@@ -1,0 +1,10 @@
+db_host: db.example.com
+cache_port: 6379
+db_config_query:
+  host: db.example.com
+  port: 5432
+explicit:
+  host: db.example.com
+  port: 5432
+env_ref: production
+dynamic: prod-config-value

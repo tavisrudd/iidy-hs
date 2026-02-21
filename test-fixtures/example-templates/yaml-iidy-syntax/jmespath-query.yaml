@@ -1,0 +1,49 @@
+$defs:
+  config:
+    database:
+      host: "db.example.com"
+      port: 5432
+      max_connections: 100
+    cache:
+      host: "cache.example.com"
+      port: 6379
+  services:
+    - name: api
+      port: 3000
+      enabled: true
+    - name: web
+      port: 8080
+      enabled: true
+    - name: worker
+      port: 9000
+      enabled: false
+
+# Simple field access via JMESPath
+db_host: !$
+  path: config.database
+  jmespath: "host"
+
+# Multi-select hash to pick specific keys
+db_subset: !$
+  path: config.database
+  jmespath: "{host: host, port: port}"
+
+# Nested traversal
+nested_host: !$
+  path: config
+  jmespath: "database.host"
+
+# Array projection
+service_names: !$
+  path: services
+  jmespath: "[*].name"
+
+# Filter expression
+enabled_services: !$
+  path: services
+  jmespath: "[?enabled].name"
+
+# Multi-select on array items
+service_ports: !$
+  path: services
+  jmespath: "[*].{name: name, port: port}"

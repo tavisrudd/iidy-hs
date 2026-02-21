@@ -1,0 +1,11 @@
+$params:
+  - Name: Greeting
+    Type: String
+  - Name: Target
+    Type: String
+    Default: World
+
+message: "{{Greeting}}, {{Target}}!"
+details:
+  greeting_used: !$ Greeting
+  target_used: !$ Target

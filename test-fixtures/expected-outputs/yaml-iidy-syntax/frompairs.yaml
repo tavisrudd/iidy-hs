@@ -1,0 +1,103 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Example of !$fromPairs tag for object creation from pairs
+Resources:
+  EnvironmentVariables:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/env-vars
+      Type: String
+      Value: '{"DEBUG":"false","LOG_LEVEL":"info","NODE_ENV":"production","PORT":"3000"}'
+  ApplicationConfig:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/settings
+      Type: String
+      Value: '{"database.host":"db.example.com","database.name":"myapp","database.port":"5432","redis.host":"redis.example.com"}'
+  ResourceTags:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/tags
+      Type: String
+      Value: '{"Environment":"production","Service":"api","Team":"backend","Version":"1.2.3"}'
+  ServicePorts:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/service-ports
+      Type: String
+      Value: '{"admin":8080,"api":3000,"web":80,"worker":6379}'
+  TransformedSettings:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/transformed-settings
+      Type: String
+      Value: '{"max_connections":"100","retry_attempts":"3","timeout_seconds":"30"}'
+  FeatureFlags:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/feature-flags
+      Type: String
+      Value: '{"advanced_search":true,"beta_features":false,"dark_mode":true,"experimental_ui":false,"new_dashboard":true}'
+  EnvironmentUrls:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/environment-urls
+      Type: String
+      Value: '{"dev":"https://dev.example.com","prod":"https://example.com","staging":"https://staging.example.com"}'
+  SecurityGroupPorts:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/sg-ports
+      Type: String
+      Value: '{"api":[3000,3001],"database":[5432],"web":[80,443]}'
+  DatabaseConnections:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/db-connections
+      Type: String
+      Value: '{"analytics":"postgresql://analytics-db.example.com:5432/analytics","primary":"postgresql://db1.example.com:5432/myapp","replica":"postgresql://db2.example.com:5432/myapp"}'
+  HealthCheckEndpoints:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/health-checks
+      Type: String
+      Value: '{"admin":"http://admin.example.com:8080/health","api":"http://api.example.com:3000/health","web":"http://web.example.com:80/health"}'
+  IamRoleMappings:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/iam-roles
+      Type: String
+      Value: '{"api-role":["s3:GetObject","ssm:GetParameter"],"web-role":["s3:GetObject"],"worker-role":["sqs:ReceiveMessage","s3:PutObject"]}'
+  ServiceConfigurations:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/service-configurations
+      Type: String
+      Value: '{"api":{"healthCheck":"/health/api","replicas":3,"resources":{"cpu":"500m","memory":"512Mi"}},"web":{"healthCheck":"/health/web","replicas":2,"resources":{"cpu":"250m","memory":"256Mi"}},"worker":{"healthCheck":"/health/worker","replicas":1,"resources":{"cpu":"1000m","memory":"1Gi"}}}'
+  ParsedEnvironmentVars:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/parsed-env-vars
+      Type: String
+      Value: '{"API_KEY":"secret123","DB_HOST":"localhost","DB_PORT":"5432","LOG_LEVEL":"debug"}'
+  MetricThresholds:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/metric-thresholds
+      Type: String
+      Value: '{"cpu_utilization":80,"disk_utilization":90,"error_rate":5,"memory_utilization":85,"response_time_p99":2000}'
+  AlertConfigurations:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/alerts
+      Type: String
+      Value: '{"high_cpu":{"alarmDuration":300,"datapointsToAlarm":2,"evaluationPeriods":2,"threshold":90,"treatMissingData":"breaching"},"high_error_rate":{"alarmDuration":120,"datapointsToAlarm":2,"evaluationPeriods":2,"threshold":10,"treatMissingData":"breaching"},"high_memory":{"alarmDuration":180,"datapointsToAlarm":2,"evaluationPeriods":2,"threshold":95,"treatMissingData":"breaching"}}'
+Outputs:
+  EnvironmentVariableCount:
+    Description: Number of environment variables
+    Value: true
+  ConfigurationSummary:
+    Description: Summary of configurations created
+    Value: Environment Variables | Service Configurations | Feature Flags | Health Check Endpoints
+  SampleConfiguration:
+    Description: Example of object created from pairs
+    Value: NODE_ENV will be mapped to production

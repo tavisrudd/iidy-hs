@@ -1,0 +1,19 @@
+$defs:
+  app_name: "import-demo"
+  environment: "dev"
+
+$imports:
+  config: "./config.yaml"
+
+name: "{{app_name}}-{{environment}}"
+
+database:
+  host: !$ config.database.host
+  port: !$ config.database.port
+  name: "{{config.database.name}}"
+
+api_config:
+  version: "{{config.api.version}}"
+  timeout: !$ config.api.timeout
+
+monitoring_enabled: !$ config.monitoring.enabled

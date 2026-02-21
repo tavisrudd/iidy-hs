@@ -1,5 +1,7 @@
 module Iidy.Yaml.Resolution.Context
   ( TagContext(..)
+  , TemplateInfo(..)
+  , ParamDef(..)
   , emptyContext
   , withBindings
   , withVariable
@@ -7,16 +9,13 @@ module Iidy.Yaml.Resolution.Context
   , getVariable
   , contextVariableNames
   , VariableSource(..)
-  , isTruthy
-  , valuesEqual
   ) where
 
-import Data.Aeson (Value(..))
-import qualified Data.Aeson.KeyMap as KM
+import Data.Aeson (Value)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import qualified Data.Vector as V
+import Iidy.Yaml.OValue (OValue)
 
 -- | Source of a variable binding (for error reporting)
 data VariableSource
@@ -27,11 +26,24 @@ data VariableSource
   | SourceExternal
   deriving stock (Show, Eq)
 
+-- | Template definition for !$expand
+data TemplateInfo = TemplateInfo
+  { tiParams   :: ![ParamDef]
+  , tiRawBody  :: !Text        -- Raw YAML string for re-parsing
+  , tiLocation :: !Text        -- File path for error context
+  } deriving stock (Show, Eq)
+
+-- | Parameter definition from $params section
+data ParamDef = ParamDef
+  { pdName    :: !Text
+  , pdDefault :: !(Maybe Value)
+  } deriving stock (Show, Eq)
+
 -- | Context threaded through tag resolution
 data TagContext = TagContext
-  { tcVariables          :: !(Map Text Value)
+  { tcVariables          :: !(Map Text OValue)
   , tcInputUri           :: !(Maybe Text)
-  , tcCustomTemplateDefs :: !(Map Text Value)
+  , tcCustomTemplateDefs :: !(Map Text TemplateInfo)
   } deriving stock (Show, Eq)
 
 emptyContext :: TagContext
@@ -41,36 +53,19 @@ emptyContext = TagContext
   , tcCustomTemplateDefs = Map.empty
   }
 
-withBindings :: Map Text Value -> TagContext -> TagContext
+withBindings :: Map Text OValue -> TagContext -> TagContext
 withBindings bindings ctx = ctx
   { tcVariables = Map.union bindings (tcVariables ctx) }
 
-withVariable :: Text -> Value -> TagContext -> TagContext
+withVariable :: Text -> OValue -> TagContext -> TagContext
 withVariable name val ctx = ctx
   { tcVariables = Map.insert name val (tcVariables ctx) }
 
 withInputUri :: Text -> TagContext -> TagContext
 withInputUri uri ctx = ctx { tcInputUri = Just uri }
 
-getVariable :: Text -> TagContext -> Maybe Value
+getVariable :: Text -> TagContext -> Maybe OValue
 getVariable name = Map.lookup name . tcVariables
 
 contextVariableNames :: TagContext -> [Text]
 contextVariableNames = Map.keys . tcVariables
-
-------------------------------------------------------------------------
--- Value predicates
-------------------------------------------------------------------------
-
-isTruthy :: Value -> Bool
-isTruthy = \case
-  Null       -> False
-  Bool b     -> b
-  String s   -> s /= ""
-  Number _   -> True
-  Array a    -> not (V.null a)
-  Object o   -> not (KM.null o)
-
-valuesEqual :: Value -> Value -> Bool
-valuesEqual (Number a) (Number b) = a == b
-valuesEqual a b = a == b

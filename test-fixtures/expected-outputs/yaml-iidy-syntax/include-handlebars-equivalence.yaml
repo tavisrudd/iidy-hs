@@ -1,0 +1,62 @@
+include:
+  bool_t: true
+  bool_f: false
+  str_bool_t: 'true'
+  str_bool_f: 'false'
+  bool_yes: 'yes'
+  bool_no: 'no'
+  bool_on: 'on'
+  bool_off: 'off'
+  n1234: 1234
+  str_n1234: '1234'
+  real_null: null
+  str_null: 'null'
+  str_with_newlines: |
+    a
+    b
+    c
+    d
+
+    e
+  str_with_newlines_expl: |-
+    a
+    b
+handlebars:
+  bool_t: 'true'
+  bool_f: 'false'
+  str_bool_t: 'true'
+  str_bool_f: 'false'
+  bool_yes: 'yes'
+  bool_no: 'no'
+  bool_on: 'on'
+  bool_off: 'off'
+  n1234: '1234'
+  str_n1234: '1234'
+  real_null: ''
+  str_null: 'null'
+  str_with_newlines: |
+    a
+    b
+    c
+    d
+
+    e
+handlebars_with_parseYaml:
+  bool_t: true
+  bool_f: false
+  str_bool_t: true
+  str_bool_f: false
+  str_bool_t_quoted: 'true'
+  str_bool_f_quoted: 'false'
+  bool_yes: 'yes'
+  bool_no: 'no'
+  bool_on: 'on'
+  bool_off: 'off'
+  n1234: 1234
+  str_n1234: 1234
+  str_n1234_quoted: '1234'
+  real_null: null
+  str_null: null
+  str_with_newlines: |-
+    a b c d
+    e

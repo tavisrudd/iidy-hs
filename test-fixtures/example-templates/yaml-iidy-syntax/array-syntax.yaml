@@ -1,0 +1,100 @@
+$defs:
+  test_data:
+    message: "Hello World"
+    config:
+      database_host: "db.example.com"
+      database_port: 5432
+      features:
+        - "feature1"
+        - "feature2"
+  services: ["api", "web", "worker"]
+
+# Array Syntax Compatibility Example
+# This demonstrates that both !Tag value and !Tag [value] syntaxes work identically
+
+title: "Array Syntax Compatibility Demo"
+
+# 1. Escape tag - both syntaxes should preserve templates without processing
+escape_tests:
+  direct_syntax: !$escape "{{test_data.message}}"
+  array_syntax: !$escape ["{{test_data.message}}"]
+
+# 2. String conversion tags - both should produce identical output
+string_conversion:
+  yaml_direct: !$toYamlString 
+    key: "value"
+    number: 42
+  yaml_array: !$toYamlString 
+    - key: "value"
+      number: 42
+  json_direct: !$toJsonString 
+    key: "value" 
+    number: 42
+  json_array: !$toJsonString 
+    - key: "value"
+      number: 42
+
+# 3. Parse tags - both should parse content identically
+parsing_tests:
+  parse_yaml_direct: !$parseYaml "key: parsed_value\nnumber: 123"
+  parse_yaml_array: !$parseYaml ["key: parsed_value\nnumber: 123"]
+  parse_json_direct: !$parseJson '{"parsed": true, "count": 456}'
+  parse_json_array: !$parseJson ['{"parsed": true, "count": 456}']
+
+# 4. Boolean logic with array syntax (the original bug case)
+boolean_logic:
+  not_direct: !$not false
+  not_array: !$not [false]
+  complex_filter: !$map
+    items: !$ services
+    filter: !$not [!$eq ["{{item}}", "worker"]]
+    template: "service-{{item}}"
+
+# 5. CloudFormation tags - both syntaxes should produce identical CF structures
+cloudformation_tags:
+  ref_direct: !Ref "MyBucket"
+  ref_array: !Ref ["MyBucket"]
+  sub_direct: !Sub "arn:aws:s3:::${BucketName}/*"
+  sub_array: !Sub ["arn:aws:s3:::${BucketName}/*"]
+  getatt_direct: !GetAtt "MyInstance.PublicDnsName"
+  getatt_array: !GetAtt ["MyInstance.PublicDnsName"]
+
+# 6. Nested structures with mixed syntax
+nested_example:
+  Resources:
+    MyBucket:
+      Type: "AWS::S3::Bucket"
+      Properties:
+        BucketName: !Sub ["${AWS::StackName}-bucket"]
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: !$not [false]
+        Tags: !$map
+          items:
+            - Key: "Environment"
+              Value: "production"
+            - Key: "Application"  
+              Value: "demo"
+          template: !$ item
+
+# 7. Edge cases - arrays with different element counts
+edge_cases:
+  # Single element (should unpack)
+  single_element: !$escape ["single value"]
+  # Multiple elements (should preserve array structure)  
+  multiple_elements: !$escape ["value1", "value2"]
+  # Empty array (should preserve array structure)
+  empty_array: !$escape []
+  # Nested single element (should preserve nesting)
+  nested_single: !$escape [["nested"]]
+
+# 8. Complex transformation with array syntax
+transformation_example: !$concatMap
+  items: !$ services
+  filter: !$not [!$eq ["{{item}}", "worker"]]
+  template:
+    - name: "{{item}}-primary"
+      type: "primary"
+      config: !$toJsonString [!$ test_data.config]
+    - name: "{{item}}-backup"
+      type: "backup"
+      escaped_template: !$escape ["{{item}}-template"]

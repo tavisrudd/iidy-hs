@@ -1,0 +1,73 @@
+$defs:
+  environment: "production"
+  
+  base_config:
+    cpu: 256
+    memory: 512
+    timeout: 30
+  
+  production_overrides:
+    cpu: 1024
+    memory: 2048
+    replicas: 3
+  
+  monitoring_config:
+    logging: true
+    metrics: true
+    alerts: true
+
+# !$merge examples
+title: "Merge Operations Demo"
+
+# Simple !$merge of two objects
+app_config: !$merge
+  - !$ base_config
+  - !$ production_overrides
+
+# !$merge with inline objects
+database_config: !$merge
+  - host: "localhost"
+    port: 5432
+  - user: "app_user"
+    database: "app_db"
+  - !$ monitoring_config
+
+# !$merge with conditional overrides
+final_config: !$merge
+  - !$ base_config
+  - !$if
+      test: !$eq ["{{environment}}", "production"]
+      then: !$ production_overrides
+      else:
+        replicas: 1
+  - version: "1.0.0"
+    environment: "{{environment}}"
+
+# !$merge for extending arrays
+all_tags: !$merge
+  - base_tags:
+      - "app:my-app"
+      - "team:platform"
+  - environment_tags:
+      - "env:{{environment}}"
+  - custom_tags:
+      - "version:1.0.0"
+
+# Complex merge with nested objects
+service_definition: !$merge
+  - metadata:
+      name: "my-service"
+      namespace: "default"
+  - spec: !$merge
+      - replicas: 2
+        strategy: "RollingUpdate"
+      - template:
+          spec:
+            containers:
+              - name: "app"
+                image: "my-app:latest"
+      - !$if
+          test: !$eq ["{{environment}}", "production"]
+          then:
+            replicas: 5
+          else: {}

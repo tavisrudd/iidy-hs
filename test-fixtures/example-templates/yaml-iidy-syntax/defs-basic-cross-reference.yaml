@@ -1,0 +1,7 @@
+# Basic cross-reference
+$defs:
+  a: 1234
+  b: !$ a
+
+output: !$ b
+# Expected: output: 1234

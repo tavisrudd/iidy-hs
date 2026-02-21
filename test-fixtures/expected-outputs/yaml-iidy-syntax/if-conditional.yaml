@@ -1,0 +1,11 @@
+title: Conditional Logic Demo
+log_level: WARN
+debug_enabled: false
+high_availability: true
+monitoring_enabled: true
+instance_type: m5.large
+database_config:
+  engine: postgres
+  instance_class: db.r5.xlarge
+  multi_az: true
+  backup_retention: 30

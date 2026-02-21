@@ -1,0 +1,5 @@
+output:
+  handlebars_a: a-is-1234
+  direct_a: 1234
+  c: 1234
+  a_plus_b: a-is-1234-and-b-is-999

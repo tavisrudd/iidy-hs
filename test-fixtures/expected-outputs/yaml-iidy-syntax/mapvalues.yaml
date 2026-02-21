@@ -1,0 +1,72 @@
+title: MapValues Transformation Demo
+user_roles:
+  alice: ADMIN
+  bob: USER
+  charlie: ADMIN
+  david: USER
+service_configs:
+  api:
+    name: api-service
+    port: 3000
+    protocol: tcp
+    health_check: /api/health
+  web:
+    name: web-service
+    port: 8080
+    protocol: tcp
+    health_check: /web/health
+  db:
+    name: db-service
+    port: 5432
+    protocol: tcp
+    health_check: /db/health
+  cache:
+    name: cache-service
+    port: 6379
+    protocol: tcp
+    health_check: /cache/health
+environment_settings:
+  dev:
+    name: dev
+    replicas: 1
+    resources:
+      cpu: 100m
+      memory: 256Mi
+    monitoring:
+      enabled: false
+      level: basic
+  staging:
+    name: staging
+    replicas: 2
+    resources:
+      cpu: 200m
+      memory: 512Mi
+    monitoring:
+      enabled: false
+      level: basic
+  production:
+    name: production
+    replicas: 5
+    resources:
+      cpu: 500m
+      memory: 1Gi
+    monitoring:
+      enabled: true
+      level: detailed
+formatted_users:
+  alice:
+    username: alice
+    access_level: admin
+    is_privileged: true
+  bob:
+    username: bob
+    access_level: user
+    is_privileged: false
+  charlie:
+    username: charlie
+    access_level: admin
+    is_privileged: true
+  david:
+    username: david
+    access_level: user
+    is_privileged: false

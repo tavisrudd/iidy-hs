@@ -29,7 +29,11 @@ type Parse a = Either ParseError a
 
 parseYaml :: BL.ByteString -> Text -> Parse YamlAst
 parseYaml input uri =
-  case runIdentity (Y.decodeLoader (yamlLoader uri) input) of
+  let -- Ensure trailing newline for HsYAML compatibility
+      input' = if BL.null input || BL.last input /= 0x0a
+               then input <> "\n"
+               else input
+  in case runIdentity (Y.decodeLoader (yamlLoader uri) input') of
     Left (pos, msg) -> Left (ParseError (convertPos pos) (T.pack msg))
     Right []        -> Right (AstNull (emptyMeta uri))
     Right (node : _) -> Right node
@@ -277,10 +281,12 @@ parseSeqTag meta name mk = \case
 
 parseVarLookupTag :: SrcMeta -> YamlAst -> Parse YamlAst
 parseVarLookupTag meta = \case
-  AstPlainString path _ ->
-    pure $ AstPreprocessingTag (PpVarLookup (VarLookupTag path Nothing Nothing)) meta
-  AstTemplatedString path _ ->
-    pure $ AstPreprocessingTag (PpVarLookup (VarLookupTag path Nothing Nothing)) meta
+  AstPlainString raw _ ->
+    let (path, query) = splitVarQuery raw
+    in pure $ AstPreprocessingTag (PpVarLookup (VarLookupTag path query Nothing)) meta
+  AstTemplatedString raw _ ->
+    let (path, query) = splitVarQuery raw
+    in pure $ AstPreprocessingTag (PpVarLookup (VarLookupTag path query Nothing)) meta
   AstMapping pairs _ ->
     case getTextField "path" pairs of
       Just path -> pure $ AstPreprocessingTag
@@ -389,3 +395,9 @@ getField name pairs =
 
 getTextField :: Text -> [(YamlAst, YamlAst)] -> Maybe Text
 getTextField name pairs = getField name pairs >>= getScalarText
+
+splitVarQuery :: Text -> (Text, Maybe Text)
+splitVarQuery raw = case T.breakOn "?" raw of
+  (path, rest)
+    | T.null rest -> (path, Nothing)
+    | otherwise   -> (path, Just (T.drop 1 rest))

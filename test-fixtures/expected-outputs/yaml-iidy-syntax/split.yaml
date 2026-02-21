@@ -1,0 +1,64 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Example of !$split tag for string to array conversion
+Parameters:
+  FruitList:
+    Type: CommaDelimitedList
+    Default:
+      - apple
+      - banana
+      - cherry
+      - date
+  PathComponents:
+    Type: CommaDelimitedList
+    Default:
+      - ''
+      - usr
+      - local
+      - bin
+Resources:
+  ResourceTags:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/tags
+      Type: String
+      Value: '[["Name","MyResource"],["Environment","Production"],["Version","1.2.3"]]'
+  NotificationConfig:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/notifications
+      Type: String
+      Value: '{"count":3,"emails":["admin@example.com","user@example.com","support@example.com"]}'
+  VersionInfo:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/version
+      Type: String
+      Value: '{"parts":["1","2","3"],"release":["1","2","3"],"version":"1.2.3"}'
+  SecurityGroupRules:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/security-rules
+      Type: String
+      Value: '[{"CidrIp":"0.0.0.0/0","FromPort":"80","IpProtocol":"tcp","ToPort":"80"},{"CidrIp":"0.0.0.0/0","FromPort":"443","IpProtocol":"tcp","ToPort":"443"},{"CidrIp":"0.0.0.0/0","FromPort":"8080","IpProtocol":"tcp","ToPort":"8080"},{"CidrIp":"0.0.0.0/0","FromPort":"8443","IpProtocol":"tcp","ToPort":"8443"}]'
+  EnvironmentConfig:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/environment
+      Type: String
+      Value: '{"DEBUG":"false","NODE_ENV":"production","PORT":"3000"}'
+  DomainConfig:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/domains
+      Type: String
+      Value: '[{"full":"api.prod.example.com","subdomain":["api","prod","example","com"]},{"full":"web.prod.example.com","subdomain":["web","prod","example","com"]},{"full":"admin.prod.example.com","subdomain":["admin","prod","example","com"]}]'
+Outputs:
+  ProcessedFruits:
+    Description: Processed fruit list
+    Value: apple | banana | cherry | date
+  EmailCount:
+    Description: Number of email addresses
+    Value: 3
+  PathDepth:
+    Description: Path depth (number of components)
+    Value: ' -> usr -> local -> bin'

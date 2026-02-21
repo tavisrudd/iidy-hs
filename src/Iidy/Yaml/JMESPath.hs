@@ -99,19 +99,18 @@ parseAtom input
 parsePostfix :: JExpr -> Text -> Either JMESPathError (JExpr, Text)
 parsePostfix lhs input
   | T.null input = Right (lhs, input)
+  | isProjecting lhs, not (T.isPrefixOf "|" input) =
+      -- Inside a projection: parse the RHS as the projected expression
+      parseProjectedPostfix lhs input
   | T.isPrefixOf "." input = do
       let after = T.drop 1 input
       if T.isPrefixOf "*" after
         then do
           let rest = T.drop 1 after
           parsePostfix (JProjection lhs JIdentity) rest
-        else if T.isPrefixOf "{" after
-          then do
-            (rhs, rest) <- parseAtom after
-            parsePostfix (JSubExpr lhs rhs) rest
-          else do
-            (rhs, rest) <- parseAtom after
-            parsePostfix (JSubExpr lhs rhs) rest
+        else do
+          (rhs, rest) <- parseAtom after
+          parsePostfix (JSubExpr lhs rhs) rest
   | T.isPrefixOf "[?" input = do
       (filterExpr, rest) <- parseFilterExpr (T.drop 2 input)
       parsePostfix (JProjection lhs filterExpr) rest
@@ -132,6 +131,55 @@ parsePostfix lhs input
   | T.isPrefixOf "<" input = parseBinOp OpLt lhs (T.drop 1 input)
   | T.isPrefixOf ">" input = parseBinOp OpGt lhs (T.drop 1 input)
   | otherwise = Right (lhs, input)
+
+-- | Check if an expression is a projection that needs its RHS filled in
+isProjecting :: JExpr -> Bool
+isProjecting (JProjection _ JIdentity) = True
+isProjecting (JFilter _ JIdentity) = True
+isProjecting _ = False
+
+-- | Parse postfix expressions inside a projection, threading them into the
+-- projection's RHS rather than wrapping the projection in a JSubExpr
+parseProjectedPostfix :: JExpr -> Text -> Either JMESPathError (JExpr, Text)
+parseProjectedPostfix lhs input
+  | T.null input = Right (lhs, input)
+  | T.isPrefixOf "." input = do
+      let after = T.drop 1 input
+      if T.isPrefixOf "*" after
+        then do
+          let rest = T.drop 1 after
+          -- Nested projection: [*].*  becomes JProjection(source, JProjection(JIdentity, JIdentity))
+          parsePostfix (setProjectionRHS lhs (JProjection JIdentity JIdentity)) rest
+        else if T.isPrefixOf "{" after
+          then do
+            (rhs, rest) <- parseAtom after
+            parsePostfix (setProjectionRHS lhs rhs) rest
+          else do
+            (rhs, rest) <- parseAtom after
+            (fullRhs, rest') <- parsePostfix rhs rest
+            Right (setProjectionRHS lhs fullRhs, rest')
+  | T.isPrefixOf "[" input = do
+      -- [*][0] or [*][?filter] — parse the bracket expression as projected
+      if T.isPrefixOf "[?" input
+        then do
+          (filterExpr, rest) <- parseFilterExpr (T.drop 2 input)
+          parsePostfix (setProjectionRHS lhs (JProjection JIdentity filterExpr)) rest
+        else if T.isPrefixOf "[]" input
+          then do
+            parsePostfix (setProjectionRHS lhs (JFlatten JIdentity)) (T.drop 2 input)
+          else if T.isPrefixOf "[*]" input
+            then do
+              parsePostfix (setProjectionRHS lhs (JProjection JIdentity JIdentity)) (T.drop 3 input)
+            else do
+              (indexExpr, rest) <- parseIndexOrMultiSelect (T.drop 1 input)
+              parsePostfix (setProjectionRHS lhs (JSubExpr JIdentity indexExpr)) rest
+  | otherwise = Right (lhs, input)
+
+-- | Set the RHS of a projection or filter expression
+setProjectionRHS :: JExpr -> JExpr -> JExpr
+setProjectionRHS (JProjection src _) rhs = JProjection src rhs
+setProjectionRHS (JFilter cond _) rhs = JFilter cond rhs
+setProjectionRHS other _ = other  -- shouldn't happen
 
 parseBinOp :: CompOp -> JExpr -> Text -> Either JMESPathError (JExpr, Text)
 parseBinOp op lhs input = do

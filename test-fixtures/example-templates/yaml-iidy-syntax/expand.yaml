@@ -1,0 +1,21 @@
+$imports:
+  GreetingTemplate: expand-template.yaml
+
+simple_expand: !$expand
+  template: GreetingTemplate
+  params:
+    Greeting: Hello
+
+override_default: !$expand
+  template: GreetingTemplate
+  params:
+    Greeting: Hi
+    Target: Everyone
+
+other_content:
+  static_value: unchanged
+  expanded: !$expand
+    template: GreetingTemplate
+    params:
+      Greeting: Welcome
+      Target: User

@@ -64,9 +64,10 @@ needsQuotes :: Text -> Bool
 needsQuotes s
   | T.null s = True
   | isAmbiguousType s = True
+  | T.head s == ' ' = True
   | not (isPlainSafeFirst (T.head s)) = True
   | T.last s == ':' || T.last s == ' ' = True
-  | T.any isFlowIndicator s = True
+  | T.head s `elem` ("[]{},:" :: [Char]) = True
   | T.isInfixOf ": " s = True
   | T.isInfixOf " #" s = True
   | otherwise = False
@@ -135,6 +136,15 @@ emitArray indent items =
         in indentStr <> "- " <> valStr
   in "\n" <> T.intercalate "\n" (map emitItem items)
 
+emitArrayInline :: Int -> [OValue] -> Text
+emitArrayInline indent items =
+  let indentStr = T.replicate indent " "
+      emitFirst val = "- " <> emitArrayValue (indent + 2) val
+      emitRest val = indentStr <> "- " <> emitArrayValue (indent + 2) val
+  in case items of
+    [] -> "[]"
+    (first:rest) -> emitFirst first <> "\n" <> T.intercalate "\n" (map emitRest rest)
+
 emitArrayValue :: Int -> OValue -> Text
 emitArrayValue indent = \case
   OObject kvs
@@ -143,7 +153,7 @@ emitArrayValue indent = \case
     | otherwise -> emitMappingInline indent kvs
   OArray items
     | null items -> "[]"
-    | otherwise -> emitArray indent items
+    | otherwise -> emitArrayInline indent items
   other -> emitValue indent False other
 
 ------------------------------------------------------------------------
@@ -222,9 +232,13 @@ emitTaggedKvs indent kvs = case kvs of
 
 emitTagArgument :: Int -> OValue -> Text
 emitTagArgument indent = \case
-  OString s -> " " <> emitString s
+  OString s
+    | T.any (== '\n') s -> " " <> emitMultilineStringIndented indent s
+    | needsQuotes s -> " " <> quoteString s
+    | otherwise -> " " <> s
   ONumber n -> " " <> emitNumber n
   OBool b -> " " <> if b then "true" else "false"
   ONull -> " null"
+  OArray [single] -> emitTagArgument indent single
   OArray items -> emitArray indent items
   OObject kvs -> emitMapping indent False kvs

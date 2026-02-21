@@ -1,0 +1,17 @@
+$defs:
+  app_name: "my-app"
+  environment: "production"
+
+# !$join example - combines array elements with a delimiter
+title: "Join Operation Demo"
+
+# Basic string joining
+stack_name: !$join ["-", ["{{app_name}}", "{{environment}}"]]
+
+# Join with different delimiters
+comma_separated: !$join [", ", ["apple", "banana", "cherry"]]
+path_like: !$join ["/", ["usr", "local", "bin"]]
+no_delimiter: !$join ["", ["prefix", "{{app_name}}", "suffix"]]
+
+# Join with mixed types (numbers, strings)
+version_string: !$join [".", ["1", "2", "3"]]

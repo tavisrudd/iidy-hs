@@ -1,0 +1,23 @@
+title: Array Syntax Compatibility Test
+boolean_tests:
+  not_direct: true
+  not_array: true
+  not_true_direct: false
+  not_true_array: false
+filter_test:
+  - service-api
+  - service-web
+cloudformation_tags:
+  ref_direct: !Ref MyBucket
+  ref_array: !Ref MyBucket
+  sub_direct: !Sub Hello ${Param}
+  sub_array: !Sub Hello ${Param}
+edge_cases:
+  single_not: true
+  multiple_not: false
+  empty_not: true
+nested_test:
+  - name: api-config
+    enabled: true
+  - name: web-config
+    enabled: true

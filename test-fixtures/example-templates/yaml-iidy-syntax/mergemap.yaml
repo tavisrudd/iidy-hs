@@ -1,0 +1,193 @@
+# Example demonstrating !$mergeMap tag for map followed by merge
+# The !$mergeMap tag transforms an array and merges the resulting objects into a single object
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Example of !$mergeMap tag for map and merge operations'
+
+$defs:
+  services:
+    - name: "api"
+      port: 3000
+      replicas: 3
+    - name: "web"
+      port: 80
+      replicas: 2
+    - name: "worker"
+      port: 6379
+      replicas: 1
+
+  environments:
+    - name: "dev"
+      domain: "dev.example.com"
+      ssl: false
+    - name: "staging"
+      domain: "staging.example.com"
+      ssl: true
+    - name: "prod"
+      domain: "example.com"
+      ssl: true
+
+  regions:
+    - code: "us-east-1"
+      name: "N. Virginia"
+    - code: "us-west-2"
+      name: "Oregon"
+    - code: "eu-west-1"
+      name: "Ireland"
+
+Resources:
+  # Example 1: Create service configurations from service list
+  ServiceConfigurations:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/services
+      Type: String
+      Value: !$toJsonString
+        - !$mergeMap
+            items: !$ services
+            template:
+              !$ item.name:
+                host: !$join ["-", [!$ item.name, "service"]]
+                port: !$ item.port
+                replicas: !$ item.replicas
+                healthCheck: !$join ["", ["http://", !$ item.name, "-service:", !$ item.port, "/health"]]
+
+  # Example 2: Environment-specific settings
+  EnvironmentSettings:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/environments
+      Type: String
+      Value: !$toJsonString
+        - !$mergeMap
+            items: !$ environments
+            template:
+              !$ item.name:
+                url: !$join 
+                  - ""
+                  - - !$if
+                        test: !$ item.ssl
+                        then: "https"
+                        else: "http"
+                    - "://"
+                    - !$ item.domain
+                ssl_enabled: !$ item.ssl
+                certificate_required: !$ item.ssl
+                config_prefix: !$join ["/", ["", "config", !$ item.name]]
+
+  # Example 3: Regional resource mappings
+  RegionalMappings:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/regions
+      Type: String
+      Value: !$toJsonString
+        - !$mergeMap
+            items: !$ regions
+            template:
+              !$ item.code:
+                displayName: !$ item.name
+                s3Bucket: !$join ["-", ["myapp", !$ item.code, "data"]]
+                cloudWatchLogGroup: !$join ["/", ["", "aws", "lambda", "myapp", !$ item.code]]
+
+  # Example 4: Port mappings for load balancer
+  LoadBalancerPorts:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/lb-ports
+      Type: String
+      Value: !$toJsonString
+        - !$mergeMap
+            items: !$ services
+            template:
+              !$ item.port:
+                service: !$ item.name
+                protocol: !$if
+                  test: !$eq [!$ item.port, 443]
+                  then: "HTTPS"
+                  else: "HTTP"
+                targetGroup: !$join ["-", [!$ item.name, "tg"]]
+
+  # Example 5: Security group rules by service
+  SecurityGroupRules:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/sg-rules
+      Type: String
+      Value: !$toJsonString
+        - rules: !$mergeMap
+            items: !$ services
+            template:
+              !$join ["-", [!$ item.name, "rule"]]:
+                IpProtocol: "tcp"
+                FromPort: !$ item.port
+                ToPort: !$ item.port
+                Description: !$join [" ", ["Allow traffic to", !$ item.name, "service"]]
+
+  # Example 6: Environment variables by service
+  ServiceEnvironmentVars:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/service-env-vars
+      Type: String
+      Value: !$toJsonString
+        - !$mergeMap
+            items: !$ services
+            template:
+              !$join ["_", [!$ item.name, "CONFIG"]]:
+                SERVICE_NAME: !$ item.name
+                SERVICE_PORT: !$ item.port
+                SERVICE_REPLICAS: !$ item.replicas
+                SERVICE_URL: !$join ["", ["http://", !$ item.name, ":", !$ item.port]]
+
+  # Example 7: CloudFormation outputs by environment
+  EnvironmentOutputs:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/cf-outputs
+      Type: String
+      Value: !$toJsonString
+        - !$mergeMap
+            items: !$ environments
+            template:
+              !$join ["", [!$ item.name, "StackOutput"]]:
+                Description: !$join [" ", ["Stack output for", !$ item.name, "environment"]]
+                Value: !$ item.domain
+                Export:
+                  Name: !$join ["-", ["MyApp", !$ item.name, "Domain"]]
+
+  # Example 8: Complex nested transformation with filtering
+  ProductionConfigs:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/production
+      Type: String
+      Value: !$toJsonString
+        - !$mergeMap
+            items: !$ environments
+            template: !$if
+              test: !$ item.ssl  # Only include SSL-enabled environments
+              then:
+                !$join ["-", [!$ item.name, "secure"]]:
+                  environment: !$ item.name
+                  secureUrl: !$join ["", ["https://", !$ item.domain]]
+                  sslRequired: true
+                  backupBucket: !$join ["-", ["backup", !$ item.name, "secure"]]
+              else: {}
+
+Outputs:
+  ServiceCount:
+    Description: Number of services configured
+    Value: !$eq [!$ services, !$ services]  # Simple way to reference the list
+
+  EnvironmentCount:
+    Description: Number of environments configured  
+    Value: !$eq [!$ environments, !$ environments]
+
+  ConfigurationSummary:
+    Description: Summary of merged configurations
+    Value: !$join
+      - ", "
+      - - "Services: api, web, worker"
+        - "Environments: dev, staging, prod"
+        - "Regions: us-east-1, us-west-2, eu-west-1"

@@ -1,0 +1,83 @@
+$defs:
+  services: ["api", "web", "worker"]
+  environments: ["dev", "staging", "production"]
+  
+  user_configs:
+    - name: "alice"
+      teams: ["backend", "frontend"]
+    - name: "bob" 
+      teams: ["devops"]
+    - name: "charlie"
+      teams: ["backend", "data"]
+
+# !$concatMap example - map and flatten results
+title: "ConcatMap Transformation Demo"
+
+# Basic concat mapping - create multiple items per input
+service_endpoints: !$concatMap
+  items: !$ services
+  template:
+    - name: "{{item}}-internal"
+      type: "internal"
+      port: 3000
+    - name: "{{item}}-external"
+      type: "external" 
+      port: 8080
+
+# Generate all service-environment combinations
+deployments: !$concatMap
+  items: !$ services
+  var: "service"
+  template: !$map
+    items: !$ environments
+    var: "env"
+    template:
+      service: "{{service}}"
+      environment: "{{env}}"
+      name: "{{service}}-{{env}}"
+
+# Complex nested expansion
+user_permissions: !$concatMap
+  items: !$ user_configs
+  var: "user"
+  template: !$map
+    items: !$ user.teams
+    var: "team"
+    template:
+      username: "{{user.name}}"
+      team: "{{team}}"
+      permission: "{{user.name}}:{{team}}"
+
+# Using index variables
+indexed_services: !$concatMap
+  items: !$ services
+  template:
+    - service_id: "{{itemIdx}}"
+      service_name: "{{item}}"
+      primary: true
+    - service_id: "{{itemIdx}}"
+      service_name: "{{item}}-backup"
+      primary: false
+
+# With filtering - exclude worker service
+production_configs: !$concatMap
+  items: !$ services
+  filter: !$not [!$eq ["{{item}}", "worker"]]
+  template:
+    - name: "{{item}}-config"
+      type: "config"
+    - name: "{{item}}-secret"
+      type: "secret"
+
+# Custom variable names
+team_assignments: !$concatMap
+  items: !$ user_configs
+  var: "user"
+  template: !$map
+    items: !$ user.teams
+    var: "team"
+    template:
+      assignment_id: "{{userIdx}}-{{teamIdx}}"
+      user: "{{user.name}}"
+      team: "{{team}}"
+      role: "member"

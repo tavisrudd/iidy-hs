@@ -1,0 +1,70 @@
+$defs:
+  user_data:
+    alice: admin
+    bob: user
+    charlie: admin
+    david: user
+  
+  service_ports:
+    api: 3000
+    web: 8080
+    db: 5432
+    cache: 6379
+  
+  environment_configs:
+    dev:
+      replicas: 1
+      cpu: "100m"
+      memory: "256Mi"
+    staging:
+      replicas: 2
+      cpu: "200m"
+      memory: "512Mi"
+    production:
+      replicas: 5
+      cpu: "500m"
+      memory: "1Gi"
+
+# !$mapValues example - transform object values while preserving keys
+title: "MapValues Transformation Demo"
+
+# Basic value transformation
+user_roles: !$mapValues
+  items: !$ user_data
+  template: "{{toUpperCase item.value}}"
+
+# Transform values with key access
+service_configs: !$mapValues
+  items: !$ service_ports
+  template:
+    name: "{{item.key}}-service"
+    port: !$ item.value
+    protocol: "tcp"
+    health_check: "/{{item.key}}/health"
+
+# Complex transformation with conditionals
+environment_settings: !$mapValues
+  items: !$ environment_configs
+  template:
+    name: "{{item.key}}"
+    replicas: !$ item.value.replicas
+    resources:
+      cpu: !$ item.value.cpu
+      memory: !$ item.value.memory
+    monitoring: !$if
+      test: !$eq ["{{item.key}}", "production"]
+      then:
+        enabled: true
+        level: "detailed"
+      else:
+        enabled: false
+        level: "basic"
+
+# Custom variable names
+formatted_users: !$mapValues
+  items: !$ user_data
+  var: "role"
+  template:
+    username: "{{role.key}}"
+    access_level: "{{role.value}}"
+    is_privileged: !$eq ["{{role.value}}", "admin"]

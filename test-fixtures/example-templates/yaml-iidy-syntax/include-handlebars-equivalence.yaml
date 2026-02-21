@@ -1,0 +1,81 @@
+$defs:
+  bool_t: true
+  bool_f: false
+  str_bool_t: "true"
+  str_bool_f: "false"
+  bool_yes: yes
+  bool_no: no
+  bool_on: on
+  bool_off: off
+  
+  n1234: 1234
+  str_n1234: "1234"
+  
+  real_null: null
+  str_null: 'null'
+
+  str_with_newlines: |    
+    a
+    b
+    c
+    d
+
+    e
+  str_with_newlines_expl: "a\nb"
+  
+include:
+  bool_t: !$ bool_t
+  bool_f: !$ bool_f
+  str_bool_t: !$ str_bool_t
+  str_bool_f: !$ str_bool_f
+  bool_yes: !$ bool_yes
+  bool_no: !$ bool_no
+  bool_on: !$ bool_on
+  bool_off: !$ bool_off
+  n1234: !$ n1234
+  str_n1234: !$ str_n1234
+  real_null: !$ real_null
+  str_null: !$ str_null
+
+  str_with_newlines: !$ str_with_newlines
+  str_with_newlines_expl: !$ str_with_newlines_expl
+
+handlebars:
+  bool_t: '{{bool_t}}'
+  bool_f: '{{bool_f}}'
+  str_bool_t: '{{str_bool_t}}'
+  str_bool_f: '{{str_bool_f}}'
+  bool_yes: '{{bool_yes}}'
+  bool_no: '{{bool_no}}'
+  bool_on: '{{bool_on}}'
+  bool_off: '{{bool_off}}'
+
+  n1234: '{{n1234}}'
+  str_n1234: '{{str_n1234}}'
+  
+  real_null: '{{real_null}}'
+  str_null: '{{str_null}}'
+  
+  str_with_newlines: '{{str_with_newlines}}'
+
+
+handlebars_with_parseYaml:
+  bool_t: !$parseYaml '{{bool_t}}'
+  bool_f: !$parseYaml '{{bool_f}}'
+  str_bool_t: !$parseYaml '{{str_bool_t}}'
+  str_bool_f: !$parseYaml '{{str_bool_f}}'
+  str_bool_t_quoted: !$parseYaml '"{{str_bool_t}}"'
+  str_bool_f_quoted: !$parseYaml '"{{str_bool_f}}"'
+  bool_yes: !$parseYaml '{{bool_yes}}'
+  bool_no: !$parseYaml '{{bool_no}}'
+  bool_on: !$parseYaml '{{bool_on}}'
+  bool_off:  !$parseYaml '{{bool_off}}'
+
+  n1234: !$parseYaml '{{n1234}}'
+  str_n1234: !$parseYaml '{{str_n1234}}'
+  str_n1234_quoted: !$parseYaml '"{{str_n1234}}"'
+
+  real_null: !$parseYaml '{{real_null}}'
+  str_null: !$parseYaml '{{str_null}}'
+  
+  str_with_newlines: !$parseYaml '{{str_with_newlines}}'

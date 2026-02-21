@@ -1,0 +1,73 @@
+title: Array Syntax Compatibility Demo
+escape_tests:
+  direct_syntax: '{{test_data.message}}'
+  array_syntax: '{{test_data.message}}'
+string_conversion:
+  yaml_direct: |-
+    key: value
+    number: 42
+  yaml_array: |-
+    key: value
+    number: 42
+  json_direct: '{"key":"value","number":42}'
+  json_array: '{"key":"value","number":42}'
+parsing_tests:
+  parse_yaml_direct:
+    key: parsed_value
+    number: 123
+  parse_yaml_array:
+    key: parsed_value
+    number: 123
+  parse_json_direct:
+    count: 456
+    parsed: true
+  parse_json_array:
+    count: 456
+    parsed: true
+boolean_logic:
+  not_direct: true
+  not_array: true
+  complex_filter:
+    - service-api
+    - service-web
+cloudformation_tags:
+  ref_direct: !Ref MyBucket
+  ref_array: !Ref MyBucket
+  sub_direct: !Sub arn:aws:s3:::${BucketName}/*
+  sub_array: !Sub arn:aws:s3:::${BucketName}/*
+  getatt_direct: !GetAtt MyInstance.PublicDnsName
+  getatt_array: !GetAtt MyInstance.PublicDnsName
+nested_example:
+  Resources:
+    MyBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: !Sub ${AWS::StackName}-bucket
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+        Tags:
+          - Key: Environment
+            Value: production
+          - Key: Application
+            Value: demo
+edge_cases:
+  single_element: single value
+  multiple_elements:
+    - value1
+    - value2
+  empty_array: []
+  nested_single:
+    - nested
+transformation_example:
+  - name: api-primary
+    type: primary
+    config: '{"database_host":"db.example.com","database_port":5432,"features":["feature1","feature2"]}'
+  - name: api-backup
+    type: backup
+    escaped_template: '{{item}}-template'
+  - name: web-primary
+    type: primary
+    config: '{"database_host":"db.example.com","database_port":5432,"features":["feature1","feature2"]}'
+  - name: web-backup
+    type: backup
+    escaped_template: '{{item}}-template'

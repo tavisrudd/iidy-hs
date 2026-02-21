@@ -1,0 +1,10 @@
+# Mixed nesting with complex handlebars
+$defs:
+  a: 1234
+  b: "{{ a }}"
+  c: "prefix-{{ b }}-suffix"
+  d: !$ c
+  e: "final-{{ d }}"
+
+output: !$ e
+# Expected: output: final-prefix-1234-suffix

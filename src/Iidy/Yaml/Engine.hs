@@ -14,11 +14,12 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Vector as V
 import Iidy.Yaml.Ast
 import Iidy.Yaml.Handlebars.Engine (interpolate, defaultHelpers, InterpolateError(..))
 import Iidy.Yaml.Imports.Manifest
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..))
-import Iidy.Yaml.OValue (OValue(..), toValue)
+import Iidy.Yaml.OValue (OValue(..), toValue, fromValue)
 import Iidy.Yaml.Resolution.Context
 
 import Iidy.Yaml.Resolution.Resolver (resolveAst, ResolveError(..))
@@ -62,14 +63,15 @@ process loader ast baseLocation yaml11Compat = do
     Left err -> pure $ Left $ PeCycleError err
     Right stack' -> do
       -- Phase 1: Load imports and build environment
-      result <- loadImportsAndDefs loader ast baseLocation Map.empty emptyManifest stack'
+      result <- loadImportsAndDefs loader ast baseLocation Map.empty Map.empty emptyManifest stack'
       case result of
         Left err -> pure $ Left err
-        Right (env, manifest, _stack'') -> do
+        Right (env, templateDefs, manifest, _stack'') -> do
           -- Phase 2: Build context and resolve
           let ctx = emptyContext
                 { tcVariables = env
                 , tcInputUri = Just baseLocation
+                , tcCustomTemplateDefs = templateDefs
                 }
           case resolveAst ctx ast of
             Left reErr -> pure $ Left $ PeResolveError reErr
@@ -87,9 +89,10 @@ process loader ast baseLocation yaml11Compat = do
 ------------------------------------------------------------------------
 
 loadImportsAndDefs
-  :: LoadImportFn -> YamlAst -> Text -> Map Text Value -> ImportManifest -> ImportStack
-  -> IO (Either PreprocessError (Map Text Value, ImportManifest, ImportStack))
-loadImportsAndDefs loader ast baseLocation env0 manifest0 stack0 =
+  :: LoadImportFn -> YamlAst -> Text -> Map Text OValue -> Map Text TemplateInfo
+  -> ImportManifest -> ImportStack
+  -> IO (Either PreprocessError (Map Text OValue, Map Text TemplateInfo, ImportManifest, ImportStack))
+loadImportsAndDefs loader ast baseLocation env0 tmplDefs0 manifest0 stack0 =
   case ast of
     AstMapping pairs _ -> do
       let defsAst = findSectionPairs "$defs" pairs
@@ -98,8 +101,8 @@ loadImportsAndDefs loader ast baseLocation env0 manifest0 stack0 =
       case processDefs env0 defsAst baseLocation of
         Left err -> pure $ Left err
         Right env1 ->
-          processImports loader env1 manifest0 stack0 importsAst baseLocation
-    _ -> pure $ Right (env0, manifest0, stack0)
+          processImports loader env1 tmplDefs0 manifest0 stack0 importsAst baseLocation
+    _ -> pure $ Right (env0, tmplDefs0, manifest0, stack0)
 
 findSectionPairs :: Text -> [(YamlAst, YamlAst)] -> [(YamlAst, YamlAst)]
 findSectionPairs name pairs =
@@ -114,7 +117,7 @@ findSectionPairs name pairs =
 -- Process $defs (sequential let* semantics)
 ------------------------------------------------------------------------
 
-processDefs :: Map Text Value -> [(YamlAst, YamlAst)] -> Text -> Either PreprocessError (Map Text Value)
+processDefs :: Map Text OValue -> [(YamlAst, YamlAst)] -> Text -> Either PreprocessError (Map Text OValue)
 processDefs env0 defs _baseLocation = foldM processOneDef env0 defs
   where
     processOneDef env (keyAst, valAst) =
@@ -125,19 +128,20 @@ processDefs env0 defs _baseLocation = foldM processOneDef env0 defs
                   }
       in case resolveAst ctx valAst of
            Left reErr -> Left (PeResolveError reErr)
-           Right resolved -> Right (Map.insert keyText (toValue resolved) env)
+           Right resolved -> Right (Map.insert keyText resolved env)
 
 ------------------------------------------------------------------------
 -- Process $imports
 ------------------------------------------------------------------------
 
 processImports
-  :: LoadImportFn -> Map Text Value -> ImportManifest -> ImportStack
+  :: LoadImportFn -> Map Text OValue -> Map Text TemplateInfo
+  -> ImportManifest -> ImportStack
   -> [(YamlAst, YamlAst)] -> Text
-  -> IO (Either PreprocessError (Map Text Value, ImportManifest, ImportStack))
-processImports _loader env manifest stack [] _baseLocation =
-  pure $ Right (env, manifest, stack)
-processImports loader env manifest stack ((keyAst, locAst):rest) baseLocation = do
+  -> IO (Either PreprocessError (Map Text OValue, Map Text TemplateInfo, ImportManifest, ImportStack))
+processImports _loader env tmplDefs manifest stack [] _baseLocation =
+  pure $ Right (env, tmplDefs, manifest, stack)
+processImports loader env tmplDefs manifest stack ((keyAst, locAst):rest) baseLocation = do
   let importKey = extractKeyText keyAst
       locationText = extractKeyText locAst
   -- Interpolate handlebars in import location
@@ -148,23 +152,25 @@ processImports loader env manifest stack ((keyAst, locAst):rest) baseLocation = 
       case result of
         Left err -> pure $ Left $ PeImportError err
         Right importData -> do
-          -- Check for $params (custom resource template detection)
-          let _hasParams = case idDoc importData of
-                Object obj -> KM.member "$params" obj
-                _ -> False
-          -- Add imported value to environment
-          let env' = Map.insert importKey (idDoc importData) env
-          processImports loader env' manifest stack rest baseLocation
+          -- Check for $params and store as template def if found
+          let tmplDefs' = case idDoc importData of
+                Object obj | KM.member "$params" obj ->
+                  let params = parseParamDefs (KM.lookup "$params" obj)
+                  in Map.insert importKey (TemplateInfo params (idRawData importData) (idLocation importData)) tmplDefs
+                _ -> tmplDefs
+          -- Add imported value to environment (convert from Value to OValue)
+          let env' = Map.insert importKey (fromValue (idDoc importData)) env
+          processImports loader env' tmplDefs' manifest stack rest baseLocation
 
 ------------------------------------------------------------------------
 -- Handlebars interpolation for import locations
 ------------------------------------------------------------------------
 
-interpolateLocation :: Map Text Value -> Text -> Either InterpolateError Text
+interpolateLocation :: Map Text OValue -> Text -> Either InterpolateError Text
 interpolateLocation env loc
   | not (T.isInfixOf "{{" loc) = Right loc
   | otherwise =
-      let ctx = Object (KM.fromList [(Key.fromText k, v) | (k, v) <- Map.toList env])
+      let ctx = Object (KM.fromList [(Key.fromText k, toValue v) | (k, v) <- Map.toList env])
       in interpolate defaultHelpers ctx loc
 
 ------------------------------------------------------------------------
@@ -203,3 +209,19 @@ extractKeyText = \case
   AstBool False _ -> "false"
   AstNull _ -> "null"
   _ -> ""
+
+------------------------------------------------------------------------
+-- $params parsing
+------------------------------------------------------------------------
+
+parseParamDefs :: Maybe Value -> [ParamDef]
+parseParamDefs Nothing = []
+parseParamDefs (Just (Array arr)) = concatMap parseOneParam (V.toList arr)
+parseParamDefs (Just _) = []
+
+parseOneParam :: Value -> [ParamDef]
+parseOneParam (Object obj) =
+  case KM.lookup "Name" obj of
+    Just (String name) -> [ParamDef name (KM.lookup "Default" obj)]
+    _ -> []
+parseOneParam _ = []

@@ -1,0 +1,41 @@
+title: Merge Operations Demo
+app_config:
+  cpu: 1024
+  memory: 2048
+  timeout: 30
+  replicas: 3
+database_config:
+  host: localhost
+  port: 5432
+  user: app_user
+  database: app_db
+  logging: true
+  metrics: true
+  alerts: true
+final_config:
+  cpu: 1024
+  memory: 2048
+  timeout: 30
+  replicas: 3
+  version: 1.0.0
+  environment: production
+all_tags:
+  base_tags:
+    - app:my-app
+    - team:platform
+  environment_tags:
+    - env:production
+  custom_tags:
+    - version:1.0.0
+service_definition:
+  metadata:
+    name: my-service
+    namespace: default
+  spec:
+    replicas: 5
+    strategy: RollingUpdate
+    template:
+      spec:
+        containers:
+          - name: app
+            image: my-app:latest

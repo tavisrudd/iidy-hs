@@ -1,0 +1,12 @@
+$defs:
+  a: 1234
+  b: 999
+  c: !$ a
+  handlebars_a: "a-is-{{ a }}"
+  direct_a: !$ a
+
+output:
+  handlebars_a: !$ handlebars_a
+  direct_a: !$ direct_a
+  c: !$ c
+  a_plus_b: "{{ handlebars_a }}-and-b-is-{{ b }}"

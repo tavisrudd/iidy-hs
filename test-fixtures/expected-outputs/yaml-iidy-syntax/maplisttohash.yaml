@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Example of !$mapListToHash tag for key-value pair conversion
+Resources:
+  EnvironmentVariables:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/env-vars
+      Type: String
+      Value: '{"DEBUG":"false","LOG_LEVEL":"info","NODE_ENV":"production","PORT":"3000"}'
+  ApplicationSettings:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/settings
+      Type: String
+      Value: '{"max_connections":"100","retry_attempts":"3","timeout_seconds":"30"}'
+  ResourceTags:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/tags
+      Type: String
+      Value: '{"Environment":"production","Service":"api","Team":"backend","Version":"1.2.3"}'
+  ConfigurationHash:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/parameters
+      Type: String
+      Value: '{"database.host":"db.example.com","database.name":"myapp","database.port":"5432","redis.host":"redis.example.com"}'
+  ServiceConfigurations:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/services
+      Type: String
+      Value: '{"api":"api:3000","web":"web:80","worker":"worker:6379"}'
+  DatabaseConnections:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/databases
+      Type: String
+      Value: '{"analytics":{"host":"analytics-db.example.com","port":5432,"url":"postgresql://analytics-db.example.com:5432/myapp"},"primary":{"host":"db1.example.com","port":5432,"url":"postgresql://db1.example.com:5432/myapp"},"replica":{"host":"db2.example.com","port":5432,"url":"postgresql://db2.example.com:5432/myapp"}}'
+  SecurityGroupMappings:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/security-groups
+      Type: String
+      Value: '{"api-sg":{"allowedPorts":[3000,3001],"description":"Security group for api service","serviceName":"api"},"database-sg":{"allowedPorts":[5432],"description":"Security group for database service","serviceName":"database"},"web-sg":{"allowedPorts":[80,443],"description":"Security group for web service","serviceName":"web"}}'
+  EnvironmentConfigs:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/environments
+      Type: String
+      Value: '{"dev":{"baseUrl":"http://dev.example.com","logLevel":"debug","sslEnabled":false},"prod":{"baseUrl":"https://example.com","logLevel":"warn","sslEnabled":true},"staging":{"baseUrl":"https://staging.example.com","logLevel":"debug","sslEnabled":true}}'
+  FeatureFlags:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/feature-flags
+      Type: String
+      Value: '{"advanced_search":true,"beta_features":false,"experimental_ui":false,"new_dashboard":true}'
+  ServiceDiscovery:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/service-discovery
+      Type: String
+      Value: '{"order-service":{"endpoint":"order-service.us-east-1.example.com:8081","healthCheck":"http://order-service.us-east-1.example.com:8081/health","region":"us-east-1"},"payment-service":{"endpoint":"payment-service.us-west-2.example.com:8082","healthCheck":"http://payment-service.us-west-2.example.com:8082/health","region":"us-west-2"},"user-service":{"endpoint":"user-service.us-east-1.example.com:8080","healthCheck":"http://user-service.us-east-1.example.com:8080/health","region":"us-east-1"}}'
+Outputs:
+  EnvironmentVariableCount:
+    Description: Number of environment variables configured
+    Value: true
+  ConfigurationSummary:
+    Description: Summary of configurations created
+    Value: Environment Variables | Application Settings | Resource Tags | Database Configs
+  SampleEnvironmentVariable:
+    Description: Sample environment variable from the hash
+    Value: NODE_ENV will be set to production

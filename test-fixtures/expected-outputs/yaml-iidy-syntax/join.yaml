@@ -1,0 +1,6 @@
+title: Join Operation Demo
+stack_name: my-app-production
+comma_separated: apple, banana, cherry
+path_like: usr/local/bin
+no_delimiter: prefixmy-appsuffix
+version_string: 1.2.3

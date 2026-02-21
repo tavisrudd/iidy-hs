@@ -1,0 +1,19 @@
+db_host: db.example.com
+db_subset:
+  host: db.example.com
+  port: 5432
+nested_host: db.example.com
+service_names:
+  - api
+  - web
+  - worker
+enabled_services:
+  - api
+  - web
+service_ports:
+  - name: api
+    port: 3000
+  - name: web
+    port: 8080
+  - name: worker
+    port: 9000

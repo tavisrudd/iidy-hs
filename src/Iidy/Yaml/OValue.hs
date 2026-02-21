@@ -38,7 +38,7 @@ toValue = \case
   OArray items -> Array (V.fromList (map toValue items))
   OObject kvs  -> Object (KM.fromList [(Key.fromText k, toValue v) | (k, v) <- kvs])
 
--- | Convert aeson Value to ordered value (alphabetical key order from Map).
+-- | Convert aeson Value to ordered value (preserves insertion order via aeson ordered-keymap).
 fromValue :: Value -> OValue
 fromValue = \case
   Null       -> ONull

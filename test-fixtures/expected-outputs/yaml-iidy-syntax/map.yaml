@@ -1,0 +1,43 @@
+title: Map Transformation Demo
+port_configs:
+  - port_number: '80'
+    protocol: tcp
+    description: Port 80 configuration
+  - port_number: '443'
+    protocol: tcp
+    description: Port 443 configuration
+  - port_number: '8080'
+    protocol: tcp
+    description: Port 8080 configuration
+environment_configs:
+  - name: dev
+    url: https://dev.example.com
+  - name: staging
+    url: https://staging.example.com
+  - name: production
+    url: https://production.example.com
+user_permissions:
+  - username: alice
+    is_admin: true
+    home_directory: /home/alice
+  - username: bob
+    is_admin: false
+    home_directory: /home/bob
+  - username: charlie
+    is_admin: true
+    home_directory: /home/charlie
+filtered_admins:
+  - name: alice
+    access_level: full
+  - name: charlie
+    access_level: full
+subnet_definitions:
+  - - subnet-a
+    - cidr: 10.0.0.0/24
+      zone: us-west-2a
+  - - subnet-b
+    - cidr: 10.0.1.0/24
+      zone: us-west-2b
+  - - subnet-c
+    - cidr: 10.0.2.0/24
+      zone: us-west-2c

@@ -1,0 +1,17 @@
+simple_expand:
+  message: Hello, World!
+  details:
+    greeting_used: Hello
+    target_used: World
+override_default:
+  message: Hi, Everyone!
+  details:
+    greeting_used: Hi
+    target_used: Everyone
+other_content:
+  static_value: unchanged
+  expanded:
+    message: Welcome, User!
+    details:
+      greeting_used: Welcome
+      target_used: User

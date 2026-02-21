@@ -1,0 +1,19 @@
+title: String and Array Concatenation Demo
+full_name: my-app-production
+resource_name: my-app-production-v1.2.3-resource
+all_environments:
+  - dev
+  - test
+  - staging
+  - production
+csv_items: apple,banana,cherry
+pipe_separated: first | second | third
+connection_string: protocol://my-app.db.production.example.com
+api_subdomain: api-my-app-production
+env_vars:
+  - name: APP_NAME
+    value: my-app
+  - name: ENVIRONMENT
+    value: production
+  - name: VERSION
+    value: 1.2.3

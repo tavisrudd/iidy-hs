@@ -1,0 +1,9 @@
+# Chain of multiple references
+$defs:
+  level4: "deep-value"
+  level3: "{{ level4 }}"
+  level2: !$ level3
+  level1: !$ level2
+
+output: !$ level1
+# Expected: output: deep-value

@@ -11,6 +11,7 @@ import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map.Strict as Map
+import qualified Data.Scientific as Sci
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -84,7 +85,7 @@ resolveMapping ctx pairs = do
 resolveTemplateString :: TagContext -> SrcMeta -> Text -> Resolve OValue
 resolveTemplateString ctx meta template =
   let ctxValue = Object (KM.fromList
-        [(Key.fromText k, v) | (k, v) <- Map.toList (tcVariables ctx)])
+        [(Key.fromText k, toValue v) | (k, v) <- Map.toList (tcVariables ctx)])
   in case interpolate defaultHelpers ctxValue template of
        Right s -> pure (OString s)
        Left (InterpolateError msg) -> resolveError meta ("Handlebars error: " <> msg)
@@ -156,47 +157,77 @@ resolvePreprocessingTag ctx meta = \case
 ------------------------------------------------------------------------
 
 resolveVarLookup :: TagContext -> SrcMeta -> VarLookupTag -> Resolve OValue
-resolveVarLookup ctx meta (VarLookupTag path query jmesPathExpr) = do
-  baseVal <- case resolveDotPath path ctx of
+resolveVarLookup ctx meta (VarLookupTag rawPath query jmesPathExpr) = do
+  -- Expand bracket notation: config[environment] -> config.production
+  let path = expandBrackets rawPath ctx
+  baseVal <- case resolveDotPathO path ctx of
     Just val -> pure val
     Nothing -> resolveError meta $
       "Variable not found: " <> path <> ". Available: " <>
       T.intercalate ", " (contextVariableNames ctx)
   let queriedVal = case query of
         Nothing -> baseVal
-        Just q -> applyDotQuery q baseVal
+        Just q -> applyDotQueryO q baseVal
   case jmesPathExpr of
-    Nothing -> pure (fromValue queriedVal)
-    Just expr -> case applyJmesPath expr queriedVal of
+    Nothing -> pure queriedVal
+    Just expr -> case applyJmesPath expr (toValue queriedVal) of
       Right v -> pure (fromValue v)
       Left (JMESPathError msg) -> resolveError meta $ "JMESPath error: " <> msg
 
-applyDotQuery :: Text -> Value -> Value
-applyDotQuery q val =
-  let segments = filter (not . T.null) (T.splitOn "." q)
-  in case traversePath segments val of
-       Just v  -> v
-       Nothing -> Null
+expandBrackets :: Text -> TagContext -> Text
+expandBrackets path ctx
+  | T.isInfixOf "[" path =
+      let (before, rest) = T.breakOn "[" path
+          (varName, after) = T.breakOn "]" (T.drop 1 rest)
+          suffix = T.drop 1 after
+          resolved = case getVariable varName ctx of
+            Just (OString s) -> s
+            Just (ONumber n) -> case Sci.floatingOrInteger n of
+              Left (d :: Double) -> T.pack (show d)
+              Right (i :: Integer) -> T.pack (show i)
+            _ -> varName
+          expanded = before <> "." <> resolved <> suffix
+      in expandBrackets expanded ctx
+  | otherwise = path
 
-resolveDotPath :: Text -> TagContext -> Maybe Value
-resolveDotPath path ctx =
+-- | Resolve a dot-path to an OValue (preserving key ordering)
+resolveDotPathO :: Text -> TagContext -> Maybe OValue
+resolveDotPathO path ctx =
   let segments = T.splitOn "." path
   in case segments of
     [] -> Nothing
     (root:rest) -> case getVariable root ctx of
       Nothing -> Nothing
-      Just val -> traversePath rest val
+      Just val -> traversePathO rest val
 
-traversePath :: [Text] -> Value -> Maybe Value
-traversePath [] val = Just val
-traversePath (seg:rest) val = case val of
-  Object obj -> case KM.lookup (Key.fromText seg) obj of
-    Just v  -> traversePath rest v
+-- | Traverse a path through an OValue
+traversePathO :: [Text] -> OValue -> Maybe OValue
+traversePathO [] val = Just val
+traversePathO (seg:rest) val = case val of
+  OObject kvs -> case lookupO seg kvs of
+    Just v  -> traversePathO rest v
     Nothing -> Nothing
-  Array arr  -> case reads (T.unpack seg) of
-    [(i, "")] | i >= 0 && i < V.length arr -> traversePath rest (arr V.! i)
+  OArray arr  -> case reads (T.unpack seg) of
+    [(i, "")] | i >= 0 && i < length arr -> traversePathO rest (arr !! i)
     _ -> Nothing
   _ -> Nothing
+
+-- | Apply dot-query (comma-separated key selection or path traversal)
+applyDotQueryO :: Text -> OValue -> OValue
+applyDotQueryO q val
+  -- Comma-separated key selection: "host,port" selects specific keys
+  | T.isInfixOf "," q = case val of
+      OObject kvs ->
+        let keys = map T.strip (T.splitOn "," q)
+            selected = [(k, v) | k <- keys, Just v <- [lookupO k kvs]]
+        in OObject selected
+      _ -> ONull
+  -- Single dot-path traversal
+  | otherwise =
+      let segments = filter (not . T.null) (T.splitOn "." q)
+      in case traversePathO segments val of
+           Just v  -> v
+           Nothing -> ONull
 
 resolveIf :: TagContext -> SrcMeta -> IfTag -> Resolve OValue
 resolveIf ctx _meta (IfTag test thenVal elseVal) = do
@@ -215,7 +246,7 @@ resolveLet ctx _meta (LetTag bindings expr) = do
     foldBindings c [] = pure c
     foldBindings c ((name, ast):rest) = do
       val <- resolveAst c ast
-      foldBindings (withVariable name (toValue val) c) rest
+      foldBindings (withVariable name val c) rest
 
 resolveMap :: TagContext -> SrcMeta -> MapTag -> Resolve OValue
 resolveMap ctx meta (MapTag items template var filterExpr) =
@@ -228,8 +259,8 @@ resolveMapItems ctx meta itemsAst templateAst varName filterExpr = do
     OArray arr -> do
       results <- imapMaybeM (\i item -> do
         let bindings = Map.fromList
-              [ (varName, toValue item)
-              , (varName <> "Idx", Number (fromIntegral i))
+              [ (varName, item)
+              , (varName <> "Idx", ONumber (fromIntegral i))
               ]
             itemCtx = withBindings bindings ctx
         case filterExpr of
@@ -253,9 +284,14 @@ resolveMerge ctx meta (MergeTag sources) = do
 
 mergeOObjects :: OValue -> [(Text, OValue)] -> OValue
 mergeOObjects (OObject base) overlay =
-  let overlayKeys = map fst overlay
-      keptBase = filter (\(k, _) -> k `notElem` overlayKeys) base
-  in OObject (keptBase ++ overlay)
+  let -- Update base values where overlay has same key
+      updatedBase = map (\(k, v) -> case lookup k overlay of
+                           Just v' -> (k, v')
+                           Nothing -> (k, v)) base
+      -- Append new keys from overlay that aren't in base
+      baseKeys = map fst base
+      newKeys = filter (\(k, _) -> k `notElem` baseKeys) overlay
+  in OObject (updatedBase ++ newKeys)
 mergeOObjects _ overlay = OObject overlay
 
 resolveConcat :: TagContext -> SrcMeta -> ConcatTag -> Resolve OValue
@@ -341,9 +377,8 @@ resolveMapValues ctx meta (MapValuesTag itemsAst templateAst var) = do
   case itemsVal of
     OObject kvs -> do
       pairs <- traverse (\(k, v) -> do
-        let bindings = Map.singleton (fromMaybeVar var) $
-              Object $ KM.fromList [("key", String k), ("value", toValue v)]
-            itemCtx = withBindings bindings ctx
+        let binding = OObject [("key", OString k), ("value", v)]
+            itemCtx = withVariable (fromMaybeVar var) binding ctx
         resolved <- resolveAst itemCtx templateAst
         pure (k, resolved)
         ) kvs
@@ -356,7 +391,7 @@ resolveGroupBy ctx meta (GroupByTag itemsAst keyAst var _templateAst) = do
   case itemsVal of
     OArray arr -> do
       groups <- foldM (\acc item -> do
-        let itemCtx = withVariable (fromMaybeVar var) (toValue item) ctx
+        let itemCtx = withVariable (fromMaybeVar var) item ctx
         keyVal <- resolveAst itemCtx keyAst
         let k = oValueToText keyVal
             existing = case lookupO k acc of
@@ -415,8 +450,42 @@ resolveEscape _ctx _meta (EscapeTag contentAst) =
   pure $ fromValue $ astToValueRaw contentAst
 
 resolveExpand :: TagContext -> SrcMeta -> ExpandTag -> Resolve OValue
-resolveExpand _ctx meta (ExpandTag _templateAst _paramsAst) =
-  resolveError meta "!$expand not yet implemented"
+resolveExpand ctx meta (ExpandTag templateRefAst paramsAst) = do
+  -- 1. Resolve template reference to get template name
+  templateVal <- resolveAst ctx templateRefAst
+  let templateName = oValueToText templateVal
+  -- 2. Look up template info
+  case Map.lookup templateName (tcCustomTemplateDefs ctx) of
+    Nothing -> resolveError meta $ "!$expand: template '" <> templateName <> "' not found"
+    Just tmplInfo -> do
+      -- 3. Resolve provided params
+      providedParams <- resolveAst ctx paramsAst
+      let provided = case providedParams of
+            OObject kvs -> Map.fromList [(k, fromValue (toValue v)) | (k, v) <- kvs]
+            _ -> Map.empty
+      -- 4. Merge with defaults from $params (defaults are Value, convert to OValue)
+      let merged = mergeExpandParams (tiParams tmplInfo) provided
+      -- 5. Re-parse the raw template YAML
+      case parseYaml (BL.fromStrict (TE.encodeUtf8 (tiRawBody tmplInfo))) (tiLocation tmplInfo) of
+        Left (ParseError _ msg) -> resolveError meta $ "!$expand parse error: " <> msg
+        Right templateAst' -> do
+          -- 6. Build sub-context with merged params as variables
+          let subCtx = ctx
+                { tcVariables = Map.union merged (tcVariables ctx)
+                , tcInputUri = Just (tiLocation tmplInfo)
+                }
+          -- 7. Resolve the template body
+          resolveAst subCtx templateAst'
+
+mergeExpandParams :: [ParamDef] -> Map.Map Text OValue -> Map.Map Text OValue
+mergeExpandParams defs provided = foldl' addParam provided defs
+  where
+    addParam acc pd =
+      case Map.lookup (pdName pd) acc of
+        Just _ -> acc
+        Nothing -> case pdDefault pd of
+          Just defVal -> Map.insert (pdName pd) (fromValue defVal) acc
+          Nothing -> acc
 
 ------------------------------------------------------------------------
 -- Raw AST to Value (for !$escape — no resolution)

@@ -1,0 +1,16 @@
+database:
+  host: "db.example.com"
+  port: 5432
+  name: "myapp_db"
+
+cache:
+  host: "cache.example.com"
+  port: 6379
+
+api:
+  version: "v1"
+  timeout: 30
+
+monitoring:
+  enabled: true
+  retention_days: 30

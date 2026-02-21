@@ -1,0 +1,113 @@
+title: ConcatMap Transformation Demo
+service_endpoints:
+  - name: api-internal
+    type: internal
+    port: 3000
+  - name: api-external
+    type: external
+    port: 8080
+  - name: web-internal
+    type: internal
+    port: 3000
+  - name: web-external
+    type: external
+    port: 8080
+  - name: worker-internal
+    type: internal
+    port: 3000
+  - name: worker-external
+    type: external
+    port: 8080
+deployments:
+  - service: api
+    environment: dev
+    name: api-dev
+  - service: api
+    environment: staging
+    name: api-staging
+  - service: api
+    environment: production
+    name: api-production
+  - service: web
+    environment: dev
+    name: web-dev
+  - service: web
+    environment: staging
+    name: web-staging
+  - service: web
+    environment: production
+    name: web-production
+  - service: worker
+    environment: dev
+    name: worker-dev
+  - service: worker
+    environment: staging
+    name: worker-staging
+  - service: worker
+    environment: production
+    name: worker-production
+user_permissions:
+  - username: alice
+    team: backend
+    permission: alice:backend
+  - username: alice
+    team: frontend
+    permission: alice:frontend
+  - username: bob
+    team: devops
+    permission: bob:devops
+  - username: charlie
+    team: backend
+    permission: charlie:backend
+  - username: charlie
+    team: data
+    permission: charlie:data
+indexed_services:
+  - service_id: '0'
+    service_name: api
+    primary: true
+  - service_id: '0'
+    service_name: api-backup
+    primary: false
+  - service_id: '1'
+    service_name: web
+    primary: true
+  - service_id: '1'
+    service_name: web-backup
+    primary: false
+  - service_id: '2'
+    service_name: worker
+    primary: true
+  - service_id: '2'
+    service_name: worker-backup
+    primary: false
+production_configs:
+  - name: api-config
+    type: config
+  - name: api-secret
+    type: secret
+  - name: web-config
+    type: config
+  - name: web-secret
+    type: secret
+team_assignments:
+  - assignment_id: 0-0
+    user: alice
+    team: backend
+    role: member
+  - assignment_id: 0-1
+    user: alice
+    team: frontend
+    role: member
+  - assignment_id: 1-0
+    user: bob
+    team: devops
+    role: member
+  - assignment_id: 2-0
+    user: charlie
+    team: backend
+    role: member
+  - assignment_id: 2-1
+    user: charlie
+    team: data
+    role: member

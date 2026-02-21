@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Example of !$mergeMap tag for map and merge operations
+Resources:
+  ServiceConfigurations:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/services
+      Type: String
+      Value: '{"api":{"healthCheck":"http://api-service:3000/health","host":"api-service","port":3000,"replicas":3},"web":{"healthCheck":"http://web-service:80/health","host":"web-service","port":80,"replicas":2},"worker":{"healthCheck":"http://worker-service:6379/health","host":"worker-service","port":6379,"replicas":1}}'
+  EnvironmentSettings:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/environments
+      Type: String
+      Value: '{"dev":{"certificate_required":false,"config_prefix":"/config/dev","ssl_enabled":false,"url":"http://dev.example.com"},"prod":{"certificate_required":true,"config_prefix":"/config/prod","ssl_enabled":true,"url":"https://example.com"},"staging":{"certificate_required":true,"config_prefix":"/config/staging","ssl_enabled":true,"url":"https://staging.example.com"}}'
+  RegionalMappings:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/regions
+      Type: String
+      Value: '{"eu-west-1":{"cloudWatchLogGroup":"/aws/lambda/myapp/eu-west-1","displayName":"Ireland","s3Bucket":"myapp-eu-west-1-data"},"us-east-1":{"cloudWatchLogGroup":"/aws/lambda/myapp/us-east-1","displayName":"N. Virginia","s3Bucket":"myapp-us-east-1-data"},"us-west-2":{"cloudWatchLogGroup":"/aws/lambda/myapp/us-west-2","displayName":"Oregon","s3Bucket":"myapp-us-west-2-data"}}'
+  LoadBalancerPorts:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/lb-ports
+      Type: String
+      Value: '{"3000":{"protocol":"HTTP","service":"api","targetGroup":"api-tg"},"6379":{"protocol":"HTTP","service":"worker","targetGroup":"worker-tg"},"80":{"protocol":"HTTP","service":"web","targetGroup":"web-tg"}}'
+  SecurityGroupRules:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/sg-rules
+      Type: String
+      Value: '{"rules":{"api-rule":{"Description":"Allow traffic to api service","FromPort":3000,"IpProtocol":"tcp","ToPort":3000},"web-rule":{"Description":"Allow traffic to web service","FromPort":80,"IpProtocol":"tcp","ToPort":80},"worker-rule":{"Description":"Allow traffic to worker service","FromPort":6379,"IpProtocol":"tcp","ToPort":6379}}}'
+  ServiceEnvironmentVars:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/service-env-vars
+      Type: String
+      Value: '{"api_CONFIG":{"SERVICE_NAME":"api","SERVICE_PORT":3000,"SERVICE_REPLICAS":3,"SERVICE_URL":"http://api:3000"},"web_CONFIG":{"SERVICE_NAME":"web","SERVICE_PORT":80,"SERVICE_REPLICAS":2,"SERVICE_URL":"http://web:80"},"worker_CONFIG":{"SERVICE_NAME":"worker","SERVICE_PORT":6379,"SERVICE_REPLICAS":1,"SERVICE_URL":"http://worker:6379"}}'
+  EnvironmentOutputs:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/cf-outputs
+      Type: String
+      Value: '{"devStackOutput":{"Description":"Stack output for dev environment","Export":{"Name":"MyApp-dev-Domain"},"Value":"dev.example.com"},"prodStackOutput":{"Description":"Stack output for prod environment","Export":{"Name":"MyApp-prod-Domain"},"Value":"example.com"},"stagingStackOutput":{"Description":"Stack output for staging environment","Export":{"Name":"MyApp-staging-Domain"},"Value":"staging.example.com"}}'
+  ProductionConfigs:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/production
+      Type: String
+      Value: '{"prod-secure":{"backupBucket":"backup-prod-secure","environment":"prod","secureUrl":"https://example.com","sslRequired":true},"staging-secure":{"backupBucket":"backup-staging-secure","environment":"staging","secureUrl":"https://staging.example.com","sslRequired":true}}'
+Outputs:
+  ServiceCount:
+    Description: Number of services configured
+    Value: true
+  EnvironmentCount:
+    Description: Number of environments configured
+    Value: true
+  ConfigurationSummary:
+    Description: Summary of merged configurations
+    Value: 'Services: api, web, worker, Environments: dev, staging, prod, Regions: us-east-1, us-west-2, eu-west-1'

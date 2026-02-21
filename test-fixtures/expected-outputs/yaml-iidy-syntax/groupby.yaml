@@ -1,0 +1,106 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Example of !$groupBy tag for grouping operations
+Resources:
+  ResourcesByEnvironment:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/resources-by-env
+      Type: String
+      Value: '{"production":[{"environment":"production","name":"web-server-1","team":"frontend","type":"EC2"},{"environment":"production","name":"web-server-2","team":"frontend","type":"EC2"},{"environment":"production","name":"api-server-1","team":"backend","type":"EC2"},{"environment":"production","name":"database-1","team":"backend","type":"RDS"}],"staging":[{"environment":"staging","name":"test-server-1","team":"qa","type":"EC2"},{"environment":"staging","name":"test-database","team":"qa","type":"RDS"}]}'
+  ResourcesByType:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/resources-by-type
+      Type: String
+      Value: '{"EC2":[{"environment":"production","name":"web-server-1","team":"frontend","type":"EC2"},{"environment":"production","name":"web-server-2","team":"frontend","type":"EC2"},{"environment":"production","name":"api-server-1","team":"backend","type":"EC2"},{"environment":"staging","name":"test-server-1","team":"qa","type":"EC2"}],"RDS":[{"environment":"production","name":"database-1","team":"backend","type":"RDS"},{"environment":"staging","name":"test-database","team":"qa","type":"RDS"}]}'
+  ResourcesByTeam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/resources-by-team
+      Type: String
+      Value: '{"backend":[{"environment":"production","name":"api-server-1","team":"backend","type":"EC2"},{"environment":"production","name":"database-1","team":"backend","type":"RDS"}],"frontend":[{"environment":"production","name":"web-server-1","team":"frontend","type":"EC2"},{"environment":"production","name":"web-server-2","team":"frontend","type":"EC2"}],"qa":[{"environment":"staging","name":"test-server-1","team":"qa","type":"EC2"},{"environment":"staging","name":"test-database","team":"qa","type":"RDS"}]}'
+  UsersByDepartment:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/users-by-dept
+      Type: String
+      Value: '{"engineering":[{"department":"engineering","level":"senior","name":"alice","role":"developer"},{"department":"engineering","level":"junior","name":"bob","role":"developer"},{"department":"engineering","level":"senior","name":"carol","role":"manager"}],"marketing":[{"department":"marketing","level":"senior","name":"david","role":"analyst"},{"department":"marketing","level":"senior","name":"eve","role":"manager"}],"sales":[{"department":"sales","level":"junior","name":"frank","role":"representative"}]}'
+  UsersByRole:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/users-by-role
+      Type: String
+      Value: '{"analyst":[{"department":"marketing","level":"senior","name":"david","role":"analyst"}],"developer":[{"department":"engineering","level":"senior","name":"alice","role":"developer"},{"department":"engineering","level":"junior","name":"bob","role":"developer"}],"manager":[{"department":"engineering","level":"senior","name":"carol","role":"manager"},{"department":"marketing","level":"senior","name":"eve","role":"manager"}],"representative":[{"department":"sales","level":"junior","name":"frank","role":"representative"}]}'
+  UsersByLevel:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/users-by-level
+      Type: String
+      Value: '{"junior":[{"department":"engineering","level":"junior","name":"bob","role":"developer"},{"department":"sales","level":"junior","name":"frank","role":"representative"}],"senior":[{"department":"engineering","level":"senior","name":"alice","role":"developer"},{"department":"engineering","level":"senior","name":"carol","role":"manager"},{"department":"marketing","level":"senior","name":"david","role":"analyst"},{"department":"marketing","level":"senior","name":"eve","role":"manager"}]}'
+  LogsByLevel:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/logs-by-level
+      Type: String
+      Value: '{"ERROR":[{"level":"ERROR","message":"Database connection failed","service":"api","timestamp":"2024-01-01T10:01:00Z"},{"level":"ERROR","message":"Asset not found","service":"web","timestamp":"2024-01-01T10:04:00Z"}],"INFO":[{"level":"INFO","message":"Request processed","service":"api","timestamp":"2024-01-01T10:00:00Z"},{"level":"INFO","message":"Page rendered","service":"web","timestamp":"2024-01-01T10:02:00Z"}],"WARN":[{"level":"WARN","message":"Slow query detected","service":"api","timestamp":"2024-01-01T10:03:00Z"}]}'
+  LogsByService:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/logs-by-service
+      Type: String
+      Value: '{"api":[{"level":"INFO","message":"Request processed","service":"api","timestamp":"2024-01-01T10:00:00Z"},{"level":"ERROR","message":"Database connection failed","service":"api","timestamp":"2024-01-01T10:01:00Z"},{"level":"WARN","message":"Slow query detected","service":"api","timestamp":"2024-01-01T10:03:00Z"}],"web":[{"level":"INFO","message":"Page rendered","service":"web","timestamp":"2024-01-01T10:02:00Z"},{"level":"ERROR","message":"Asset not found","service":"web","timestamp":"2024-01-01T10:04:00Z"}]}'
+  ResourcesByEnvironmentAndType:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/resources-by-env-type
+      Type: String
+      Value: '{"production-EC2":[{"environment":"production","name":"web-server-1","team":"frontend","type":"EC2"},{"environment":"production","name":"web-server-2","team":"frontend","type":"EC2"},{"environment":"production","name":"api-server-1","team":"backend","type":"EC2"}],"production-RDS":[{"environment":"production","name":"database-1","team":"backend","type":"RDS"}],"staging-EC2":[{"environment":"staging","name":"test-server-1","team":"qa","type":"EC2"}],"staging-RDS":[{"environment":"staging","name":"test-database","team":"qa","type":"RDS"}]}'
+  UsersByDepartmentAndSeniority:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/users-by-dept-seniority
+      Type: String
+      Value: '{"engineering-junior":[{"department":"engineering","level":"junior","name":"bob","role":"developer"}],"engineering-senior":[{"department":"engineering","level":"senior","name":"alice","role":"developer"},{"department":"engineering","level":"senior","name":"carol","role":"manager"}],"marketing-senior":[{"department":"marketing","level":"senior","name":"david","role":"analyst"},{"department":"marketing","level":"senior","name":"eve","role":"manager"}],"sales-junior":[{"department":"sales","level":"junior","name":"frank","role":"representative"}]}'
+  ResourcesByOwnership:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/resources-by-ownership
+      Type: String
+      Value: '{"backend-production":[{"environment":"production","name":"api-server-1","team":"backend","type":"EC2"},{"environment":"production","name":"database-1","team":"backend","type":"RDS"}],"frontend-production":[{"environment":"production","name":"web-server-1","team":"frontend","type":"EC2"},{"environment":"production","name":"web-server-2","team":"frontend","type":"EC2"}],"qa-staging":[{"environment":"staging","name":"test-server-1","team":"qa","type":"EC2"},{"environment":"staging","name":"test-database","team":"qa","type":"RDS"}]}'
+  TeamResourceAnalysis:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/team-analysis
+      Type: String
+      Value: '{"byEnvironment":{"production":[{"environment":"production","name":"web-server-1","team":"frontend","type":"EC2"},{"environment":"production","name":"web-server-2","team":"frontend","type":"EC2"},{"environment":"production","name":"api-server-1","team":"backend","type":"EC2"},{"environment":"production","name":"database-1","team":"backend","type":"RDS"}],"staging":[{"environment":"staging","name":"test-server-1","team":"qa","type":"EC2"},{"environment":"staging","name":"test-database","team":"qa","type":"RDS"}]},"byTeam":{"backend":[{"environment":"production","name":"api-server-1","team":"backend","type":"EC2"},{"environment":"production","name":"database-1","team":"backend","type":"RDS"}],"frontend":[{"environment":"production","name":"web-server-1","team":"frontend","type":"EC2"},{"environment":"production","name":"web-server-2","team":"frontend","type":"EC2"}],"qa":[{"environment":"staging","name":"test-server-1","team":"qa","type":"EC2"},{"environment":"staging","name":"test-database","team":"qa","type":"RDS"}]},"byType":{"EC2":[{"environment":"production","name":"web-server-1","team":"frontend","type":"EC2"},{"environment":"production","name":"web-server-2","team":"frontend","type":"EC2"},{"environment":"production","name":"api-server-1","team":"backend","type":"EC2"},{"environment":"staging","name":"test-server-1","team":"qa","type":"EC2"}],"RDS":[{"environment":"production","name":"database-1","team":"backend","type":"RDS"},{"environment":"staging","name":"test-database","team":"qa","type":"RDS"}]}}'
+  ResourceCounts:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/resource-counts
+      Type: String
+      Value: '{"environmentCounts":{"production":true,"staging":true},"typeCounts":{"EC2":true,"RDS":true}}'
+  ProductionResourcesByTeam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/prod-resources-by-team
+      Type: String
+      Value: '{"backend":[{"environment":"production","name":"api-server-1","team":"backend","type":"EC2"},{"environment":"production","name":"database-1","team":"backend","type":"RDS"}],"frontend":[{"environment":"production","name":"web-server-1","team":"frontend","type":"EC2"},{"environment":"production","name":"web-server-2","team":"frontend","type":"EC2"}]}'
+  ErrorAnalysis:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/error-analysis
+      Type: String
+      Value: '{"errorsByService":{"api":[{"level":"ERROR","message":"Database connection failed","service":"api","timestamp":"2024-01-01T10:01:00Z"}],"web":[{"level":"ERROR","message":"Asset not found","service":"web","timestamp":"2024-01-01T10:04:00Z"}]},"warningsByService":{"api":[{"level":"WARN","message":"Slow query detected","service":"api","timestamp":"2024-01-01T10:03:00Z"}]}}'
+Outputs:
+  TotalResources:
+    Description: Total number of resources
+    Value: true
+  TotalUsers:
+    Description: Total number of users
+    Value: true
+  GroupingSummary:
+    Description: Summary of grouping operations
+    Value: Resources grouped by environment, type, and team | Users grouped by department, role, and level | Logs grouped by level and service
+  SampleGrouping:
+    Description: Example of grouped data structure
+    Value: Resources will be grouped into production/staging by environment

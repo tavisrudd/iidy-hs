@@ -1,0 +1,16 @@
+$defs:
+  app_name: "test-app"
+  environment: "dev"
+
+name: "{{app_name}}-{{environment}}"
+region: "us-west-2"
+
+resources: !$map
+  items: ["web", "api", "database"]
+  template: "{{app_name}}-{{item}}-{{environment}}"
+
+config: !$merge
+  - name: "{{app_name}}"
+    env: "{{environment}}"
+  - replicas: 3
+    version: "1.0.0"

@@ -1,0 +1,11 @@
+name: test-app-dev
+region: us-west-2
+resources:
+  - test-app-web-dev
+  - test-app-api-dev
+  - test-app-database-dev
+config:
+  name: test-app
+  env: dev
+  replicas: 3
+  version: 1.0.0

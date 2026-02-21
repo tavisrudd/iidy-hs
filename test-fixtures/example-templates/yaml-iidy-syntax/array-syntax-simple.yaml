@@ -1,0 +1,46 @@
+$defs:
+  test_data:
+    message: "Hello World"
+  services: ["api", "web", "worker"]
+
+# Simple Array Syntax Compatibility Test
+# Tests core array syntax behavior that both iidy-js and iidy-rs should support
+
+title: "Array Syntax Compatibility Test"
+
+# 1. Boolean logic with array syntax (the main bug we fixed)
+boolean_tests:
+  not_direct: !$not false
+  not_array: !$not [false]
+  not_true_direct: !$not true
+  not_true_array: !$not [true]
+
+# 2. Filter operations with array syntax
+filter_test: !$map
+  items: !$ services
+  filter: !$not [!$eq ["{{item}}", "worker"]]
+  template: "service-{{item}}"
+
+# 3. CloudFormation tags with array syntax
+cloudformation_tags:
+  ref_direct: !Ref "MyBucket"
+  ref_array: !Ref ["MyBucket"]
+  sub_direct: !Sub "Hello ${Param}"
+  sub_array: !Sub ["Hello ${Param}"]
+
+# 4. Edge cases for array handling
+edge_cases:
+  # Single element should unpack
+  single_not: !$not [false]
+  # Multiple elements should preserve array
+  multiple_not: !$not [true, false]
+  # Empty array should preserve
+  empty_not: !$not []
+
+# 5. Nested operations with mixed syntax
+nested_test: !$concatMap
+  items: !$ services
+  filter: !$not [!$eq ["{{item}}", "worker"]]
+  template:
+    - name: "{{item}}-config"
+      enabled: !$not [false]

@@ -1,0 +1,30 @@
+$defs:
+  config:
+    database:
+      host: "db.example.com"
+      port: 5432
+    cache:
+      host: "cache.example.com"
+      port: 6379
+    production: "prod-config-value"
+  environment: "production"
+
+# Variable lookup using !$ in various forms
+
+# Simple path reference
+db_host: !$ config.database.host
+cache_port: !$ config.cache.port
+
+# Query syntax
+db_config_query: !$ config.database?host,port
+
+# Object form
+explicit: !$
+  path: config.database
+  query: "host,port"
+
+# Variable reference
+env_ref: !$ environment
+
+# Bracket notation
+dynamic: !$ config[environment]

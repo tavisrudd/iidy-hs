@@ -38,6 +38,12 @@ Autonomous claude driven, Haskell port of iidy (a CloudFormation preprocessor/de
 - No modifications to files outside ~/src/iidy-hs/
 - Read-only access to ~/src/iidy/
 
+## Progress Logging
+- After completing each workplan chunk (2.1, 2.2, etc.), append a timestamped line to `progress.log`
+- Format: `YYYY-MM-DD HH:MM — Chunk X.Y: <brief description of what was done>`
+- Also log gate pass/fail results
+- This file is for `tail -f` monitoring — keep entries single-line
+
 ## Safety
 - No destructive operations (rm -rf, git reset --hard, force push)
 - No writing credentials, secrets, or API keys to disk

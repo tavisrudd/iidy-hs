@@ -1,0 +1,45 @@
+$defs:
+  app_name: "my-app"
+  environment: "production"
+  version: "1.2.3"
+  items: ["apple", "banana", "cherry"]
+  
+# !$concat and !$join examples
+title: "String and Array Concatenation Demo"
+
+# String concatenation uses handlebars templates, not !$concat
+full_name: "{{app_name}}-{{environment}}"
+
+# Complex string concatenation
+resource_name: "{{app_name}}-{{environment}}-v{{version}}-resource"
+
+# !$concat for arrays
+all_environments: !$concat
+  - ["dev", "test"]
+  - ["staging"]
+  - ["production"]
+
+# !$join to create delimited strings (iidy-js format: [delimiter, array])
+csv_items: !$join [",", !$ items]
+
+# !$join with custom separator
+pipe_separated: !$join [" | ", ["first", "second", "third"]]
+
+# !$join with !$concat (arrays only)
+connection_string: !$join
+  - ""
+  - !$concat
+    - ["protocol://", "{{app_name}}", ".db."]
+    - ["{{environment}}", ".example.com"]
+
+# Building a URL component with !$join
+api_subdomain: !$join ["-", ["api", "{{app_name}}", "{{environment}}"]]
+
+# Building environment variables
+env_vars: !$concat
+  - - name: "APP_NAME"
+      value: "{{app_name}}"
+  - - name: "ENVIRONMENT" 
+      value: "{{environment}}"
+  - - name: "VERSION"
+      value: "{{version}}"

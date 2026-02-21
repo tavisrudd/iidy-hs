@@ -1,0 +1,13 @@
+# Nested dynamic scopes
+$defs:
+  outer_var: "outer"
+
+outer: !$let
+  vars:
+    middle_var: "middle"
+  in: !$map
+    items: [1, 2]
+    var: inner
+    template: "{{ outer_var }}-{{ vars.middle_var }}-{{ inner }}"
+# Expected:
+# outer: ["outer-middle-1", "outer-middle-2"]
