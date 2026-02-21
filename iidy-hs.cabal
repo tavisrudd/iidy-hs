@@ -24,6 +24,8 @@ library
     Iidy.Yaml.PathTracker
     Iidy.Yaml.Errors.Ids
     Iidy.Yaml.Errors.Enhanced
+    Iidy.Yaml.Resolution.Context
+    Iidy.Yaml.Resolution.Resolver
     Iidy.Output.Types
     Iidy.Cli
     Iidy.Aws.CredentialSource
@@ -40,6 +42,7 @@ library
     , scientific
     , text
     , time
+    , vector
 
 executable iidy-hs
   import:           warnings
