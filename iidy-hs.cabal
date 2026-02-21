@@ -29,6 +29,11 @@ library
     Iidy.Yaml.Handlebars.Engine
     Iidy.Yaml.Handlebars.Helpers
     Iidy.Yaml.JMESPath
+    Iidy.Yaml.Imports.Types
+    Iidy.Yaml.Imports.Manifest
+    Iidy.Yaml.Imports.Loaders.File
+    Iidy.Yaml.Imports.Loaders.Env
+    Iidy.Yaml.Imports.Loaders.Random
     Iidy.Output.Types
     Iidy.Cli
     Iidy.Aws.CredentialSource
@@ -43,6 +48,9 @@ library
     , containers
     , HsYAML
     , scientific
+    , directory
+    , filepath
+    , random
     , text
     , time
     , vector
