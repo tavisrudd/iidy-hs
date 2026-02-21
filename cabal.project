@@ -1,0 +1,5 @@
+packages: .
+jobs: 4
+
+package iidy-hs
+  ghc-options: -O0
