@@ -163,8 +163,8 @@ Layer 13 (ancillary):  Demo, explain, render command, template approval, convert
 
 ### Gate 1 (after Phase 1): Types Compile
 - [x] `nix develop` enters Haskell shell with GHC + cabal
-- [ ] `cabal build` succeeds with all type modules
-- [ ] No warnings with `-Wall`
+- [x] `cabal build` succeeds with all type modules
+- [x] No warnings with `-Wall`
 
 ### Gate 2 (after Phase 2): YAML Engine Works
 - [ ] `render` command processes all 6 test fixtures
@@ -441,10 +441,8 @@ build-depends:
 
 | Session | Phase | Chunks | Status |
 |---------|-------|--------|--------|
-| 1 | Phase 1 | 1.1-1.7 | Not started |
-| 2 | Phase 2 | 2.1-2.4 | Not started |
-| 3 | Phase 2 | 2.5-2.8 | Not started |
-| 4 | Phase 2 | 2.9-2.12 | Not started |
+| 1 | Phase 1 | 1.1-1.7 | DONE (Gate 1 passed) |
+| 2 | Phase 2 | 2.1-2.12 | DONE (all chunks compiled) |
 | 5 | Phase 2 (gate) | Gate 2 validation | Not started |
 | 6 | Phase 3 | 3.1-3.7 | Not started |
 | 7 | Phase 4 | 4.1-4.6 | Not started |
