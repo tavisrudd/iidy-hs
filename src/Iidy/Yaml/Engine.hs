@@ -14,14 +14,13 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Vector as V
 import Iidy.Yaml.Ast
--- import Iidy.Yaml.CustomResources.Params used during import loading for $params detection
 import Iidy.Yaml.Handlebars.Engine (interpolate, defaultHelpers, InterpolateError(..))
 import Iidy.Yaml.Imports.Manifest
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..))
-import Iidy.Yaml.Location (Position, zeroPosition)
+import Iidy.Yaml.OValue (OValue(..), toValue)
 import Iidy.Yaml.Resolution.Context
+
 import Iidy.Yaml.Resolution.Resolver (resolveAst, ResolveError(..))
 
 ------------------------------------------------------------------------
@@ -29,7 +28,7 @@ import Iidy.Yaml.Resolution.Resolver (resolveAst, ResolveError(..))
 ------------------------------------------------------------------------
 
 data PreprocessResult = PreprocessResult
-  { prValue         :: !Value
+  { prValue         :: !OValue
   , prImportRecords :: !ImportManifest
   } deriving stock (Show)
 
@@ -76,7 +75,7 @@ process loader ast baseLocation yaml11Compat = do
             Left reErr -> pure $ Left $ PeResolveError reErr
             Right resolved -> do
               let final = if yaml11Compat
-                          then convertYaml11Compat resolved
+                          then convertYaml11CompatO resolved
                           else resolved
               pure $ Right $ PreprocessResult
                 { prValue = final
@@ -126,7 +125,7 @@ processDefs env0 defs _baseLocation = foldM processOneDef env0 defs
                   }
       in case resolveAst ctx valAst of
            Left reErr -> Left (PeResolveError reErr)
-           Right resolved -> Right (Map.insert keyText resolved env)
+           Right resolved -> Right (Map.insert keyText (toValue resolved) env)
 
 ------------------------------------------------------------------------
 -- Process $imports
@@ -172,13 +171,13 @@ interpolateLocation env loc
 -- YAML 1.1 compatibility
 ------------------------------------------------------------------------
 
-convertYaml11Compat :: Value -> Value
-convertYaml11Compat = \case
-  Object obj -> Object (KM.map convertYaml11Compat obj)
-  Array arr -> Array (V.map convertYaml11Compat arr)
-  String s
-    | isBooleanLike s -> Bool (isTrueIsh s)
-    | otherwise -> String s
+convertYaml11CompatO :: OValue -> OValue
+convertYaml11CompatO = \case
+  OObject kvs -> OObject [(k, convertYaml11CompatO v) | (k, v) <- kvs]
+  OArray items -> OArray (map convertYaml11CompatO items)
+  OString s
+    | isBooleanLike s -> OBool (isTrueIsh s)
+    | otherwise -> OString s
   other -> other
 
 isBooleanLike :: Text -> Bool
@@ -204,7 +203,3 @@ extractKeyText = \case
   AstBool False _ -> "false"
   AstNull _ -> "null"
   _ -> ""
-
--- | Dummy position for synthetic AST nodes
-_dummyPos :: Position
-_dummyPos = zeroPosition

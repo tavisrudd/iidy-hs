@@ -5,12 +5,14 @@ module Iidy.Yaml.Parser
   ) where
 
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.Map as Map
+import Data.Char (isDigit)
+import Data.Functor.Identity (Identity(..))
 import Data.Scientific (Scientific)
+import qualified Data.Scientific as Sci
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.YAML as Y
-import Data.YAML.Event (Tag, tagToText)
+import Data.YAML.Event (Tag, ScalarStyle(..), tagToText)
 import Iidy.Yaml.Ast
 import Iidy.Yaml.Location (Position(..), zeroPosition)
 
@@ -27,15 +29,120 @@ type Parse a = Either ParseError a
 
 parseYaml :: BL.ByteString -> Text -> Parse YamlAst
 parseYaml input uri =
-  case Y.decodeNode input of
+  case runIdentity (Y.decodeLoader (yamlLoader uri) input) of
     Left (pos, msg) -> Left (ParseError (convertPos pos) (T.pack msg))
     Right []        -> Right (AstNull (emptyMeta uri))
-    Right (Y.Doc node : _) -> convertNode uri node
+    Right (node : _) -> Right node
 
 parseYamlFile :: FilePath -> IO (Parse YamlAst)
 parseYamlFile path = do
   input <- BL.readFile path
   pure (parseYaml input (T.pack path))
+
+------------------------------------------------------------------------
+-- Loader (preserves document key order)
+------------------------------------------------------------------------
+
+yamlLoader :: Text -> Y.Loader Identity YamlAst
+yamlLoader uri = Y.Loader
+  { Y.yScalar = \tag style text pos -> pure $
+      resolveScalar uri pos tag style text
+  , Y.ySequence = \tag items pos -> pure $
+      let meta = makeSrcMeta uri pos
+      in applyTag meta tag (AstSequence items meta)
+  , Y.yMapping = \tag kvs pos -> pure $
+      let meta = makeSrcMeta uri pos
+      in applyTag meta tag (AstMapping kvs meta)
+  , Y.yAlias = \_ _ node _ -> pure $ Right node
+  , Y.yAnchor = \_ node _ -> pure $ Right node
+  }
+
+------------------------------------------------------------------------
+-- Scalar resolution (Core schema)
+------------------------------------------------------------------------
+
+resolveScalar :: Text -> Y.Pos -> Tag -> ScalarStyle -> Text -> Either (Y.Pos, String) YamlAst
+resolveScalar uri pos tag style text =
+  let meta = makeSrcMeta uri pos
+  in case tagToText tag of
+    Just t | "!" `T.isPrefixOf` t ->
+      -- Local tag on scalar: resolve the scalar type first, then apply tag
+      let baseNode = case style of
+            Plain -> resolvePlainScalar meta text
+            _     -> classifyString meta text
+      in mapLeft (\(ParseError p m) -> (unconvertPos p, T.unpack m)) $
+        classifyLocalTag meta t baseNode
+    _ ->
+      -- Untagged or global-tagged: resolve type
+      Right $ case style of
+        Plain -> resolvePlainScalar meta text
+        _     -> classifyString meta text
+
+resolvePlainScalar :: SrcMeta -> Text -> YamlAst
+resolvePlainScalar meta text
+  | isNullLiteral text  = AstNull meta
+  | text == "true"  || text == "True"  || text == "TRUE"  = AstBool True meta
+  | text == "false" || text == "False" || text == "FALSE" = AstBool False meta
+  | Just n <- parseInteger text = AstNumber (fromInteger n) meta
+  | Just n <- parseFloat text   = AstNumber n meta
+  | otherwise = classifyString meta text
+
+isNullLiteral :: Text -> Bool
+isNullLiteral t = t == "null" || t == "Null" || t == "NULL" || t == "~" || T.null t
+
+parseInteger :: Text -> Maybe Integer
+parseInteger t
+  | T.null t = Nothing
+  | T.isPrefixOf "0x" t || T.isPrefixOf "0X" t =
+      readMaybe (T.unpack t)
+  | T.isPrefixOf "0o" t || T.isPrefixOf "0O" t =
+      readMaybe (T.unpack t)
+  | T.isPrefixOf "-" t || T.isPrefixOf "+" t =
+      let rest = T.drop 1 t
+      in if not (T.null rest) && T.all isDigit rest
+         then readMaybe (T.unpack t)
+         else Nothing
+  | T.all isDigit t = readMaybe (T.unpack t)
+  | otherwise = Nothing
+
+parseFloat :: Text -> Maybe Scientific
+parseFloat t
+  | t == ".inf" || t == ".Inf" || t == ".INF"   = Just (Sci.fromFloatDigits (1/0 :: Double))
+  | t == "-.inf" || t == "-.Inf" || t == "-.INF" = Just (Sci.fromFloatDigits ((-1)/0 :: Double))
+  | t == ".nan" || t == ".NaN" || t == ".NAN"   = Just (Sci.fromFloatDigits (0/0 :: Double))
+  | hasFloatChars t = case reads (T.unpack t) :: [(Double, String)] of
+      [(d, "")] -> Just (Sci.fromFloatDigits d)
+      _ -> Nothing
+  | otherwise = Nothing
+  where
+    hasFloatChars s = T.any (== '.') s || T.any (== 'e') s || T.any (== 'E') s
+
+readMaybe :: Read a => String -> Maybe a
+readMaybe s = case reads s of
+  [(a, "")] -> Just a
+  _         -> Nothing
+
+------------------------------------------------------------------------
+-- Tag handling
+------------------------------------------------------------------------
+
+applyTag :: SrcMeta -> Tag -> YamlAst -> Either (Y.Pos, String) YamlAst
+applyTag meta tag node = case tagToText tag of
+  Just t | "!" `T.isPrefixOf` t ->
+    mapLeft (\(ParseError p m) -> (unconvertPos p, T.unpack m)) $
+      classifyLocalTag meta t node
+  _ -> Right node
+
+classifyLocalTag :: SrcMeta -> Text -> YamlAst -> Parse YamlAst
+classifyLocalTag meta tagName value
+  | isPreprocessingTagName tagName = parsePreprocessingTag meta tagName value
+  | isCfnTagName tagName = pure $ AstCloudFormationTag (makeCfnTag tagName value) meta
+  | otherwise = pure $ AstUnknownTag (UnknownTag tagName value) meta
+
+classifyString :: SrcMeta -> Text -> YamlAst
+classifyString meta text
+  | "{{" `T.isInfixOf` text = AstTemplatedString text meta
+  | otherwise = AstPlainString text meta
 
 ------------------------------------------------------------------------
 -- Position helpers
@@ -48,6 +155,14 @@ convertPos p = Position
   , posOffset = Y.posByteOffset p
   }
 
+unconvertPos :: Position -> Y.Pos
+unconvertPos p = Y.Pos
+  { Y.posLine       = posLine p
+  , Y.posColumn     = posColumn p
+  , Y.posByteOffset = posOffset p
+  , Y.posCharOffset = posOffset p
+  }
+
 emptyMeta :: Text -> SrcMeta
 emptyMeta uri = SrcMeta uri zeroPosition zeroPosition
 
@@ -58,55 +173,16 @@ parseErrorAt :: SrcMeta -> Text -> Parse a
 parseErrorAt meta msg = Left (ParseError (smStart meta) msg)
 
 ------------------------------------------------------------------------
--- Node conversion
+-- Error mapping
 ------------------------------------------------------------------------
 
-convertNode :: Text -> Y.Node Y.Pos -> Parse YamlAst
-convertNode uri = \case
-  Y.Scalar pos scalar -> convertScalar uri pos scalar
-  Y.Mapping pos tag pairs -> convertMapping uri pos tag (Map.toList pairs)
-  Y.Sequence pos tag items -> convertSequence uri pos tag items
-  Y.Anchor _pos _nid inner -> convertNode uri inner
-
-convertScalar :: Text -> Y.Pos -> Y.Scalar -> Parse YamlAst
-convertScalar uri pos = \case
-  Y.SNull      -> pure $ AstNull meta
-  Y.SBool b    -> pure $ AstBool b meta
-  Y.SInt i     -> pure $ AstNumber (fromInteger i) meta
-  Y.SFloat d   -> pure $ AstNumber (realToFrac d :: Scientific) meta
-  Y.SStr text  -> pure $ classifyString meta text
-  Y.SUnknown tag text -> case tagToText tag of
-    Just t  -> classifyLocalTag meta t (AstPlainString text meta)
-    Nothing -> pure $ classifyString meta text
-  where
-    meta = makeSrcMeta uri pos
-
-convertMapping :: Text -> Y.Pos -> Tag -> [(Y.Node Y.Pos, Y.Node Y.Pos)] -> Parse YamlAst
-convertMapping uri pos tag pairs = do
-  let meta = makeSrcMeta uri pos
-  converted <- traverse convertPair pairs
-  case localTagText tag of
-    Just t  -> classifyLocalTag meta t (AstMapping converted meta)
-    Nothing -> pure $ AstMapping converted meta
-  where
-    convertPair (k, v) = (,) <$> convertNode uri k <*> convertNode uri v
-
-convertSequence :: Text -> Y.Pos -> Tag -> [Y.Node Y.Pos] -> Parse YamlAst
-convertSequence uri pos tag items = do
-  let meta = makeSrcMeta uri pos
-  converted <- traverse (convertNode uri) items
-  case localTagText tag of
-    Just t  -> classifyLocalTag meta t (AstSequence converted meta)
-    Nothing -> pure $ AstSequence converted meta
+mapLeft :: (a -> b) -> Either a c -> Either b c
+mapLeft f (Left a) = Left (f a)
+mapLeft _ (Right c) = Right c
 
 ------------------------------------------------------------------------
--- Tag helpers
+-- Tag classification
 ------------------------------------------------------------------------
-
-localTagText :: Tag -> Maybe Text
-localTagText tag = case tagToText tag of
-  Just t | "!" `T.isPrefixOf` t -> Just t
-  _ -> Nothing
 
 isPreprocessingTagName :: Text -> Bool
 isPreprocessingTagName t = t == "!$" || "!$" `T.isPrefixOf` t
@@ -121,17 +197,6 @@ cfnTagNames =
 
 isCfnTagName :: Text -> Bool
 isCfnTagName t = t `elem` cfnTagNames
-
-classifyLocalTag :: SrcMeta -> Text -> YamlAst -> Parse YamlAst
-classifyLocalTag meta tagName value
-  | isPreprocessingTagName tagName = parsePreprocessingTag meta tagName value
-  | isCfnTagName tagName = pure $ AstCloudFormationTag (makeCfnTag tagName value) meta
-  | otherwise = pure $ AstUnknownTag (UnknownTag tagName value) meta
-
-classifyString :: SrcMeta -> Text -> YamlAst
-classifyString meta text
-  | "{{" `T.isInfixOf` text = AstTemplatedString text meta
-  | otherwise = AstPlainString text meta
 
 ------------------------------------------------------------------------
 -- CloudFormation tag construction

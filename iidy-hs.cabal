@@ -30,6 +30,7 @@ library
     Iidy.Yaml.Handlebars.Engine
     Iidy.Yaml.Handlebars.Helpers
     Iidy.Yaml.JMESPath
+    Iidy.Yaml.OValue
     Iidy.Yaml.Emitter
     Iidy.Yaml.Engine
     Iidy.Yaml.CustomResources.Params
@@ -66,8 +67,12 @@ executable iidy-hs
   main-is:          Main.hs
   hs-source-dirs:   app
   default-language: GHC2021
-  default-extensions: OverloadedStrings
+  default-extensions:
+    LambdaCase
+    OverloadedStrings
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >= 4.17 && < 5
+    , bytestring
+    , text
     , iidy-hs

@@ -2,42 +2,39 @@ module Iidy.Yaml.Emitter
   ( emitYaml
   ) where
 
-import Data.Aeson (Value(..))
-import qualified Data.Aeson.Key as Key
-import qualified Data.Aeson.KeyMap as KM
 import Data.Char (isDigit)
 import Data.Scientific (Scientific)
 import qualified Data.Scientific as Sci
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Vector as V
+import Iidy.Yaml.OValue
 
 ------------------------------------------------------------------------
 -- Public API
 ------------------------------------------------------------------------
 
--- | Emit a Value as iidy-js-compatible YAML.
-emitYaml :: Value -> Text
+-- | Emit an OValue as iidy-js-compatible YAML.
+emitYaml :: OValue -> Text
 emitYaml val = emitValue 0 True val
 
 ------------------------------------------------------------------------
 -- Core emission
 ------------------------------------------------------------------------
 
-emitValue :: Int -> Bool -> Value -> Text
+emitValue :: Int -> Bool -> OValue -> Text
 emitValue indent isRoot = \case
-  Null -> "null"
-  Bool True -> "true"
-  Bool False -> "false"
-  Number n -> emitNumber n
-  String s -> emitString s
-  Array arr
-    | V.null arr -> "[]"
-    | otherwise -> emitArray indent arr
-  Object obj
-    | KM.null obj -> "{}"
-    | isTaggedValue obj -> emitTaggedValue indent obj
-    | otherwise -> emitMapping indent isRoot obj
+  ONull -> "null"
+  OBool True -> "true"
+  OBool False -> "false"
+  ONumber n -> emitNumber n
+  OString s -> emitString s
+  OArray items
+    | null items -> "[]"
+    | otherwise -> emitArray indent items
+  OObject kvs
+    | null kvs -> "{}"
+    | isTaggedKvs kvs -> emitTaggedKvs indent kvs
+    | otherwise -> emitMapping indent isRoot kvs
 
 ------------------------------------------------------------------------
 -- Scalars
@@ -130,50 +127,47 @@ escapeDoubleQuotes = T.concatMap $ \case
 -- Arrays
 ------------------------------------------------------------------------
 
-emitArray :: Int -> V.Vector Value -> Text
-emitArray indent arr =
-  let items = V.toList arr
-      indentStr = T.replicate indent " "
+emitArray :: Int -> [OValue] -> Text
+emitArray indent items =
+  let indentStr = T.replicate indent " "
       emitItem val =
         let valStr = emitArrayValue (indent + 2) val
         in indentStr <> "- " <> valStr
   in "\n" <> T.intercalate "\n" (map emitItem items)
 
-emitArrayValue :: Int -> Value -> Text
+emitArrayValue :: Int -> OValue -> Text
 emitArrayValue indent = \case
-  Object obj
-    | KM.null obj -> "{}"
-    | isTaggedValue obj -> emitTaggedValue indent obj
-    | otherwise -> emitMappingInline indent obj
-  Array arr
-    | V.null arr -> "[]"
-    | otherwise -> emitArray indent arr
+  OObject kvs
+    | null kvs -> "{}"
+    | isTaggedKvs kvs -> emitTaggedKvs indent kvs
+    | otherwise -> emitMappingInline indent kvs
+  OArray items
+    | null items -> "[]"
+    | otherwise -> emitArray indent items
   other -> emitValue indent False other
 
 ------------------------------------------------------------------------
 -- Mappings
 ------------------------------------------------------------------------
 
-emitMapping :: Int -> Bool -> KM.KeyMap Value -> Text
-emitMapping indent isRoot obj =
-  let pairs = KM.toList obj
-      indentStr = T.replicate indent " "
+emitMapping :: Int -> Bool -> [(Text, OValue)] -> Text
+emitMapping indent isRoot kvs =
+  let indentStr = T.replicate indent " "
       emitPair (k, v) =
-        let keyStr = emitMapKey (Key.toText k)
+        let keyStr = emitMapKey k
             valStr = emitMapValue (indent + 2) v
         in indentStr <> keyStr <> ":" <> valStr
-      body = T.intercalate "\n" (map emitPair pairs)
+      body = T.intercalate "\n" (map emitPair kvs)
   in if isRoot then body else "\n" <> body
 
-emitMappingInline :: Int -> KM.KeyMap Value -> Text
-emitMappingInline indent obj =
-  let pairs = KM.toList obj
-      indentStr = T.replicate indent " "
+emitMappingInline :: Int -> [(Text, OValue)] -> Text
+emitMappingInline indent kvs =
+  let indentStr = T.replicate indent " "
       emitFirst (k, v) =
-        emitMapKey (Key.toText k) <> ":" <> emitMapValue (indent + 2) v
+        emitMapKey k <> ":" <> emitMapValue (indent + 2) v
       emitRest (k, v) =
-        indentStr <> emitMapKey (Key.toText k) <> ":" <> emitMapValue (indent + 2) v
-  in case pairs of
+        indentStr <> emitMapKey k <> ":" <> emitMapValue (indent + 2) v
+  in case kvs of
     [] -> "{}"
     (first:rest) -> emitFirst first <> "\n" <> T.intercalate "\n" (map emitRest rest)
 
@@ -182,23 +176,23 @@ emitMapKey k
   | needsQuotes k = quoteString k
   | otherwise = k
 
-emitMapValue :: Int -> Value -> Text
+emitMapValue :: Int -> OValue -> Text
 emitMapValue indent = \case
-  Null -> " null"
-  Bool True -> " true"
-  Bool False -> " false"
-  Number n -> " " <> emitNumber n
-  String s
+  ONull -> " null"
+  OBool True -> " true"
+  OBool False -> " false"
+  ONumber n -> " " <> emitNumber n
+  OString s
     | T.any (== '\n') s -> " " <> emitMultilineStringIndented indent s
     | needsQuotes s -> " " <> quoteString s
     | otherwise -> " " <> s
-  Array arr
-    | V.null arr -> " []"
-    | otherwise -> emitArray indent arr
-  Object obj
-    | KM.null obj -> " {}"
-    | isTaggedValue obj -> " " <> emitTaggedValue indent obj
-    | otherwise -> emitMapping indent False obj
+  OArray items
+    | null items -> " []"
+    | otherwise -> emitArray indent items
+  OObject kvs
+    | null kvs -> " {}"
+    | isTaggedKvs kvs -> " " <> emitTaggedKvs indent kvs
+    | otherwise -> emitMapping indent False kvs
 
 emitMultilineStringIndented :: Int -> Text -> Text
 emitMultilineStringIndented indent s =
@@ -214,25 +208,23 @@ emitMultilineStringIndented indent s =
 -- CloudFormation tagged values
 ------------------------------------------------------------------------
 
-isTaggedValue :: KM.KeyMap Value -> Bool
-isTaggedValue obj =
-  KM.size obj == 1 &&
-  case KM.toList obj of
-    [(k, _)] -> T.isPrefixOf "!" (Key.toText k)
+isTaggedKvs :: [(Text, OValue)] -> Bool
+isTaggedKvs kvs =
+  length kvs == 1 &&
+  case kvs of
+    [(k, _)] -> T.isPrefixOf "!" k
     _ -> False
 
-emitTaggedValue :: Int -> KM.KeyMap Value -> Text
-emitTaggedValue indent obj = case KM.toList obj of
-  [(k, v)] ->
-    let tag = Key.toText k
-    in tag <> emitTagArgument indent v
-  _ -> "{}"  -- shouldn't happen
+emitTaggedKvs :: Int -> [(Text, OValue)] -> Text
+emitTaggedKvs indent kvs = case kvs of
+  [(tag, v)] -> tag <> emitTagArgument indent v
+  _ -> "{}"
 
-emitTagArgument :: Int -> Value -> Text
+emitTagArgument :: Int -> OValue -> Text
 emitTagArgument indent = \case
-  String s -> " " <> emitString s
-  Number n -> " " <> emitNumber n
-  Bool b -> " " <> if b then "true" else "false"
-  Null -> " null"
-  Array arr -> emitArray indent arr
-  Object obj -> emitMapping indent False obj
+  OString s -> " " <> emitString s
+  ONumber n -> " " <> emitNumber n
+  OBool b -> " " <> if b then "true" else "false"
+  ONull -> " null"
+  OArray items -> emitArray indent items
+  OObject kvs -> emitMapping indent False kvs

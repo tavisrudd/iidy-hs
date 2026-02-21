@@ -6,11 +6,14 @@ import Control.Exception (IOException, try)
 import Data.Aeson (Value(..))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BL
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import System.FilePath (takeExtension, takeDirectory, (</>))
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportType(..), ImportError(..))
+import Iidy.Yaml.Parser (parseYaml)
+import Iidy.Yaml.Resolution.Resolver (astToValueRaw)
 
 loadFileImport :: Text -> Text -> IO (Either ImportError ImportData)
 loadFileImport location baseLocation = do
@@ -43,9 +46,15 @@ isAbsolutePath t = T.isPrefixOf "/" t
 
 parseByExtension :: String -> Text -> Value
 parseByExtension ext content
-  | ext `elem` [".yaml", ".yml"] = parseJson content  -- HsYAML produces JSON-compatible Values via aeson
+  | ext `elem` [".yaml", ".yml"] = parseYamlToValue content
   | ext == ".json" = parseJson content
   | otherwise = String content
+
+parseYamlToValue :: Text -> Value
+parseYamlToValue content =
+  case parseYaml (BL.fromStrict (TE.encodeUtf8 content)) "<import>" of
+    Right ast -> astToValueRaw ast
+    Left _ -> String content
 
 parseJson :: Text -> Value
 parseJson content =

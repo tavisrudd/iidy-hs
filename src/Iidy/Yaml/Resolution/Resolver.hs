@@ -1,5 +1,6 @@
 module Iidy.Yaml.Resolution.Resolver
   ( resolveAst
+  , astToValueRaw
   , ResolveError(..)
   ) where
 
@@ -9,14 +10,18 @@ import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL
-import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Vector as V
 import Iidy.Yaml.Ast
+import Iidy.Yaml.Emitter (emitYaml)
+import Iidy.Yaml.Handlebars.Engine (interpolate, defaultHelpers, InterpolateError(..))
+import Iidy.Yaml.JMESPath (applyJmesPath, JMESPathError(..))
 import Iidy.Yaml.Location (Position)
+import Iidy.Yaml.OValue
+import Iidy.Yaml.Parser (parseYaml, ParseError(..))
 import Iidy.Yaml.Resolution.Context
 
 data ResolveError = ResolveError
@@ -33,12 +38,12 @@ resolveError meta msg = Left (ResolveError (smStart meta) msg)
 -- Main resolution
 ------------------------------------------------------------------------
 
-resolveAst :: TagContext -> YamlAst -> Resolve Value
+resolveAst :: TagContext -> YamlAst -> Resolve OValue
 resolveAst ctx = \case
-  AstNull _            -> pure Null
-  AstBool b _          -> pure (Bool b)
-  AstNumber n _        -> pure (Number n)
-  AstPlainString s _   -> pure (String s)
+  AstNull _            -> pure ONull
+  AstBool b _          -> pure (OBool b)
+  AstNumber n _        -> pure (ONumber n)
+  AstPlainString s _   -> pure (OString s)
   AstTemplatedString s meta -> resolveTemplateString ctx meta s
   AstSequence items _  -> resolveSequence ctx items
   AstMapping pairs _   -> resolveMapping ctx pairs
@@ -46,7 +51,7 @@ resolveAst ctx = \case
   AstCloudFormationTag tag meta -> resolveCfnTag ctx meta tag
   AstUnknownTag (UnknownTag name inner) _meta -> do
     val <- resolveAst ctx inner
-    pure $ Object $ KM.singleton (Key.fromText name) val
+    pure $ OObject [(name, val)]
   AstImportedDocument (ImportedDocumentNode _ _ content _) _ ->
     resolveAst ctx content
 
@@ -54,101 +59,74 @@ resolveAst ctx = \case
 -- Sequences & mappings
 ------------------------------------------------------------------------
 
-resolveSequence :: TagContext -> [YamlAst] -> Resolve Value
+resolveSequence :: TagContext -> [YamlAst] -> Resolve OValue
 resolveSequence ctx items = do
   vals <- traverse (resolveAst ctx) items
-  pure $ Array (V.fromList vals)
+  pure $ OArray vals
 
-resolveMapping :: TagContext -> [(YamlAst, YamlAst)] -> Resolve Value
+resolveMapping :: TagContext -> [(YamlAst, YamlAst)] -> Resolve OValue
 resolveMapping ctx pairs = do
   resolved <- traverse resolvePair pairs
   let filtered = [(k, v) | (k, v) <- resolved, not (isSpecialKey k)]
-  pure $ Object $ KM.fromList [(Key.fromText k, v) | (k, v) <- filtered]
+  pure $ OObject filtered
   where
     resolvePair (keyAst, valAst) = do
       kv <- resolveAst ctx keyAst
-      let k = valueToText kv
+      let k = oValueToText kv
       vv <- resolveAst ctx valAst
       pure (k, vv)
     isSpecialKey k = k `elem` ["$imports", "$defs", "$envValues", "$params"]
-
-valueToText :: Value -> Text
-valueToText = \case
-  String s -> s
-  Number n -> T.pack (show n)
-  Bool True -> "true"
-  Bool False -> "false"
-  Null -> "null"
-  other -> T.pack (show other)
 
 ------------------------------------------------------------------------
 -- Template strings (handlebars)
 ------------------------------------------------------------------------
 
-resolveTemplateString :: TagContext -> SrcMeta -> Text -> Resolve Value
-resolveTemplateString ctx _meta template =
-  -- TODO: implement handlebars interpolation (chunk 2.5)
-  -- For now, do simple {{variable}} replacement
-  pure $ String $ simpleInterpolate (tcVariables ctx) template
-
-simpleInterpolate :: Map Text Value -> Text -> Text
-simpleInterpolate vars template =
-  case T.breakOn "{{" template of
-    (before, rest)
-      | T.null rest -> template
-      | otherwise ->
-          case T.breakOn "}}" (T.drop 2 rest) of
-            (varName, after)
-              | T.null after -> template  -- malformed
-              | otherwise ->
-                  let name = T.strip varName
-                      replacement = case Map.lookup name vars of
-                        Just (String s) -> s
-                        Just (Number n) -> T.pack (show n)
-                        Just (Bool True) -> "true"
-                        Just (Bool False) -> "false"
-                        Just Null -> ""
-                        _ -> "{{" <> varName <> "}}"
-                  in before <> replacement <> simpleInterpolate vars (T.drop 2 after)
+resolveTemplateString :: TagContext -> SrcMeta -> Text -> Resolve OValue
+resolveTemplateString ctx meta template =
+  let ctxValue = Object (KM.fromList
+        [(Key.fromText k, v) | (k, v) <- Map.toList (tcVariables ctx)])
+  in case interpolate defaultHelpers ctxValue template of
+       Right s -> pure (OString s)
+       Left (InterpolateError msg) -> resolveError meta ("Handlebars error: " <> msg)
 
 ------------------------------------------------------------------------
 -- CloudFormation tags
 ------------------------------------------------------------------------
 
-resolveCfnTag :: TagContext -> SrcMeta -> CloudFormationTag -> Resolve Value
+resolveCfnTag :: TagContext -> SrcMeta -> CloudFormationTag -> Resolve OValue
 resolveCfnTag ctx _meta tag = do
   let (name, inner) = cfnTagParts tag
   resolved <- resolveAst ctx inner
-  pure $ Object $ KM.singleton (Key.fromText name) resolved
+  pure $ OObject [(name, resolved)]
 
 cfnTagParts :: CloudFormationTag -> (Text, YamlAst)
 cfnTagParts = \case
-  CfnRef v         -> ("Ref", v)
-  CfnSub v         -> ("Fn::Sub", v)
-  CfnGetAtt v      -> ("Fn::GetAtt", v)
-  CfnJoin v        -> ("Fn::Join", v)
-  CfnSelect v      -> ("Fn::Select", v)
-  CfnSplit v       -> ("Fn::Split", v)
-  CfnBase64 v      -> ("Fn::Base64", v)
-  CfnGetAZs v      -> ("Fn::GetAZs", v)
-  CfnImportValue v -> ("Fn::ImportValue", v)
-  CfnFindInMap v   -> ("Fn::FindInMap", v)
-  CfnCidr v        -> ("Fn::Cidr", v)
-  CfnLength v      -> ("Fn::Length", v)
-  CfnToJsonString v -> ("Fn::ToJsonString", v)
-  CfnTransform v   -> ("Fn::Transform", v)
-  CfnForEach v     -> ("Fn::ForEach", v)
-  CfnIf v          -> ("Fn::If", v)
-  CfnEquals v      -> ("Fn::Equals", v)
-  CfnAnd v         -> ("Fn::And", v)
-  CfnOr v          -> ("Fn::Or", v)
-  CfnNot v         -> ("Fn::Not", v)
+  CfnRef v         -> ("!Ref", v)
+  CfnSub v         -> ("!Sub", v)
+  CfnGetAtt v      -> ("!GetAtt", v)
+  CfnJoin v        -> ("!Join", v)
+  CfnSelect v      -> ("!Select", v)
+  CfnSplit v       -> ("!Split", v)
+  CfnBase64 v      -> ("!Base64", v)
+  CfnGetAZs v      -> ("!GetAZs", v)
+  CfnImportValue v -> ("!ImportValue", v)
+  CfnFindInMap v   -> ("!FindInMap", v)
+  CfnCidr v        -> ("!Cidr", v)
+  CfnLength v      -> ("!Length", v)
+  CfnToJsonString v -> ("!ToJsonString", v)
+  CfnTransform v   -> ("!Transform", v)
+  CfnForEach v     -> ("!ForEach", v)
+  CfnIf v          -> ("!If", v)
+  CfnEquals v      -> ("!Equals", v)
+  CfnAnd v         -> ("!And", v)
+  CfnOr v          -> ("!Or", v)
+  CfnNot v         -> ("!Not", v)
 
 ------------------------------------------------------------------------
 -- Preprocessing tag resolution
 ------------------------------------------------------------------------
 
-resolvePreprocessingTag :: TagContext -> SrcMeta -> PreprocessingTag -> Resolve Value
+resolvePreprocessingTag :: TagContext -> SrcMeta -> PreprocessingTag -> Resolve OValue
 resolvePreprocessingTag ctx meta = \case
   PpVarLookup tag     -> resolveVarLookup ctx meta tag
   PpIf tag            -> resolveIf ctx meta tag
@@ -177,13 +155,28 @@ resolvePreprocessingTag ctx meta = \case
 -- Individual tag resolvers
 ------------------------------------------------------------------------
 
-resolveVarLookup :: TagContext -> SrcMeta -> VarLookupTag -> Resolve Value
-resolveVarLookup ctx meta (VarLookupTag path _query _jmespath) =
-  case resolveDotPath path ctx of
+resolveVarLookup :: TagContext -> SrcMeta -> VarLookupTag -> Resolve OValue
+resolveVarLookup ctx meta (VarLookupTag path query jmesPathExpr) = do
+  baseVal <- case resolveDotPath path ctx of
     Just val -> pure val
     Nothing -> resolveError meta $
       "Variable not found: " <> path <> ". Available: " <>
       T.intercalate ", " (contextVariableNames ctx)
+  let queriedVal = case query of
+        Nothing -> baseVal
+        Just q -> applyDotQuery q baseVal
+  case jmesPathExpr of
+    Nothing -> pure (fromValue queriedVal)
+    Just expr -> case applyJmesPath expr queriedVal of
+      Right v -> pure (fromValue v)
+      Left (JMESPathError msg) -> resolveError meta $ "JMESPath error: " <> msg
+
+applyDotQuery :: Text -> Value -> Value
+applyDotQuery q val =
+  let segments = filter (not . T.null) (T.splitOn "." q)
+  in case traversePath segments val of
+       Just v  -> v
+       Nothing -> Null
 
 resolveDotPath :: Text -> TagContext -> Maybe Value
 resolveDotPath path ctx =
@@ -205,16 +198,16 @@ traversePath (seg:rest) val = case val of
     _ -> Nothing
   _ -> Nothing
 
-resolveIf :: TagContext -> SrcMeta -> IfTag -> Resolve Value
+resolveIf :: TagContext -> SrcMeta -> IfTag -> Resolve OValue
 resolveIf ctx _meta (IfTag test thenVal elseVal) = do
   testResult <- resolveAst ctx test
-  if isTruthy testResult
+  if oIsTruthy testResult
     then resolveAst ctx thenVal
     else case elseVal of
       Just e  -> resolveAst ctx e
-      Nothing -> pure Null
+      Nothing -> pure ONull
 
-resolveLet :: TagContext -> SrcMeta -> LetTag -> Resolve Value
+resolveLet :: TagContext -> SrcMeta -> LetTag -> Resolve OValue
 resolveLet ctx _meta (LetTag bindings expr) = do
   newCtx <- foldBindings ctx bindings
   resolveAst newCtx expr
@@ -222,205 +215,207 @@ resolveLet ctx _meta (LetTag bindings expr) = do
     foldBindings c [] = pure c
     foldBindings c ((name, ast):rest) = do
       val <- resolveAst c ast
-      foldBindings (withVariable name val c) rest
+      foldBindings (withVariable name (toValue val) c) rest
 
-resolveMap :: TagContext -> SrcMeta -> MapTag -> Resolve Value
+resolveMap :: TagContext -> SrcMeta -> MapTag -> Resolve OValue
 resolveMap ctx meta (MapTag items template var filterExpr) =
   resolveMapItems ctx meta items template (fromMaybeVar var) filterExpr
 
-resolveMapItems :: TagContext -> SrcMeta -> YamlAst -> YamlAst -> Text -> Maybe YamlAst -> Resolve Value
+resolveMapItems :: TagContext -> SrcMeta -> YamlAst -> YamlAst -> Text -> Maybe YamlAst -> Resolve OValue
 resolveMapItems ctx meta itemsAst templateAst varName filterExpr = do
   itemsVal <- resolveAst ctx itemsAst
   case itemsVal of
-    Array arr -> do
+    OArray arr -> do
       results <- imapMaybeM (\i item -> do
         let bindings = Map.fromList
-              [ (varName, item)
+              [ (varName, toValue item)
               , (varName <> "Idx", Number (fromIntegral i))
               ]
             itemCtx = withBindings bindings ctx
         case filterExpr of
           Just fExpr -> do
             fVal <- resolveAst itemCtx fExpr
-            if isTruthy fVal
+            if oIsTruthy fVal
               then Just <$> resolveAst itemCtx templateAst
               else pure Nothing
           Nothing -> Just <$> resolveAst itemCtx templateAst
-        ) (V.toList arr)
-      pure $ Array (V.fromList results)
+        ) arr
+      pure $ OArray results
     _ -> resolveError meta "!$map items must be a sequence"
 
-resolveMerge :: TagContext -> SrcMeta -> MergeTag -> Resolve Value
+resolveMerge :: TagContext -> SrcMeta -> MergeTag -> Resolve OValue
 resolveMerge ctx meta (MergeTag sources) = do
   vals <- traverse (resolveAst ctx) sources
   let merge acc v = case v of
-        Object obj -> pure $ mergeObjects acc obj
+        OObject kvs -> pure $ mergeOObjects acc kvs
         _ -> resolveError meta "!$merge: all sources must be mappings"
-  foldM merge (Object KM.empty) vals
+  foldM merge (OObject []) vals
 
-mergeObjects :: Value -> KM.KeyMap Value -> Value
-mergeObjects (Object base) overlay = Object (KM.union overlay base)
-mergeObjects _ overlay = Object overlay
+mergeOObjects :: OValue -> [(Text, OValue)] -> OValue
+mergeOObjects (OObject base) overlay =
+  let overlayKeys = map fst overlay
+      keptBase = filter (\(k, _) -> k `notElem` overlayKeys) base
+  in OObject (keptBase ++ overlay)
+mergeOObjects _ overlay = OObject overlay
 
-resolveConcat :: TagContext -> SrcMeta -> ConcatTag -> Resolve Value
+resolveConcat :: TagContext -> SrcMeta -> ConcatTag -> Resolve OValue
 resolveConcat ctx _meta (ConcatTag sources) = do
   vals <- traverse (resolveAst ctx) sources
   let flatten v = case v of
-        Array arr -> V.toList arr
-        other     -> [other]
-  pure $ Array $ V.fromList $ concatMap flatten vals
+        OArray arr -> arr
+        other      -> [other]
+  pure $ OArray $ concatMap flatten vals
 
-resolveEq :: TagContext -> SrcMeta -> EqTag -> Resolve Value
+resolveEq :: TagContext -> SrcMeta -> EqTag -> Resolve OValue
 resolveEq ctx _meta (EqTag left right) = do
   l <- resolveAst ctx left
   r <- resolveAst ctx right
-  pure $ Bool (valuesEqual l r)
+  pure $ OBool (oValuesEqual l r)
 
-resolveNot :: TagContext -> SrcMeta -> NotTag -> Resolve Value
+resolveNot :: TagContext -> SrcMeta -> NotTag -> Resolve OValue
 resolveNot ctx _meta (NotTag expr) = do
   val <- resolveAst ctx expr
-  pure $ Bool (not (isTruthy val))
+  pure $ OBool (not (oIsTruthy val))
 
-resolveSplit :: TagContext -> SrcMeta -> SplitTag -> Resolve Value
+resolveSplit :: TagContext -> SrcMeta -> SplitTag -> Resolve OValue
 resolveSplit ctx meta (SplitTag delimAst strAst) = do
   delimVal <- resolveAst ctx delimAst
   strVal <- resolveAst ctx strAst
   case (delimVal, strVal) of
-    (String d, String s) ->
-      pure $ Array $ V.fromList $ map String $ T.splitOn d s
+    (OString d, OString s) ->
+      pure $ OArray $ map OString $ T.splitOn d s
     _ -> resolveError meta "!$split requires string arguments"
 
-resolveJoin :: TagContext -> SrcMeta -> JoinTag -> Resolve Value
+resolveJoin :: TagContext -> SrcMeta -> JoinTag -> Resolve OValue
 resolveJoin ctx meta (JoinTag delimAst arrAst) = do
   delimVal <- resolveAst ctx delimAst
   arrVal <- resolveAst ctx arrAst
   case (delimVal, arrVal) of
-    (String d, Array arr) ->
-      pure $ String $ T.intercalate d [valueToText v | v <- V.toList arr]
+    (OString d, OArray arr) ->
+      pure $ OString $ T.intercalate d [oValueToText v | v <- arr]
     _ -> resolveError meta "!$join requires [string, sequence]"
 
-resolveConcatMap :: TagContext -> SrcMeta -> ConcatMapTag -> Resolve Value
+resolveConcatMap :: TagContext -> SrcMeta -> ConcatMapTag -> Resolve OValue
 resolveConcatMap ctx meta (ConcatMapTag items template var filterExpr) = do
   result <- resolveMapItems ctx meta items template (fromMaybeVar var) filterExpr
   case result of
-    Array arr -> pure $ Array $ V.concatMap flattenItem arr
+    OArray arr -> pure $ OArray $ concatMap flattenItem arr
     _ -> resolveError meta "!$concatMap: unexpected result"
   where
-    flattenItem (Array inner) = inner
-    flattenItem other = V.singleton other
+    flattenItem (OArray inner) = inner
+    flattenItem other = [other]
 
-resolveMergeMap :: TagContext -> SrcMeta -> MergeMapTag -> Resolve Value
+resolveMergeMap :: TagContext -> SrcMeta -> MergeMapTag -> Resolve OValue
 resolveMergeMap ctx meta (MergeMapTag items template var) = do
   result <- resolveMapItems ctx meta items template (fromMaybeVar var) Nothing
   case result of
-    Array arr -> do
+    OArray arr -> do
       let merge acc v = case v of
-            Object obj -> pure $ mergeObjects acc obj
+            OObject kvs -> pure $ mergeOObjects acc kvs
             _ -> resolveError meta "!$mergeMap: items must resolve to mappings"
-      foldM merge (Object KM.empty) (V.toList arr)
+      foldM merge (OObject []) arr
     _ -> resolveError meta "!$mergeMap: unexpected result"
 
-resolveMapListToHash :: TagContext -> SrcMeta -> MapListToHashTag -> Resolve Value
+resolveMapListToHash :: TagContext -> SrcMeta -> MapListToHashTag -> Resolve OValue
 resolveMapListToHash ctx meta (MapListToHashTag items template var filterExpr) = do
   result <- resolveMapItems ctx meta items template (fromMaybeVar var) filterExpr
   case result of
-    Array arr -> do
-      pairs <- traverse extractPair (V.toList arr)
-      pure $ Object $ KM.fromList pairs
+    OArray arr -> do
+      pairs <- traverse extractPair arr
+      pure $ OObject pairs
     _ -> resolveError meta "!$mapListToHash: unexpected result"
   where
-    extractPair (Array pair)
-      | V.length pair == 2 = pure (Key.fromText (valueToText (pair V.! 0)), pair V.! 1)
-    extractPair (Object obj)
-      | Just k <- KM.lookup "key" obj, Just v <- KM.lookup "value" obj =
-          pure (Key.fromText (valueToText k), v)
-    extractPair (Object obj) = case KM.toList obj of
+    extractPair (OArray pair)
+      | length pair == 2 = pure (oValueToText (pair !! 0), pair !! 1)
+    extractPair (OObject kvs)
+      | Just k <- lookupO "key" kvs, Just v <- lookupO "value" kvs =
+          pure (oValueToText k, v)
+    extractPair (OObject kvs) = case kvs of
       [(k, v)] -> pure (k, v)
       _ -> resolveError meta "!$mapListToHash: object item must have exactly one key"
     extractPair v = resolveError meta $ "!$mapListToHash: invalid item: " <> T.pack (show v)
 
-resolveMapValues :: TagContext -> SrcMeta -> MapValuesTag -> Resolve Value
+resolveMapValues :: TagContext -> SrcMeta -> MapValuesTag -> Resolve OValue
 resolveMapValues ctx meta (MapValuesTag itemsAst templateAst var) = do
   itemsVal <- resolveAst ctx itemsAst
   case itemsVal of
-    Object obj -> do
+    OObject kvs -> do
       pairs <- traverse (\(k, v) -> do
         let bindings = Map.singleton (fromMaybeVar var) $
-              Object $ KM.fromList [("key", String (Key.toText k)), ("value", v)]
+              Object $ KM.fromList [("key", String k), ("value", toValue v)]
             itemCtx = withBindings bindings ctx
         resolved <- resolveAst itemCtx templateAst
         pure (k, resolved)
-        ) (KM.toList obj)
-      pure $ Object $ KM.fromList pairs
+        ) kvs
+      pure $ OObject pairs
     _ -> resolveError meta "!$mapValues items must be a mapping"
 
-resolveGroupBy :: TagContext -> SrcMeta -> GroupByTag -> Resolve Value
+resolveGroupBy :: TagContext -> SrcMeta -> GroupByTag -> Resolve OValue
 resolveGroupBy ctx meta (GroupByTag itemsAst keyAst var _templateAst) = do
   itemsVal <- resolveAst ctx itemsAst
   case itemsVal of
-    Array arr -> do
+    OArray arr -> do
       groups <- foldM (\acc item -> do
-        let itemCtx = withVariable (fromMaybeVar var) item ctx
+        let itemCtx = withVariable (fromMaybeVar var) (toValue item) ctx
         keyVal <- resolveAst itemCtx keyAst
-        let k = Key.fromText (valueToText keyVal)
-            existing = case KM.lookup k acc of
-              Just (Array v) -> v
-              _ -> V.empty
-        pure $ KM.insert k (Array (V.snoc existing item)) acc
-        ) KM.empty (V.toList arr)
-      pure $ Object groups
+        let k = oValueToText keyVal
+            existing = case lookupO k acc of
+              Just (OArray v) -> v
+              _ -> []
+        pure $ insertO k (OArray (existing ++ [item])) acc
+        ) [] arr
+      pure $ OObject groups
     _ -> resolveError meta "!$groupBy items must be a sequence"
 
-resolveFromPairs :: TagContext -> SrcMeta -> FromPairsTag -> Resolve Value
+resolveFromPairs :: TagContext -> SrcMeta -> FromPairsTag -> Resolve OValue
 resolveFromPairs ctx meta (FromPairsTag sourceAst) = do
   sourceVal <- resolveAst ctx sourceAst
   case sourceVal of
-    Array arr -> do
-      pairs <- traverse extractPair (V.toList arr)
-      pure $ Object $ KM.fromList pairs
+    OArray arr -> do
+      pairs <- traverse extractPair arr
+      pure $ OObject pairs
     _ -> resolveError meta "!$fromPairs requires a sequence"
   where
-    extractPair (Array pair)
-      | V.length pair == 2 =
-          pure (Key.fromText (valueToText (pair V.! 0)), pair V.! 1)
+    extractPair (OArray pair)
+      | length pair == 2 =
+          pure (oValueToText (pair !! 0), pair !! 1)
     extractPair _ = resolveError meta "!$fromPairs: each item must be a 2-element sequence"
 
-resolveToYamlString :: TagContext -> SrcMeta -> ToYamlStringTag -> Resolve Value
+resolveToYamlString :: TagContext -> SrcMeta -> ToYamlStringTag -> Resolve OValue
 resolveToYamlString ctx _meta (ToYamlStringTag dataAst) = do
   val <- resolveAst ctx dataAst
-  -- TODO: proper YAML serialization (chunk 2.10)
-  pure $ String $ T.pack $ show val
+  pure $ OString $ emitYaml val
 
-resolveParseYaml :: TagContext -> SrcMeta -> ParseYamlTag -> Resolve Value
+resolveParseYaml :: TagContext -> SrcMeta -> ParseYamlTag -> Resolve OValue
 resolveParseYaml ctx meta (ParseYamlTag strAst) = do
   val <- resolveAst ctx strAst
   case val of
-    String _s -> do
-      -- TODO: parse YAML string (chunk 2.10)
-      pure val
+    OString s ->
+      case parseYaml (BL.fromStrict (TE.encodeUtf8 s)) "<parseYaml>" of
+        Right ast -> Right (fromValue (astToValueRaw ast))
+        Left (ParseError _ msg) -> resolveError meta $ "!$parseYaml: " <> msg
     _ -> resolveError meta "!$parseYaml requires a string"
 
-resolveToJsonString :: TagContext -> SrcMeta -> ToJsonStringTag -> Resolve Value
+resolveToJsonString :: TagContext -> SrcMeta -> ToJsonStringTag -> Resolve OValue
 resolveToJsonString ctx _meta (ToJsonStringTag dataAst) = do
   val <- resolveAst ctx dataAst
-  pure $ String $ TE.decodeUtf8 $ BL.toStrict $ Aeson.encode val
+  pure $ OString $ TE.decodeUtf8 $ BL.toStrict $ Aeson.encode (toValue val)
 
-resolveParseJson :: TagContext -> SrcMeta -> ParseJsonTag -> Resolve Value
+resolveParseJson :: TagContext -> SrcMeta -> ParseJsonTag -> Resolve OValue
 resolveParseJson ctx meta (ParseJsonTag strAst) = do
   val <- resolveAst ctx strAst
   case val of
-    String s -> case Aeson.eitherDecodeStrict' (TE.encodeUtf8 s) of
-      Right v  -> pure v
+    OString s -> case Aeson.eitherDecodeStrict' (TE.encodeUtf8 s) of
+      Right v  -> pure (fromValue v)
       Left err -> resolveError meta $ "!$parseJson: " <> T.pack err
     _ -> resolveError meta "!$parseJson requires a string"
 
-resolveEscape :: TagContext -> SrcMeta -> EscapeTag -> Resolve Value
+resolveEscape :: TagContext -> SrcMeta -> EscapeTag -> Resolve OValue
 resolveEscape _ctx _meta (EscapeTag contentAst) =
-  pure $ astToValueRaw contentAst
+  pure $ fromValue $ astToValueRaw contentAst
 
-resolveExpand :: TagContext -> SrcMeta -> ExpandTag -> Resolve Value
+resolveExpand :: TagContext -> SrcMeta -> ExpandTag -> Resolve OValue
 resolveExpand _ctx meta (ExpandTag _templateAst _paramsAst) =
-  -- TODO: implement custom resource expansion (chunk 2.9)
   resolveError meta "!$expand not yet implemented"
 
 ------------------------------------------------------------------------
@@ -450,6 +445,21 @@ rawKeyText :: YamlAst -> Text
 rawKeyText (AstPlainString t _) = t
 rawKeyText (AstTemplatedString t _) = t
 rawKeyText _ = ""
+
+------------------------------------------------------------------------
+-- OValue list helpers
+------------------------------------------------------------------------
+
+lookupO :: Text -> [(Text, OValue)] -> Maybe OValue
+lookupO k kvs = case [v | (k', v) <- kvs, k' == k] of
+  (v:_) -> Just v
+  []    -> Nothing
+
+insertO :: Text -> OValue -> [(Text, OValue)] -> [(Text, OValue)]
+insertO k v [] = [(k, v)]
+insertO k v ((k', v'):rest)
+  | k == k' = (k, v) : rest
+  | otherwise = (k', v') : insertO k v rest
 
 ------------------------------------------------------------------------
 -- Helpers
