@@ -2,7 +2,11 @@ module Iidy.Yaml.Errors.Ids
   ( ErrorId(..)
   , errorIdCode
   , errorIdFromCode
+  , showErrorId
   ) where
+
+import Data.Text (Text)
+import qualified Data.Text as T
 
 data ErrorId
   -- 1xxx: YAML Syntax & Parsing
@@ -175,3 +179,6 @@ errorIdFromCode = \case
   9004 -> Just NetworkConnectivityIssue
   9005 -> Just UnexpectedSystemError
   _    -> Nothing
+
+showErrorId :: ErrorId -> Text
+showErrorId eid = "ERR_" <> T.pack (show (errorIdCode eid))
