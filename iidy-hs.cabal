@@ -29,6 +29,9 @@ library
     Iidy.Yaml.Handlebars.Engine
     Iidy.Yaml.Handlebars.Helpers
     Iidy.Yaml.JMESPath
+    Iidy.Yaml.CustomResources.Params
+    Iidy.Yaml.CustomResources.Expansion
+    Iidy.Yaml.CustomResources.RefRewriting
     Iidy.Yaml.Imports.Types
     Iidy.Yaml.Imports.Manifest
     Iidy.Yaml.Imports.Loaders.File
