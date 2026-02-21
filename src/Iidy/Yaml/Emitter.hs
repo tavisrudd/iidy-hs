@@ -103,9 +103,6 @@ isNumericLooking s =
 isPlainSafeFirst :: Char -> Bool
 isPlainSafeFirst c = not (c `elem` ("-?:,[]{}#&*!|>'\"%@`" :: [Char]))
 
-isFlowIndicator :: Char -> Bool
-isFlowIndicator c = c `elem` ("[]{}" :: [Char])
-
 quoteString :: Text -> Text
 quoteString s
   | not (T.any (== '\'') s) = "'" <> escapeSingleQuotes s <> "'"

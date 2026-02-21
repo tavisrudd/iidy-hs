@@ -1,1 +1,2 @@
 # Claude's progress log. See the 'Progress Logging' section of CLAUDE.md. Please start using this
+2026-02-21 14:22 — Gate 2: All 27 test fixtures pass (fixed 6 failures: parser, JMESPath, emitter, expand, key ordering)

@@ -42,6 +42,15 @@ library
     Iidy.Yaml.Imports.Loaders.Env
     Iidy.Yaml.Imports.Loaders.Random
     Iidy.Output.Types
+    Iidy.Output.Renderer
+    Iidy.Output.Color
+    Iidy.Output.Theme
+    Iidy.Output.Terminal
+    Iidy.Output.Status
+    Iidy.Output.Spinner
+    Iidy.Output.Manager
+    Iidy.Output.Renderers.Interactive
+    Iidy.Output.Renderers.Json
     Iidy.Cli
     Iidy.Aws.CredentialSource
     Iidy.Aws.ClientReqToken
