@@ -41,6 +41,9 @@ library
     Iidy.Yaml.Imports.Loaders.File
     Iidy.Yaml.Imports.Loaders.Env
     Iidy.Yaml.Imports.Loaders.Random
+    Iidy.Yaml.Imports.Loaders.S3
+    Iidy.Yaml.Imports.Loaders.Ssm
+    Iidy.Yaml.Imports.Loaders.Cfn
     Iidy.Output.Types
     Iidy.Output.Renderer
     Iidy.Output.Color
@@ -63,10 +66,17 @@ library
     Iidy.Cfn.RequestBuilder
     Iidy.Cfn.TemplateLoader
     Iidy.Cfn.StackOperations
+    Iidy.Cfn.Operations.Changeset
     Iidy.Cfn.Operations.CreateStack
+    Iidy.Cfn.Operations.CreateOrUpdate
     Iidy.Cfn.Operations.DescribeStack
+    Iidy.Cfn.Operations.DescribeStackDrift
+    Iidy.Cfn.Operations.EstimateCost
+    Iidy.Cfn.Operations.GetStackTemplate
     Iidy.Cfn.Operations.ListStacks
     Iidy.Cfn.Operations.UpdateStack
+    Iidy.Cfn.Operations.DeleteStack
+    Iidy.Cfn.Operations.WatchStack
   build-depends:
       base >= 4.17 && < 5
     , aeson
