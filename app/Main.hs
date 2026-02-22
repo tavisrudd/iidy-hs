@@ -173,7 +173,8 @@ runCommand cli = case cliCommand cli of
       ctx <- createSimpleContext cli OpListStacks
       dispatch <- mkOutputDispatch (cliGlobalOpts cli)
       let tagFilters = if null (laTagFilter args) then Nothing else Just (laTagFilter args)
-      result <- listStacks ctx tagFilters
+          hasQuery = case laQuery args of { Just _ -> True; Nothing -> False }
+      result <- listStacks ctx tagFilters (laTags args) hasQuery
       case result of
         Left err    -> dieTxt err
         Right datas -> mapM_ (renderOutput dispatch) datas

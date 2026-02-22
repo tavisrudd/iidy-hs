@@ -42,8 +42,10 @@ import Iidy.Output.Types
 listStacks
   :: CfnContext
   -> Maybe [Text]           -- ^ Optional tag filters ("key=value")
+  -> Bool                   -- ^ Show tags column
+  -> Bool                   -- ^ Query mode (JMESPath query present)
   -> IO (Either Text [OutputData])
-listStacks ctx mTagFilters = do
+listStacks ctx mTagFilters showTags queryMode = do
   let req = DStacks.newDescribeStacks
   resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
   let stacks = fromMaybe [] resp.stacks
@@ -52,12 +54,13 @@ listStacks ctx mTagFilters = do
       matched = filter (stackMatchesFilters parsed) stacks
       sorted  = sortBy (comparing (.creationTime)) matched
       entries = map convertStack sorted
+      filterLabels = map (\f -> "tag:" <> f) filters
       display = StackListDisplay
         { sldStacks         = entries
-        , sldShowTags       = not (null filters)
-        , sldFiltersApplied = filters
-        , sldColumns        = defaultColumns filters
-        , sldQueryMode      = False
+        , sldShowTags       = showTags || not (null filters)
+        , sldFiltersApplied = filterLabels
+        , sldColumns        = defaultColumns filters showTags
+        , sldQueryMode      = queryMode
         }
   pure (Right [OdStackList display])
 
@@ -110,9 +113,10 @@ convertStack s = StackListEntry
 ------------------------------------------------------------------------
 
 -- | Choose which columns to display.
--- When tag filters are active we include the tags column.
-defaultColumns :: [Text] -> [StackListColumn]
-defaultColumns [] =
-  [ColName, ColStatus, ColTime, ColStatusReason, ColTerminationProtection]
-defaultColumns _ =
-  [ColName, ColStatus, ColTime, ColTags, ColStatusReason, ColTerminationProtection]
+-- When tag filters are active or --tags is requested, include the tags column.
+defaultColumns :: [Text] -> Bool -> [StackListColumn]
+defaultColumns filters showTags
+  | showTags || not (null filters) =
+    [ColName, ColStatus, ColTime, ColTags, ColStatusReason, ColTerminationProtection]
+  | otherwise =
+    [ColName, ColStatus, ColTime, ColStatusReason, ColTerminationProtection]
