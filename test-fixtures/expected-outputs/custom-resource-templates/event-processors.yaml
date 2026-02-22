@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Event processing Lambda functions
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - development
+      - staging
+      - production
+Resources:
+  OrderProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}--order-processor
+      Handler: index.handler
+      Runtime: nodejs20.x
+      MemorySize: !FindInMap
+        - WorkerSizing
+        - !Ref Environment
+        - MemorySize
+      Timeout: !FindInMap
+        - WorkerSizing
+        - !Ref Environment
+        - Timeout
+      Code:
+        S3Bucket: deploy-artifacts
+        S3Key: lambdas/order-processor.zip
+      Tags:
+        - Key: Team
+          Value: commerce
+        - Key: Component
+          Value: order-processing
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+  OrderProcessorExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: function-permissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/orders
+  PaymentProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}--payment-processor
+      Handler: main.handle
+      Runtime: python3.12
+      MemorySize: !FindInMap
+        - WorkerSizing
+        - !Ref Environment
+        - MemorySize
+      Timeout: !FindInMap
+        - WorkerSizing
+        - !Ref Environment
+        - Timeout
+      Code:
+        S3Bucket: deploy-artifacts
+        S3Key: lambdas/payment-processor.zip
+      Tags:
+        - Key: Team
+          Value: payments
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+  PaymentProcessorExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: function-permissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !Sub arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:payment-receipts
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:payment-api-key-*
+Mappings:
+  WorkerSizing:
+    production:
+      MemorySize: 1024
+      Timeout: 300
+    development:
+      MemorySize: 256
+      Timeout: 60
+    staging:
+      MemorySize: 512
+      Timeout: 120
+Outputs:
+  OrderProcessorFunctionArn:
+    Value: !GetAtt OrderProcessorFunction.Arn
+  PaymentProcessorFunctionArn:
+    Value: !GetAtt PaymentProcessorFunction.Arn

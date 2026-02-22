@@ -1,0 +1,7 @@
+# Tag error: !$map uses 'transform' instead of 'template'
+$defs:
+  services: ["web", "api", "db"]
+
+configs: !$map
+  items: !$ services
+  transform: "{{item}}-config"

@@ -1,0 +1,12 @@
+# !$mapValues with unknown extra field
+$defs:
+  configs:
+    api:
+      port: 3000
+    web:
+      port: 8080
+
+result: !$mapValues
+  items: !$ configs
+  template: "{{item.key}}"
+  separator: "-"

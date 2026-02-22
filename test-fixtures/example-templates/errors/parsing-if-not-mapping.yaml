@@ -1,0 +1,2 @@
+# !$if with string instead of mapping
+test: !$if "invalid"

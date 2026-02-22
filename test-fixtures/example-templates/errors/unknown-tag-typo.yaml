@@ -1,0 +1,7 @@
+# Unknown iidy tag error (typo)
+$defs:
+  data: ["a", "b", "c"]
+
+result: !$mapp
+  items: !$ data
+  template: "{{item}}"

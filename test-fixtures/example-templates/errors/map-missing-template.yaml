@@ -1,0 +1,3 @@
+# !$map with missing template field error
+test_map: !$map
+  items: ["a", "b", "c"]

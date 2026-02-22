@@ -1,0 +1,2 @@
+# !$fromPairs with source that's not a sequence  
+test_frompairs: !$fromPairs "not_a_sequence"

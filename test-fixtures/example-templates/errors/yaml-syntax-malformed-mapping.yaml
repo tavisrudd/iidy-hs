@@ -1,0 +1,9 @@
+# YAML syntax error: malformed block mapping
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "my-bucket"
+      Enabled: !$not !$eq
+        - "true"
+        - "false"

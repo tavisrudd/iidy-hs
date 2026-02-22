@@ -1,0 +1,7 @@
+# Tag error: !$map uses 'source' instead of 'items'
+$defs:
+  services: ["web", "api", "db"]
+
+configs: !$map
+  source: !$ services
+  template: "{{item}}-config"

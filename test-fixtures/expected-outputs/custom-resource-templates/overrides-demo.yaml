@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Queue with FIFO override
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - development
+      - staging
+      - production
+  AlertTopicArn:
+    Type: String
+Resources:
+  StandardQueueQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub app--${Environment}--Standard
+      MessageRetentionPeriod: 1209600
+      VisibilityTimeout: 30
+      RedrivePolicy: !Ref AWS::NoValue
+  StandardQueueQueueDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P3--${StandardQueueQueue.QueueName}-depth
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt StandardQueueQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Queue depth exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Sum
+      Threshold: 250
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateNumberOfMessagesVisible
+  StandardQueueQueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P3--${StandardQueueQueue.QueueName}-age
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt StandardQueueQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Message age exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Maximum
+      Threshold: 60
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateAgeOfOldestMessage
+  FifoQueueQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub app--${Environment}--Fifo
+      MessageRetentionPeriod: 1209600
+      VisibilityTimeout: 30
+      RedrivePolicy: !Ref AWS::NoValue
+      FifoQueue: true
+      ContentBasedDeduplication: true
+  FifoQueueQueueDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P3--${FifoQueueQueue.QueueName}-depth
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt FifoQueueQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Queue depth exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Sum
+      Threshold: 250
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateNumberOfMessagesVisible
+  FifoQueueQueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P3--${FifoQueueQueue.QueueName}-age
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt FifoQueueQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Message age exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Maximum
+      Threshold: 60
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateAgeOfOldestMessage
+Outputs:
+  StandardQueueQueueUrl:
+    Value: !Ref StandardQueueQueue
+  StandardQueueQueueArn:
+    Value: !GetAtt StandardQueueQueue.Arn
+  FifoQueueQueueUrl:
+    Value: !Ref FifoQueueQueue
+  FifoQueueQueueArn:
+    Value: !GetAtt FifoQueueQueue.Arn

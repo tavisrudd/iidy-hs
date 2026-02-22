@@ -1,0 +1,2 @@
+# !$mapListToHash with string instead of mapping
+result: !$mapListToHash "invalid"

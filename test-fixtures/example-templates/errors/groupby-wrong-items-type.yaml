@@ -1,0 +1,4 @@
+# !$groupBy with items that's not a sequence
+test_groupby: !$groupBy
+  items: "not_a_sequence"
+  key: "{{item}}"

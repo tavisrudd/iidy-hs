@@ -1,0 +1,4 @@
+# !$let without required 'in' field
+test: !$let
+  var1: "value1"
+  var2: "value2"

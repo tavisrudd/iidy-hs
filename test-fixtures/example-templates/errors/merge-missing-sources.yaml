@@ -1,0 +1,2 @@
+# !$merge with missing sources field
+test_merge: !$merge

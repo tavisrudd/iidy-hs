@@ -1,0 +1,9 @@
+# query and jmespath are mutually exclusive
+$defs:
+  config:
+    host: "db.example.com"
+
+result: !$
+  path: config
+  query: "host"
+  jmespath: "host"

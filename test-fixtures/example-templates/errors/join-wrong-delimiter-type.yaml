@@ -1,0 +1,6 @@
+# !$join with delimiter that's not string-convertible
+$defs:
+  wrong_delimiter: 
+    key: value
+
+test_join: !$join [!$ wrong_delimiter, ["hello", "world"]]

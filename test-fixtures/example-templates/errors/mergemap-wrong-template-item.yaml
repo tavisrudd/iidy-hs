@@ -1,0 +1,4 @@
+# !$mergeMap with template that produces invalid items
+test_mergemap: !$mergeMap
+  items: [1, 2, 3]
+  template: "not_an_object"

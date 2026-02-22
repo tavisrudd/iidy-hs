@@ -1,0 +1,2 @@
+# !$eq with only one element instead of two
+test: !$eq ["single_value"]

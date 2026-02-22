@@ -1,0 +1,4 @@
+# !$mapListToHash missing required field
+test_mapListToHash: !$mapListToHash
+  items: [{"key": "a", "value": 1}]
+  # Missing keyPath field

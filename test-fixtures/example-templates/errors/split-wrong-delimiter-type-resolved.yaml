@@ -1,0 +1,5 @@
+# !$split with delimiter that's not a string (resolved at runtime)
+$defs:
+  wrong_delimiter: 123
+
+test_split: !$split [!$ wrong_delimiter, "hello,world"]

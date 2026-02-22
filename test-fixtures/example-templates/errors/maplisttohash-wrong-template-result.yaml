@@ -1,0 +1,4 @@
+# !$mapListToHash with template that produces wrong result type
+test_maplisttohash: !$mapListToHash
+  items: [1, 2, 3]
+  template: "{{item}}"

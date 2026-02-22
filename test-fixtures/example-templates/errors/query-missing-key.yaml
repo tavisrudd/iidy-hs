@@ -1,0 +1,7 @@
+# Query selector references a key that doesn't exist
+$defs:
+  config:
+    host: "db.example.com"
+    port: 5432
+
+result: !$ config?host,missing_key

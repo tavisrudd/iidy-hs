@@ -1,0 +1,2 @@
+# !$fromPairs with item that's not a 2-element array
+test_frompairs: !$fromPairs [["key1", "value1"], "not_a_pair", ["key2", "value2"]]

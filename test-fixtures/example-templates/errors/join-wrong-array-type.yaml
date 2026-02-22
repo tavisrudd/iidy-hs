@@ -1,0 +1,2 @@
+# !$join with array that's not a sequence
+test_join: !$join [",", "not_an_array"]

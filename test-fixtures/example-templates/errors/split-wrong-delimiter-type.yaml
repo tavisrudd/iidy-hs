@@ -1,0 +1,2 @@
+# !$split with delimiter that's not a string
+test_split: !$split [123, "hello,world"]

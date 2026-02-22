@@ -1,0 +1,2 @@
+# !$join with array containing non-string-convertible items
+test_join: !$join [",", ["hello", {key: value}, "world"]]

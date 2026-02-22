@@ -1,0 +1,4 @@
+# !$mapListToHash with items that's not a sequence
+test_maplisttohash: !$mapListToHash
+  items: "not_a_sequence"
+  template: ["{{item}}", "{{item}}"]

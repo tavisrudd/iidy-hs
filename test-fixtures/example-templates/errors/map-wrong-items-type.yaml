@@ -1,0 +1,4 @@
+# !$map with wrong items type error - items should be array, not string
+test_map: !$map
+  items: "not_an_array"
+  template: "{{item}}"

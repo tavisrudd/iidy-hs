@@ -1,0 +1,2 @@
+# Unknown iidy tag error in flow style (typo)
+result: !$joinn [",", ["a", "b"]]

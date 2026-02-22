@@ -1,0 +1,2 @@
+# !$merge with string instead of sequence  
+test: !$merge "invalid"

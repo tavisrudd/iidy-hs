@@ -1,0 +1,2 @@
+# !$eq with string instead of sequence
+test: !$eq "invalid"

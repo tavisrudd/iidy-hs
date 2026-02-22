@@ -1,0 +1,50 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Data lake storage buckets
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+  CostCenter:
+    Type: String
+    Default: engineering
+Resources:
+  RawDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}--raw-data
+      AccessControl: Private
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CostCenter
+          Value: !Ref CostCenter
+  ProcessedDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}--processed-data
+      AccessControl: Private
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CostCenter
+          Value: !Ref CostCenter
+  ArchivesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}--archives
+      AccessControl: LogDeliveryWrite
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CostCenter
+          Value: !Ref CostCenter
+Outputs:
+  RawDataBucketArn:
+    Value: !GetAtt RawDataBucket.Arn
+  ProcessedDataBucketArn:
+    Value: !GetAtt ProcessedDataBucket.Arn
+  ArchivesBucketArn:
+    Value: !GetAtt ArchivesBucket.Arn

@@ -1,0 +1,2 @@
+# !$groupBy with string instead of mapping
+test: !$groupBy "invalid"

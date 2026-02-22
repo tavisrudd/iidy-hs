@@ -1,0 +1,2 @@
+# !$ variable include with invalid format (number instead of string or mapping with path)
+test: !$ 123

@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: CI/CD deploy roles
+Resources:
+  AppDeployRoleDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: app-deploy-role
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: cfn-permissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:GetStackPolicy
+                Resource:
+                  - arn:aws:cloudformation:*:*:stack/app-development*
+                  - arn:aws:cloudformation:*:*:stack/app-production*
+              - Effect: Allow
+                Action:
+                  - cloudformation:List*
+                Resource: '*'
+        - PolicyName: ssm-permissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              Effect: Allow
+              Action:
+                - ssm:GetParameter
+                - ssm:GetParameters
+                - ssm:GetParametersByPath
+              Resource:
+                - arn:aws:ssm:*:*:parameter/development/app/*
+                - arn:aws:ssm:*:*:parameter/production/app/*
+  DataPipelineDeployRoleDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: data-pipeline-deploy-role
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: cfn-permissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:GetStackPolicy
+                Resource:
+                  - arn:aws:cloudformation:*:*:stack/data-pipeline-*
+              - Effect: Allow
+                Action:
+                  - cloudformation:List*
+                Resource: '*'
+        - PolicyName: ssm-permissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              Effect: Allow
+              Action:
+                - ssm:GetParameter
+                - ssm:GetParameters
+                - ssm:GetParametersByPath
+              Resource:
+                - arn:aws:ssm:*:*:parameter/*/data-pipeline/*
+  AppDeployRoleS3Policy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: s3-access
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+            Resource:
+              - arn:aws:s3:::deploy-artifacts/*
+      Roles:
+        - !Ref AppDeployRoleDeployRole
+Outputs:
+  AppDeployRoleARN:
+    Value: !GetAtt AppDeployRoleDeployRole.Arn
+    Export:
+      Name: deploy-roles:app-deploy-role
+  DataPipelineDeployRoleARN:
+    Value: !GetAtt DataPipelineDeployRoleDeployRole.Arn
+    Export:
+      Name: deploy-roles:data-pipeline-deploy-role

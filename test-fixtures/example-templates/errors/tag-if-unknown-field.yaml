@@ -1,0 +1,9 @@
+# !$if with unknown extra field
+$defs:
+  enabled: true
+
+result: !$if
+  test: !$ enabled
+  then: "yes"
+  else: "no"
+  default: "maybe"

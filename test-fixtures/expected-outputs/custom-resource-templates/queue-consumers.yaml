@@ -1,0 +1,313 @@
+Description: Event processing queues
+Parameters:
+  Environment:
+    AllowedValues:
+      - development
+      - staging
+      - production
+    Type: String
+  AlertTopicArn:
+    Type: String
+Resources:
+  OrderEventsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub app--${Environment}--OrderEvents
+      MessageRetentionPeriod: 1209600
+      VisibilityTimeout: 30
+      RedrivePolicy: !Ref AWS::NoValue
+  OrderEventsQueueDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P2--${OrderEventsQueue.QueueName}-depth
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt OrderEventsQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Queue depth exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Sum
+      Threshold: 250
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateNumberOfMessagesVisible
+  OrderEventsQueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P2--${OrderEventsQueue.QueueName}-age
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt OrderEventsQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Message age exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Maximum
+      Threshold: 120
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateAgeOfOldestMessage
+  PaymentEventsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub app--${Environment}--PaymentEvents
+      MessageRetentionPeriod: 1209600
+      VisibilityTimeout: 30
+      RedrivePolicy: !Ref AWS::NoValue
+  PaymentEventsQueueDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P1--${PaymentEventsQueue.QueueName}-depth
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt PaymentEventsQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Queue depth exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Sum
+      Threshold: 100
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateNumberOfMessagesVisible
+  PaymentEventsQueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P1--${PaymentEventsQueue.QueueName}-age
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt PaymentEventsQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Message age exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Maximum
+      Threshold: 60
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateAgeOfOldestMessage
+  NotificationEventsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub app--${Environment}--NotificationEvents
+      MessageRetentionPeriod: 1209600
+      VisibilityTimeout: 30
+      RedrivePolicy: !Ref AWS::NoValue
+  NotificationEventsQueueDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P3--${NotificationEventsQueue.QueueName}-depth
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt NotificationEventsQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Queue depth exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Sum
+      Threshold: 250
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateNumberOfMessagesVisible
+  NotificationEventsQueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P3--${NotificationEventsQueue.QueueName}-age
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt NotificationEventsQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Message age exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Maximum
+      Threshold: 60
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateAgeOfOldestMessage
+  AuditLogQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub app--${Environment}--AuditLog
+      MessageRetentionPeriod: 1209600
+      VisibilityTimeout: 30
+      RedrivePolicy: !Ref AWS::NoValue
+  AuditLogQueueDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P4--${AuditLogQueue.QueueName}-depth
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt AuditLogQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Queue depth exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Sum
+      Threshold: 250
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateNumberOfMessagesVisible
+  AuditLogQueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P4--${AuditLogQueue.QueueName}-age
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt AuditLogQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Message age exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Maximum
+      Threshold: 300
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateAgeOfOldestMessage
+  RetryableEventsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub app--${Environment}--RetryableEvents
+      MessageRetentionPeriod: 1209600
+      VisibilityTimeout: 30
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+            - DeadLetterQueue
+            - Arn
+        maxReceiveCount: 3
+  RetryableEventsQueueDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P3--${RetryableEventsQueue.QueueName}-depth
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt RetryableEventsQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Queue depth exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Sum
+      Threshold: 250
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateNumberOfMessagesVisible
+  RetryableEventsQueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P3--${RetryableEventsQueue.QueueName}-age
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt RetryableEventsQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Message age exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Maximum
+      Threshold: 180
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateAgeOfOldestMessage
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub app--${Environment}--dead-letter
+      MessageRetentionPeriod: 1209600
+  DeadLetterQueueDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P3--${DeadLetterQueue.QueueName}-depth
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt DeadLetterQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Queue depth exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Sum
+      Threshold: 250
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateNumberOfMessagesVisible
+  DeadLetterQueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub P3--${DeadLetterQueue.QueueName}-age
+      EvaluationPeriods: 2
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt DeadLetterQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopicArn
+      AlarmDescription: Message age exceeded threshold
+      Namespace: AWS/SQS
+      Period: 60
+      ComparisonOperator: GreaterThanThreshold
+      Statistic: Maximum
+      Threshold: 60
+      OKActions:
+        - !Ref AlertTopicArn
+      MetricName: ApproximateAgeOfOldestMessage
+  EventTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub app--${Environment}--events
+Outputs:
+  OrderEventsQueueUrl:
+    Value: !Ref OrderEventsQueue
+  OrderEventsQueueArn:
+    Value: !GetAtt OrderEventsQueue.Arn
+  PaymentEventsQueueUrl:
+    Value: !Ref PaymentEventsQueue
+  PaymentEventsQueueArn:
+    Value: !GetAtt PaymentEventsQueue.Arn
+  NotificationEventsQueueUrl:
+    Value: !Ref NotificationEventsQueue
+  NotificationEventsQueueArn:
+    Value: !GetAtt NotificationEventsQueue.Arn
+  AuditLogQueueUrl:
+    Value: !Ref AuditLogQueue
+  AuditLogQueueArn:
+    Value: !GetAtt AuditLogQueue.Arn
+  RetryableEventsQueueUrl:
+    Value: !Ref RetryableEventsQueue
+  RetryableEventsQueueArn:
+    Value: !GetAtt RetryableEventsQueue.Arn
+  DeadLetterQueueUrl:
+    Value: !Ref DeadLetterQueue
+  DeadLetterQueueArn:
+    Value: !GetAtt DeadLetterQueue.Arn

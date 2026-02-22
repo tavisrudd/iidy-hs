@@ -1,0 +1,4 @@
+# !$merge with source that's not a mapping
+test_merge: !$merge
+  - key1: value1
+  - "not_a_mapping"

@@ -1,0 +1,6 @@
+# Missing required field error
+$defs:
+  data: ["a", "b", "c"]
+
+result: !$map
+  items: !$ data

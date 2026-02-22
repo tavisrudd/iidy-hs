@@ -1,0 +1,6 @@
+# Variable not found error
+$defs:
+  environment: "prod"
+  region: "us-west-2"
+
+stack_name: "{{app_name}}-{{environment}}"

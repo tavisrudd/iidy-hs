@@ -1,0 +1,7 @@
+# Variable not found in include reference
+$defs:
+  config:
+    database: "db.example.com"
+    cache: "cache.example.com"
+
+host: !$ config.storage

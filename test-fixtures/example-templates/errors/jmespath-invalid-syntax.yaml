@@ -1,0 +1,9 @@
+# JMESPath invalid syntax error
+$defs:
+  config:
+    host: "db.example.com"
+    port: 5432
+
+result: !$
+  path: config
+  jmespath: "host["

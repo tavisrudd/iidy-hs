@@ -1,0 +1,2 @@
+# !$concat with string instead of sequence
+test: !$concat "invalid"

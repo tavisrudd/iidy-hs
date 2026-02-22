@@ -1,0 +1,2 @@
+# !$split with string instead of sequence
+test: !$split "invalid"
