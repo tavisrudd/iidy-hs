@@ -31,7 +31,7 @@
 | 5 | CLI + remaining commands | DONE (Session 5) | — |
 | 6 | Tests + polish | DONE (Sessions 6-11) | — |
 | 7 | Error display system | **DONE** (Sessions 13-17) | [phase-7-error-display.md](notes/phases/phase-7-error-display.md) |
-| 8 | Remaining features (NTP, schema, demo) | NOT STARTED | [phase-8-remaining-features.md](notes/phases/phase-8-remaining-features.md) |
+| 8 | Remaining features (NTP, schema, demo, exception handling) | **IN PROGRESS** | [phase-8-remaining-features.md](notes/phases/phase-8-remaining-features.md) |
 | 9 | Final verification | NOT STARTED | [phase-9-final-verification.md](notes/phases/phase-9-final-verification.md) |
 
 ## Session Log
@@ -54,7 +54,7 @@
 | 14 | 7 | Phase 7.2: Error message matching, position tracking — 0→18/49 error snapshots pass. |
 | 15 | 7 | Phase 7.2d-h: Position refinement, examples, caret logic — 18→35/49 error snapshots pass. |
 | 16 | 7 | Phase 7.3: Validation gaps (11 UNEXPECTED_OK → 0), unknown tags, field validation, CFN validation — 35→44/49 error snapshots pass. |
-| 17 | 7 | Phase 7.4: Final 5 error snapshots fixed — 49/49 pass. Phase 7 complete. |
+| 17 | 7-8 | Phase 7.4: Final 5 error snapshots fixed — 49/49 pass. Phase 7 complete. Ctrl-C + exception handling fixed. |
 
 **Current: 76 modules, 181 tests, 36/36 render snapshots, 49/49 error snapshots match**
 
