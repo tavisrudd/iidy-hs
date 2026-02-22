@@ -36,3 +36,13 @@ Key places to check:
 - Begin with chunk 7.1: wire up EnhancedPreprocessingError conversion
 - Read phase-7-error-display.md for detailed chunks and verification criteria
 - Check .msgs/ after every tool call chain
+
+### END-OF-SESSION GATE (every session, non-negotiable)
+Before wrapping up any session, verify:
+- [ ] WORKPLAN.md phase index is current (status, links)
+- [ ] Current phase doc has all checkboxes updated to reflect actual state
+- [ ] Session handoff doc created/updated with what was done, deviations, next steps
+- [ ] progress.log has entries for all completed chunks
+- [ ] MEMORY.md reflects any new learnings, decisions, or status changes
+- [ ] All doc updates committed alongside code (not separate or forgotten)
+- [ ] No orphaned TODOs — anything deferred is tracked in a phase doc

@@ -49,3 +49,34 @@ Autonomous claude driven, Haskell port of iidy (a CloudFormation preprocessor/de
 - No destructive operations (rm -rf, git reset --hard, force push)
 - No writing credentials, secrets, or API keys to disk
 - No network calls except Hackage/nixpkgs downloads and ntfy notifications
+
+## Feature Completeness
+- This is a COMPLETE port. Every Rust feature gets ported. No shortcuts, no dropping features.
+- NTP time sync, full schema validation, demo command — everything.
+- No "minimal subset", no "deferred indefinitely", no "marginal value" judgments.
+- If Rust has it, Haskell gets it.
+
+## End-of-Session Gate (every session, non-negotiable)
+Before wrapping up, verify ALL of these:
+- WORKPLAN.md phase index is current (status, links)
+- Current phase doc checkboxes reflect actual state
+- Session handoff doc created in notes/sessions/ with: what done, deviations, next steps
+- progress.log has entries for all completed chunks
+- MEMORY.md reflects any new learnings or status changes
+- All doc updates committed alongside code
+- No orphaned TODOs — anything deferred is tracked in a phase doc
+
+## Workflow
+You are running inside a 'ralph loop' headlessly with the -p argument.
+
+!! MESSAGE INBOX !! 
+
+Frequently check the folder .msgs/ for files matching *.msg that do
+NOT have a corresponding .reply file (use ls or Glob). Do this roughly
+once per minute — after each tool call chain or at any natural
+pause. For each unread message, read it, then write your reply to
+.msgs/{same-name}.reply. Keep replies concise. If the message asks you
+to change priorities or stop, follow those instructions. Read the
+first prompt from the user (what was provided with -p) and then read
+and reply to all unread messages before you start working.
+
