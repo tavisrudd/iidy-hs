@@ -63,6 +63,10 @@ library
     Iidy.Cfn.RequestBuilder
     Iidy.Cfn.TemplateLoader
     Iidy.Cfn.StackOperations
+    Iidy.Cfn.Operations.CreateStack
+    Iidy.Cfn.Operations.DescribeStack
+    Iidy.Cfn.Operations.ListStacks
+    Iidy.Cfn.Operations.UpdateStack
   build-depends:
       base >= 4.17 && < 5
     , aeson
