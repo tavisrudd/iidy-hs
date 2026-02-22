@@ -36,8 +36,9 @@
 | 10 | Output pipeline wiring | **DONE** | [phase-10-output-wiring.md](notes/phases/phase-10-output-wiring.md) |
 | 11 | Renderer output tests | **DONE** | [phase-11-renderer-tests.md](notes/phases/phase-11-renderer-tests.md) |
 | 12 | Completion audit vs Rust (iterative) | **DONE** (Sessions 25-27) | [phase-12-completion-audit.md](notes/phases/phase-12-completion-audit.md) |
-| 13 | Output sequencing + feature gaps (full audit) | **IN PROGRESS** (13.1-13.3 done, Session 29) | [phase-13-cli-output-fixes.md](notes/phases/phase-13-cli-output-fixes.md) |
+| 13 | Output sequencing + feature gaps (full audit) | **IN PROGRESS** (13.1-13.4 done, Session 30) | [phase-13-cli-output-fixes.md](notes/phases/phase-13-cli-output-fixes.md) |
 | 14 | Live AWS verification — ALL commands | **PLANNED** | — |
+| 15 | AWS auth chain: profile, assume-role, region | **PLANNED** | [aws-auth-chain-analysis.md](notes/aws-auth-chain-analysis.md) |
 
 Phase 12 offline audit found zero gaps, but live AWS testing (Session 28) on just 3 commands
 revealed 8 divergences. A full sequencing audit of all 22 commands then uncovered:
@@ -89,8 +90,9 @@ Phase 14 is systematic live verification of ALL 22 commands after Phase 13 fixes
 | 27 | 12 | Phase 12.3: Final re-audit pass — zero gaps found. Phase 12 COMPLETE. Port DONE. |
 | 28 | 13 | Phase 13 planned: 8 output divergences from live AWS testing. |
 | 29 | 13.1-13.3 | Phase 13.1-13.3: Section headings, console URL, region priority, STS getCallerIdentity, StackAbsentInfo, StackDefinition before polling in all ops. |
+| 30 | 13.4 | Phase 13.4: CommandMetadata + FinalCommandSummary emission. AWS auth chain analysis (3 critical gaps found). |
 
-**Offline audit: 79 modules, 352 tests, 37/37 render snapshots, 49/49 error snapshots match**
+**Offline audit: 80 modules, 352 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
 ## Phase 12 Offline Audit Summary
 
