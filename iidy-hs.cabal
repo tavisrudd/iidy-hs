@@ -73,6 +73,7 @@ library
     Iidy.Cfn.Types
     Iidy.Cfn.Constants
     Iidy.Cfn.Status
+    Iidy.Cfn.CommandMetadata
     Iidy.Cfn.Context
     Iidy.Cfn.RequestBuilder
     Iidy.Cfn.TemplateHash
