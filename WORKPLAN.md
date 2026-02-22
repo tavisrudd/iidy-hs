@@ -450,8 +450,9 @@ build-depends:
 | 7 | Phase 6 | 6.6-6.7 | DONE (StackArgsLoader, Main.hs wiring, 89 tests) |
 | 8 | Phase 6 | 6.7-6.8 | DONE (remaining stubs, TemplateHash, TODOs fixed, 106 tests) |
 | 9 | Polish | help, custom resources, tests | DONE (custom resource expansion, 138 tests) |
+| 10 | Polish | emitter, OValue pipeline, snapshot comparison | DONE (36/36 Rust snapshots match, 181 tests) |
 
-**Actual: 9 sessions. 75 modules, ~13,500 LOC, 138 tests**
+**Actual: 10 sessions. 75 modules, ~13,500 LOC, 181 tests**
 
 ## Estimated LOC Summary
 
