@@ -158,7 +158,8 @@ runCommand cli = case cliCommand cli of
   CmdDeleteStack args -> do
       ctx <- createSimpleContext cli OpDeleteStack
       dispatch <- mkOutputDispatch (cliGlobalOpts cli)
-      result <- deleteStack ctx (delStackname args) (delYes args) (renderOutput dispatch)
+      let env = goEnvironment (cliGlobalOpts cli)
+      result <- deleteStack ctx (delStackname args) (delYes args) env (renderOutput dispatch)
       case result of
         Left err -> dieTxt err
         Right rc -> exitCode rc

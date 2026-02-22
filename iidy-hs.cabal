@@ -68,6 +68,7 @@ library
     Iidy.Aws.Config
     Iidy.Aws.CredentialSource
     Iidy.Aws.ClientReqToken
+    Iidy.Aws.Sts
     Iidy.Aws.Timing
     Iidy.Cfn.Types
     Iidy.Cfn.Constants

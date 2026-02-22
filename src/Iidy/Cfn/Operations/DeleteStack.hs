@@ -18,6 +18,7 @@ import Control.Monad.Trans.Resource (runResourceT)
 
 import qualified Amazonka
 
+import Iidy.Aws.Sts (getCallerIdentity)
 import Iidy.Cfn.Context (CfnContext(..), deleteSuccessStates)
 import Iidy.Cfn.Operations.DescribeStack (convertEvent)
 import Iidy.Cfn.RequestBuilder (buildDeleteStackRequest)
@@ -28,7 +29,7 @@ import Iidy.Cfn.StackOperations
   , pollForCompletion
   , stackExists
   )
-import Iidy.Output.Types (OutputData(..), StackEventWithTiming(..))
+import Iidy.Output.Types (OutputData(..), StackAbsentInfo(..), StackEventWithTiming(..))
 
 ------------------------------------------------------------------------
 -- Terminal statuses for delete-stack polling
@@ -64,13 +65,25 @@ deleteStack
   :: CfnContext
   -> Text                   -- ^ stack name
   -> Bool                   -- ^ skip confirmation (--yes flag)
+  -> Text                   -- ^ environment name
   -> (OutputData -> IO ())  -- ^ output emitter for progress display
   -> IO (Either Text Int)
-deleteStack ctx stackName skipConfirmation emit = do
+deleteStack ctx stackName skipConfirmation env emit = do
   -- Step 1: Check stack existence
   exists <- stackExists ctx stackName
   if not exists
-    then pure (Right 0)
+    then do
+      -- Emit StackAbsentInfo like Rust does
+      let regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
+      (account, authArn) <- getCallerIdentity (cfnEnv ctx)
+      emit $ OdStackAbsentInfo StackAbsentInfo
+        { saiStackName   = stackName
+        , saiEnvironment = env
+        , saiRegion      = regionText
+        , saiAccount     = account
+        , saiAuthArn     = authArn
+        }
+      pure (Right 0)
     else do
       -- Step 1b: Prompt for confirmation unless --yes
       confirmed <- if skipConfirmation
