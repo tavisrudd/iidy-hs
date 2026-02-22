@@ -4,12 +4,15 @@ module Main (main) where
 
 import Control.Exception (try, SomeException)
 import Control.Monad (forM, when)
-import Data.IORef (newIORef, readIORef, writeIORef, modifyIORef')
 import Data.Aeson (Value(..))
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Key as AesonKey
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL
+import Data.IORef (newIORef, readIORef, writeIORef, modifyIORef')
 import Data.List (nubBy, sort, sortBy)
 import qualified Data.Map.Strict
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -25,51 +28,33 @@ import Test.QuickCheck hiding (Failure, Success)
 import Options.Applicative (execParserPure, prefs, showHelpOnEmpty, ParserResult(..))
 
 import qualified Amazonka.CloudFormation.Types as CF
-import Iidy.Aws.CredentialSource (AwsSettings(..))
-import Iidy.Cfn.Operations.Changeset (convertChange, convertDetail)
-import Iidy.Cfn.Operations.WatchStack (formatEvent, allTerminalStatuses)
-import Iidy.Cfn.StackOperations (stackNameFromId, pollForCompletionWith, PollConfig(..), defaultPollConfig)
-import qualified Amazonka.CloudFormation.Types.StackEvent as SE
-import Data.Time.Clock (UTCTime(..))
-import Data.Time.Calendar (fromGregorian)
-import Iidy.Cfn.Operations.DeleteStack (isConfirmation)
-import Iidy.Output.Types (ChangeInfo(..), ChangeDetail(..))
-import Iidy.Cfn.RequestBuilder (mapCapability, mapCapabilities, mapParameters, mapTags, mapOnFailure)
 import qualified Amazonka.CloudFormation.Types.Change as CChange
 import qualified Amazonka.CloudFormation.Types.ResourceChange as CRC
 import qualified Amazonka.CloudFormation.Types.ResourceChangeDetail as CRCD
 import qualified Amazonka.CloudFormation.Types.ResourceTargetDefinition as CRTD
+import qualified Amazonka.CloudFormation.Types.StackEvent as SE
+import Data.Time.Calendar (fromGregorian)
+import Data.Time.Clock (UTCTime(..))
+
+import Iidy.Aws.ClientReqToken (TokenInfo(..), TokenSource(..), DerivedTokenInfo(..))
+import Iidy.Aws.CredentialSource (AwsSettings(..))
+import Iidy.Cfn.Operations.Changeset (convertChange, convertDetail)
 import Iidy.Cfn.Operations.ConvertStack
   ( parameterizeEnv
   , parameterizeStackName
   , templateBodyToYaml
   , buildStackArgsYaml
   )
-import Iidy.Cfn.TemplateHash (calculateTemplateHash, generateVersionedLocation, parseS3Url)
-import Iidy.Yaml.Errors.Display (formatError, defaultColors, noColors)
-import Iidy.Yaml.Errors.Enhanced
-import Iidy.Yaml.Errors.Ids (ErrorId(..))
-import Iidy.Yaml.Location (SourceLocation(..))
+import Iidy.Cfn.Operations.DeleteStack (isConfirmation)
+import Iidy.Cfn.Operations.WatchStack (formatEvent, allTerminalStatuses)
+import Iidy.Cfn.RequestBuilder (mapCapability, mapCapabilities, mapParameters, mapTags, mapOnFailure)
 import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..))
-import Iidy.Cfn.Types (CfnOperation(..), StackArgs(..))
+import Iidy.Cfn.StackOperations (stackNameFromId, pollForCompletionWith, PollConfig(..), defaultPollConfig)
+import Iidy.Cfn.TemplateHash (calculateTemplateHash, generateVersionedLocation, parseS3Url)
+import Iidy.Cfn.Types (CfnOperation(..), StackArgs(..), StackChangeType(..))
 import Iidy.Cli (Cli(..), Commands(..), GlobalOpts(..), AwsOpts(..), DeleteArgs(..), DescribeArgs(..), RenderArgs(..))
 import Iidy.Cli.Parser (cliParserInfo)
-import Iidy.Types (ColorChoice(..), Theme(..), YamlSpec(..))
-import Iidy.Yaml.Emitter (emitYaml)
-import Iidy.Yaml.Detection (detectYamlSpec, shouldUseYaml11Compatibility)
-import Iidy.Yaml.Engine
-  ( preprocessYaml
-  , preprocessYaml11
-  , PreprocessResult(..)
-  , PreprocessError(..)
-  )
-import Iidy.Yaml.Handlebars.Engine (interpolate, defaultHelpers)
-import Iidy.Yaml.Imports.Loaders.File (loadFileImport)
-import Iidy.Yaml.JMESPath (applyJmesPath)
-import Iidy.Yaml.CustomResources.JsonSchema (validateSchema)
-import Iidy.Yaml.OValue (OValue(..), oIsTruthy, toValue, fromValue)
-import Iidy.Yaml.Parser (parseYaml)
-import Iidy.Output.Color (darkTheme, noColorTheme, IidyTheme(..), colorize, colorizeResourceStatus)
+import Iidy.Output.Color (darkTheme, lightTheme, highContrastTheme, noColorTheme, IidyTheme(..), colorize, colorizeResourceStatus)
 import Iidy.Output.Renderers.Interactive
   ( InteractiveRenderer(..)
   , defaultInteractiveOptions, plainInteractiveOptions
@@ -78,8 +63,55 @@ import Iidy.Output.Renderers.Interactive
   , prettyFormatTags, prettyFormatParameters, formatTokenSource
   , column2Start, minStatusPadding, maxPadding, defaultScreenWidth
   )
-import Iidy.Aws.ClientReqToken (TokenSource(..), DerivedTokenInfo(..))
-import qualified Data.Map.Strict as Map
+import Iidy.Output.Renderers.Json
+  ( JsonOptions(..), defaultJsonOptions
+  , metadataToValue, defToValue, eventToValue, eventWithTimingToValue
+  , eventsDisplayToValue, contentsToValue, statusUpdateToValue
+  , commandResultToValue, summaryToValue, stackListToValue
+  , stackListEntryToValue, changesetResultToValue, driftToValue
+  , errorInfoToValue, tokenInfoToValue, operationCompleteToValue
+  , inactivityTimeoutToValue, changeDetailsToValue, absentInfoToValue
+  , costEstimateToValue, approvalRequestToValue, templateValidationToValue
+  , approvalStatusToValue, templateDiffToValue, approvalResultToValue
+  , encodeValue
+  )
+import Iidy.Output.Types
+  ( CommandMetadata(..), StackDefinition(..)
+  , StackEvent(..), StackEventWithTiming(..), StackEventsDisplay(..)
+  , StackContents(..), StackResourceInfo(..)
+  , StackOutputInfo(..), StackStatusInfo(..)
+  , StackListDisplay(..), StackListEntry(..), StackListColumn(..)
+  , ChangeSetCreationResult(..)
+  , ChangeInfo(..), ChangeDetail(..)
+  , StatusUpdate(..), StatusLevel(..), CommandResult(..)
+  , FinalCommandSummary(..), CommandSummaryResult(..)
+  , StackDrift(..), DriftedResource(..), PropertyDifference(..)
+  , ErrorInfo(..), ErrorDetails(..)
+  , OperationCompleteInfo(..), InactivityTimeoutInfo(..)
+  , StackChangeDetails(..), StackAbsentInfo(..)
+  , CostEstimate(..), CostEstimateInfo(..)
+  , ApprovalRequestResult(..), TemplateValidation(..)
+  , ApprovalStatus(..), TemplateDiff(..), ApprovalResult(..)
+  )
+import Iidy.Types (ColorChoice(..), Theme(..), YamlSpec(..))
+import Iidy.Yaml.CustomResources.JsonSchema (validateSchema)
+import Iidy.Yaml.Detection (detectYamlSpec, shouldUseYaml11Compatibility)
+import Iidy.Yaml.Emitter (emitYaml)
+import Iidy.Yaml.Engine
+  ( preprocessYaml
+  , preprocessYaml11
+  , PreprocessResult(..)
+  , PreprocessError(..)
+  )
+import Iidy.Yaml.Errors.Display (formatError, defaultColors, noColors)
+import Iidy.Yaml.Errors.Enhanced
+import Iidy.Yaml.Errors.Ids (ErrorId(..))
+import Iidy.Yaml.Handlebars.Engine (interpolate, defaultHelpers)
+import Iidy.Yaml.Imports.Loaders.File (loadFileImport)
+import Iidy.Yaml.JMESPath (applyJmesPath)
+import Iidy.Yaml.Location (SourceLocation(..))
+import Iidy.Yaml.OValue (OValue(..), oIsTruthy, toValue, fromValue)
+import Iidy.Yaml.Parser (parseYaml)
 
 ------------------------------------------------------------------------
 -- Fixture directories
@@ -122,6 +154,9 @@ main = do
     , testGroup "WatchStack" watchStackTests
     , testGroup "ErrorColors" errorColorTests
     , testGroup "Renderer" rendererTests
+    , testGroup "JsonRenderer" jsonRendererTests
+    , testGroup "ThemeVariants" themeVariantTests
+    , testGroup "RendererOutput" rendererOutputTests
     ]
 
 ------------------------------------------------------------------------
@@ -1786,4 +1821,616 @@ rendererTests =
 
   , testCase "defaultScreenWidth is 130" $ do
       assertEqual "defaultScreenWidth" 130 defaultScreenWidth
+  ]
+
+------------------------------------------------------------------------
+-- Test fixtures for OutputData types
+------------------------------------------------------------------------
+
+testTimestamp :: UTCTime
+testTimestamp = UTCTime (fromGregorian 2026 2 22) (15 * 3600 + 30 * 60)
+
+testTokenInfo :: TokenInfo
+testTokenInfo = TokenInfo
+  { tiValue = "tok-abc123"
+  , tiSource = AutoGenerated
+  , tiOperationId = "op-001"
+  }
+
+testStackDef :: StackDefinition
+testStackDef = StackDefinition
+  { sdName = "my-stack"
+  , sdStacksetName = Nothing
+  , sdDescription = Just "Test stack"
+  , sdStatus = "CREATE_COMPLETE"
+  , sdStatusReason = Nothing
+  , sdCapabilities = ["CAPABILITY_IAM"]
+  , sdServiceRole = Nothing
+  , sdTags = Map.fromList [("Environment", "production")]
+  , sdParameters = Map.fromList [("Env", "prod")]
+  , sdDisableRollback = False
+  , sdTerminationProtection = True
+  , sdCreationTime = Just testTimestamp
+  , sdLastUpdatedTime = Nothing
+  , sdTimeoutInMinutes = Just 30
+  , sdNotificationArns = []
+  , sdStackPolicy = Nothing
+  , sdArn = "arn:aws:cloudformation:us-east-1:123456789:stack/my-stack/guid"
+  , sdConsoleUrl = "https://console.aws.amazon.com/cloudformation/home#/stacks/my-stack"
+  , sdRegion = "us-east-1"
+  }
+
+testStackEvent :: StackEvent
+testStackEvent = StackEvent
+  { seEventId = "evt-001"
+  , seStackId = "arn:aws:cloudformation:us-east-1:123456789:stack/my-stack/guid"
+  , seStackName = "my-stack"
+  , seLogicalResourceId = "MyBucket"
+  , sePhysicalResourceId = Just "my-bucket-abc"
+  , seResourceType = "AWS::S3::Bucket"
+  , seTimestamp = Just testTimestamp
+  , seResourceStatus = "CREATE_COMPLETE"
+  , seResourceStatusReason = Nothing
+  , seResourceProperties = Nothing
+  , seClientRequestToken = Just "tok-abc123"
+  }
+
+testEventWithTiming :: StackEventWithTiming
+testEventWithTiming = StackEventWithTiming
+  { sewEvent = testStackEvent
+  , sewDurationSeconds = Just 45
+  }
+
+testStatusUpdate :: StatusUpdate
+testStatusUpdate = StatusUpdate
+  { suMessage = "Stack creation in progress"
+  , suTimestamp = testTimestamp
+  , suLevel = LevelInfo
+  }
+
+testCommandResult :: CommandResult
+testCommandResult = CommandResult
+  { crSuccess = True
+  , crElapsedSeconds = 120
+  , crMessage = Just "Stack created successfully"
+  , crExitCode = 0
+  }
+
+testStackListEntry :: StackListEntry
+testStackListEntry = StackListEntry
+  { sleStackName = "my-stack"
+  , sleStackStatus = "CREATE_COMPLETE"
+  , sleCreationTime = Just testTimestamp
+  , sleLastUpdatedTime = Nothing
+  , sleTags = Map.fromList [("Environment", "production")]
+  , sleStatusReason = Nothing
+  , sleTerminationProtection = True
+  , sleEnvironmentType = Just "production"
+  }
+
+testErrorInfo :: ErrorInfo
+testErrorInfo = ErrorInfo
+  { eiErrorType = "ValidationError"
+  , eiMessage = "Template format error"
+  , eiTimestamp = testTimestamp
+  , eiSuggestions = ["Check template syntax"]
+  , eiErrorDetails = ErrorGeneric (Just "Invalid YAML")
+  }
+
+testAbsentInfo :: StackAbsentInfo
+testAbsentInfo = StackAbsentInfo
+  { saiStackName = "missing-stack"
+  , saiEnvironment = "development"
+  , saiRegion = "us-west-2"
+  , saiAccount = "123456789012"
+  , saiAuthArn = "arn:aws:iam::123456789012:user/dev"
+  }
+
+------------------------------------------------------------------------
+-- JSON Renderer tests (Phase 11.4)
+------------------------------------------------------------------------
+
+-- | Helper to look up a key in a JSON object Value.
+jsonLookup :: Text -> Value -> Maybe Value
+jsonLookup key (Object obj) = KM.lookup (AesonKey.fromText key) obj
+jsonLookup _ _ = Nothing
+
+jsonRendererTests :: [TestTree]
+jsonRendererTests =
+  [ testCase "metadataToValue - has all fields" $ do
+      let meta = CommandMetadata
+            { cmEnvironment = "production"
+            , cmRegion = "us-east-1"
+            , cmProfile = Just "default"
+            , cmCliArguments = Map.fromList [("stack-args", "stack.yaml")]
+            , cmIamServiceRole = Nothing
+            , cmCurrentIamPrincipal = "arn:aws:iam::123:user/dev"
+            , cmCredentialSource = "environment"
+            , cmVersion = "1.0.0"
+            , cmPrimaryToken = testTokenInfo
+            , cmDerivedTokens = []
+            }
+          val = metadataToValue meta
+      assertBool "is object" (isObject val)
+      assertEqual "region" (Just (String "us-east-1")) (jsonLookup "region" val)
+      assertEqual "environment" (Just (String "production")) (jsonLookup "iidy_environment" val)
+      assertEqual "version" (Just (String "1.0.0")) (jsonLookup "iidy_version" val)
+
+  , testCase "defToValue - contains stack fields" $ do
+      let val = defToValue testStackDef
+      assertEqual "name" (Just (String "my-stack")) (jsonLookup "name" val)
+      assertEqual "status" (Just (String "CREATE_COMPLETE")) (jsonLookup "status" val)
+      assertEqual "description" (Just (String "Test stack")) (jsonLookup "description" val)
+      assertEqual "region" (Just (String "us-east-1")) (jsonLookup "region" val)
+      assertEqual "termination_protection" (Just (Aeson.Bool True)) (jsonLookup "termination_protection" val)
+
+  , testCase "eventToValue - has event fields" $ do
+      let val = eventToValue testStackEvent
+      assertEqual "event_id" (Just (String "evt-001")) (jsonLookup "event_id" val)
+      assertEqual "logical_resource_id" (Just (String "MyBucket")) (jsonLookup "logical_resource_id" val)
+      assertEqual "resource_type" (Just (String "AWS::S3::Bucket")) (jsonLookup "resource_type" val)
+      assertEqual "resource_status" (Just (String "CREATE_COMPLETE")) (jsonLookup "resource_status" val)
+
+  , testCase "eventWithTimingToValue - wraps event with duration" $ do
+      let val = eventWithTimingToValue testEventWithTiming
+      assertBool "has event" (jsonLookup "event" val /= Nothing)
+      assertEqual "duration" (Just (Number 45)) (jsonLookup "duration_seconds" val)
+
+  , testCase "eventsDisplayToValue - has title and events" $ do
+      let display = StackEventsDisplay
+            { sedTitle = "Recent Events"
+            , sedEvents = [testEventWithTiming]
+            , sedMaxEvents = Just 50
+            , sedTruncated = Nothing
+            }
+          val = eventsDisplayToValue display
+      assertEqual "title" (Just (String "Recent Events")) (jsonLookup "title" val)
+
+  , testCase "statusUpdateToValue - has level and message" $ do
+      let val = statusUpdateToValue testStatusUpdate
+      assertEqual "message" (Just (String "Stack creation in progress")) (jsonLookup "message" val)
+      assertEqual "level" (Just (String "info")) (jsonLookup "level" val)
+
+  , testCase "statusUpdateToValue - warning level" $ do
+      let upd = testStatusUpdate { suLevel = LevelWarning }
+          val = statusUpdateToValue upd
+      assertEqual "level" (Just (String "warning")) (jsonLookup "level" val)
+
+  , testCase "statusUpdateToValue - error level" $ do
+      let upd = testStatusUpdate { suLevel = LevelError }
+          val = statusUpdateToValue upd
+      assertEqual "level" (Just (String "error")) (jsonLookup "level" val)
+
+  , testCase "statusUpdateToValue - success level" $ do
+      let upd = testStatusUpdate { suLevel = LevelSuccess }
+          val = statusUpdateToValue upd
+      assertEqual "level" (Just (String "success")) (jsonLookup "level" val)
+
+  , testCase "commandResultToValue - success" $ do
+      let val = commandResultToValue testCommandResult
+      assertEqual "success" (Just (Aeson.Bool True)) (jsonLookup "success" val)
+      assertEqual "elapsed" (Just (Number 120)) (jsonLookup "elapsed_seconds" val)
+      assertEqual "exit_code" (Just (Number 0)) (jsonLookup "exit_code" val)
+
+  , testCase "summaryToValue - success" $ do
+      let summ = FinalCommandSummary { fcsResult = SummarySuccess, fcsElapsedSeconds = 60 }
+          val = summaryToValue summ
+      assertEqual "result" (Just (String "success")) (jsonLookup "result" val)
+      assertEqual "elapsed" (Just (Number 60)) (jsonLookup "elapsed_seconds" val)
+
+  , testCase "summaryToValue - failure" $ do
+      let summ = FinalCommandSummary { fcsResult = SummaryFailure, fcsElapsedSeconds = 10 }
+          val = summaryToValue summ
+      assertEqual "result" (Just (String "failure")) (jsonLookup "result" val)
+
+  , testCase "stackListEntryToValue - has stack fields" $ do
+      let val = stackListEntryToValue testStackListEntry
+      assertEqual "stack_name" (Just (String "my-stack")) (jsonLookup "stack_name" val)
+      assertEqual "stack_status" (Just (String "CREATE_COMPLETE")) (jsonLookup "stack_status" val)
+      assertEqual "termination_protection" (Just (Aeson.Bool True)) (jsonLookup "termination_protection" val)
+      assertEqual "environment_type" (Just (String "production")) (jsonLookup "environment_type" val)
+
+  , testCase "stackListToValue - has stacks and columns" $ do
+      let display = StackListDisplay
+            { sldStacks = [testStackListEntry]
+            , sldShowTags = True
+            , sldFiltersApplied = ["status:CREATE_COMPLETE"]
+            , sldColumns = [ColName, ColStatus, ColTags]
+            , sldQueryMode = False
+            }
+          val = stackListToValue display
+      assertEqual "show_tags" (Just (Aeson.Bool True)) (jsonLookup "show_tags" val)
+      assertEqual "query_mode" (Just (Aeson.Bool False)) (jsonLookup "query_mode" val)
+
+  , testCase "driftToValue - has drifted resources" $ do
+      let drift = StackDrift
+            { sdrDriftedResources =
+              [ DriftedResource
+                { drLogicalResourceId = "MyBucket"
+                , drPhysicalResourceId = "bucket-123"
+                , drResourceType = "AWS::S3::Bucket"
+                , drDriftStatus = "MODIFIED"
+                , drPropertyDifferences =
+                  [ PropertyDifference
+                    { pdPropertyPath = "/BucketName"
+                    , pdExpectedValue = Just "expected-name"
+                    , pdActualValue = Just "actual-name"
+                    , pdDifferenceType = Just "NOT_EQUAL"
+                    }
+                  ]
+                }
+              ]
+            }
+          val = driftToValue drift
+      assertBool "has drifted_resources" (jsonLookup "drifted_resources" val /= Nothing)
+
+  , testCase "errorInfoToValue - has error fields" $ do
+      let val = errorInfoToValue testErrorInfo
+      assertEqual "error_type" (Just (String "ValidationError")) (jsonLookup "error_type" val)
+      assertEqual "message" (Just (String "Template format error")) (jsonLookup "message" val)
+
+  , testCase "tokenInfoToValue - auto-generated" $ do
+      let val = tokenInfoToValue testTokenInfo
+      assertEqual "value" (Just (String "tok-abc123")) (jsonLookup "value" val)
+      assertEqual "operation_id" (Just (String "op-001")) (jsonLookup "operation_id" val)
+
+  , testCase "operationCompleteToValue - has elapsed" $ do
+      let info = OperationCompleteInfo
+            { ociElapsedSeconds = 300
+            , ociOperationStartTime = testTimestamp
+            , ociSkipRemainingSections = False
+            }
+          val = operationCompleteToValue info
+      assertEqual "elapsed" (Just (Number 300)) (jsonLookup "elapsed_seconds" val)
+
+  , testCase "inactivityTimeoutToValue - has timeout" $ do
+      let info = InactivityTimeoutInfo
+            { itiTimeoutSeconds = 600
+            , itiElapsedSeconds = 605
+            , itiOperationStartTime = testTimestamp
+            }
+          val = inactivityTimeoutToValue info
+      assertEqual "timeout" (Just (Number 600)) (jsonLookup "timeout_seconds" val)
+      assertEqual "elapsed" (Just (Number 605)) (jsonLookup "elapsed_seconds" val)
+
+  , testCase "changeDetailsToValue - create" $ do
+      let details = StackChangeDetails { scdChangeType = ChangeCreate, scdStackName = "new-stack" }
+          val = changeDetailsToValue details
+      assertEqual "change_type" (Just (String "create")) (jsonLookup "change_type" val)
+      assertEqual "stack_name" (Just (String "new-stack")) (jsonLookup "stack_name" val)
+
+  , testCase "absentInfoToValue - has all fields" $ do
+      let val = absentInfoToValue testAbsentInfo
+      assertEqual "stack_name" (Just (String "missing-stack")) (jsonLookup "stack_name" val)
+      assertEqual "environment" (Just (String "development")) (jsonLookup "environment" val)
+      assertEqual "region" (Just (String "us-west-2")) (jsonLookup "region" val)
+
+  , testCase "costEstimateToValue - has URL" $ do
+      let est = CostEstimate (CostEstimateInfo "https://calculator.aws" (Just "my-stack") (Just "template.yaml"))
+          val = costEstimateToValue est
+      assertEqual "url" (Just (String "https://calculator.aws")) (jsonLookup "url" val)
+
+  , testCase "approvalRequestToValue - has locations" $ do
+      let req = ApprovalRequestResult
+            { arrTemplateLocation = "s3://bucket/template.yaml"
+            , arrPendingLocation = "s3://bucket/pending/template.yaml"
+            , arrAlreadyApproved = False
+            , arrNextSteps = ["Review the template", "Run approval-review"]
+            }
+          val = approvalRequestToValue req
+      assertEqual "template_location" (Just (String "s3://bucket/template.yaml")) (jsonLookup "template_location" val)
+      assertEqual "already_approved" (Just (Aeson.Bool False)) (jsonLookup "already_approved" val)
+
+  , testCase "templateValidationToValue - with errors" $ do
+      let tv = TemplateValidation { tvEnabled = True, tvErrors = ["Missing required property"], tvWarnings = [] }
+          val = templateValidationToValue tv
+      assertEqual "enabled" (Just (Aeson.Bool True)) (jsonLookup "enabled" val)
+
+  , testCase "approvalStatusToValue - pending" $ do
+      let st = ApprovalStatus
+            { apsPendingExists = True
+            , apsAlreadyApproved = False
+            , apsPendingLocation = "s3://bucket/pending"
+            , apsApprovedLocation = Nothing
+            }
+          val = approvalStatusToValue st
+      assertEqual "pending_exists" (Just (Aeson.Bool True)) (jsonLookup "pending_exists" val)
+
+  , testCase "templateDiffToValue - has changes" $ do
+      let diff = TemplateDiff { tdDiffOutput = "--- a/t\n+++ b/t\n@@ -1 +1 @@\n-old\n+new", tdContextLines = 3, tdHasChanges = True }
+          val = templateDiffToValue diff
+      assertEqual "has_changes" (Just (Aeson.Bool True)) (jsonLookup "has_changes" val)
+
+  , testCase "approvalResultToValue - approved" $ do
+      let res = ApprovalResult
+            { arApproved = True
+            , arApprovedLocation = Just "s3://bucket/approved"
+            , arLatestLocation = Just "s3://bucket/latest"
+            , arCleanupCompleted = True
+            }
+          val = approvalResultToValue res
+      assertEqual "approved" (Just (Aeson.Bool True)) (jsonLookup "approved" val)
+      assertEqual "cleanup_completed" (Just (Aeson.Bool True)) (jsonLookup "cleanup_completed" val)
+
+  , testCase "encodeValue - produces valid JSON text" $ do
+      let val = Aeson.object ["key" Aeson..= ("value" :: Text)]
+          encoded = encodeValue defaultJsonOptions val
+      assertBool "not empty" (not $ T.null encoded)
+      assertBool "contains key" ("key" `T.isInfixOf` encoded)
+
+  , testCase "JSON envelope with type wraps data" $ do
+      -- Test the envelope structure that outputJson builds
+      let opts = defaultJsonOptions { joIncludeTimestamps = False }
+          dataVal = statusUpdateToValue testStatusUpdate
+          envelope = Aeson.object ["type" Aeson..= ("status_update" :: Text), "data" Aeson..= dataVal]
+          encoded = encodeValue opts envelope
+          parsed = Aeson.decode (BL.fromStrict (TE.encodeUtf8 encoded)) :: Maybe Value
+      case parsed of
+        Nothing -> assertFailure ("Failed to parse JSON envelope: " <> T.unpack encoded)
+        Just v -> do
+          assertEqual "type" (Just (String "status_update")) (jsonLookup "type" v)
+          assertBool "has data" (jsonLookup "data" v /= Nothing)
+
+  , testCase "JSON envelope without type" $ do
+      let opts = defaultJsonOptions { joIncludeTimestamps = False, joIncludeType = False }
+          dataVal = statusUpdateToValue testStatusUpdate
+          encoded = encodeValue opts dataVal
+          parsed = Aeson.decode (BL.fromStrict (TE.encodeUtf8 encoded)) :: Maybe Value
+      case parsed of
+        Nothing -> assertFailure "Failed to parse JSON"
+        Just v -> assertEqual "no type field" Nothing (jsonLookup "type" v)
+
+  , testCase "JSON envelope all OutputData types produce valid JSON" $ do
+      -- Build a representative value for each type and verify encodeValue round-trips
+      let opts = defaultJsonOptions { joIncludeTimestamps = False }
+          pairs :: [(Text, Value)]
+          pairs =
+            [ ("command_metadata", metadataToValue CommandMetadata
+                { cmEnvironment = "dev", cmRegion = "us-east-1", cmProfile = Nothing
+                , cmCliArguments = Map.empty, cmIamServiceRole = Nothing
+                , cmCurrentIamPrincipal = "arn:test", cmCredentialSource = "env"
+                , cmVersion = "1.0", cmPrimaryToken = testTokenInfo, cmDerivedTokens = [] })
+            , ("status_update", statusUpdateToValue testStatusUpdate)
+            , ("command_result", commandResultToValue testCommandResult)
+            , ("final_command_summary", summaryToValue (FinalCommandSummary SummarySuccess 1))
+            , ("error", errorInfoToValue testErrorInfo)
+            , ("stack_definition", defToValue testStackDef)
+            , ("stack_events", eventsDisplayToValue (StackEventsDisplay "Events" [testEventWithTiming] Nothing Nothing))
+            , ("operation_complete", operationCompleteToValue (OperationCompleteInfo 60 testTimestamp False))
+            , ("inactivity_timeout", inactivityTimeoutToValue (InactivityTimeoutInfo 300 305 testTimestamp))
+            , ("cost_estimate", costEstimateToValue (CostEstimate (CostEstimateInfo "https://calc" Nothing Nothing)))
+            , ("template_validation", templateValidationToValue (TemplateValidation True [] []))
+            , ("template_diff", templateDiffToValue (TemplateDiff "diff" 3 True))
+            , ("approval_result", approvalResultToValue (ApprovalResult True Nothing Nothing True))
+            ]
+      mapM_ (\(typeName, dataVal) -> do
+        let envelope = Aeson.object ["type" Aeson..= typeName, "data" Aeson..= dataVal]
+            encoded = encodeValue opts envelope
+            parsed = Aeson.decode (BL.fromStrict (TE.encodeUtf8 encoded)) :: Maybe Value
+        case parsed of
+          Nothing -> assertFailure ("Failed to parse JSON for " <> T.unpack typeName <> ": " <> T.unpack encoded)
+          Just _ -> pure ()
+        ) pairs
+
+  , testCase "contentsToValue - has resources and outputs" $ do
+      let contents = StackContents
+            { scResources =
+                [ StackResourceInfo "MyBucket" (Just "bucket-abc") "AWS::S3::Bucket" "CREATE_COMPLETE" Nothing Nothing ]
+            , scOutputs =
+                [ StackOutputInfo "BucketArn" "arn:aws:s3:::bucket-abc" (Just "ARN of bucket") Nothing ]
+            , scExports = []
+            , scCurrentStatus = StackStatusInfo "CREATE_COMPLETE" Nothing Nothing
+            , scPendingChangesets = []
+            }
+          val = contentsToValue contents
+      assertBool "has resources" (jsonLookup "resources" val /= Nothing)
+      assertBool "has outputs" (jsonLookup "outputs" val /= Nothing)
+
+  , testCase "changesetResultToValue - has changeset fields" $ do
+      let cs = ChangeSetCreationResult
+            { csrChangesetName = "cs-001"
+            , csrStackName = "my-stack"
+            , csrChangesetType = "CREATE"
+            , csrStatus = "CREATE_COMPLETE"
+            , csrConsoleUrl = "https://console.aws.amazon.com"
+            , csrHasChanges = True
+            , csrPendingChangesets = []
+            , csrNextSteps = ["exec-changeset cs-001"]
+            }
+          val = changesetResultToValue cs
+      assertEqual "changeset_name" (Just (String "cs-001")) (jsonLookup "changeset_name" val)
+      assertEqual "has_changes" (Just (Aeson.Bool True)) (jsonLookup "has_changes" val)
+  ]
+
+isObject :: Value -> Bool
+isObject (Object _) = True
+isObject _ = False
+
+------------------------------------------------------------------------
+-- Theme variant tests (Phase 11.3)
+------------------------------------------------------------------------
+
+themeVariantTests :: [TestTree]
+themeVariantTests =
+  [ testCase "darkTheme - has colors enabled" $ do
+      assertBool "colors enabled" (thColorsEnabled darkTheme)
+
+  , testCase "lightTheme - has colors enabled" $ do
+      assertBool "colors enabled" (thColorsEnabled lightTheme)
+
+  , testCase "highContrastTheme - has colors enabled" $ do
+      assertBool "colors enabled" (thColorsEnabled highContrastTheme)
+
+  , testCase "noColorTheme - colors disabled" $ do
+      assertBool "colors disabled" (not $ thColorsEnabled noColorTheme)
+
+  , testCase "darkTheme colorize produces ANSI" $ do
+      let result = colorize darkTheme (thSuccess darkTheme) "OK"
+      assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
+
+  , testCase "lightTheme colorize produces ANSI" $ do
+      let result = colorize lightTheme (thSuccess lightTheme) "OK"
+      assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
+
+  , testCase "highContrastTheme colorize produces ANSI" $ do
+      let result = colorize highContrastTheme (thSuccess highContrastTheme) "OK"
+      assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
+
+  , testCase "noColorTheme colorize is plain" $ do
+      let result = colorize noColorTheme (thSuccess noColorTheme) "OK"
+      assertEqual "no ANSI" "OK" result
+
+  , testCase "dark and light themes produce different ANSI codes" $ do
+      let dark = colorize darkTheme (thMuted darkTheme) "text"
+          light = colorize lightTheme (thMuted lightTheme) "text"
+      assertBool "different codes" (dark /= light)
+
+  , testCase "highContrast uses bright colors" $ do
+      let result = colorize highContrastTheme (thError highContrastTheme) "ERR"
+      assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
+      assertBool "contains text" ("ERR" `T.isInfixOf` result)
+
+  , testCase "colorizeResourceStatus consistent across themes" $ do
+      -- All colored themes should produce ANSI for COMPLETE status
+      let darkResult = colorizeResourceStatus darkTheme "UPDATE_COMPLETE"
+          lightResult = colorizeResourceStatus lightTheme "UPDATE_COMPLETE"
+          hcResult = colorizeResourceStatus highContrastTheme "UPDATE_COMPLETE"
+      assertBool "dark has ANSI" ("\ESC[" `T.isInfixOf` darkResult)
+      assertBool "light has ANSI" ("\ESC[" `T.isInfixOf` lightResult)
+      assertBool "hc has ANSI" ("\ESC[" `T.isInfixOf` hcResult)
+
+  , testCase "colorizeResourceStatus - ROLLBACK uses error color" $ do
+      let result = colorizeResourceStatus darkTheme "ROLLBACK_COMPLETE"
+      assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
+
+  , testCase "colorizeResourceStatus - DELETE_SKIPPED uses muted" $ do
+      let result = colorizeResourceStatus darkTheme "DELETE_SKIPPED"
+      assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
+  ]
+
+------------------------------------------------------------------------
+-- Renderer output capture tests (Phase 11.2 + 11.5)
+------------------------------------------------------------------------
+
+rendererOutputTests :: [TestTree]
+rendererOutputTests =
+  -- Pure formatting tests for OutputData rendering (no stdout capture needed)
+  [ testCase "formatSectionEntry renders stack definition fields" $ do
+      r <- mkPlainRenderer
+      let nameEntry = formatSectionEntry r "Name" "my-stack"
+          statusEntry = formatSectionEntry r "Status" "CREATE_COMPLETE"
+          regionEntry = formatSectionEntry r "Region" "us-east-1"
+      assertBool "name entry has stack name" ("my-stack" `T.isInfixOf` nameEntry)
+      assertBool "status entry has status" ("CREATE_COMPLETE" `T.isInfixOf` statusEntry)
+      assertBool "region entry has region" ("us-east-1" `T.isInfixOf` regionEntry)
+
+  , testCase "formatSectionEntry colored has ANSI, plain does not" $ do
+      colored <- mkColoredRenderer
+      plain <- mkPlainRenderer
+      let coloredEntry = formatSectionEntry colored "Status" "CREATE_COMPLETE"
+          plainEntry = formatSectionEntry plain "Status" "CREATE_COMPLETE"
+      assertBool "colored has ANSI" ("\ESC[" `T.isInfixOf` coloredEntry)
+      assertBool "plain no ANSI" (not $ "\ESC[" `T.isInfixOf` plainEntry)
+      assertBool "both have value" ("CREATE_COMPLETE" `T.isInfixOf` coloredEntry && "CREATE_COMPLETE" `T.isInfixOf` plainEntry)
+
+  , testCase "formatSectionHeading renders event titles" $ do
+      r <- mkPlainRenderer
+      let heading = formatSectionHeading r "Recent Events"
+      assertEqual "plain heading" "Recent Events:" heading
+
+  , testCase "formatLogicalId renders resource names" $ do
+      r <- mkPlainRenderer
+      let fid = formatLogicalId r "MyBucket"
+      assertEqual "plain id" "MyBucket" fid
+
+  , testCase "formatLogicalId colored wraps with ANSI" $ do
+      r <- mkColoredRenderer
+      let fid = formatLogicalId r "WebServer"
+      assertBool "has ANSI" ("\ESC[" `T.isInfixOf` fid)
+      assertBool "has name" ("WebServer" `T.isInfixOf` fid)
+
+  , testCase "colorizeResourceStatus maps status families correctly" $ do
+      -- IN_PROGRESS -> warning color
+      let inProgressResult = colorizeResourceStatus darkTheme "CREATE_IN_PROGRESS"
+      assertBool "in_progress colored" ("\ESC[" `T.isInfixOf` inProgressResult)
+      -- COMPLETE -> success color
+      let completeResult = colorizeResourceStatus darkTheme "UPDATE_COMPLETE"
+      assertBool "complete colored" ("\ESC[" `T.isInfixOf` completeResult)
+      -- FAILED -> error color
+      let failedResult = colorizeResourceStatus darkTheme "DELETE_FAILED"
+      assertBool "failed colored" ("\ESC[" `T.isInfixOf` failedResult)
+      -- ROLLBACK -> error color
+      let rollbackResult = colorizeResourceStatus darkTheme "ROLLBACK_IN_PROGRESS"
+      assertBool "rollback colored" ("\ESC[" `T.isInfixOf` rollbackResult)
+
+  , testCase "renderTimestamp produces expected format" $ do
+      let ts = UTCTime (fromGregorian 2026 1 15) (10 * 3600 + 5 * 60 + 30)
+          formatted = renderTimestamp ts
+      assertEqual "timestamp" "Thu Jan 15 2026 10:05:30" formatted
+
+  , testCase "prettyFormatTags with environment and env" $ do
+      let tags = Map.fromList [("Environment", "staging"), ("Name", "my-stack")]
+          result = prettyFormatTags tags (Just 100)
+      assertBool "Environment first" (T.isPrefixOf "Environment=staging" result)
+      assertBool "contains Name" ("Name=my-stack" `T.isInfixOf` result)
+
+  , testCase "prettyFormatParameters with multiple params" $ do
+      let params = Map.fromList [("InstanceType", "t3.micro"), ("Env", "prod"), ("VpcId", "vpc-123")]
+          result = prettyFormatParameters params
+      assertBool "sorted alphabetically" (T.isPrefixOf "Env=prod" result)
+      assertBool "contains all" ("InstanceType=t3.micro" `T.isInfixOf` result && "VpcId=vpc-123" `T.isInfixOf` result)
+
+  , testCase "JSON value for stack list entry query mode" $ do
+      -- In query mode, stack list entries should be raw values
+      let entries = [stackListEntryToValue testStackListEntry]
+          val = Aeson.toJSON entries
+          encoded = encodeValue defaultJsonOptions val
+          parsed = Aeson.decode (BL.fromStrict (TE.encodeUtf8 encoded)) :: Maybe Value
+      case parsed of
+        Nothing -> assertFailure "Failed to parse JSON array"
+        Just (Array arr) -> assertEqual "one entry" 1 (V.length arr)
+        Just other -> assertFailure ("Expected array, got: " <> show other)
+
+  , testCase "JSON stack list non-query mode has wrapper" $ do
+      let display = StackListDisplay
+            { sldStacks = [testStackListEntry]
+            , sldShowTags = True
+            , sldFiltersApplied = ["status:CREATE_COMPLETE"]
+            , sldColumns = [ColName, ColStatus, ColTags]
+            , sldQueryMode = False
+            }
+          val = stackListToValue display
+      assertEqual "show_tags" (Just (Aeson.Bool True)) (jsonLookup "show_tags" val)
+      assertBool "has stacks" (jsonLookup "stacks" val /= Nothing)
+      assertBool "has filters" (jsonLookup "filters_applied" val /= Nothing)
+      assertBool "has columns" (jsonLookup "columns" val /= Nothing)
+
+  , testCase "JSON stack definition envelope structure" $ do
+      let envelope = Aeson.object
+            [ "type" Aeson..= ("stack_definition" :: Text)
+            , "data" Aeson..= Aeson.object
+                [ "stack_definition" Aeson..= defToValue testStackDef
+                , "show_times" Aeson..= True
+                ]
+            ]
+          encoded = encodeValue defaultJsonOptions envelope
+          parsed = Aeson.decode (BL.fromStrict (TE.encodeUtf8 encoded)) :: Maybe Value
+      case parsed of
+        Nothing -> assertFailure "Failed to parse JSON"
+        Just v -> do
+          assertEqual "type" (Just (String "stack_definition")) (jsonLookup "type" v)
+          assertBool "has data" (jsonLookup "data" v /= Nothing)
+
+  , testCase "JSON new stack events is array of event objects" $ do
+      let events = Aeson.toJSON (map eventWithTimingToValue [testEventWithTiming])
+          encoded = encodeValue defaultJsonOptions events
+          parsed = Aeson.decode (BL.fromStrict (TE.encodeUtf8 encoded)) :: Maybe Value
+      case parsed of
+        Nothing -> assertFailure "Failed to parse JSON"
+        Just (Array arr) -> do
+          assertEqual "one event" 1 (V.length arr)
+          case V.head arr of
+            Object _ -> pure ()
+            other -> assertFailure ("Expected object in array, got: " <> show other)
+        Just other -> assertFailure ("Expected array, got: " <> show other)
   ]

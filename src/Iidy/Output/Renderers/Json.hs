@@ -8,6 +8,33 @@ module Iidy.Output.Renderers.Json
   , defaultJsonOptions
   , newJsonRenderer
   , renderOutputDataJson
+    -- * Value conversions (exported for testing)
+  , metadataToValue
+  , defToValue
+  , eventToValue
+  , eventWithTimingToValue
+  , eventsDisplayToValue
+  , contentsToValue
+  , statusUpdateToValue
+  , commandResultToValue
+  , summaryToValue
+  , stackListToValue
+  , stackListEntryToValue
+  , changesetResultToValue
+  , driftToValue
+  , errorInfoToValue
+  , tokenInfoToValue
+  , operationCompleteToValue
+  , inactivityTimeoutToValue
+  , changeDetailsToValue
+  , absentInfoToValue
+  , costEstimateToValue
+  , approvalRequestToValue
+  , templateValidationToValue
+  , approvalStatusToValue
+  , templateDiffToValue
+  , approvalResultToValue
+  , encodeValue
   ) where
 
 import Data.Aeson (Value(..), object, (.=))

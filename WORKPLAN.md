@@ -34,7 +34,7 @@
 | 8 | Remaining features (NTP, schema, demo, exception handling) | **DONE** (8.1-8.6 complete) | [phase-8-remaining-features.md](notes/phases/phase-8-remaining-features.md) |
 | 9 | Final verification | **DONE** (all verified) | [phase-9-final-verification.md](notes/phases/phase-9-final-verification.md) |
 | 10 | Output pipeline wiring | **DONE** | [phase-10-output-wiring.md](notes/phases/phase-10-output-wiring.md) |
-| 11 | Renderer output tests | **NOT STARTED** | [phase-11-renderer-tests.md](notes/phases/phase-11-renderer-tests.md) |
+| 11 | Renderer output tests | **DONE** | [phase-11-renderer-tests.md](notes/phases/phase-11-renderer-tests.md) |
 | 12 | Completion audit vs Rust (iterative) | **NOT STARTED** | [phase-12-completion-audit.md](notes/phases/phase-12-completion-audit.md) |
 
 Phase 12 is iterative: audit → triage → create fix phases (13, 14, ...) → re-audit.
@@ -69,20 +69,14 @@ behavior testable without live AWS matches Rust, with automated tests and docume
 | 22 | 8.6 | watch-stack mock polling tests (pollForCompletionWith + DI). 258 tests. Phase 8.6 COMPLETE. |
 | 23 | 8-9 | Error color audit: --color flag wiring, detectErrorColors, 7 color tests. 265 tests. |
 | 24 | 10-11 | Phase 10 COMPLETE: Output pipeline wiring. Phase 11.1: 28 renderer formatting tests. 293 tests. |
+| 25 | 11 | Phase 11 COMPLETE: JSON renderer, theme, rendering output tests. 352 tests. |
 
-**Current: 78 modules, 293 tests, 37/37 render snapshots, 49/49 error snapshots match**
+**Current: 78 modules, 352 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
 ## Remaining Work
 
-**The output pipeline is now wired up.** The InteractiveRenderer and
-JsonRenderer are connected to all CFN commands via OutputDispatch.
-Read-only commands (describe-stack, list-stacks) route OutputData through the
-renderer for colored, formatted output. Write operations (create/update/delete)
-emit OdNewStackEvents during polling and OdStackContents on completion.
-Watch-stack emits structured OdNewStackEvents through the renderer.
-
-Phase 11 adds comprehensive renderer tests (which Rust also lacks — see
-`~/src/iidy/notes/handoffs/2026-02-19-renderer-output-capture.md`).
+Phases 1-11 are complete. Phase 12 (completion audit) is next: systematic
+command-by-command comparison against the Rust oracle to verify behavioral parity.
 
 ## Key Architecture Decisions
 
