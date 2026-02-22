@@ -46,7 +46,7 @@ import Iidy.Cfn.Operations.ConvertStack
   , buildStackArgsYaml
   )
 import Iidy.Cfn.TemplateHash (calculateTemplateHash, generateVersionedLocation, parseS3Url)
-import Iidy.Yaml.Errors.Display (formatError, ErrorColors(..), defaultColors, noColors)
+import Iidy.Yaml.Errors.Display (formatError, defaultColors, noColors)
 import Iidy.Yaml.Errors.Enhanced
 import Iidy.Yaml.Errors.Ids (ErrorId(..))
 import Iidy.Yaml.Location (SourceLocation(..))
@@ -69,6 +69,17 @@ import Iidy.Yaml.JMESPath (applyJmesPath)
 import Iidy.Yaml.CustomResources.JsonSchema (validateSchema)
 import Iidy.Yaml.OValue (OValue(..), oIsTruthy, toValue, fromValue)
 import Iidy.Yaml.Parser (parseYaml)
+import Iidy.Output.Color (darkTheme, noColorTheme, IidyTheme(..), colorize, colorizeResourceStatus)
+import Iidy.Output.Renderers.Interactive
+  ( InteractiveRenderer(..)
+  , defaultInteractiveOptions, plainInteractiveOptions
+  , formatSectionHeading, formatSectionLabel, formatSectionEntry
+  , formatLogicalId, styleMuted, renderTimestamp, calcPadding, padRight
+  , prettyFormatTags, prettyFormatParameters, formatTokenSource
+  , column2Start, minStatusPadding, maxPadding, defaultScreenWidth
+  )
+import Iidy.Aws.ClientReqToken (TokenSource(..), DerivedTokenInfo(..))
+import qualified Data.Map.Strict as Map
 
 ------------------------------------------------------------------------
 -- Fixture directories
@@ -110,6 +121,7 @@ main = do
     , testGroup "Properties" propertyTests
     , testGroup "WatchStack" watchStackTests
     , testGroup "ErrorColors" errorColorTests
+    , testGroup "Renderer" rendererTests
     ]
 
 ------------------------------------------------------------------------
@@ -1600,4 +1612,178 @@ errorColorTests =
       let caretLine = head caretLines
       -- inline desc "variable not defined" should be in grey (245)
       assertBool "inline desc has grey" ("\ESC[38;5;245m" `T.isInfixOf` caretLine)
+  ]
+
+------------------------------------------------------------------------
+-- Renderer tests
+------------------------------------------------------------------------
+
+-- | Create a colored renderer for testing (bypasses terminal detection).
+mkColoredRenderer :: IO InteractiveRenderer
+mkColoredRenderer = do
+  hasRendered <- newIORef False
+  spinnerRef <- newIORef Nothing
+  pure InteractiveRenderer
+    { irTheme              = darkTheme
+    , irOptions            = defaultInteractiveOptions
+    , irTerminalWidth      = 130
+    , irHasRenderedContent = hasRendered
+    , irSpinner            = spinnerRef
+    }
+
+-- | Create a plain renderer for testing (no colors, no spinners).
+mkPlainRenderer :: IO InteractiveRenderer
+mkPlainRenderer = do
+  hasRendered <- newIORef False
+  spinnerRef <- newIORef Nothing
+  pure InteractiveRenderer
+    { irTheme              = noColorTheme
+    , irOptions            = plainInteractiveOptions
+    , irTerminalWidth      = 130
+    , irHasRenderedContent = hasRendered
+    , irSpinner            = spinnerRef
+    }
+
+rendererTests :: [TestTree]
+rendererTests =
+  -- Pure formatting function tests
+  [ testCase "formatSectionHeading - colored output" $ do
+      r <- mkColoredRenderer
+      let heading = formatSectionHeading r "Stack Definition"
+      assertBool "contains ANSI" ("\ESC[" `T.isInfixOf` heading)
+      assertBool "contains text" ("Stack Definition" `T.isInfixOf` heading)
+      assertBool "ends with colon" (T.isSuffixOf ":" heading)
+
+  , testCase "formatSectionHeading - plain output" $ do
+      r <- mkPlainRenderer
+      let heading = formatSectionHeading r "Stack Definition"
+      assertBool "no ANSI" (not $ "\ESC[" `T.isInfixOf` heading)
+      assertEqual "plain heading" "Stack Definition:" heading
+
+  , testCase "formatSectionHeading - strips trailing colon" $ do
+      r <- mkPlainRenderer
+      let heading = formatSectionHeading r "Events:"
+      assertEqual "no double colon" "Events:" heading
+
+  , testCase "formatSectionLabel - muted color" $ do
+      r <- mkColoredRenderer
+      let lbl = formatSectionLabel r "Status"
+      assertBool "contains ANSI" ("\ESC[" `T.isInfixOf` lbl)
+      assertBool "contains text" ("Status" `T.isInfixOf` lbl)
+
+  , testCase "formatSectionLabel - plain" $ do
+      r <- mkPlainRenderer
+      let lbl = formatSectionLabel r "Status"
+      assertEqual "plain label" "Status" lbl
+
+  , testCase "formatSectionEntry - colored alignment" $ do
+      r <- mkColoredRenderer
+      let entry = formatSectionEntry r "Status" "CREATE_COMPLETE"
+      assertBool "contains ANSI" ("\ESC[" `T.isInfixOf` entry)
+      assertBool "contains value" ("CREATE_COMPLETE" `T.isInfixOf` entry)
+      assertBool "starts with space" (T.isPrefixOf " " entry)
+      assertBool "ends with newline" (T.isSuffixOf "\n" entry)
+
+  , testCase "formatSectionEntry - plain alignment" $ do
+      r <- mkPlainRenderer
+      let entry = formatSectionEntry r "Status" "CREATE_COMPLETE"
+      assertBool "no ANSI" (not $ "\ESC[" `T.isInfixOf` entry)
+      assertBool "contains label" ("Status" `T.isInfixOf` entry)
+      assertBool "contains value" ("CREATE_COMPLETE" `T.isInfixOf` entry)
+
+  , testCase "formatLogicalId - colored" $ do
+      r <- mkColoredRenderer
+      let fid = formatLogicalId r "MyBucket"
+      assertBool "contains ANSI" ("\ESC[" `T.isInfixOf` fid)
+      assertBool "contains text" ("MyBucket" `T.isInfixOf` fid)
+
+  , testCase "styleMuted - colored" $ do
+      r <- mkColoredRenderer
+      let muted = styleMuted r "dimmed text"
+      assertBool "contains ANSI" ("\ESC[" `T.isInfixOf` muted)
+
+  , testCase "styleMuted - plain" $ do
+      r <- mkPlainRenderer
+      let muted = styleMuted r "dimmed text"
+      assertEqual "no styling" "dimmed text" muted
+
+  , testCase "renderTimestamp - correct format" $ do
+      let ts = UTCTime (fromGregorian 2026 2 22) (15 * 3600 + 30 * 60 + 45)
+          formatted = renderTimestamp ts
+      assertEqual "timestamp format" "Sun Feb 22 2026 15:30:45" formatted
+
+  , testCase "calcPadding - respects min and max" $ do
+      assertEqual "empty list uses min" minStatusPadding (calcPadding ([] :: [Text]) id)
+      let items = [T.replicate 100 "x"]
+      assertEqual "long item capped at max" maxPadding (calcPadding items id)
+      let shortItems = ["SHORT", "MED"]
+      assertEqual "normal items use maxLen" minStatusPadding (calcPadding shortItems id)
+
+  , testCase "padRight - pads short text" $ do
+      assertEqual "padded" "hello     " (padRight 10 "hello")
+      assertEqual "exact length" "1234567890" (padRight 10 "1234567890")
+      assertEqual "longer text unchanged" "12345678901" (padRight 10 "12345678901")
+
+  , testCase "prettyFormatTags - Environment first" $ do
+      let tags = Map.fromList [("Version", "1.0"), ("Environment", "production"), ("App", "web")]
+      let result = prettyFormatTags tags Nothing
+      assertBool "Environment first" (T.isPrefixOf "Environment=production" result)
+      assertBool "contains all" ("App=web" `T.isInfixOf` result)
+
+  , testCase "prettyFormatTags - empty" $ do
+      assertEqual "empty tags" "" (prettyFormatTags Map.empty Nothing)
+
+  , testCase "prettyFormatParameters - sorted" $ do
+      let params = Map.fromList [("Zebra", "z"), ("Alpha", "a"), ("Middle", "m")]
+      let result = prettyFormatParameters params
+      assertBool "Alpha first" (T.isPrefixOf "Alpha=a" result)
+      assertBool "contains all" ("Zebra=z" `T.isInfixOf` result)
+
+  , testCase "prettyFormatParameters - empty" $ do
+      assertEqual "empty params" "" (prettyFormatParameters Map.empty)
+
+  , testCase "formatTokenSource - user-provided" $ do
+      assertEqual "user" "user-provided" (formatTokenSource UserProvided)
+
+  , testCase "formatTokenSource - auto-generated" $ do
+      assertEqual "auto" "auto-generated" (formatTokenSource AutoGenerated)
+
+  , testCase "formatTokenSource - derived" $ do
+      let dti = DerivedTokenInfo { dtiFrom = "primary", dtiStep = "create-stack" }
+      let result = formatTokenSource (Derived dti)
+      assertBool "derived from" ("derived from primary" `T.isInfixOf` result)
+
+  -- Color function tests
+  , testCase "colorize - dark theme applies ANSI" $ do
+      let result = colorize darkTheme (thSuccess darkTheme) "OK"
+      assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
+      assertBool "has text" ("OK" `T.isInfixOf` result)
+
+  , testCase "colorize - noColor theme is plain" $ do
+      let result = colorize noColorTheme (thSuccess noColorTheme) "OK"
+      assertEqual "no color" "OK" result
+
+  , testCase "colorizeResourceStatus - IN_PROGRESS is warning color" $ do
+      let result = colorizeResourceStatus darkTheme "CREATE_IN_PROGRESS"
+      assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
+      assertBool "has text" ("CREATE_IN_PROGRESS" `T.isInfixOf` result)
+
+  , testCase "colorizeResourceStatus - COMPLETE is success color" $ do
+      let result = colorizeResourceStatus darkTheme "CREATE_COMPLETE"
+      assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
+
+  , testCase "colorizeResourceStatus - FAILED is error color" $ do
+      let result = colorizeResourceStatus darkTheme "CREATE_FAILED"
+      assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
+
+  , testCase "colorizeResourceStatus - noColor" $ do
+      let result = colorizeResourceStatus noColorTheme "CREATE_COMPLETE"
+      assertEqual "no color" "CREATE_COMPLETE" result
+
+  -- Column constants
+  , testCase "column2Start is 25" $ do
+      assertEqual "column2Start" 25 column2Start
+
+  , testCase "defaultScreenWidth is 130" $ do
+      assertEqual "defaultScreenWidth" 130 defaultScreenWidth
   ]

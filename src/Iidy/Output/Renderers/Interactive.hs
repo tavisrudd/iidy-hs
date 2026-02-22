@@ -15,6 +15,19 @@ module Iidy.Output.Renderers.Interactive
   , maxPadding
   , resourceTypePadding
   , defaultScreenWidth
+    -- * Formatting helpers (exported for testing)
+  , formatSectionHeading
+  , formatSectionLabel
+  , formatSectionEntry
+  , formatLogicalId
+  , formatTimestampText
+  , renderTimestamp
+  , styleMuted
+  , calcPadding
+  , padRight
+  , prettyFormatTags
+  , prettyFormatParameters
+  , formatTokenSource
   ) where
 
 import Data.IORef

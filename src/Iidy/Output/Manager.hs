@@ -16,7 +16,7 @@ import Iidy.Output.Renderers.Interactive
   (InteractiveRenderer, InteractiveOptions(..), newInteractiveRenderer,
    renderOutputData)
 import Iidy.Output.Renderers.Json
-  (JsonRenderer, JsonOptions(..), newJsonRenderer, defaultJsonOptions,
+  (JsonRenderer, newJsonRenderer, defaultJsonOptions,
    renderOutputDataJson)
 import Iidy.Output.Terminal (TerminalCapabilities(..), detectCapabilities)
 import Iidy.Output.Theme (ColorTheme(..), resolveTheme)
