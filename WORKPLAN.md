@@ -31,7 +31,7 @@
 | 4 | AWS + CloudFormation | DONE (Session 4) | — |
 | 5 | CLI + remaining commands | DONE (Session 5) | — |
 | 6 | Tests + polish | DONE (Sessions 6-11) | — |
-| 7 | Error display system | **NEXT** | [phase-7-error-display.md](notes/phases/phase-7-error-display.md) |
+| 7 | Error display system | **IN PROGRESS** | [phase-7-error-display.md](notes/phases/phase-7-error-display.md) |
 | 8 | Remaining features (NTP, schema, demo) | NOT STARTED | [phase-8-remaining-features.md](notes/phases/phase-8-remaining-features.md) |
 | 9 | Final verification | NOT STARTED | [phase-9-final-verification.md](notes/phases/phase-9-final-verification.md) |
 
@@ -51,8 +51,9 @@
 | 10 | Polish | Emitter fixes, OValue pipeline, 36/36 render snapshots, 181 tests. |
 | 11 | Polish | Error snapshot audit: 0/49 match. Gap analysis done. |
 | 12 | Meta | Workflow restructuring: per-phase docs, session handoffs, quality gates. |
+| 13 | 7 | Phase 7.1: Enhanced error display wired up (Conversion module), research documented. |
 
-**Current: 75 modules, ~13,500 LOC, 181 tests, 36/36 render snapshots match**
+**Current: 76 modules, ~13,800 LOC, 181 tests, 36/36 render snapshots match**
 
 ## Key Architecture Decisions
 

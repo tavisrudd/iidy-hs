@@ -66,6 +66,14 @@ Before wrapping up, verify ALL of these:
 - All doc updates committed alongside code
 - No orphaned TODOs — anything deferred is tracked in a phase doc
 
+## Research Before Implementation
+- Each phase MUST begin with a research cycle before any code is written.
+- Research goes INTO the phase doc (e.g. `notes/phases/phase-7-error-display.md`) and is committed.
+- Research includes: Rust source code pointers, sample snippets, key function signatures, data flow analysis.
+- Do NOT rely on context window or external memory files for code research — put it in committed files under `notes/`.
+- If memory files contain detailed code research, move that content into `notes/` files and commit them.
+- Do NOT begin implementing until the phase doc has the research section filled in.
+
 ## Session Size & Delegation
 - Keep sessions SHORT. Each session = 1-2 good green commits, then exit.
 - If a subphase is too large for 1-2 commits, split it across sessions.

@@ -6,6 +6,7 @@ import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as BL
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
 import System.Exit (exitWith, ExitCode(..))
 import System.IO (stderr)
@@ -17,8 +18,8 @@ import Iidy.Yaml.Engine
   ( preprocessYaml
   , preprocessYaml11
   , PreprocessResult(..)
-  , PreprocessError(..)
   )
+import Iidy.Yaml.Errors.Conversion (formatPreprocessErrorEnhanced, formatParseErrorEnhanced)
 import Iidy.Yaml.Imports.Loaders.File (loadFileImport)
 import Iidy.Yaml.OValue (OValue, toValue)
 import Iidy.Yaml.Parser (parseYaml, ParseError(..))
@@ -43,8 +44,10 @@ runRender args _gopts = do
 
   -- Parse YAML
   case parseYaml content baseLocation of
-    Left (ParseError _pos msg) -> do
-      TIO.hPutStrLn stderr $ "Parse error: " <> msg
+    Left (ParseError pos msg) -> do
+      let source = TE.decodeUtf8 (BL.toStrict content)
+      formatted <- formatParseErrorEnhanced baseLocation source pos msg
+      TIO.hPutStr stderr formatted
       exitWith (ExitFailure 1)
 
     Right ast -> do
@@ -56,7 +59,9 @@ runRender args _gopts = do
       result <- preprocess loadFileImport ast baseLocation
       case result of
         Left err -> do
-          TIO.hPutStrLn stderr $ "Preprocess error: " <> formatPreprocessError err
+          let source = TE.decodeUtf8 (BL.toStrict content)
+          formatted <- formatPreprocessErrorEnhanced baseLocation source err
+          TIO.hPutStr stderr formatted
           exitWith (ExitFailure 1)
 
         Right (PreprocessResult val _manifest) -> do
@@ -84,13 +89,3 @@ formatJson val =
     . Aeson.encode
     $ toValue val
 
-------------------------------------------------------------------------
--- Error formatting
-------------------------------------------------------------------------
-
-formatPreprocessError :: PreprocessError -> Text
-formatPreprocessError = \case
-  PeResolveError re    -> "Resolve error: "    <> T.pack (show re)
-  PeImportError ie     -> "Import error: "     <> T.pack (show ie)
-  PeHandlebarsError he -> "Handlebars error: " <> T.pack (show he)
-  PeCycleError msg     -> "Import cycle: "     <> msg
