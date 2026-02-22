@@ -15,6 +15,8 @@ module Iidy.Cfn.StackOperations
   , pollForCompletion
   , PollConfig(..)
   , defaultPollConfig
+    -- * Helpers (exported for testing)
+  , stackNameFromId
   ) where
 
 import Control.Concurrent (threadDelay)
@@ -164,10 +166,11 @@ pollForCompletion ctx sId terminalStatuses config = go []
       e.logicalResourceId == Just (stackNameFromId sId)
       || e.resourceType == Just "AWS::CloudFormation::Stack"
 
-    stackNameFromId :: Text -> Text
-    stackNameFromId sid = case T.splitOn "/" sid of
-      (_:name:_) -> name
-      _          -> sid
+-- | Extract stack name from a stack ID (ARN format: arn:.../stackName/guid)
+stackNameFromId :: Text -> Text
+stackNameFromId sid = case T.splitOn "/" sid of
+  (_:name:_) -> name
+  _          -> sid
 
 ------------------------------------------------------------------------
 -- AWS type conversion helpers

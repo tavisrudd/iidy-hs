@@ -25,6 +25,11 @@ import Options.Applicative (execParserPure, prefs, showHelpOnEmpty, ParserResult
 import qualified Amazonka.CloudFormation.Types as CF
 import Iidy.Aws.CredentialSource (AwsSettings(..))
 import Iidy.Cfn.Operations.Changeset (convertChange, convertDetail)
+import Iidy.Cfn.Operations.WatchStack (formatEvent, allTerminalStatuses)
+import Iidy.Cfn.StackOperations (stackNameFromId)
+import qualified Amazonka.CloudFormation.Types.StackEvent as SE
+import Data.Time.Clock (UTCTime(..))
+import Data.Time.Calendar (fromGregorian)
 import Iidy.Cfn.Operations.DeleteStack (isConfirmation)
 import Iidy.Output.Types (ChangeInfo(..), ChangeDetail(..))
 import Iidy.Cfn.RequestBuilder (mapCapability, mapCapabilities, mapParameters, mapTags, mapOnFailure)
@@ -97,6 +102,7 @@ main = do
     , testGroup "DeleteStack" deleteStackTests
     , testGroup "Changeset" changesetTests
     , testGroup "Properties" propertyTests
+    , testGroup "WatchStack" watchStackTests
     ]
 
 ------------------------------------------------------------------------
@@ -1308,3 +1314,58 @@ genSimpleYamlDoc = do
       , T.pack . show <$> (arbitrary :: Gen Int)
       , genSafeText
       ]
+
+------------------------------------------------------------------------
+-- WatchStack tests
+------------------------------------------------------------------------
+
+watchStackTests :: [TestTree]
+watchStackTests =
+  [ testCase "formatEvent - all fields present" $ do
+      let e = mkEvent
+                { SE.logicalResourceId = Just "MyBucket"
+                , SE.resourceType = Just "AWS::S3::Bucket"
+                , SE.resourceStatus = Just CF.ResourceStatus_CREATE_COMPLETE
+                , SE.resourceStatusReason = Just "Resource creation complete"
+                }
+      formatEvent e @?= "MyBucket | AWS::S3::Bucket | CREATE_COMPLETE | Resource creation complete"
+  , testCase "formatEvent - missing optional fields" $ do
+      let e = mkEvent
+      formatEvent e @?= " |  |  | "
+  , testCase "formatEvent - partial fields" $ do
+      let e = mkEvent
+                { SE.logicalResourceId = Just "MyFunc"
+                , SE.resourceStatus = Just CF.ResourceStatus_CREATE_IN_PROGRESS
+                }
+      formatEvent e @?= "MyFunc |  | CREATE_IN_PROGRESS | "
+  , testCase "formatEvent - with reason but no type" $ do
+      let e = mkEvent
+                { SE.logicalResourceId = Just "Stack"
+                , SE.resourceStatusReason = Just "User Initiated"
+                }
+      formatEvent e @?= "Stack |  |  | User Initiated"
+  , testCase "allTerminalStatuses - contains expected statuses" $ do
+      assertBool "CREATE_COMPLETE" ("CREATE_COMPLETE" `elem` allTerminalStatuses)
+      assertBool "DELETE_COMPLETE" ("DELETE_COMPLETE" `elem` allTerminalStatuses)
+      assertBool "UPDATE_COMPLETE" ("UPDATE_COMPLETE" `elem` allTerminalStatuses)
+      assertBool "ROLLBACK_COMPLETE" ("ROLLBACK_COMPLETE" `elem` allTerminalStatuses)
+      assertBool "CREATE_FAILED" ("CREATE_FAILED" `elem` allTerminalStatuses)
+  , testCase "allTerminalStatuses - does not contain in-progress" $ do
+      assertBool "CREATE_IN_PROGRESS not terminal"
+        ("CREATE_IN_PROGRESS" `notElem` allTerminalStatuses)
+      assertBool "UPDATE_IN_PROGRESS not terminal"
+        ("UPDATE_IN_PROGRESS" `notElem` allTerminalStatuses)
+  , testCase "stackNameFromId - ARN format" $
+      stackNameFromId "arn:aws:cloudformation:us-east-1:123456:stack/my-stack/guid"
+        @?= "my-stack"
+  , testCase "stackNameFromId - plain name passthrough" $
+      stackNameFromId "my-stack" @?= "my-stack"
+  , testCase "stackNameFromId - stack ID with slashes" $
+      stackNameFromId "prefix/stack-name/suffix"
+        @?= "stack-name"
+  ]
+  where
+    epoch :: UTCTime
+    epoch = UTCTime (fromGregorian 2024 1 1) 0
+    mkEvent :: SE.StackEvent
+    mkEvent = SE.newStackEvent "stack-id" "event-1" "test-stack" epoch

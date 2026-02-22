@@ -174,3 +174,4 @@ test-suite iidy-hs-test
     , optparse-applicative
     , QuickCheck
     , tasty-quickcheck
+    , time
