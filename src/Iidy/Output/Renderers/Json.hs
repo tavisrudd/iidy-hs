@@ -12,6 +12,7 @@ module Iidy.Output.Renderers.Json
 
 import Data.Aeson (Value(..), object, (.=))
 import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Encode.Pretty as Pretty
 import Data.Text (Text)
 import qualified Data.Text.IO as TIO
 import qualified Data.Text.Lazy as TL
@@ -115,7 +116,7 @@ outputJson r typeName val = do
 outputRawJson :: JsonRenderer -> Value -> IO ()
 outputRawJson r val = do
   let encoded = if joPrettyPrint (jrOptions r)
-                then TL.toStrict (TLE.decodeUtf8 (Aeson.encode val))  -- TODO: pretty
+                then TL.toStrict (TLE.decodeUtf8 (Pretty.encodePretty val))
                 else TL.toStrict (TLE.decodeUtf8 (Aeson.encode val))
   TIO.putStrLn encoded
   hFlush stdout

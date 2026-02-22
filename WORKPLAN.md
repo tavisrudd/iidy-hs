@@ -447,9 +447,10 @@ build-depends:
 | 4 | Phase 4 | 4.1-4.15 | DONE (all operations + AWS loaders) |
 | 5 | Phase 5 | 5.1-5.11 | DONE (CLI parser, commands, loaders) |
 | 6 | Phase 6 | 6.1-6.5 | DONE (81 tests passing) |
-| 7 | Phase 6 | 6.6-6.8 + Gate 6 | In progress — StackArgsLoader, Main.hs wiring, 89 tests |
+| 7 | Phase 6 | 6.6-6.7 | DONE (StackArgsLoader, Main.hs wiring, 89 tests) |
+| 8 | Phase 6 | 6.7-6.8 | DONE (remaining stubs, TemplateHash, TODOs fixed, 106 tests) |
 
-**Actual: 7 sessions. 69 modules, ~11,700 LOC, 89 tests**
+**Actual: 8 sessions. 75 modules, ~13,200 LOC, 106 tests**
 
 ## Estimated LOC Summary
 

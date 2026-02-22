@@ -28,6 +28,8 @@
         hpkgs.amazonka-sts
         hpkgs.amazonka-ssm
         hpkgs.amazonka-sns
+        hpkgs.aeson-pretty
+        hpkgs.yaml
         hpkgs.crypton
         hpkgs.memory
         hpkgs.lens

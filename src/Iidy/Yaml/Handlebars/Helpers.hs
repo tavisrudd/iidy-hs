@@ -21,6 +21,9 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Vector as V
 import Data.Word (Word8)
+import Crypto.Hash (SHA256(..), hashWith)
+import qualified Data.Aeson.Encode.Pretty as Pretty
+import qualified Data.ByteArray as BA
 
 type HelperFn = [Value] -> Either Text Value
 
@@ -53,8 +56,8 @@ defaultHelpers = Map.fromList
   -- Serialization
   , ("toJson",       helperToJson)
   , ("tojson",       helperToJson)
-  , ("toJsonPretty", helperToJson)  -- TODO: use aeson-pretty when available
-  , ("tojsonPretty", helperToJson)
+  , ("toJsonPretty", helperToJsonPretty)
+  , ("tojsonPretty", helperToJsonPretty)
   -- Object access
   , ("lookup",       helperLookup)
   -- Equality (for sub-expressions like (eq a b))
@@ -241,7 +244,15 @@ urlEncode = T.concatMap encodeChar
       | otherwise = toEnum (fromEnum 'A' + fromIntegral n - 10)
 
 sha256Hex :: Text -> Text
-sha256Hex _t = "TODO_SHA256"  -- TODO: implement with crypton package
+sha256Hex t =
+  let digest = hashWith SHA256 (TE.encodeUtf8 t)
+      bytes = BA.convert digest :: ByteString
+  in T.pack (concatMap toHexLower (BS.unpack bytes))
+  where
+    toHexLower b = [hexLower (b `div` 16), hexLower (b `mod` 16)]
+    hexLower n
+      | n < 10    = toEnum (fromEnum '0' + fromIntegral n)
+      | otherwise = toEnum (fromEnum 'a' + fromIntegral n - 10)
 
 ------------------------------------------------------------------------
 -- Serialization helpers
@@ -251,6 +262,11 @@ helperToJson :: HelperFn
 helperToJson = \case
   [val] -> Right $ String $ TE.decodeUtf8 $ BL.toStrict $ Aeson.encode val
   _ -> Left "toJson requires exactly one parameter"
+
+helperToJsonPretty :: HelperFn
+helperToJsonPretty = \case
+  [val] -> Right $ String $ TE.decodeUtf8 $ BL.toStrict $ Pretty.encodePretty val
+  _ -> Left "toJsonPretty requires exactly one parameter"
 
 ------------------------------------------------------------------------
 -- Object access helpers

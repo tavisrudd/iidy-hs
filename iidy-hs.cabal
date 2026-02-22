@@ -71,21 +71,26 @@ library
     Iidy.Cfn.Status
     Iidy.Cfn.Context
     Iidy.Cfn.RequestBuilder
+    Iidy.Cfn.TemplateHash
     Iidy.Cfn.TemplateLoader
     Iidy.Cfn.StackOperations
     Iidy.Cfn.StackArgsLoader
     Iidy.Cfn.Operations.Changeset
+    Iidy.Cfn.Operations.ConvertStack
     Iidy.Cfn.Operations.CreateStack
     Iidy.Cfn.Operations.CreateOrUpdate
     Iidy.Cfn.Operations.DescribeStack
     Iidy.Cfn.Operations.DescribeStackDrift
     Iidy.Cfn.Operations.EstimateCost
     Iidy.Cfn.Operations.GetStackTemplate
+    Iidy.Cfn.Operations.LintTemplate
     Iidy.Cfn.Operations.ListStacks
+    Iidy.Cfn.Operations.TemplateApproval
     Iidy.Cfn.Operations.UpdateStack
     Iidy.Cfn.Operations.DeleteStack
     Iidy.Cfn.Operations.WatchStack
     Iidy.Params.Client
+    Iidy.Params.Review
   build-depends:
       base >= 4.17 && < 5
     , aeson
@@ -117,6 +122,8 @@ library
     , unliftio
     , uuid
     , vector
+    , yaml
+    , aeson-pretty
 
 executable iidy-hs
   import:           warnings
