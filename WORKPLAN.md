@@ -449,8 +449,9 @@ build-depends:
 | 6 | Phase 6 | 6.1-6.5 | DONE (81 tests passing) |
 | 7 | Phase 6 | 6.6-6.7 | DONE (StackArgsLoader, Main.hs wiring, 89 tests) |
 | 8 | Phase 6 | 6.7-6.8 | DONE (remaining stubs, TemplateHash, TODOs fixed, 106 tests) |
+| 9 | Polish | help, custom resources, tests | DONE (custom resource expansion, 138 tests) |
 
-**Actual: 8 sessions. 75 modules, ~13,200 LOC, 106 tests**
+**Actual: 9 sessions. 75 modules, ~13,500 LOC, 138 tests**
 
 ## Estimated LOC Summary
 
