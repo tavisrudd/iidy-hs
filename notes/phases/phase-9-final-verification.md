@@ -19,7 +19,11 @@
 - No stubs, no undefined, no TODO, no dropped features
 - **Verify**: `grep -r 'undefined\|TODO\|STUB\|FIXME' src/` returns nothing
 
-### 9.4: Nix Build
+### 9.4: Memory Profiling
+- Memory usage under 512MB for typical operations (Gate 6 carryover)
+- **Verify**: `+RTS -s` output shows acceptable memory
+
+### 9.5: Nix Build
 - `nix build` produces working binary
 - **Verify**: `nix build && result/bin/iidy-hs --help`
 

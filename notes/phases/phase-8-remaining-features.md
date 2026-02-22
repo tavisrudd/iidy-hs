@@ -29,6 +29,16 @@
 - Verify memory usage under 512MB for typical operations
 - **Verify**: `+RTS -s` output shows acceptable memory
 
+### 8.6: Unchecked Gate Items from Phases 1-6
+Carried forward from completed phases — these were never finished:
+- [ ] Property tests for parser (Gate 2 deferral)
+- [ ] Mock/fixture unit tests for CFN request building, response parsing, event filtering (Gate 4)
+- [ ] `watch-stack` streams mock events with spinner (Gate 4)
+- [ ] `delete-stack` prompts for confirmation test (Gate 4)
+- [ ] Changeset data structures serialize/deserialize correctly (Gate 4)
+- [ ] Shell completion works for bash/zsh (Gate 5)
+- **Verify**: each item checked off with passing test
+
 ## Gate Criteria
 ```bash
 cabal build 2>&1 | grep -c warning  # must be 0
