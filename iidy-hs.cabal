@@ -60,6 +60,7 @@ library
     Iidy.Cli.Parser
     Iidy.Explain
     Iidy.Render
+    Iidy.GetImport
     Iidy.Aws.Config
     Iidy.Aws.CredentialSource
     Iidy.Aws.ClientReqToken
@@ -71,6 +72,7 @@ library
     Iidy.Cfn.RequestBuilder
     Iidy.Cfn.TemplateLoader
     Iidy.Cfn.StackOperations
+    Iidy.Cfn.StackArgsLoader
     Iidy.Cfn.Operations.Changeset
     Iidy.Cfn.Operations.CreateStack
     Iidy.Cfn.Operations.CreateOrUpdate
@@ -112,6 +114,7 @@ library
     , http-conduit
     , process
     , unliftio
+    , uuid
     , vector
 
 executable iidy-hs
@@ -125,8 +128,10 @@ executable iidy-hs
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >= 4.17 && < 5
+    , amazonka
     , bytestring
     , text
+    , uuid
     , iidy-hs
 
 test-suite iidy-hs-test
