@@ -7,12 +7,16 @@ module Iidy.Yaml.CustomResources.Params
   ) where
 
 import Data.Aeson (Value(..))
+import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified Data.Text as T
 import qualified Data.Vector as V
+import Text.Regex.Posix ((=~))
+import Iidy.Yaml.CustomResources.JsonSchema (validateSchema)
 import Iidy.Yaml.OValue
 
 ------------------------------------------------------------------------
@@ -89,6 +93,7 @@ validateParams defs provided = traverse_ validateOne defs
           validateAllowedValues pd val
           validateAllowedPattern pd val
           validateType pd val
+          validateParamSchema pd val
 
 validateAllowedValues :: ParamDef -> OValue -> Either Text ()
 validateAllowedValues pd val = case pdAllowedValues pd of
@@ -101,22 +106,56 @@ validateAllowedValues pd val = case pdAllowedValues pd of
 validateAllowedPattern :: ParamDef -> OValue -> Either Text ()
 validateAllowedPattern pd val = case pdAllowedPattern pd of
   Nothing -> Right ()
-  Just _pattern -> case val of
-    OString _s -> Right ()  -- TODO: regex matching
+  Just pat -> case val of
+    OString s
+      | (T.unpack s =~ T.unpack pat :: Bool) -> Right ()
+      | otherwise -> Left $ pdName pd <> ": value does not match AllowedPattern: " <> pat
     _ -> Right ()
 
 validateType :: ParamDef -> OValue -> Either Text ()
 validateType pd val = case pdType pd of
   Nothing -> Right ()
-  Just "String" -> case val of
-    OString _ -> Right ()
-    _ | isCfnRef val -> Right ()
-    _ -> Left $ pdName pd <> ": expected String"
-  Just "Number" -> case val of
-    ONumber _ -> Right ()
-    _ | isCfnRef val -> Right ()
-    _ -> Left $ pdName pd <> ": expected Number"
-  Just _ -> Right ()  -- AWS types etc
+  Just "String"  -> expectType pd val isOString "String"
+  Just "string"  -> expectType pd val isOString "String"
+  Just "Number"  -> expectType pd val isONumber "Number"
+  Just "number"  -> expectType pd val isONumber "Number"
+  Just "Object"  -> expectType pd val isOObject "Object"
+  Just "object"  -> expectType pd val isOObject "Object"
+  Just t
+    | "AWS:" `T.isPrefixOf` t -> Right ()
+    | "List<" `T.isPrefixOf` t -> Right ()
+    | t == "CommaDelimitedList" -> Right ()
+    | otherwise -> Left $ "Unknown parameter type: " <> t
+
+expectType :: ParamDef -> OValue -> (OValue -> Bool) -> Text -> Either Text ()
+expectType pd val check typeName
+  | check val = Right ()
+  | isCfnRef val = Right ()
+  | otherwise = Left $ pdName pd <> ": expected " <> typeName
+
+isOString :: OValue -> Bool
+isOString (OString _) = True
+isOString _ = False
+
+isONumber :: OValue -> Bool
+isONumber (ONumber _) = True
+isONumber _ = False
+
+isOObject :: OValue -> Bool
+isOObject (OObject _) = True
+isOObject _ = False
+
+-- | Validate a param value against its JSON Schema definition, if any.
+validateParamSchema :: ParamDef -> OValue -> Either Text ()
+validateParamSchema pd val = case pdSchema pd of
+  Nothing -> Right ()
+  Just schema
+    | isCfnRef val -> Right ()  -- skip for CFN intrinsic values
+    | otherwise ->
+        let jsonVal = Aeson.toJSON (toValue val)
+        in case validateSchema schema jsonVal of
+          Left err -> Left $ "Schema validation failed for '" <> pdName pd <> "': " <> err
+          Right () -> Right ()
 
 isCfnRef :: OValue -> Bool
 isCfnRef (OObject kvs) = any (`elem` keys) cfnRefKeys

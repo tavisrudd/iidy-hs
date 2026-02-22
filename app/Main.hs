@@ -14,7 +14,7 @@ import System.Posix.Signals (installHandler, sigINT, Handler(..))
 import Iidy.Aws.ClientReqToken (TokenInfo(..), TokenSource(..))
 import Iidy.Aws.Config (createAwsEnv, createAwsEnvFromSettings)
 import Iidy.Aws.CredentialSource (AwsSettings(..))
-import Iidy.Aws.Timing (systemTimeProvider)
+import Iidy.Aws.Timing (TimeProvider, systemTimeProvider, reliableTimeProvider)
 import Iidy.Cfn.Context (CfnContext, createContext, createContextFromEnv)
 import Iidy.Cfn.Operations.Changeset (createChangeset, executeChangeset)
 import Iidy.Cfn.Operations.ConvertStack (convertStackToIidy)
@@ -31,7 +31,7 @@ import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateAp
 import Iidy.Cfn.Operations.UpdateStack (updateStack)
 import Iidy.Cfn.Operations.WatchStack (watchStack)
 import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..))
-import Iidy.Cfn.Types (CfnOperation(..), StackArgs(..))
+import Iidy.Cfn.Types (CfnOperation(..), StackArgs(..), isReadOnlyOperation)
 import Iidy.Cli
 import Iidy.Cli.Parser (parseCliOpts)
 import Iidy.Explain (explainErrors)
@@ -271,7 +271,8 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
       -- Create AWS env with merged settings
       (awsEnv, credStack) <- createAwsEnv detectionCtx mergedAws
       token <- generateToken cli
-      ctx <- createContextFromEnv awsEnv credStack operation systemTimeProvider token
+      let tp = timeProviderForOperation operation
+      ctx <- createContextFromEnv awsEnv credStack operation tp token
       rc <- action ctx sa' (Just argsfilePath) env
       exitCode rc
 
@@ -280,7 +281,13 @@ createSimpleContext :: Cli -> CfnOperation -> IO CfnContext
 createSimpleContext cli operation = do
   let cliAws = cliToAwsSettings cli
   token <- generateToken cli
-  createContext cliAws operation systemTimeProvider token
+  createContext cliAws operation (timeProviderForOperation operation) token
+
+-- | Select NTP-backed provider for write ops, system time for read-only.
+timeProviderForOperation :: CfnOperation -> TimeProvider
+timeProviderForOperation op
+  | isReadOnlyOperation op = systemTimeProvider
+  | otherwise              = reliableTimeProvider
 
 -- | Convert CLI AWS options to AwsSettings
 cliToAwsSettings :: Cli -> AwsSettings

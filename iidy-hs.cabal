@@ -35,6 +35,7 @@ library
     Iidy.Yaml.Emitter
     Iidy.Yaml.Engine
     Iidy.Yaml.CustomResources.Params
+    Iidy.Yaml.CustomResources.JsonSchema
     Iidy.Yaml.CustomResources.Expansion
     Iidy.Yaml.CustomResources.RefRewriting
     Iidy.Yaml.Imports.Types
@@ -111,8 +112,10 @@ library
     , lens
     , memory
     , mtl
+    , network
     , optparse-applicative
     , random
+    , regex-posix
     , resourcet
     , scientific
     , text
