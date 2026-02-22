@@ -67,6 +67,78 @@ classifyResolveError filePath source (ResolveError pos msg) =
 classifyMessage :: Text -> SourceLocation -> Text -> EnhancedPreprocessingError
 classifyMessage source loc msg
 
+  -- Unknown preprocessing tag: "'!$mapp' is not a valid iidy tag" (ERR_4001)
+  | "' is not a valid iidy tag" `T.isSuffixOf` msg =
+      let unknownTagName = T.takeWhile (/= '\'') (T.drop 1 msg)  -- extract between quotes
+      in TagParsingError TagParsingInfo
+        { tpiErrorId     = UnknownPreprocessingTag
+        , tpiTagName     = unknownTagName
+        , tpiMessage     = msg
+        , tpiGuidance    = Just "check tag spelling or see documentation for valid tags"
+        , tpiLocation    = loc
+        , tpiSuggestion  = Nothing
+        , tpiCaretColumn = 0
+        , tpiSpanLen     = T.length unknownTagName
+        }
+
+  -- Unexpected field: "unexpected field 'xxx'\n\nValid fields are: ..." (ERR_4005)
+  | "unexpected field '" `T.isPrefixOf` msg =
+      TagParsingError TagParsingInfo
+        { tpiErrorId     = TagSyntaxError
+        , tpiTagName     = ""
+        , tpiMessage     = msg
+        , tpiGuidance    = Just "check field spelling and tag documentation"
+        , tpiLocation    = loc
+        , tpiSuggestion  = findTagExampleForUnexpectedField source loc
+        , tpiCaretColumn = 0
+        , tpiSpanLen     = 0
+        }
+
+  -- Query/jmespath mutual exclusivity: (ERR_4005)
+  | "'query' and 'jmespath' are mutually exclusive" == msg =
+      TagParsingError TagParsingInfo
+        { tpiErrorId     = TagSyntaxError
+        , tpiTagName     = "!$"
+        , tpiMessage     = msg
+        , tpiGuidance    = Just "use one or the other, not both"
+        , tpiLocation    = loc
+        , tpiSuggestion  = Just "!$ variable_name"
+        , tpiCaretColumn = 0
+        , tpiSpanLen     = 0
+        }
+
+  -- Property not found in mapping (lookup query) (ERR_2006)
+  | "property '" `T.isPrefixOf` msg && "' not found in mapping" `T.isInfixOf` msg =
+      let propName = T.takeWhile (/= '\'') (T.drop (T.length "property '") msg)
+          -- Extract variable path: "... Variable: config. Keys: ..."
+          varPath = case T.breakOn "Variable: " msg of
+            (_, rest) | not (T.null rest) ->
+              T.takeWhile (/= '.') (T.drop (T.length "Variable: ") rest)
+            _ -> ""
+          -- Extract available keys: "... Keys: host, port"
+          availKeys = case T.breakOn "Keys: " msg of
+            (_, rest) | not (T.null rest) ->
+              T.splitOn ", " (T.drop (T.length "Keys: ") rest)
+            _ -> []
+      in LookupQueryError LookupQueryInfo
+        { lqiErrorId       = LookupQueryFailed
+        , lqiVariablePath  = varPath
+        , lqiMessage       = "property '" <> propName <> "' not found in mapping"
+        , lqiLocation      = loc
+        , lqiAvailableKeys = availKeys
+        }
+
+  -- CloudFormation validation errors (ERR_7001)
+  | isCfnValidationMessage msg =
+      let (cfnTag, _) = parseCfnValidationMessage msg
+      in CfnValidationError CfnValidationInfo
+        { cviErrorId  = InvalidCloudFormationIntrinsic
+        , cviTagName  = cfnTag
+        , cviMessage  = msg
+        , cviLocation = loc
+        , cviHelpText = cfnHelpText cfnTag msg
+        }
+
   -- Variable not found: "Variable not found: path. Available: x, y"
   | "Variable not found: " `T.isPrefixOf` msg =
       let rest = T.drop (T.length "Variable not found: ") msg
@@ -358,6 +430,30 @@ adjustLocationForTag source loc msg =
           in case findVariableColumn allLines lineNum varPath of
             Just (ln, col) -> loc { srcLocLine = ln, srcLocColumn = col }
             Nothing -> loc
+      -- Unknown tag: "'!$mapp' is not a valid iidy tag"
+      | "' is not a valid iidy tag" `T.isSuffixOf` msg ->
+          let unknownTag = T.takeWhile (/= '\'') (T.drop 1 msg)
+          in case findTagInLine allLines lineNum unknownTag of
+            Just (ln, col) -> loc { srcLocLine = ln, srcLocColumn = col }
+            Nothing -> case findTagInLine allLines (lineNum - 1) unknownTag of
+              Just (ln, col) -> loc { srcLocLine = ln, srcLocColumn = col }
+              Nothing -> loc
+      -- Unexpected field: position needs +1 for 1-based column
+      | "unexpected field '" `T.isPrefixOf` msg ->
+          loc { srcLocColumn = srcLocColumn loc + 1 }
+      -- Query/jmespath mutual exclusivity: search for !$ tag
+      | "'query' and 'jmespath'" `T.isPrefixOf` msg ->
+          case findAnyTagInLine allLines lineNum of
+            Just (ln, col) -> loc { srcLocLine = ln, srcLocColumn = col }
+            _ -> case findAnyTagInLine allLines (lineNum - 1) of
+              Just (ln, col) -> loc { srcLocLine = ln, srcLocColumn = col }
+              Nothing -> loc
+      -- CFN validation: +1 for 1-based column
+      | isCfnValidationMessage msg ->
+          loc { srcLocColumn = srcLocColumn loc + 1 }
+      -- Property not found in query
+      | "property '" `T.isPrefixOf` msg ->
+          loc
       | otherwise -> loc
 
 -- | Check if message is a type mismatch error
@@ -486,21 +582,6 @@ findUnquotedComma = go 0 False
            '"' -> go (i+1) True rest
            _   -> go (i+1) False rest
 
--- | Find column after '[' and whitespace.
-findAfterBracket :: Text -> Maybe Int
-findAfterBracket line = do
-  bracketPos <- findSubstring "[" line
-  let after = T.drop (bracketPos + 1) line
-      ws = T.length (T.takeWhile (== ' ') after)
-  Just (bracketPos + 1 + ws + 1)
-
--- | Find column after first comma and whitespace.
-findAfterFirstComma :: Text -> Maybe Int
-findAfterFirstComma line = do
-  commaPos <- findSubstring "," line
-  let after = T.drop (commaPos + 1) line
-      ws = T.length (T.takeWhile (== ' ') after)
-  Just (commaPos + 1 + ws + 1)
 
 -- | Find the position of a variable reference in source lines.
 -- Searches for patterns like "!$ variable", "!$variable", "{{variable}}".
@@ -681,8 +762,78 @@ tagExample tag = case T.toLower tag of
   "!$let"  -> "!$let\n     var1: value1\n     var2: value2\n     in: \"{{var1}}-{{var2}}\""
   "!$maplisttohash" -> "!$mapListToHash\n     items: [{\"key\": \"a\", \"value\": 1}, {\"key\": \"b\", \"value\": 2}]\n     keyPath: key\n     valuePath: value"
   "!$mergemap" -> "!$mergeMap\n     items: [1, 2, 3]\n     template: \"{key: {{item}}}\""
-  "!$mapvalues" -> "!$mapValues\n     items: {a: 1, b: 2}\n     template: \"prefix-{{value}}\""
+  "!$mapvalues" -> "!$mapValues\n     <check documentation for proper syntax>"
   "!$groupby" -> "!$groupBy\n     items: [{name: \"a\", type: \"x\"}, {name: \"b\", type: \"x\"}]\n     key: type\n     var: group\n     template: \"{{group.key}}: {{#each group.items}}{{name}}{{/each}}\""
   "!$expand" -> "!$expand\n     template: my-template\n     params: {key: value}"
   "!$eq" -> "!$eq [\"{{env}}\", \"production\"]"
   _ -> ""
+
+-- | Check if a message is a CloudFormation validation error.
+isCfnValidationMessage :: Text -> Bool
+isCfnValidationMessage msg =
+  ("!Ref " `T.isPrefixOf` msg) ||
+  ("!Base64 " `T.isPrefixOf` msg) ||
+  ("!GetAZs " `T.isPrefixOf` msg) ||
+  ("!ImportValue " `T.isPrefixOf` msg) ||
+  ("!Join " `T.isPrefixOf` msg) ||
+  ("!Select " `T.isPrefixOf` msg) ||
+  ("!FindInMap " `T.isPrefixOf` msg) ||
+  ("!If " `T.isPrefixOf` msg) ||
+  ("!Equals " `T.isPrefixOf` msg) ||
+  ("!Not " `T.isPrefixOf` msg) ||
+  ("!Sub " `T.isPrefixOf` msg)
+
+-- | Extract CFN tag name from validation message.
+parseCfnValidationMessage :: Text -> (Text, Text)
+parseCfnValidationMessage msg =
+  let tag = "!" <> T.takeWhile (/= ' ') (T.drop 1 msg)
+  in (tag, msg)
+
+-- | Generate help text for CloudFormation validation errors.
+cfnHelpText :: Text -> Text -> Text
+cfnHelpText tag _msg
+  | tag == "!Ref" =
+      "!Ref expects a string (resource or parameter name)\n" <>
+      "   example: BucketName: !Ref MyBucket\n" <>
+      "   example: Environment: !Ref EnvironmentParam"
+  | tag == "!Base64" =
+      "!Base64 expects a non-null string value\n" <>
+      "   example: UserData: !Base64 'echo Hello'\n" <>
+      "   example: Script: !Base64 !Sub 'echo ${Parameter}'"
+  | tag == "!Join" =
+      "!Join expects [delimiter, array] with exactly 2 elements\n" <>
+      "   example: Name: !Join ['-', [!Ref 'AWS::StackName', 'suffix']]"
+  | tag == "!Select" =
+      "!Select expects [index, array] with exactly 2 elements\n" <>
+      "   example: AZ: !Select [0, !GetAZs '']"
+  | tag == "!FindInMap" =
+      "!FindInMap expects [map, key1, key2] with exactly 3 elements\n" <>
+      "   example: AMI: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]"
+  | otherwise = tag <> " usage error"
+
+-- | Find a tag example for unexpected field errors by looking at the source line.
+findTagExampleForUnexpectedField :: Text -> SourceLocation -> Maybe Text
+findTagExampleForUnexpectedField source loc =
+  let allLines = T.lines source
+      lineNum = srcLocLine loc
+  in case findTagOnSourceLine source (loc { srcLocLine = max 1 (lineNum - 3) }) of
+    Just t  -> let ex = tagExample t in if T.null ex then Nothing else Just ex
+    Nothing -> findTagInNearbyLines allLines lineNum
+
+-- | Search nearby lines (before the error position) for a tag.
+findTagInNearbyLines :: [Text] -> Int -> Maybe Text
+findTagInNearbyLines allLines lineNum =
+  let searchRange = [max 1 (lineNum - 5) .. lineNum]
+      findTag ln
+        | ln >= 1 && ln <= length allLines =
+            let line = allLines !! (ln - 1)
+            in case findSubstring "!$" line of
+                 Just col ->
+                   let rest = T.drop col line
+                       tag = T.takeWhile (\c -> c /= ' ' && c /= '\n' && c /= '\t' && c /= '{' && c /= '[' && c /= ':') rest
+                   in if T.length tag > 2 then Just tag else Nothing
+                 Nothing -> Nothing
+        | otherwise = Nothing
+  in case concatMap (\ln -> maybe [] (:[]) (findTag ln)) searchRange of
+    (t:_) -> let ex = tagExample t in if T.null ex then Nothing else Just ex
+    [] -> Nothing

@@ -1,7 +1,7 @@
 # iidy-hs Workplan
 
 **Target**: Feature-complete, behavior-identical, output-identical Haskell port. No shortcuts, no dropped features.
-**Status**: Phases 1-6 done. Error display in progress (18/49 snapshots match).
+**Status**: Phases 1-6 done. Error display in progress (44/49 snapshots match).
 
 ## Critical Rules
 
@@ -52,8 +52,10 @@
 | 12 | Meta | Workflow restructuring: per-phase docs, session handoffs, quality gates. |
 | 13 | 7 | Phase 7.1: Enhanced error display wired up (Conversion module), research documented. |
 | 14 | 7 | Phase 7.2: Error message matching, position tracking — 0→18/49 error snapshots pass. |
+| 15 | 7 | Phase 7.2d-h: Position refinement, examples, caret logic — 18→35/49 error snapshots pass. |
+| 16 | 7 | Phase 7.3: Validation gaps (11 UNEXPECTED_OK → 0), unknown tags, field validation, CFN validation — 35→44/49 error snapshots pass. |
 
-**Current: 76 modules, 181 tests, 36/36 render snapshots, 18/49 error snapshots match**
+**Current: 76 modules, 181 tests, 36/36 render snapshots, 44/49 error snapshots match**
 
 ## Key Architecture Decisions
 

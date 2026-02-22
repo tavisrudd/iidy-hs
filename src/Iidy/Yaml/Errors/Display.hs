@@ -49,7 +49,7 @@ formatError c source = \case
   VariableNotFoundError info ->
     formatHeader c "Variable error" ("'" <> vnfVariable info <> "' not found") (vnfLocation info) (vnfErrorId info)
     <> formatGuidance c "variable not defined in current scope"
-    <> formatSourceContext c source (vnfLocation info) (T.length (vnfVariable info)) "variable not defined"
+    <> formatSourceContext c source (vnfLocation info) (T.length (vnfVariable info) + 3) "variable not defined"
     <> formatAvailableVars c (vnfAvailableVars info)
     <> formatFooter c (vnfErrorId info)
 
@@ -75,12 +75,20 @@ formatError c source = \case
     <> formatExample c (ysiExample info)
     <> formatFooter c (ysiErrorId info)
 
-  TagParsingError info ->
-    formatHeader c "Tag error" (tpiMessage info) (tpiLocation info) (tpiErrorId info)
-    <> maybe "" (formatGuidance c) (tpiGuidance info)
-    <> formatSourceContextNoCarets c source (tpiLocation info)
-    <> formatExample c (tpiSuggestion info)
-    <> formatFooter c (tpiErrorId info)
+  TagParsingError info
+    | tpiSpanLen info > 0 ->
+        -- Unknown tag errors with carets
+        formatHeader c "Tag error" (tpiMessage info) (tpiLocation info) (tpiErrorId info)
+        <> maybe "" (formatGuidance c) (tpiGuidance info)
+        <> formatSourceContext c source (tpiLocation info) (tpiSpanLen info) ""
+        <> formatExample c (tpiSuggestion info)
+        <> formatFooter c (tpiErrorId info)
+    | otherwise ->
+        formatHeader c "Tag error" (tpiMessage info) (tpiLocation info) (tpiErrorId info)
+        <> maybe "" (formatGuidance c) (tpiGuidance info)
+        <> formatSourceContextNoCarets c source (tpiLocation info)
+        <> formatExample c (tpiSuggestion info)
+        <> formatFooter c (tpiErrorId info)
 
   LookupQueryError info ->
     formatHeader c "Lookup error" (lqiMessage info) (lqiLocation info) (lqiErrorId info)
@@ -136,7 +144,7 @@ formatSourceContext c source loc spanLen inlineDesc =
                effectiveSpan = max 1 (min spanLen (lineLen - col + 1))
            in "     | " <> T.replicate (max 0 (col - 1)) " "
               <> ecRed c <> T.replicate effectiveSpan "^" <> ecReset c
-              <> " " <> inlineDesc <> "\n"
+              <> (if T.null inlineDesc then "" else " " <> inlineDesc) <> "\n"
       else ""
     , -- Next line (grey)
       maybe "" (\l ->

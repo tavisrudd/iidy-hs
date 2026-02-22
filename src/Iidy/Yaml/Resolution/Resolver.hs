@@ -253,21 +253,105 @@ buildReparse parentCtx params rawBody =
 
 resolveTemplateString :: TagContext -> SrcMeta -> Text -> Resolve OValue
 resolveTemplateString ctx meta template =
-  let ctxValue = Object (KM.fromList
-        [(Key.fromText k, toValue v) | (k, v) <- Map.toList (tcVariables ctx)])
-  in case interpolate defaultHelpers ctxValue template of
-       Right s -> pure (OString s)
-       Left (InterpolateError msg) -> resolveError meta ("Handlebars error: " <> msg)
+  -- Pre-validate: check that template variables exist in context
+  case findMissingTemplateVar (tcVariables ctx) template of
+    Just missing -> resolveError meta $
+      "Variable not found: " <> missing <> ". Available: " <>
+      T.intercalate ", " (contextVariableNames ctx)
+    Nothing ->
+      let ctxValue = Object (KM.fromList
+            [(Key.fromText k, toValue v) | (k, v) <- Map.toList (tcVariables ctx)])
+      in case interpolate defaultHelpers ctxValue template of
+           Right s -> pure (OString s)
+           Left (InterpolateError msg) -> resolveError meta ("Handlebars error: " <> msg)
+
+-- | Find the first undefined variable in a handlebars template.
+-- Only checks simple {{var}} references, not block helpers or comments.
+findMissingTemplateVar :: Map.Map Text OValue -> Text -> Maybe Text
+findMissingTemplateVar vars = go
+  where
+    go t = case T.breakOn "{{" t of
+      (_, rest) | T.null rest -> Nothing
+      (_, rest) ->
+        let inside = T.drop 2 rest
+        in if T.isPrefixOf "#" inside || T.isPrefixOf "/" inside ||
+              T.isPrefixOf "!" inside || T.isPrefixOf "else}}" inside
+           then skipToClose inside
+           else case T.breakOn "}}" inside of
+             (expr, closeRest) | not (T.null closeRest) ->
+               let varExpr = T.strip expr
+                   -- If there's a space, it's a helper call — skip
+                   hasSpace = T.any (== ' ') varExpr
+                   rootVar = T.takeWhile (\c -> c /= '.' && c /= '[') varExpr
+               in if hasSpace || T.null rootVar ||
+                     Map.member rootVar vars ||
+                     rootVar `elem` ["this", "@index", "@key", "@first", "@last"]
+                  then go (T.drop 2 closeRest)
+                  else Just rootVar
+             _ -> Nothing
+    skipToClose t = case T.breakOn "}}" t of
+      (_, rest) | T.null rest -> Nothing
+      (_, rest) -> go (T.drop 2 rest)
 
 ------------------------------------------------------------------------
 -- CloudFormation tags
 ------------------------------------------------------------------------
 
 resolveCfnTag :: TagContext -> SrcMeta -> CloudFormationTag -> Resolve OValue
-resolveCfnTag ctx _meta tag = do
+resolveCfnTag ctx meta tag = do
   let (name, inner) = cfnTagParts tag
   resolved <- resolveAst ctx inner
+  validateCfnTag meta name resolved
   pure $ OObject [(name, resolved)]
+
+-- | Validate CloudFormation intrinsic function arguments.
+validateCfnTag :: SrcMeta -> Text -> OValue -> Resolve ()
+validateCfnTag meta name val = case name of
+  "!Ref" -> case val of
+    ONull -> resolveError meta "!Ref cannot have null value"
+    OArray [] -> resolveError meta "!Ref expects a string (resource or parameter name), found array"
+    _ -> pure ()
+  "!Base64" -> case val of
+    ONull -> resolveError meta "!Base64 cannot have null value"
+    _ -> pure ()
+  "!GetAZs" -> case val of
+    ONull -> resolveError meta "!GetAZs cannot have null value"
+    _ -> pure ()
+  "!ImportValue" -> case val of
+    ONull -> resolveError meta "!ImportValue cannot have null value"
+    _ -> pure ()
+  "!Join" -> case val of
+    OArray [OString _, OArray _] -> pure ()
+    OArray [_, _] -> resolveError meta $ "!Join expects a 2-element array [delimiter, array], got wrong types"
+    OArray items -> resolveError meta $ "!Join expects a 2-element array, found " <> describeFirstElement items
+    _ -> resolveError meta $ "!Join expects a 2-element array, found " <> oValueTypeName val
+  "!Select" -> case val of
+    OArray items | length items /= 2 ->
+      resolveError meta $ "!Select expects a 2-element array [index, array], got " <> T.pack (show (length items)) <> " elements"
+    _ -> pure ()
+  "!FindInMap" -> case val of
+    OArray items | length items /= 3 ->
+      resolveError meta $ "!FindInMap expects a 3-element array [map, key1, key2], got " <> T.pack (show (length items)) <> " elements"
+    _ -> pure ()
+  "!If" -> case val of
+    OArray items | length items /= 3 ->
+      resolveError meta $ "!If expects a 3-element array [condition, true_value, false_value], got " <> T.pack (show (length items)) <> " elements"
+    OArray _ -> pure ()
+    _ -> resolveError meta $ "!If expects a 3-element array, found " <> oValueTypeName val
+  "!Equals" -> case val of
+    OArray items | length items /= 2 ->
+      resolveError meta $ "!Equals expects a 2-element array, got " <> T.pack (show (length items)) <> " elements"
+    _ -> pure ()
+  "!Not" -> case val of
+    OArray items | length items /= 1 ->
+      resolveError meta $ "!Not expects a 1-element array, got " <> T.pack (show (length items)) <> " elements"
+    _ -> pure ()
+  _ -> pure ()
+
+-- | Describe the first element type for error messages.
+describeFirstElement :: [OValue] -> Text
+describeFirstElement [] = "empty array"
+describeFirstElement (v:_) = oValueTypeName v
 
 cfnTagParts :: CloudFormationTag -> (Text, YamlAst)
 cfnTagParts = \case
@@ -334,9 +418,9 @@ resolveVarLookup ctx meta (VarLookupTag rawPath query jmesPathExpr) = do
     Nothing -> resolveError meta $
       "Variable not found: " <> path <> ". Available: " <>
       T.intercalate ", " (contextVariableNames ctx)
-  let queriedVal = case query of
-        Nothing -> baseVal
-        Just q -> applyDotQueryO q baseVal
+  queriedVal <- case query of
+    Nothing -> pure baseVal
+    Just q -> applyDotQueryValidated meta path q baseVal
   case jmesPathExpr of
     Nothing -> pure queriedVal
     Just expr -> case applyJmesPath expr (toValue queriedVal) of
@@ -381,20 +465,25 @@ traversePathO (seg:rest) val = case val of
     _ -> Nothing
   _ -> Nothing
 
--- | Apply dot-query (comma-separated key selection or path traversal)
-applyDotQueryO :: Text -> OValue -> OValue
-applyDotQueryO q val
-  -- Comma-separated key selection: "host,port" selects specific keys
+
+-- | Like applyDotQueryO but validates that all comma-separated keys exist.
+applyDotQueryValidated :: SrcMeta -> Text -> Text -> OValue -> Resolve OValue
+applyDotQueryValidated meta varPath q val
+  -- Comma-separated key selection: validate all keys exist
   | T.isInfixOf "," q = case val of
       OObject kvs ->
         let keys = map T.strip (T.splitOn "," q)
-            selected = [(k, v) | k <- keys, Just v <- [lookupO k kvs]]
-        in OObject selected
-      _ -> ONull
+            missing = filter (\k -> lookupO k kvs == Nothing) keys
+        in case missing of
+          (m:_) -> resolveError meta $
+            "property '" <> m <> "' not found in mapping. Variable: " <>
+            varPath <> ". Keys: " <> T.intercalate ", " (map fst kvs)
+          [] -> pure $ OObject [(k, v) | k <- keys, Just v <- [lookupO k kvs]]
+      _ -> pure ONull
   -- Single dot-path traversal
   | otherwise =
       let segments = filter (not . T.null) (T.splitOn "." q)
-      in case traversePathO segments val of
+      in pure $ case traversePathO segments val of
            Just v  -> v
            Nothing -> ONull
 
@@ -497,8 +586,14 @@ resolveJoin ctx meta (JoinTag delimAst arrAst) = do
   delimVal <- resolveAst ctx delimAst
   arrVal <- resolveAst ctx arrAst
   case (delimVal, arrVal) of
-    (OString d, OArray arr) ->
-      pure $ OString $ T.intercalate d [oValueToText v | v <- arr]
+    (OString d, OArray arr) -> do
+      -- Validate that all items are string-convertible (not objects or arrays)
+      texts <- traverse (\v -> case v of
+        OObject _ -> typeMismatchError meta "string" v
+        OArray _  -> typeMismatchError meta "string" v
+        _         -> pure (oValueToText v)
+        ) arr
+      pure $ OString $ T.intercalate d texts
     (OString _, v) -> typeMismatchError meta "sequence" v
     (v, _)          -> typeMismatchError meta "string" v
 
