@@ -1,0 +1,10 @@
+StackName: test-stack
+Template: template.yaml
+Region:
+  dev: us-east-1
+  prod: us-west-2
+Profile:
+  dev: dev-profile
+  prod: prod-profile
+Tags:
+  project: my-project

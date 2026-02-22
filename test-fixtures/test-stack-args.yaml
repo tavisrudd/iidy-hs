@@ -1,0 +1,11 @@
+StackName: test-stack
+Template: template.yaml
+Region: us-east-1
+Tags:
+  project: my-project
+Parameters:
+  Env: dev
+  Version: "1.0"
+Capabilities:
+  - CAPABILITY_IAM
+  - CAPABILITY_NAMED_IAM
