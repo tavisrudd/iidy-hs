@@ -832,7 +832,7 @@ cliParserTests =
         Right cli -> case cliCommand cli of
           CmdRender args -> do
             raTemplate args @?= "template.yaml"
-            raOutfile args @?= "-"
+            raOutfile args @?= "stdout"
             raFormat args @?= "yaml"
             raOverwrite args @?= False
             raYamlSpec args @?= YamlAuto

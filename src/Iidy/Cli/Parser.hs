@@ -84,7 +84,7 @@ globalOptsParser = GlobalOpts
       )
   <*> option themeReader
       ( long "theme"
-      <> value ThemeDark
+      <> value ThemeAuto
       <> metavar "THEME"
       <> help "Color theme to use for output (auto|light|dark|high-contrast)"
       )
@@ -286,7 +286,7 @@ updateStackArgsParser = UpdateStackArgs
       ))
   <*> switch (long "changeset" <> help "Use a changeset for the update")
   <*> switch (long "yes" <> help "Skip confirmation prompt")
-  <*> switch (long "diff" <> help "Show diff before updating")
+  <*> flag True False (long "no-diff" <> help "Don't show diff before updating")
   <*> optional (option textReader
       ( long "stack-policy-during-update"
       <> metavar "POLICY"
@@ -446,7 +446,7 @@ paramPathArgParser = ParamPathArg
 paramGetArgsParser :: Parser ParamGetArgs
 paramGetArgsParser = ParamGetArgs
   <$> argument textReader (metavar "PATH" <> help "SSM parameter path")
-  <*> switch (long "decrypt" <> help "Decrypt SecureString values")
+  <*> flag True False (long "no-decrypt" <> help "Don't decrypt SecureString values")
   <*> option textReader
       ( long "format"
       <> value "simple"
@@ -457,7 +457,7 @@ paramGetArgsParser = ParamGetArgs
 paramGetByPathArgsParser :: Parser ParamGetByPathArgs
 paramGetByPathArgsParser = ParamGetByPathArgs
   <$> argument textReader (metavar "PATH" <> help "SSM parameter path prefix")
-  <*> switch (long "decrypt" <> help "Decrypt SecureString values")
+  <*> flag True False (long "no-decrypt" <> help "Don't decrypt SecureString values")
   <*> option textReader
       ( long "format"
       <> value "simple"
@@ -489,9 +489,9 @@ renderArgsParser = RenderArgs
       )
   <*> option textReader
       ( long "outfile"
-      <> value "-"
+      <> value "stdout"
       <> metavar "FILE"
-      <> help "Output file path or '-' for stdout (default: -)"
+      <> help "Output file path or 'stdout' for stdout (default: stdout)"
       )
   <*> option textReader
       ( long "format"
@@ -554,7 +554,7 @@ convertArgsParser = ConvertArgs
   <$> argument textReader (metavar "STACKNAME" <> help "Name of the existing CFN stack")
   <*> argument textReader (metavar "OUTPUT_DIR" <> help "Directory to write iidy project files")
   <*> switch (long "move-params-to-ssm" <> help "Move stack parameters to SSM Parameter Store")
-  <*> switch (long "sortkeys" <> help "Sort YAML keys in output")
+  <*> flag True False (long "no-sortkeys" <> help "Don't sort YAML keys in output")
   <*> optional (option textReader
       ( long "project"
       <> metavar "NAME"

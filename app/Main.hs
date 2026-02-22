@@ -7,6 +7,7 @@ import qualified Data.Text.IO as TIO
 import Data.UUID.V4 (nextRandom)
 import qualified Data.UUID as UUID
 import Foreign.C.Types (CInt(..))
+import System.Environment (lookupEnv)
 import System.Exit (exitWith, ExitCode(..))
 import System.IO (hPutStrLn, stderr)
 import System.Posix.Signals (installHandler, sigINT, Handler(..))
@@ -248,8 +249,15 @@ runCommand cli = case cliCommand cli of
         Left err -> dieTxt err
         Right rc -> exitCode rc
   CmdInitStackArgs args  -> runInitStackArgs args >>= exitCode
-  CmdCompletion mShell   ->
-      case maybe "bash" T.unpack mShell of
+  CmdCompletion mShell   -> do
+      shellName <- case mShell of
+        Just s  -> pure (T.unpack s)
+        Nothing -> do
+          mEnv <- lookupEnv "SHELL"
+          pure $ case mEnv of
+            Just s  -> reverse $ takeWhile (/= '/') (reverse s)
+            Nothing -> "bash"
+      case shellName of
         "bash" -> putStrLn bashCompletionScript
         "zsh"  -> putStrLn zshCompletionScript
         "fish" -> putStrLn fishCompletionScript

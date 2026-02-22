@@ -112,7 +112,7 @@ buildEventsDisplay sName numEvents events =
                      then Just TruncationInfo { truncShown = numEvents, truncTotal = total }
                      else Nothing
   in StackEventsDisplay
-       { sedTitle     = "Stack Events: " <> sName
+       { sedTitle     = "Previous Stack Events (max " <> T.pack (show numEvents) <> "):"
        , sedEvents    = wrapped
        , sedMaxEvents = Just numEvents
        , sedTruncated = truncInfo
