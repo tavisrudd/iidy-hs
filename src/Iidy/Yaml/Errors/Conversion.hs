@@ -6,6 +6,7 @@ module Iidy.Yaml.Errors.Conversion
   , formatParseErrorEnhanced
   ) where
 
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import System.IO (hIsTerminalDevice, stderr)
@@ -34,7 +35,7 @@ formatParseErrorEnhanced filePath source pos msg = do
   let colors = if isTty then defaultColors else noColors
       loc = posToSourceLocation filePath pos
       adjustedLoc = adjustLocationForTag source loc msg
-      enhanced = classifyMessage adjustedLoc msg
+      enhanced = classifyMessage source adjustedLoc msg
   pure $ formatError colors source enhanced
 
 -- | Convert PreprocessError to EnhancedPreprocessingError.
@@ -57,14 +58,13 @@ convertToEnhanced filePath source = \case
 classifyResolveError :: Text -> Text -> ResolveError -> EnhancedPreprocessingError
 classifyResolveError filePath source (ResolveError pos msg) =
   let loc = posToSourceLocation filePath pos
-      -- Try to find the tag in the source and fix the position
       adjustedLoc = adjustLocationForTag source loc msg
-  in classifyMessage adjustedLoc msg
+  in classifyMessage source adjustedLoc msg
 
 -- | Pattern-match on error message to determine error type and produce
 -- the appropriate EnhancedPreprocessingError variant.
-classifyMessage :: SourceLocation -> Text -> EnhancedPreprocessingError
-classifyMessage loc msg
+classifyMessage :: Text -> SourceLocation -> Text -> EnhancedPreprocessingError
+classifyMessage source loc msg
 
   -- Variable not found: "Variable not found: path. Available: x, y"
   | "Variable not found: " `T.isPrefixOf` msg =
@@ -116,13 +116,17 @@ classifyMessage loc msg
   -- "must be a mapping ..." (ERR_4003)
   | "must be a mapping" `T.isPrefixOf` msg =
       let guidance = extractMustBeGuidance msg
+          foundTag = findTagOnSourceLine source loc
+          example = case foundTag of
+            Just t  -> let ex = tagExample t in if T.null ex then guessExampleFromMustBe msg else Just ex
+            Nothing -> guessExampleFromMustBe msg
       in TagParsingError TagParsingInfo
         { tpiErrorId     = InvalidTagFieldValue
-        , tpiTagName     = ""
+        , tpiTagName     = fromMaybe "" foundTag
         , tpiMessage     = msg
         , tpiGuidance    = Just guidance
         , tpiLocation    = loc
-        , tpiSuggestion  = guessExampleFromMustBe msg
+        , tpiSuggestion  = example
         , tpiCaretColumn = 0
         , tpiSpanLen     = 0
         }
@@ -130,13 +134,17 @@ classifyMessage loc msg
   -- "must be a sequence ..." (ERR_4003)
   | "must be a sequence" `T.isPrefixOf` msg =
       let guidance = extractMustBeGuidance msg
+          foundTag = findTagOnSourceLine source loc
+          example = case foundTag of
+            Just t  -> let ex = tagExample t in if T.null ex then guessExampleFromMustBe msg else Just ex
+            Nothing -> guessExampleFromMustBe msg
       in TagParsingError TagParsingInfo
         { tpiErrorId     = InvalidTagFieldValue
-        , tpiTagName     = ""
+        , tpiTagName     = fromMaybe "" foundTag
         , tpiMessage     = msg
         , tpiGuidance    = Just guidance
         , tpiLocation    = loc
-        , tpiSuggestion  = guessExampleFromMustBe msg
+        , tpiSuggestion  = example
         , tpiCaretColumn = 0
         , tpiSpanLen     = 0
         }
@@ -375,6 +383,23 @@ findSubstring needle haystack
       let (before, _) = T.breakOn needle haystack
       in Just (T.length before)
   | otherwise = Nothing
+
+-- | Find the full tag name (e.g., "!$mapListToHash") on the source line at the given location.
+findTagOnSourceLine :: Text -> SourceLocation -> Maybe Text
+findTagOnSourceLine source loc =
+  let allLines = T.lines source
+      lineNum = srcLocLine loc
+  in if lineNum >= 1 && lineNum <= length allLines
+     then extractFullTag (allLines !! (lineNum - 1))
+     else Nothing
+  where
+    extractFullTag line =
+      case findSubstring "!$" line of
+        Nothing -> Nothing
+        Just col ->
+          let rest = T.drop col line
+              tag = T.takeWhile (\c -> c /= ' ' && c /= '\n' && c /= '\t' && c /= '{' && c /= '[' && c /= ':') rest
+          in if T.length tag > 2 then Just tag else Nothing
 
 -- | Check if this is a parse-time error (not a resolve-time type mismatch).
 -- Parse errors need the position adjusted to point at the tag, not the value.
