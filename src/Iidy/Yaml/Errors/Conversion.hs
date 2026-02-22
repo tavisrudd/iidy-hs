@@ -6,6 +6,7 @@ module Iidy.Yaml.Errors.Conversion
   , formatParseErrorEnhanced
   ) where
 
+import Control.Applicative ((<|>))
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -347,13 +348,76 @@ adjustLocationForTag source loc msg =
             _ -> case findAnyTagInLine allLines (lineNum - 1) of
               Just (ln, col) -> loc { srcLocLine = ln, srcLocColumn = col }
               Nothing -> loc
-      -- Resolve errors (expected/found): Rust points at the tag for block,
-      -- at the value for flow
-      | srcLocColumn loc == 0 ->
-          case findAnyTagInLine allLines (lineNum - 1) of
-            Just (ln, col) -> loc { srcLocLine = ln, srcLocColumn = col }
-            Nothing -> loc
+      -- Type mismatch errors: use Rust-style find_tag_column logic
+      | isTypeMismatchError msg ->
+          adjustForTypeMismatch allLines loc
       | otherwise -> loc
+
+-- | Check if message is a type mismatch error
+isTypeMismatchError :: Text -> Bool
+isTypeMismatchError msg = "expected " `T.isPrefixOf` msg && ", found " `T.isInfixOf` msg
+
+-- | Adjust location for type mismatch errors.
+-- Searches for the tag on the source line, then uses tag-specific logic
+-- to find the correct column (matching Rust's find_tag_column behavior).
+adjustForTypeMismatch :: [Text] -> SourceLocation -> SourceLocation
+adjustForTypeMismatch allLines loc =
+  let lineNum = srcLocLine loc
+      -- First: find which line has the tag
+      tagInfo = findAnyTagOnLine allLines lineNum
+            <|> findAnyTagOnLine allLines (lineNum - 1)
+  in case tagInfo of
+    Just (tagLn, tagCol0, tagText) ->
+      -- Try searching for field keyword on subsequent lines
+      case findFieldColumn allLines tagLn tagText of
+        Just (fieldLn, fieldCol) -> loc { srcLocLine = fieldLn, srcLocColumn = fieldCol }
+        Nothing ->
+          -- Fallback: point just past the tag on its line
+          loc { srcLocLine = tagLn, srcLocColumn = tagCol0 + T.length tagText + 1 }
+    Nothing -> loc
+
+-- | Find a !$ tag on a line, returning (lineNum, 0-based col, tag text).
+findAnyTagOnLine :: [Text] -> Int -> Maybe (Int, Int, Text)
+findAnyTagOnLine allLines lineNum
+  | lineNum >= 1 && lineNum <= length allLines =
+      let line = allLines !! (lineNum - 1)
+      in case findSubstring "!$" line of
+           Just col0 ->
+             let rest = T.drop col0 line
+                 tag = T.takeWhile (\c -> c /= ' ' && c /= '\n' && c /= '\t' && c /= '{' && c /= '[' && c /= ':') rest
+             in if T.length tag > 2 then Just (lineNum, col0, tag) else Nothing
+           Nothing -> Nothing
+  | otherwise = Nothing
+
+-- | Search subsequent lines after a tag for field keywords.
+-- Returns (lineNum, column) matching Rust's find_after_keyword logic.
+findFieldColumn :: [Text] -> Int -> Text -> Maybe (Int, Int)
+findFieldColumn allLines tagLn tagText
+  | tagLower == "!$groupby" = searchField "items:"
+  | tagLower == "!$maplisttohash" = searchField "items:"
+  | tagLower == "!$mapvalues" = searchField "items:"
+  | tagLower == "!$frompairs" = searchField "source:"
+  | otherwise = Nothing
+  where
+    tagLower = T.toLower tagText
+    searchField keyword =
+      -- Search lines after the tag for the keyword
+      let nextLines = drop tagLn (zip [1..] (map Just allLines))
+      in case [(n, findAfterKeyword line keyword) | (n, Just line) <- take 3 nextLines
+              , keyword `T.isInfixOf` line] of
+        ((n, Just col):_) -> Just (n, col)
+        _ -> Nothing
+
+-- | Find the column after a keyword and whitespace (Rust-compatible).
+-- Returns the 0-based position of the first non-whitespace char after the keyword value.
+findAfterKeyword :: Text -> Text -> Maybe Int
+findAfterKeyword line keyword =
+  case findSubstring keyword line of
+    Just pos ->
+      let afterKw = T.drop (pos + T.length keyword) line
+          ws = T.length (T.takeWhile (== ' ') afterKw)
+      in Just (pos + T.length keyword + ws + 1)  -- +1 matches Rust
+    Nothing -> Nothing
 
 -- | Find a tag in a specific source line. Returns (lineNum, 1-based column).
 findTagInLine :: [Text] -> Int -> Text -> Maybe (Int, Int)
