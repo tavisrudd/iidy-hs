@@ -11,7 +11,7 @@ STOPFILE="$WORKDIR/.ralph-stop"
 NTFY_TOPIC="tavis-iidy-port-2026"
 QUOTA_SCRIPT="$WORKDIR/scripts/check-quota.sh"
 FIVE_HR_MAX_UTIL=93   # leave headroom
-WEEKLY_MAX_UTIL=95    # leave 5% headroom
+WEEKLY_MAX_UTIL=98    # leave 2% headroom
 
 mkdir -p "$LOGDIR"
 mkdir -p "$WORKDIR/.msgs"

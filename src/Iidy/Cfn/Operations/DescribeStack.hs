@@ -6,6 +6,9 @@
 module Iidy.Cfn.Operations.DescribeStack
   ( describeStack
   , convertEvent
+  , convertStack
+  , buildEventsDisplay
+  , buildConsoleUrl
   ) where
 
 import Data.Maybe (fromMaybe)
@@ -146,4 +149,4 @@ buildConsoleUrl regionText stackArn =
     <> ".console.aws.amazon.com/cloudformation/home?region="
     <> regionText
     <> "#/stacks/stackinfo?stackId="
-    <> T.replace "/" "%2F" stackArn
+    <> stackArn

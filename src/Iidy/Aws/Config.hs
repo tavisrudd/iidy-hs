@@ -58,15 +58,16 @@ createAwsEnvFromSettings settings =
 -- Region handling
 ------------------------------------------------------------------------
 
--- | Resolve region from settings or environment, defaulting to us-east-1
+-- | Resolve region from settings or environment, defaulting to us-east-1.
+-- Priority: explicit setting > AWS_REGION > AWS_DEFAULT_REGION > us-east-1
 resolveRegion :: Maybe Text -> IO Amazonka.Region
 resolveRegion (Just r) = pure (textToRegion r)
 resolveRegion Nothing = do
-  envRegion <- lookupEnv "AWS_DEFAULT_REGION"
+  envRegion <- lookupEnv "AWS_REGION"
   case envRegion of
     Just r  -> pure (textToRegion (T.pack r))
     Nothing -> do
-      envRegion2 <- lookupEnv "AWS_REGION"
+      envRegion2 <- lookupEnv "AWS_DEFAULT_REGION"
       case envRegion2 of
         Just r  -> pure (textToRegion (T.pack r))
         Nothing -> pure Amazonka.NorthVirginia

@@ -391,7 +391,13 @@ renderStackDefinition r def showTimes = do
 
 renderStackEvents :: InteractiveRenderer -> StackEventsDisplay -> IO ()
 renderStackEvents r evts = do
-  if null (sedEvents evts) && not (T.isInfixOf "Live Stack Events" (sedTitle evts))
+  -- Print section heading (use newline for multi-line sections)
+  let isLive = T.isInfixOf "Live Stack Events" (sedTitle evts)
+      hasEvents = not (null (sedEvents evts))
+  if hasEvents || isLive
+    then printSectionHeadingLn r (sedTitle evts)
+    else printSectionHeading r (sedTitle evts)
+  if null (sedEvents evts) && not isLive
     then TIO.putStrLn (" " <> styleMuted r "No events found")
     else do
       let sorted = sortBy (comparing (seTimestamp . sewEvent)) (sedEvents evts)
@@ -439,6 +445,7 @@ renderStackContents r contents = do
   -- Resources
   if not (null (scResources contents))
     then do
+      printSectionHeadingLn r "Stack Resources"
       let idPad = calcPadding (scResources contents) sriLogicalResourceId
           rtypePad = calcPadding (scResources contents) sriResourceType
       mapM_ (\res ->
