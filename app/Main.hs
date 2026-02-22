@@ -168,8 +168,14 @@ runCommand cli = case cliCommand cli of
             Left err -> dieTxt err
             Right rc -> exitCode rc
 
-  -- Not yet implemented
-  CmdGetStackInstances _ -> notImplemented "get-stack-instances"
+  -- Removed command — directs users to AWS CLI
+  CmdGetStackInstances args -> do
+      hPutStrLn stderr $
+        "The get-stack-instances command has been removed. Use the AWS CLI instead:\n  \
+        \aws ec2 describe-instances \\\n    \
+        \--filters \"Name=tag:aws:cloudformation:stack-name,Values="
+        <> T.unpack (gsiStackname args) <> "\""
+      exitWith (ExitFailure 1)
   CmdTemplateApproval acmd -> case acmd of
     ApprovalRequest args ->
       runCfnWithArgs cli OpTemplateApprovalRequest (araArgsfile args) Nothing

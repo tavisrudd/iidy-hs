@@ -1,5 +1,6 @@
 module Iidy.Cli.Parser
   ( parseCliOpts
+  , cliParserInfo  -- exported for testing
   ) where
 
 import Data.Text (Text)
@@ -9,6 +10,7 @@ import qualified System.Exit
 import qualified System.IO
 import System.IO (hPutStrLn)
 import Options.Applicative
+import Options.Applicative.Help.Pretty (Doc, hardline, pretty)
 
 import Iidy.Cli
 import Iidy.Types (ColorChoice(..), OutputMode(..), Theme(..), YamlSpec(..))
@@ -41,8 +43,15 @@ cliParserInfo = info (cliParser <**> helper)
   ( fullDesc
   <> progDesc "CloudFormation with Confidence"
   <> header "iidy-hs - Is it done yet? CloudFormation preprocessor and deployer"
-  <> footer "Status Codes:\n  Success (0)       Command successfully completed\n  Error (1)         An error was encountered while executing command\n  Cancelled (130)   User responded 'No' to iidy prompt or interrupt (CTRL-C) was received"
+  <> footerDoc (Just statusCodesDoc)
   )
+
+statusCodesDoc :: Doc
+statusCodesDoc =
+  pretty ("Status Codes:" :: String) <> hardline
+  <> pretty ("  Success (0)       Command successfully completed" :: String) <> hardline
+  <> pretty ("  Error (1)         An error was encountered while executing command" :: String) <> hardline
+  <> pretty ("  Cancelled (130)   User responded 'No' to iidy prompt or interrupt (CTRL-C) was received" :: String)
 
 ------------------------------------------------------------------------
 -- Top-level parser
@@ -125,7 +134,10 @@ awsOptsParser = AwsOpts
 ------------------------------------------------------------------------
 
 commandsParser :: Parser Commands
-commandsParser = subparser
+commandsParser = visibleCommands <|> hiddenCommands
+
+visibleCommands :: Parser Commands
+visibleCommands = subparser
   ( command "create-stack"
       (info (CmdCreateStack <$> createStackArgsParser <**> helper)
             (progDesc "create a cfn stack based on stack-args.yaml"))
@@ -159,9 +171,6 @@ commandsParser = subparser
   <> command "get-stack-template"
       (info (CmdGetStackTemplate <$> getTemplateArgsParser <**> helper)
             (progDesc "download the template of a live stack"))
-  <> commandWith "get-stack-instances"
-      (info (CmdGetStackInstances <$> getStackInstancesArgsParser <**> helper)
-            (progDesc "list the ec2 instances of a live stack"))
   <> command "list-stacks"
       (info (CmdListStacks <$> listArgsParser <**> helper)
             (progDesc "list all stacks within a region"))
@@ -198,10 +207,15 @@ commandsParser = subparser
       (info (CmdExplain <$> many (argument textReader (metavar "CODE...")) <**> helper)
             (progDesc "explain error codes"))
   )
-  where
-    -- helper to hide a command from help
-    commandWith :: String -> ParserInfo a -> Mod CommandFields a
-    commandWith n p = command n (p { infoParser = infoParser p })
+
+-- | Hidden/removed commands — still parseable but not shown in help
+hiddenCommands :: Parser Commands
+hiddenCommands = subparser
+  ( command "get-stack-instances"
+      (info (CmdGetStackInstances <$> getStackInstancesArgsParser <**> helper)
+            (progDesc "list the ec2 instances of a live stack [removed]"))
+  <> internal
+  )
 
 ------------------------------------------------------------------------
 -- Param sub-commands
@@ -515,10 +529,8 @@ getImportArgsParser = GetImportArgs
 
 demoArgsParser :: Parser DemoArgs
 demoArgsParser = DemoArgs
-  <$> option textReader
-      ( long "demoscript"
-      <> value ""
-      <> metavar "FILE"
+  <$> argument textReader
+      ( metavar "DEMOSCRIPT"
       <> help "Path to demo script file"
       )
   <*> option auto
@@ -527,10 +539,10 @@ demoArgsParser = DemoArgs
       <> metavar "FACTOR"
       <> help "Time scaling factor for demo playback (default: 1.0)"
       )
-  <*> fmap not (switch
-      ( long "no-mask-secrets"
-      <> help "Do not mask secrets in output (default: mask secrets)"
-      ))
+  <*> switch
+      ( long "mask-secrets"
+      <> help "Mask secrets (AWS account numbers, ARNs) in command output"
+      )
 
 lintTemplateArgsParser :: Parser LintTemplateArgs
 lintTemplateArgsParser = LintTemplateArgs

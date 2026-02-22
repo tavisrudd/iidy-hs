@@ -165,3 +165,4 @@ test-suite iidy-hs-test
     , filepath
     , text
     , vector
+    , optparse-applicative

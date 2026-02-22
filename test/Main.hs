@@ -16,6 +16,8 @@ import System.FilePath ((</>), takeBaseName, takeExtension)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit
 
+import Options.Applicative (execParserPure, prefs, showHelpOnEmpty, ParserResult(..))
+
 import Iidy.Aws.CredentialSource (AwsSettings(..))
 import Iidy.Cfn.Operations.ConvertStack
   ( parameterizeEnv
@@ -27,6 +29,9 @@ import Iidy.Cfn.Operations.ConvertStack
 import Iidy.Cfn.TemplateHash (calculateTemplateHash, generateVersionedLocation, parseS3Url)
 import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..))
 import Iidy.Cfn.Types (CfnOperation(..), StackArgs(..))
+import Iidy.Cli (Cli(..), Commands(..), GlobalOpts(..), AwsOpts(..), DeleteArgs(..), DescribeArgs(..), RenderArgs(..))
+import Iidy.Cli.Parser (cliParserInfo)
+import Iidy.Types (ColorChoice(..), Theme(..), YamlSpec(..))
 import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.Engine
   ( preprocessYaml
@@ -36,7 +41,7 @@ import Iidy.Yaml.Engine
 import Iidy.Yaml.Handlebars.Engine (interpolate, defaultHelpers)
 import Iidy.Yaml.Imports.Loaders.File (loadFileImport)
 import Iidy.Yaml.JMESPath (applyJmesPath)
-import Iidy.Yaml.OValue (OValue(..))
+import Iidy.Yaml.OValue (OValue(..), oIsTruthy, toValue, fromValue)
 import Iidy.Yaml.Parser (parseYaml)
 
 ------------------------------------------------------------------------
@@ -68,6 +73,8 @@ main = do
     , testGroup "StackArgsLoader" stackArgsLoaderTests
     , testGroup "ConvertStack" convertStackTests
     , testGroup "TemplateHash" templateHashTests
+    , testGroup "CliParser" cliParserTests
+    , testGroup "OValue" oValueTests
     ]
 
 ------------------------------------------------------------------------
@@ -653,4 +660,179 @@ templateHashTests =
           assertBool "key starts with templates/" (T.isPrefixOf "templates/" key)
           assertBool "key ends with .yaml" (T.isSuffixOf ".yaml" key)
           assertBool "key has hash" (T.length key > 20)
+  ]
+
+------------------------------------------------------------------------
+-- CLI parser tests
+------------------------------------------------------------------------
+
+-- | Helper to parse CLI args using optparse-applicative in pure mode
+parseCli :: [String] -> Either String Cli
+parseCli args = case execParserPure (prefs showHelpOnEmpty) cliParserInfo args of
+  Success cli -> Right cli
+  Failure _   -> Left "parse failure"
+  _           -> Left "unexpected result"
+
+cliParserTests :: [TestTree]
+cliParserTests =
+  [ testCase "parse describe-stack" $ do
+      case parseCli ["describe-stack", "my-stack"] of
+        Left e -> assertFailure e
+        Right cli -> case cliCommand cli of
+          CmdDescribeStack args -> do
+            daStackname args @?= "my-stack"
+            daEvents args @?= 10  -- default
+          _ -> assertFailure "Expected CmdDescribeStack"
+
+  , testCase "parse describe-stack with events" $ do
+      case parseCli ["describe-stack", "my-stack", "--events", "25"] of
+        Left e -> assertFailure e
+        Right cli -> case cliCommand cli of
+          CmdDescribeStack args -> do
+            daStackname args @?= "my-stack"
+            daEvents args @?= 25
+          _ -> assertFailure "Expected CmdDescribeStack"
+
+  , testCase "parse render with defaults" $ do
+      case parseCli ["render", "template.yaml"] of
+        Left e -> assertFailure e
+        Right cli -> case cliCommand cli of
+          CmdRender args -> do
+            raTemplate args @?= "template.yaml"
+            raOutfile args @?= "-"
+            raFormat args @?= "yaml"
+            raOverwrite args @?= False
+            raYamlSpec args @?= YamlAuto
+          _ -> assertFailure "Expected CmdRender"
+
+  , testCase "parse render with options" $ do
+      case parseCli ["render", "t.yaml", "--format", "json", "--overwrite", "--yaml-spec", "1.1"] of
+        Left e -> assertFailure e
+        Right cli -> case cliCommand cli of
+          CmdRender args -> do
+            raFormat args @?= "json"
+            raOverwrite args @?= True
+            raYamlSpec args @?= YamlV11
+          _ -> assertFailure "Expected CmdRender"
+
+  , testCase "parse delete-stack with --yes" $ do
+      case parseCli ["delete-stack", "doomed-stack", "--yes"] of
+        Left e -> assertFailure e
+        Right cli -> case cliCommand cli of
+          CmdDeleteStack args -> do
+            delStackname args @?= "doomed-stack"
+            delYes args @?= True
+            delFailIfAbsent args @?= False
+          _ -> assertFailure "Expected CmdDeleteStack"
+
+  , testCase "parse global options" $ do
+      case parseCli ["-e", "staging", "--color", "never", "--theme", "light", "--debug", "explain", "ERR_2001"] of
+        Left e -> assertFailure e
+        Right cli -> do
+          goEnvironment (cliGlobalOpts cli) @?= "staging"
+          goColor (cliGlobalOpts cli) @?= ColorNever
+          goTheme (cliGlobalOpts cli) @?= ThemeLight
+          goDebug (cliGlobalOpts cli) @?= True
+
+  , testCase "parse AWS options" $ do
+      case parseCli ["--region", "eu-west-1", "--profile", "myprofile", "list-stacks"] of
+        Left e -> assertFailure e
+        Right cli -> do
+          aoRegion (cliAwsOpts cli) @?= Just "eu-west-1"
+          aoProfile (cliAwsOpts cli) @?= Just "myprofile"
+
+  , testCase "parse explain with codes" $ do
+      case parseCli ["explain", "ERR_2001", "ERR_3001"] of
+        Left e -> assertFailure e
+        Right cli -> case cliCommand cli of
+          CmdExplain codes -> codes @?= ["ERR_2001", "ERR_3001"]
+          _ -> assertFailure "Expected CmdExplain"
+
+  , testCase "invalid command fails" $ do
+      case parseCli ["nonexistent-command"] of
+        Left _  -> pure ()
+        Right _ -> assertFailure "Expected parse failure for invalid command"
+
+  , testCase "missing required arg fails" $ do
+      case parseCli ["describe-stack"] of
+        Left _  -> pure ()
+        Right _ -> assertFailure "Expected parse failure for missing stackname"
+  ]
+
+------------------------------------------------------------------------
+-- OValue tests
+------------------------------------------------------------------------
+
+oValueTests :: [TestTree]
+oValueTests =
+  [ testCase "truthiness: null is falsy" $
+      oIsTruthy ONull @?= False
+
+  , testCase "truthiness: false is falsy" $
+      oIsTruthy (OBool False) @?= False
+
+  , testCase "truthiness: true is truthy" $
+      oIsTruthy (OBool True) @?= True
+
+  , testCase "truthiness: empty string is falsy" $
+      oIsTruthy (OString "") @?= False
+
+  , testCase "truthiness: non-empty string is truthy" $
+      oIsTruthy (OString "hello") @?= True
+
+  , testCase "truthiness: all numbers are truthy (incl zero)" $
+      oIsTruthy (ONumber 0) @?= True
+
+  , testCase "truthiness: positive number is truthy" $
+      oIsTruthy (ONumber 42) @?= True
+
+  , testCase "truthiness: empty array is falsy" $
+      oIsTruthy (OArray []) @?= False
+
+  , testCase "truthiness: non-empty array is truthy" $
+      oIsTruthy (OArray [ONull]) @?= True
+
+  , testCase "toValue/fromValue round-trip null" $
+      fromValue (toValue ONull) @?= ONull
+
+  , testCase "toValue/fromValue round-trip string" $
+      fromValue (toValue (OString "test")) @?= OString "test"
+
+  , testCase "toValue/fromValue round-trip number" $
+      fromValue (toValue (ONumber 3.14)) @?= ONumber 3.14
+
+  , testCase "toValue/fromValue round-trip bool" $
+      fromValue (toValue (OBool True)) @?= OBool True
+
+  , testCase "toValue/fromValue round-trip array" $ do
+      let val = OArray [OString "a", ONumber 1, OBool False]
+      fromValue (toValue val) @?= val
+
+  , testCase "emitter: string with colon needs quoting" $
+      assertBool "quoted" (T.head (emitYaml (OString "key: value")) == '\'')
+
+  , testCase "emitter: string starting with # needs quoting" $
+      assertBool "quoted" (T.head (emitYaml (OString "# comment")) == '\'')
+
+  , testCase "emitter: string yes needs quoting" $
+      emitYaml (OString "yes") @?= "'yes'"
+
+  , testCase "emitter: string no needs quoting" $
+      emitYaml (OString "no") @?= "'no'"
+
+  , testCase "emitter: string on needs quoting" $
+      emitYaml (OString "on") @?= "'on'"
+
+  , testCase "emitter: string off needs quoting" $
+      emitYaml (OString "off") @?= "'off'"
+
+  , testCase "emitter: numeric string needs quoting" $
+      assertBool "quoted" (T.head (emitYaml (OString "42")) == '\'')
+
+  , testCase "emitter: array of objects" $ do
+      let val = OArray [OObject [("k", OString "v1")], OObject [("k", OString "v2")]]
+          result = emitYaml val
+      assertBool "starts with newline-dash" (T.isPrefixOf "\n-" result)
+      assertBool "contains k: v1" (T.isInfixOf "k: v1" result)
+      assertBool "contains k: v2" (T.isInfixOf "k: v2" result)
   ]
