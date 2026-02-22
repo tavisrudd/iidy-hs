@@ -55,6 +55,7 @@ library
     Iidy.Output.Renderers.Interactive
     Iidy.Output.Renderers.Json
     Iidy.Cli
+    Iidy.Cli.Parser
     Iidy.Aws.Config
     Iidy.Aws.CredentialSource
     Iidy.Aws.ClientReqToken
