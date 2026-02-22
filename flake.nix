@@ -9,40 +9,46 @@
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
+      hp = pkgs.haskellPackages;
+      haskellDeps = hpkgs: [
+        hpkgs.aeson
+        hpkgs.bytestring
+        hpkgs.containers
+        hpkgs.directory
+        hpkgs.filepath
+        hpkgs.HsYAML
+        hpkgs.random
+        hpkgs.scientific
+        hpkgs.text
+        hpkgs.time
+        hpkgs.vector
+        hpkgs.amazonka
+        hpkgs.amazonka-cloudformation
+        hpkgs.amazonka-s3
+        hpkgs.amazonka-sts
+        hpkgs.amazonka-ssm
+        hpkgs.amazonka-sns
+        hpkgs.crypton
+        hpkgs.memory
+        hpkgs.lens
+        hpkgs.conduit
+        hpkgs.resourcet
+        hpkgs.mtl
+        hpkgs.transformers
+        hpkgs.unliftio
+        hpkgs.optparse-applicative
+        hpkgs.http-conduit
+        hpkgs.process
+        hpkgs.tasty
+        hpkgs.tasty-hunit
+      ];
     in {
+      packages.${system}.default = hp.callCabal2nix "iidy-hs" self {};
+
       devShells.${system}.default = pkgs.mkShell {
         buildInputs = [
-          (pkgs.haskellPackages.ghcWithPackages (hp: [
-            hp.aeson
-            hp.bytestring
-            hp.containers
-            hp.directory
-            hp.filepath
-            hp.HsYAML
-            hp.random
-            hp.scientific
-            hp.text
-            hp.time
-            hp.vector
-            hp.amazonka
-            hp.amazonka-cloudformation
-            hp.amazonka-s3
-            hp.amazonka-sts
-            hp.amazonka-ssm
-            hp.amazonka-sns
-            hp.crypton
-            hp.memory
-            hp.lens
-            hp.conduit
-            hp.resourcet
-            hp.mtl
-            hp.transformers
-            hp.unliftio
-            hp.optparse-applicative
-            hp.http-conduit
-            hp.tasty-hunit
-          ]))
-          pkgs.haskellPackages.cabal-install
+          (hp.ghcWithPackages haskellDeps)
+          hp.cabal-install
           pkgs.pkg-config
           pkgs.zlib
         ];
