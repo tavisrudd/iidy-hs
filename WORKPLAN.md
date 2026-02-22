@@ -35,7 +35,7 @@
 | 9 | Final verification | **DONE** (all verified) | [phase-9-final-verification.md](notes/phases/phase-9-final-verification.md) |
 | 10 | Output pipeline wiring | **DONE** | [phase-10-output-wiring.md](notes/phases/phase-10-output-wiring.md) |
 | 11 | Renderer output tests | **DONE** | [phase-11-renderer-tests.md](notes/phases/phase-11-renderer-tests.md) |
-| 12 | Completion audit vs Rust (iterative) | **NOT STARTED** | [phase-12-completion-audit.md](notes/phases/phase-12-completion-audit.md) |
+| 12 | Completion audit vs Rust (iterative) | **IN PROGRESS** | [phase-12-completion-audit.md](notes/phases/phase-12-completion-audit.md) |
 
 Phase 12 is iterative: audit → triage → create fix phases (13, 14, ...) → re-audit.
 Loop until a full audit pass finds zero new offline-testable gaps. "Done" means every
@@ -69,14 +69,25 @@ behavior testable without live AWS matches Rust, with automated tests and docume
 | 22 | 8.6 | watch-stack mock polling tests (pollForCompletionWith + DI). 258 tests. Phase 8.6 COMPLETE. |
 | 23 | 8-9 | Error color audit: --color flag wiring, detectErrorColors, 7 color tests. 265 tests. |
 | 24 | 10-11 | Phase 10 COMPLETE: Output pipeline wiring. Phase 11.1: 28 renderer formatting tests. 293 tests. |
-| 25 | 11 | Phase 11 COMPLETE: JSON renderer, theme, rendering output tests. 352 tests. |
+| 25 | 11-12 | Phase 11 COMPLETE (352 tests). Phase 12.1: render fixes (JSON, query, overwrite), CLI defaults aligned, list-stacks query/tags wired. |
 
 **Current: 78 modules, 352 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
 ## Remaining Work
 
-Phases 1-11 are complete. Phase 12 (completion audit) is next: systematic
-command-by-command comparison against the Rust oracle to verify behavioral parity.
+Phase 12 (completion audit) IN PROGRESS.
+
+**Done in 12.1:**
+- render command: fixed broken JSON output (encodePretty), --query JMESPath, --overwrite protection, format validation
+- 8 CLI defaults aligned with Rust (events=50, timeouts=180/300, param type=SecureString, etc.)
+- list-stacks: queryMode wired from --query, --tags wired, filter labels prefixed with "tag:"
+
+**Remaining audit items (12.2+):**
+- list-stacks/describe-stack event pagination (requires AWS API pagination, NOT testable offline)
+- describe-stack event title format ("Previous Stack Events (max N)" vs "Stack Events: name")
+- JMESPath output query for describe-stack (apply --query to rendered result)
+- Full command-by-command behavioral parity audit for remaining commands
+- DIVERGENCES.md for intentional/untestable differences
 
 ## Key Architecture Decisions
 
