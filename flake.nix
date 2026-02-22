@@ -43,6 +43,8 @@
         hpkgs.process
         hpkgs.tasty
         hpkgs.tasty-hunit
+        hpkgs.tasty-quickcheck
+        hpkgs.QuickCheck
       ];
     in {
       packages.${system}.default = hp.callCabal2nix "iidy-hs" self {};

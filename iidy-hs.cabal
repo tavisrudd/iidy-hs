@@ -172,3 +172,5 @@ test-suite iidy-hs-test
     , text
     , vector
     , optparse-applicative
+    , QuickCheck
+    , tasty-quickcheck
