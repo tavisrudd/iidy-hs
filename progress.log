@@ -20,3 +20,7 @@
 2026-02-21 23:50 — Session 16: Phase 7.3 — Validation gaps fixed (11 UNEXPECTED_OK → 0). Unknown tag detection, field validation, CFN intrinsic validation, join item type checking, query/jmespath exclusivity, query missing key, template variable pre-validation. 44/49 error snapshots match (from 35). 181 tests pass.
 2026-02-22 00:17 — Session 17: Phase 7.4 — Final 5 error snapshots fixed. Join column positioning (tag fallback vs flow), query-missing-key caret suppression, JMESPath error format, HsYAML parse error translation (chained tags, unterminated strings). 49/49 error snapshots pass. Phase 7 COMPLETE.
 2026-02-22 00:22 — Session 17: Phase 8.3 — Exception handling: Ctrl-C uses _exit(130) (no GHC backtrace), top-level exception handler formats IO errors like Rust ("ERROR: msg" + bullet suggestion).
+2026-02-22 00:40 — Session 18: Phase 8.1 — NTP time sync: SNTP client (RFC 4330, pool.ntp.org, 2s timeout, retry+fallback). reliableTimeProvider for write ops, systemTimeProvider for read-only.
+2026-02-22 00:40 — Session 18: Phase 8.2 — JSON Schema validation: Custom Draft 7 validator (type, required, properties, items, pattern, min/max, minItems, enum, additionalProperties). AllowedPattern regex now works.
+2026-02-22 00:40 — Session 18: Phase 8.3 — Demo command: Full port (shell exec, silent, sleep, setenv, banner, typing display, AWS account masking, iidy substitution). No more notImplemented stubs.
+2026-02-22 00:40 — Session 18: Phase 8.6 — Gate item tests: 36 new tests (20 RequestBuilder, 16 JsonSchema). 217 total tests, all passing.
