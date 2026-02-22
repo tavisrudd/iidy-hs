@@ -13,7 +13,26 @@
 - Updated MEMORY.md with critical rules
 
 ## What's next (Session 13)
-- Start Phase 7: Error Display System
+
+### FIRST: Audit previous phases for skipped/deferred/dropped items
+Before starting Phase 7, review ALL prior session notes and the old WORKPLAN.md git history for:
+- Items marked "deferred" or "later" or "skip"
+- Items marked "won't implement" or "drop feature"
+- Unchecked gate items from Gates 1-6
+- Any TODO/STUB/undefined still in the codebase
+- Features from the Rust version that were noted but never implemented
+
+Create a `notes/phases/phase-0-audit.md` documenting everything found. Add missing items to phase-7, phase-8, or a new phase doc as appropriate. Commit the audit before starting any code work.
+
+Key places to check:
+- `git log --all --oneline` for session commit messages mentioning "defer", "skip", "stub"
+- `grep -r 'undefined\|TODO\|STUB\|FIXME\|error "Not implemented"' src/`
+- `progress.log` for any noted deferrals
+- `notes/` research docs for features identified but never tracked
+- MEMORY.md "Remaining Work" sections
+- The old WORKPLAN.md (check git history) Gates 4-6 unchecked items
+
+### THEN: Start Phase 7: Error Display System
 - Begin with chunk 7.1: wire up EnhancedPreprocessingError conversion
 - Read phase-7-error-display.md for detailed chunks and verification criteria
 - Check .msgs/ after every tool call chain
