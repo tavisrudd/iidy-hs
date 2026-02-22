@@ -42,6 +42,7 @@ Autonomous claude driven, Haskell port of iidy (a CloudFormation preprocessor/de
 - After completing each workplan chunk (2.1, 2.2, etc.), append a timestamped line to `progress.log`
 - Format: `YYYY-MM-DD HH:MM — Chunk X.Y: <brief description of what was done>`
 - Also log gate pass/fail results
+- APPEND lines only (use Edit tool to add at end) — never rewrite/recreate the file
 - This file is for `tail -f` monitoring — keep entries single-line
 
 ## Safety

@@ -12,7 +12,34 @@
     in {
       devShells.${system}.default = pkgs.mkShell {
         buildInputs = [
-          pkgs.haskellPackages.ghc
+          (pkgs.haskellPackages.ghcWithPackages (hp: [
+            hp.aeson
+            hp.bytestring
+            hp.containers
+            hp.directory
+            hp.filepath
+            hp.HsYAML
+            hp.random
+            hp.scientific
+            hp.text
+            hp.time
+            hp.vector
+            hp.amazonka
+            hp.amazonka-cloudformation
+            hp.amazonka-s3
+            hp.amazonka-sts
+            hp.amazonka-ssm
+            hp.amazonka-sns
+            hp.crypton
+            hp.memory
+            hp.lens
+            hp.conduit
+            hp.resourcet
+            hp.mtl
+            hp.transformers
+            hp.unliftio
+            hp.optparse-applicative
+          ]))
           pkgs.haskellPackages.cabal-install
           pkgs.pkg-config
           pkgs.zlib
