@@ -24,6 +24,14 @@ import Data.Word (Word8)
 import Crypto.Hash (SHA256(..), hashWith)
 import qualified Data.Aeson.Encode.Pretty as Pretty
 import qualified Data.ByteArray as BA
+import System.Directory (doesFileExist, doesDirectoryExist, listDirectory)
+import System.FilePath ((</>))
+import Data.List (sort)
+
+import System.IO.Unsafe (unsafePerformIO)
+
+import Iidy.Yaml.OValue (fromValue)
+import Iidy.Yaml.Emitter (emitYaml)
 
 type HelperFn = [Value] -> Either Text Value
 
@@ -53,11 +61,15 @@ defaultHelpers = Map.fromList
   , ("base64",       oneString "base64"       (String . encodeBase64))
   , ("urlEncode",    oneString "urlEncode"    (String . urlEncode))
   , ("sha256",       oneString "sha256"       (String . sha256Hex))
+  , ("filehash",     helperFilehash)
+  , ("filehashBase64", helperFilehashBase64)
   -- Serialization
   , ("toJson",       helperToJson)
   , ("tojson",       helperToJson)
   , ("toJsonPretty", helperToJsonPretty)
   , ("tojsonPretty", helperToJsonPretty)
+  , ("toYaml",       helperToYaml)
+  , ("toyaml",       helperToYaml)
   -- Object access
   , ("lookup",       helperLookup)
   -- Equality (for sub-expressions like (eq a b))
@@ -254,6 +266,70 @@ sha256Hex t =
       | n < 10    = toEnum (fromEnum '0' + fromIntegral n)
       | otherwise = toEnum (fromEnum 'a' + fromIntegral n - 10)
 
+-- | Calculate SHA256 hash of a file or directory (recursively).
+-- For directories, hashes each file and then hashes the concatenated hashes.
+calculateFilehash :: FilePath -> Either Text ByteString
+calculateFilehash path = unsafePerformIO $ do
+  isFile <- doesFileExist path
+  isDir  <- doesDirectoryExist path
+  if isFile
+    then do
+      contents <- BS.readFile path
+      let digest = hashWith SHA256 contents
+      pure $ Right (BA.convert digest)
+    else if isDir
+      then do
+        allFiles <- getFilesRecursive path
+        let sorted = sort allFiles
+        hashes <- mapM (\f -> do
+          contents <- BS.readFile f
+          let digest = hashWith SHA256 contents
+          pure (BA.convert digest :: ByteString)) sorted
+        let combined = BS.intercalate "," (map bytesToHex hashes)
+            finalDigest = hashWith SHA256 combined
+        pure $ Right (BA.convert finalDigest)
+      else
+        pure $ Left $ "Invalid path " <> T.pack path <> " for filehash"
+  where
+    bytesToHex :: ByteString -> ByteString
+    bytesToHex = TE.encodeUtf8 . T.pack . concatMap toHexPair . BS.unpack
+    toHexPair b = [hexLow (b `div` 16), hexLow (b `mod` 16)]
+    hexLow n
+      | n < 10    = toEnum (fromEnum '0' + fromIntegral n)
+      | otherwise = toEnum (fromEnum 'a' + fromIntegral n - 10)
+
+-- | Get all files in a directory recursively
+getFilesRecursive :: FilePath -> IO [FilePath]
+getFilesRecursive dir = do
+  entries <- listDirectory dir
+  fmap concat $ mapM (\entry -> do
+    let full = dir </> entry
+    isDir <- doesDirectoryExist full
+    if isDir
+      then getFilesRecursive full
+      else pure [full]) entries
+
+helperFilehash :: HelperFn
+helperFilehash = \case
+  [String s] -> case calculateFilehash (T.unpack s) of
+    Right bytes -> Right $ String $ T.pack $ concatMap toHexLower (BS.unpack bytes)
+    Left err -> Left err
+  [_] -> Left "filehash requires a string parameter"
+  _ -> Left "filehash requires exactly one parameter"
+  where
+    toHexLower b = [hexL (b `div` 16), hexL (b `mod` 16)]
+    hexL n
+      | n < 10    = toEnum (fromEnum '0' + fromIntegral n)
+      | otherwise = toEnum (fromEnum 'a' + fromIntegral n - 10)
+
+helperFilehashBase64 :: HelperFn
+helperFilehashBase64 = \case
+  [String s] -> case calculateFilehash (T.unpack s) of
+    Right bytes -> Right $ String $ TE.decodeUtf8 (b64Encode bytes)
+    Left err -> Left err
+  [_] -> Left "filehashBase64 requires a string parameter"
+  _ -> Left "filehashBase64 requires exactly one parameter"
+
 ------------------------------------------------------------------------
 -- Serialization helpers
 ------------------------------------------------------------------------
@@ -267,6 +343,11 @@ helperToJsonPretty :: HelperFn
 helperToJsonPretty = \case
   [val] -> Right $ String $ TE.decodeUtf8 $ BL.toStrict $ Pretty.encodePretty val
   _ -> Left "toJsonPretty requires exactly one parameter"
+
+helperToYaml :: HelperFn
+helperToYaml = \case
+  [val] -> Right $ String $ emitYaml (fromValue val) <> "\n"
+  _ -> Left "toYaml requires exactly one parameter"
 
 ------------------------------------------------------------------------
 -- Object access helpers
