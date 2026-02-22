@@ -53,12 +53,20 @@ collectGlobalRefs val = case val of
 
 rewriteObject :: Text -> Set Text -> KM.KeyMap Value -> KM.KeyMap Value
 rewriteObject prefix globals obj
+  -- Standard Fn:: format
   | Just refVal <- KM.lookup "Ref" obj, KM.size obj == 1 =
       KM.singleton "Ref" (rewriteRefValue prefix globals refVal)
   | Just attVal <- KM.lookup "Fn::GetAtt" obj, KM.size obj == 1 =
       KM.singleton "Fn::GetAtt" (rewriteGetAtt prefix globals attVal)
   | Just subVal <- KM.lookup "Fn::Sub" obj, KM.size obj == 1 =
       KM.singleton "Fn::Sub" (rewriteSub prefix globals subVal)
+  -- Short tag format (used by our resolver)
+  | Just refVal <- KM.lookup "!Ref" obj, KM.size obj == 1 =
+      KM.singleton "!Ref" (rewriteRefValue prefix globals refVal)
+  | Just attVal <- KM.lookup "!GetAtt" obj, KM.size obj == 1 =
+      KM.singleton "!GetAtt" (rewriteGetAtt prefix globals attVal)
+  | Just subVal <- KM.lookup "!Sub" obj, KM.size obj == 1 =
+      KM.singleton "!Sub" (rewriteSub prefix globals subVal)
   | otherwise =
       KM.mapWithKey (\k v -> rewriteField prefix globals k v) obj
 

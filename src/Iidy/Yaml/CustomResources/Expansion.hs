@@ -107,10 +107,21 @@ extractGlobalSections prefix globals = \case
   Object obj ->
     let sections = ["Parameters", "Outputs", "Metadata", "Mappings", "Conditions", "Transform"]
         extractSection name = case KM.lookup (Key.fromText name) obj of
-          Just section -> Just (name, rewriteRefs prefix globals section)
+          Just section -> Just (name, prefixAndRewriteSection prefix globals section)
           Nothing -> Nothing
     in Map.fromList (concatMap (maybe [] (:[]) . extractSection) sections)
   _ -> Map.empty
+
+-- | Prefix keys in a section and rewrite refs within values
+prefixAndRewriteSection :: Text -> Set Text -> Value -> Value
+prefixAndRewriteSection prefix globals = \case
+  Object obj ->
+    let prefixed = KM.fromList
+          [ (Key.fromText (prefix <> Key.toText k), rewriteRefs prefix globals v)
+          | (k, v) <- KM.toList obj
+          ]
+    in Object prefixed
+  other -> rewriteRefs prefix globals other
 
 ------------------------------------------------------------------------
 -- Deep merge

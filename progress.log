@@ -11,3 +11,4 @@
 2026-02-21 18:33 — Phase 6.6: StackArgsLoader + Main.hs wiring (11 CFN ops, 4 SSM params, get-import, completion) + Makefile. 69 modules, 81 tests
 2026-02-21 18:39 — Phase 6.7: SIGINT handler (exit 130), CLI no-args shows help with exit 0, 8 StackArgsLoader tests, gate verification. 89 tests
 2026-02-21 19:07 — Session 8: Implemented remaining stubs (lint-template, convert-stack-to-iidy, template-approval, param-review), delete-stack confirmation prompt, TemplateHash module, sha256 + JSON pretty-print TODOs fixed, 17 new tests. 75 modules, ~13,200 LOC, 106 tests
+2026-02-21 19:25 — Session 9: Help output fixed (footerDoc, hidden get-stack-instances), demo args fixed, 32 new tests (CLI parser, OValue). 138 tests. 29/31 fixtures match Rust render output

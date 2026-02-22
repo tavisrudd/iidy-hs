@@ -11,10 +11,10 @@ module Iidy.Yaml.Resolution.Context
   , VariableSource(..)
   ) where
 
-import Data.Aeson (Value)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import Iidy.Yaml.CustomResources.Params (TemplateInfo(..), ParamDef(..))
 import Iidy.Yaml.OValue (OValue)
 
 -- | Source of a variable binding (for error reporting)
@@ -26,24 +26,12 @@ data VariableSource
   | SourceExternal
   deriving stock (Show, Eq)
 
--- | Template definition for !$expand
-data TemplateInfo = TemplateInfo
-  { tiParams   :: ![ParamDef]
-  , tiRawBody  :: !Text        -- Raw YAML string for re-parsing
-  , tiLocation :: !Text        -- File path for error context
-  } deriving stock (Show, Eq)
-
--- | Parameter definition from $params section
-data ParamDef = ParamDef
-  { pdName    :: !Text
-  , pdDefault :: !(Maybe Value)
-  } deriving stock (Show, Eq)
-
 -- | Context threaded through tag resolution
 data TagContext = TagContext
   { tcVariables          :: !(Map Text OValue)
   , tcInputUri           :: !(Maybe Text)
   , tcCustomTemplateDefs :: !(Map Text TemplateInfo)
+  , tcInResourcesSection :: !Bool
   } deriving stock (Show, Eq)
 
 emptyContext :: TagContext
@@ -51,6 +39,7 @@ emptyContext = TagContext
   { tcVariables          = Map.empty
   , tcInputUri           = Nothing
   , tcCustomTemplateDefs = Map.empty
+  , tcInResourcesSection = False
   }
 
 withBindings :: Map Text OValue -> TagContext -> TagContext

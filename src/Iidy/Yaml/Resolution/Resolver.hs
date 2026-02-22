@@ -17,10 +17,11 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Vector as V
 import Iidy.Yaml.Ast
+import Iidy.Yaml.CustomResources.Expansion (expandCustomResource, ExpansionResult(..))
 import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.Handlebars.Engine (interpolate, defaultHelpers, InterpolateError(..))
 import Iidy.Yaml.JMESPath (applyJmesPath, JMESPathError(..))
-import Iidy.Yaml.Location (Position)
+import Iidy.Yaml.Location (Position, zeroPosition)
 import Iidy.Yaml.OValue
 import Iidy.Yaml.Parser (parseYaml, ParseError(..))
 import Iidy.Yaml.Resolution.Context
@@ -66,10 +67,16 @@ resolveSequence ctx items = do
   pure $ OArray vals
 
 resolveMapping :: TagContext -> [(YamlAst, YamlAst)] -> Resolve OValue
-resolveMapping ctx pairs = do
-  resolved <- traverse resolvePair pairs
-  let filtered = [(k, v) | (k, v) <- resolved, not (isSpecialKey k)]
-  pure $ OObject filtered
+resolveMapping ctx pairs
+  | tcInResourcesSection ctx && not (Map.null (tcCustomTemplateDefs ctx)) =
+      resolveResourcesMapping ctx pairs
+  | not (Map.null (tcCustomTemplateDefs ctx)) && hasResourcesKey pairs = do
+      -- This is a top-level mapping containing "Resources" — resolve with expansion
+      resolveMappingWithExpansion ctx pairs
+  | otherwise = do
+      resolved <- traverse resolvePair pairs
+      let filtered = [(k, v) | (k, v) <- resolved, not (isSpecialKey k)]
+      pure $ OObject filtered
   where
     resolvePair (keyAst, valAst) = do
       kv <- resolveAst ctx keyAst
@@ -77,6 +84,111 @@ resolveMapping ctx pairs = do
       vv <- resolveAst ctx valAst
       pure (k, vv)
     isSpecialKey k = k `elem` ["$imports", "$defs", "$envValues", "$params"]
+
+    hasResourcesKey = any (\(k, _) -> isResourcesKey k)
+    isResourcesKey (AstPlainString "Resources" _) = True
+    isResourcesKey _ = False
+
+-- | Resolve a top-level mapping that contains a "Resources" key.
+-- The Resources value is resolved with custom resource expansion, and
+-- global sections from expansions are merged into the top-level mapping.
+resolveMappingWithExpansion :: TagContext -> [(YamlAst, YamlAst)] -> Resolve OValue
+resolveMappingWithExpansion ctx pairs = do
+  -- First resolve all pairs, marking Resources for special handling
+  resolved <- traverse resolvePair pairs
+  let filtered = [(k, v) | (k, v) <- resolved, not (isSpecialKey k)]
+  -- Find the Resources section and expand custom resources
+  case extractResources filtered of
+    Nothing -> pure $ OObject filtered
+    Just (beforeRes, resources, afterRes) -> do
+      (expanded, globalSections) <- expandResources resources
+      -- Merge: before + expanded Resources + after + global sections (if not already present)
+      let existingKeys = map fst filtered
+          newGlobals = [(k, fromValue v) | (k, v) <- Map.toList globalSections, k `notElem` existingKeys]
+      pure $ OObject (beforeRes ++ [("Resources", OObject expanded)] ++ afterRes ++ newGlobals)
+  where
+    resolvePair (keyAst, valAst) = do
+      kv <- resolveAst ctx keyAst
+      let k = oValueToText kv
+      vv <- resolveAst ctx valAst
+      pure (k, vv)
+    isSpecialKey k = k `elem` ["$imports", "$defs", "$envValues", "$params"]
+
+    extractResources :: [(Text, OValue)] -> Maybe ([(Text, OValue)], [(Text, OValue)], [(Text, OValue)])
+    extractResources kvs =
+      let (before, rest) = break (\(k, _) -> k == "Resources") kvs
+      in case rest of
+           (("Resources", OObject resources) : after) -> Just (before, resources, after)
+           _ -> Nothing
+
+    expandResources :: [(Text, OValue)] -> Resolve ([(Text, OValue)], Map.Map Text Value)
+    expandResources resources = foldM expandOne ([], Map.empty) resources
+      where
+        expandOne (acc, globals) (resName, resVal) =
+          case getResourceType resVal of
+            Just typeName | Just tmplInfo <- Map.lookup typeName (tcCustomTemplateDefs ctx) -> do
+              let valAsValue = toValue resVal
+                  reparseF = buildReparse ctx
+              case expandCustomResource resName valAsValue tmplInfo reparseF of
+                Left err -> Left (ResolveError zeroPosition ("Custom resource expansion error: " <> err))
+                Right expansionResult ->
+                  let expandedResources = [(k, fromValue v) | (k, v) <- erResources expansionResult]
+                      mergedGlobals = Map.unionWith mergeGlobalSection globals (erGlobalSections expansionResult)
+                  in pure (acc ++ expandedResources, mergedGlobals)
+            _ -> pure (acc ++ [(resName, resVal)], globals)
+
+    mergeGlobalSection :: Value -> Value -> Value
+    mergeGlobalSection (Object a) (Object b) = Object (KM.union a b)
+    mergeGlobalSection _ b = b
+
+-- | Resolve a mapping that represents the Resources section.
+-- Check each resource's Type against custom template defs and expand if matched.
+resolveResourcesMapping :: TagContext -> [(YamlAst, YamlAst)] -> Resolve OValue
+resolveResourcesMapping ctx pairs = do
+  resolved <- traverse resolvePair pairs
+  let filtered = [(k, v) | (k, v) <- resolved, not (isSpecialKey k)]
+  expanded <- foldM expandIfCustom [] filtered
+  pure $ OObject expanded
+  where
+    resolvePair (keyAst, valAst) = do
+      kv <- resolveAst ctx keyAst
+      let k = oValueToText kv
+      vv <- resolveAst (ctx { tcInResourcesSection = False }) valAst
+      pure (k, vv)
+    isSpecialKey k = k `elem` ["$imports", "$defs", "$envValues", "$params"]
+
+    expandIfCustom acc (resName, resVal) =
+      case getResourceType resVal of
+        Just typeName | Just tmplInfo <- Map.lookup typeName (tcCustomTemplateDefs ctx) -> do
+          let valAsValue = toValue resVal
+              reparseF = buildReparse ctx
+          case expandCustomResource resName valAsValue tmplInfo reparseF of
+            Left err -> Left (ResolveError zeroPosition ("Custom resource expansion error: " <> err))
+            Right expansionResult ->
+              let expandedResources = [(k, fromValue v) | (k, v) <- erResources expansionResult]
+              in pure (acc ++ expandedResources)
+        _ -> pure (acc ++ [(resName, resVal)])
+
+getResourceType :: OValue -> Maybe Text
+getResourceType (OObject kvs) = case lookupO "Type" kvs of
+  Just (OString t) -> Just t
+  _ -> Nothing
+getResourceType _ = Nothing
+
+-- | Build the reparse function for expandCustomResource
+buildReparse :: TagContext -> Map.Map Text Value -> Text -> Either Text Value
+buildReparse parentCtx params rawBody =
+  case parseYaml (BL.fromStrict (TE.encodeUtf8 rawBody)) (maybe "<template>" id (tcInputUri parentCtx)) of
+    Left (ParseError _ msg) -> Left ("Parse error: " <> msg)
+    Right templateAst ->
+      let paramBindings = Map.map fromValue params
+          subCtx = parentCtx
+            { tcVariables = Map.union paramBindings (tcVariables parentCtx)
+            , tcInResourcesSection = False
+            }
+      in case resolveAst subCtx templateAst of
+           Left (ResolveError _ msg) -> Left msg
+           Right resolved -> Right (toValue resolved)
 
 ------------------------------------------------------------------------
 -- Template strings (handlebars)

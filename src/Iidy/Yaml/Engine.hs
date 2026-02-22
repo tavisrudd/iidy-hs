@@ -14,11 +14,11 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Vector as V
 import Iidy.Yaml.Ast
 import Iidy.Yaml.Handlebars.Engine (interpolate, defaultHelpers, InterpolateError(..))
 import Iidy.Yaml.Imports.Manifest
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..))
+import Iidy.Yaml.CustomResources.Params (parseParams)
 import Iidy.Yaml.OValue (OValue(..), toValue, fromValue)
 import Iidy.Yaml.Resolution.Context
 
@@ -154,9 +154,11 @@ processImports loader env tmplDefs manifest stack ((keyAst, locAst):rest) baseLo
         Right importData -> do
           -- Check for $params and store as template def if found
           let tmplDefs' = case idDoc importData of
-                Object obj | KM.member "$params" obj ->
-                  let params = parseParamDefs (KM.lookup "$params" obj)
-                  in Map.insert importKey (TemplateInfo params (idRawData importData) (idLocation importData)) tmplDefs
+                Object obj | Just paramsVal <- KM.lookup "$params" obj ->
+                  case parseParams paramsVal of
+                    Right params ->
+                      Map.insert importKey (TemplateInfo params (idRawData importData) (idLocation importData)) tmplDefs
+                    Left _err -> tmplDefs  -- Skip malformed $params
                 _ -> tmplDefs
           -- Add imported value to environment (convert from Value to OValue)
           let env' = Map.insert importKey (fromValue (idDoc importData)) env
@@ -210,18 +212,3 @@ extractKeyText = \case
   AstNull _ -> "null"
   _ -> ""
 
-------------------------------------------------------------------------
--- $params parsing
-------------------------------------------------------------------------
-
-parseParamDefs :: Maybe Value -> [ParamDef]
-parseParamDefs Nothing = []
-parseParamDefs (Just (Array arr)) = concatMap parseOneParam (V.toList arr)
-parseParamDefs (Just _) = []
-
-parseOneParam :: Value -> [ParamDef]
-parseOneParam (Object obj) =
-  case KM.lookup "Name" obj of
-    Just (String name) -> [ParamDef name (KM.lookup "Default" obj)]
-    _ -> []
-parseOneParam _ = []
