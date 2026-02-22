@@ -61,6 +61,7 @@ library
     Iidy.Explain
     Iidy.Render
     Iidy.GetImport
+    Iidy.InitStackArgs
     Iidy.Aws.Config
     Iidy.Aws.CredentialSource
     Iidy.Aws.ClientReqToken

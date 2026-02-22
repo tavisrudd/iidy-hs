@@ -31,6 +31,7 @@ import Iidy.Cli
 import Iidy.Cli.Parser (parseCliOpts)
 import Iidy.Explain (explainErrors)
 import Iidy.GetImport (runGetImport)
+import Iidy.InitStackArgs (runInitStackArgs)
 import Iidy.Output.Types (OutputData)
 import Iidy.Params.Client (paramGet, paramSet, paramGetByPath, paramGetHistory)
 import Iidy.Render (runRender)
@@ -167,7 +168,7 @@ runCommand cli = case cliCommand cli of
   CmdDemo _              -> notImplemented "demo"
   CmdLintTemplate _      -> notImplemented "lint-template"
   CmdConvertStackToIidy _ -> notImplemented "convert-stack-to-iidy"
-  CmdInitStackArgs _     -> notImplemented "init-stack-args"
+  CmdInitStackArgs args  -> runInitStackArgs args >>= exitCode
   CmdCompletion mShell   -> do
       let shellName = maybe "bash" T.unpack mShell
       hPutStrLn stderr $
