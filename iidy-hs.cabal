@@ -44,6 +44,8 @@ library
     Iidy.Yaml.Imports.Loaders.S3
     Iidy.Yaml.Imports.Loaders.Ssm
     Iidy.Yaml.Imports.Loaders.Cfn
+    Iidy.Yaml.Imports.Loaders.Http
+    Iidy.Yaml.Imports.Loaders.Git
     Iidy.Output.Types
     Iidy.Output.Renderer
     Iidy.Output.Color
@@ -56,6 +58,8 @@ library
     Iidy.Output.Renderers.Json
     Iidy.Cli
     Iidy.Cli.Parser
+    Iidy.Explain
+    Iidy.Render
     Iidy.Aws.Config
     Iidy.Aws.CredentialSource
     Iidy.Aws.ClientReqToken
@@ -78,6 +82,7 @@ library
     Iidy.Cfn.Operations.UpdateStack
     Iidy.Cfn.Operations.DeleteStack
     Iidy.Cfn.Operations.WatchStack
+    Iidy.Params.Client
   build-depends:
       base >= 4.17 && < 5
     , aeson
@@ -104,6 +109,8 @@ library
     , text
     , time
     , transformers
+    , http-conduit
+    , process
     , unliftio
     , vector
 

@@ -39,6 +39,7 @@
             hp.transformers
             hp.unliftio
             hp.optparse-applicative
+            hp.http-conduit
           ]))
           pkgs.haskellPackages.cabal-install
           pkgs.pkg-config
