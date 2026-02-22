@@ -452,6 +452,8 @@ extractMustBeGuidance msg
       "use format: [delimiter, string]"
   | "must be a sequence with format [value1, value2]" `T.isInfixOf` msg =
       "use format: [value1, value2]"
+  | "must be a sequence with exactly 2 elements" `T.isInfixOf` msg =
+      "use format: [value1, value2]"
   | "must be a sequence of objects to merge" `T.isInfixOf` msg =
       "use format: [object1, object2, ...]"
   | "must be a sequence of arrays to concatenate" `T.isInfixOf` msg =
@@ -469,8 +471,9 @@ guessExampleFromMustBe msg
   | "[delimiter, array]" `T.isInfixOf` msg = Just "!$join [\",\", [\"a\", \"b\", \"c\"]]"
   | "[delimiter, string]" `T.isInfixOf` msg = Just "!$split [\",\", \"a,b,c\"]"
   | "[value1, value2]" `T.isInfixOf` msg = Just "!$eq [\"{{env}}\", \"production\"]"
-  | "objects to merge" `T.isInfixOf` msg = Just "!$merge\n   - {key1: value1}\n   - {key2: value2}"
-  | "arrays to concatenate" `T.isInfixOf` msg = Just "!$concat\n   - [item1, item2]\n   - [item3, item4]"
+  | "exactly 2 elements" `T.isInfixOf` msg = Just "!$eq [\"{{env}}\", \"production\"]"
+  | "objects to merge" `T.isInfixOf` msg = Just "!$merge\n     - {key1: value1}\n     - {key2: value2}\n     - {key3: value3}"
+  | "arrays to concatenate" `T.isInfixOf` msg = Just "!$concat\n     - [item1, item2]\n     - [item3, item4]\n     - [item5]"
   | otherwise = Nothing
 
 -- | Extract expected type from error message (best effort).
@@ -506,7 +509,7 @@ tagExample tag = case T.toLower tag of
   "!$maplisttohash" -> "!$mapListToHash\n     items: [{\"key\": \"a\", \"value\": 1}, {\"key\": \"b\", \"value\": 2}]\n     keyPath: key\n     valuePath: value"
   "!$mergemap" -> "!$mergeMap\n     items: [1, 2, 3]\n     template: \"{key: {{item}}}\""
   "!$mapvalues" -> "!$mapValues\n     items: {a: 1, b: 2}\n     template: \"prefix-{{value}}\""
-  "!$groupby" -> "!$groupBy\n     items: [{type: a, val: 1}, {type: b, val: 2}]\n     key: type"
+  "!$groupby" -> "!$groupBy\n     items: [{name: \"a\", type: \"x\"}, {name: \"b\", type: \"x\"}]\n     key: type\n     var: group\n     template: \"{{group.key}}: {{#each group.items}}{{name}}{{/each}}\""
   "!$expand" -> "!$expand\n     template: my-template\n     params: {key: value}"
   "!$eq" -> "!$eq [\"{{env}}\", \"production\"]"
   _ -> ""

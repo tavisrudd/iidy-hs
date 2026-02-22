@@ -108,6 +108,7 @@ formatGuidance c msg =
   "  " <> ecLightBlue c <> "-> " <> msg <> ecReset c <> "\n\n"
 
 -- | Format source context with carets on the current line.
+-- Line numbers are right-aligned in a fixed 4-character gutter (matching Rust's {:4}).
 formatSourceContext :: ErrorColors -> Text -> SourceLocation -> Int -> Text -> Text
 formatSourceContext c source loc spanLen inlineDesc =
   let allLines = T.lines source
@@ -116,30 +117,27 @@ formatSourceContext c source loc spanLen inlineDesc =
       prevLine = getSourceLine allLines (lineNum - 1)
       currLine = getSourceLine allLines lineNum
       nextLine = getSourceLine allLines (lineNum + 1)
-      gutterWidth = length (show (max lineNum (lineNum + 1)))
-      padGutter n = let s = show n
-                    in T.replicate (gutterWidth - length s) " " <> T.pack s
-      emptyGutter = T.replicate gutterWidth " "
   in T.concat
     [ -- Previous line (grey)
       maybe "" (\l ->
-        "   " <> ecDarkGrey c <> padGutter (lineNum - 1) <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
+        ecDarkGrey c <> padGutter4 (lineNum - 1) <> ecReset c <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
         ) prevLine
     , -- Current line
       maybe "" (\l ->
-        "   " <> ecRed c <> padGutter lineNum <> ecReset c <> " | " <> l <> "\n"
+        ecRed c <> padGutter4 lineNum <> ecReset c <> " | " <> l <> "\n"
         ) currLine
     , -- Caret line
-      "   " <> emptyGutter <> " | " <> T.replicate (max 0 (col - 1)) " "
+      "     | " <> T.replicate (max 0 (col - 1)) " "
       <> ecRed c <> T.replicate (max 1 spanLen) "^" <> ecReset c
       <> " " <> inlineDesc <> "\n"
     , -- Next line (grey)
       maybe "" (\l ->
-        "   " <> ecDarkGrey c <> padGutter (lineNum + 1) <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
+        ecDarkGrey c <> padGutter4 (lineNum + 1) <> ecReset c <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
         ) nextLine
     ]
 
 -- | Format source context without caret line (for tag errors with missing fields).
+-- Line numbers are right-aligned in a fixed 4-character gutter (matching Rust's {:4}).
 formatSourceContextNoCarets :: ErrorColors -> Text -> SourceLocation -> Text
 formatSourceContextNoCarets c source loc =
   let allLines = T.lines source
@@ -147,20 +145,24 @@ formatSourceContextNoCarets c source loc =
       prevLine = getSourceLine allLines (lineNum - 1)
       currLine = getSourceLine allLines lineNum
       nextLine = getSourceLine allLines (lineNum + 1)
-      gutterWidth = length (show (max lineNum (lineNum + 1)))
-      padGutter n = let s = show n
-                    in T.replicate (gutterWidth - length s) " " <> T.pack s
   in T.concat
     [ maybe "" (\l ->
-        "   " <> ecDarkGrey c <> padGutter (lineNum - 1) <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
+        ecDarkGrey c <> padGutter4 (lineNum - 1) <> ecReset c <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
         ) prevLine
     , maybe "" (\l ->
-        "   " <> ecRed c <> padGutter lineNum <> ecReset c <> " | " <> l <> "\n"
+        ecRed c <> padGutter4 lineNum <> ecReset c <> " | " <> l <> "\n"
         ) currLine
     , maybe "" (\l ->
-        "   " <> ecDarkGrey c <> padGutter (lineNum + 1) <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
+        ecDarkGrey c <> padGutter4 (lineNum + 1) <> ecReset c <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
         ) nextLine
     ]
+
+-- | Right-align a line number in a fixed 4-character field (matching Rust's {:4}).
+padGutter4 :: Int -> Text
+padGutter4 n =
+  let s = show n
+      pad = max 0 (4 - length s)
+  in T.replicate pad " " <> T.pack s
 
 getSourceLine :: [Text] -> Int -> Maybe Text
 getSourceLine lns n
