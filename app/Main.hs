@@ -1,10 +1,12 @@
 module Main (main) where
 
+import Control.Exception (SomeException, IOException, catch, fromException, displayException)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Data.UUID.V4 (nextRandom)
 import qualified Data.UUID as UUID
+import Foreign.C.Types (CInt(..))
 import System.Exit (exitWith, ExitCode(..))
 import System.IO (hPutStrLn, stderr)
 import System.Posix.Signals (installHandler, sigINT, Handler(..))
@@ -40,12 +42,40 @@ import Iidy.Params.Client (paramGet, paramSet, paramGetByPath, paramGetHistory)
 import Iidy.Params.Review (paramReview)
 import Iidy.Render (runRender)
 
+-- | POSIX _exit(2) — terminates immediately without cleanup.
+-- Used for signal handlers to avoid GHC's backtrace on exitWith.
+foreign import ccall "unistd.h _exit" c_exit :: CInt -> IO ()
+
 main :: IO ()
 main = do
-  -- Install SIGINT handler for exit code 130 (matching Rust iidy behavior)
-  _ <- installHandler sigINT (CatchOnce $ exitWith (ExitFailure 130)) Nothing
-  cli <- parseCliOpts
-  runCommand cli
+  -- Install SIGINT handler: _exit(130) avoids GHC backtrace on Ctrl-C
+  _ <- installHandler sigINT (CatchOnce $ c_exit 130) Nothing
+  -- Catch unhandled exceptions (missing file, AWS errors, etc.)
+  -- and format them like Rust does, without GHC backtrace noise.
+  (do cli <- parseCliOpts
+      runCommand cli
+    ) `catch` handleUncaughtException
+
+-- | Format unhandled exceptions matching Rust's error output style.
+-- Strips GHC backtrace noise and formats IO errors cleanly.
+handleUncaughtException :: SomeException -> IO ()
+handleUncaughtException e
+  | Just ec <- fromException e = exitWith (ec :: ExitCode)
+  | Just ioe <- fromException e = do
+      -- IO exceptions: format like Rust's "No such file or directory (os error 2)"
+      let msg = displayException (ioe :: IOException)
+      hPutStrLn stderr $ "ERROR: " <> firstLine msg
+      hPutStrLn stderr "  \x2022 Check the AWS CloudFormation console for more details"
+      exitWith (ExitFailure 1)
+  | otherwise = do
+      let msg = firstLine (displayException e)
+      hPutStrLn stderr $ "ERROR: " <> msg
+      hPutStrLn stderr "  \x2022 Check the AWS CloudFormation console for more details"
+      exitWith (ExitFailure 1)
+  where
+    firstLine s = case lines s of
+      (l:_) -> l
+      []    -> s
 
 ------------------------------------------------------------------------
 -- Command dispatch
