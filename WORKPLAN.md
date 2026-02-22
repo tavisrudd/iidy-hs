@@ -1,7 +1,7 @@
 # iidy-hs Workplan
 
 **Target**: Feature-complete, behavior-identical, output-identical Haskell port. No shortcuts, no dropped features.
-**Status**: Phases 1-8 done (8.6 partial). Phase 9 verified. 226 tests, 37/37 render + 49/49 error snapshots.
+**Status**: ALL PHASES COMPLETE. 258 tests, 37/37 render + 49/49 error snapshots. Feature-complete port.
 
 ## Critical Rules
 
