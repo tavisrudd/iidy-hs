@@ -50,6 +50,7 @@ data TagParsingInfo = TagParsingInfo
   { tpiErrorId     :: !ErrorId
   , tpiTagName     :: !Text
   , tpiMessage     :: !Text
+  , tpiGuidance    :: !(Maybe Text)
   , tpiLocation    :: !SourceLocation
   , tpiSuggestion  :: !(Maybe Text)
   , tpiCaretColumn :: !Int

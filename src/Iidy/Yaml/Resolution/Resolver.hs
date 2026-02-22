@@ -37,6 +37,21 @@ type Resolve a = Either ResolveError a
 resolveError :: SrcMeta -> Text -> Resolve a
 resolveError meta msg = Left (ResolveError (smStart meta) msg)
 
+-- | Describe an OValue's type for error messages (matching Rust format)
+oValueTypeName :: OValue -> Text
+oValueTypeName = \case
+  OString _  -> "string"
+  ONumber _  -> "number"
+  OBool _    -> "boolean"
+  ONull      -> "null"
+  OArray _   -> "sequence"
+  OObject _  -> "object"
+
+-- | Create a "expected X, found Y" error message
+typeMismatchError :: SrcMeta -> Text -> OValue -> Resolve a
+typeMismatchError meta expected val =
+  resolveError meta ("expected " <> expected <> ", found " <> oValueTypeName val)
+
 ------------------------------------------------------------------------
 -- Main resolution
 ------------------------------------------------------------------------
@@ -426,14 +441,14 @@ resolveMapItems ctx meta itemsAst templateAst varName filterExpr = do
           Nothing -> Just <$> resolveAst itemCtx templateAst
         ) arr
       pure $ OArray results
-    _ -> resolveError meta "!$map items must be a sequence"
+    _ -> typeMismatchError meta "sequence" itemsVal
 
 resolveMerge :: TagContext -> SrcMeta -> MergeTag -> Resolve OValue
 resolveMerge ctx meta (MergeTag sources) = do
   vals <- traverse (resolveAst ctx) sources
   let merge acc v = case v of
         OObject kvs -> pure $ mergeOObjects acc kvs
-        _ -> resolveError meta "!$merge: all sources must be mappings"
+        _ -> typeMismatchError meta "object" v
   foldM merge (OObject []) vals
 
 mergeOObjects :: OValue -> [(Text, OValue)] -> OValue
@@ -474,7 +489,8 @@ resolveSplit ctx meta (SplitTag delimAst strAst) = do
   case (delimVal, strVal) of
     (OString d, OString s) ->
       pure $ OArray $ map OString $ T.splitOn d s
-    _ -> resolveError meta "!$split requires string arguments"
+    (OString _, v) -> typeMismatchError meta "string" v
+    (v, _)          -> typeMismatchError meta "string" v
 
 resolveJoin :: TagContext -> SrcMeta -> JoinTag -> Resolve OValue
 resolveJoin ctx meta (JoinTag delimAst arrAst) = do
@@ -483,7 +499,8 @@ resolveJoin ctx meta (JoinTag delimAst arrAst) = do
   case (delimVal, arrVal) of
     (OString d, OArray arr) ->
       pure $ OString $ T.intercalate d [oValueToText v | v <- arr]
-    _ -> resolveError meta "!$join requires [string, sequence]"
+    (OString _, v) -> typeMismatchError meta "sequence" v
+    (v, _)          -> typeMismatchError meta "string" v
 
 resolveConcatMap :: TagContext -> SrcMeta -> ConcatMapTag -> Resolve OValue
 resolveConcatMap ctx meta (ConcatMapTag items template var filterExpr) = do
@@ -502,7 +519,7 @@ resolveMergeMap ctx meta (MergeMapTag items template var) = do
     OArray arr -> do
       let merge acc v = case v of
             OObject kvs -> pure $ mergeOObjects acc kvs
-            _ -> resolveError meta "!$mergeMap: items must resolve to mappings"
+            _ -> typeMismatchError meta "object" v
       foldM merge (OObject []) arr
     _ -> resolveError meta "!$mergeMap: unexpected result"
 
@@ -523,7 +540,7 @@ resolveMapListToHash ctx meta (MapListToHashTag items template var filterExpr) =
     extractPair (OObject kvs) = case kvs of
       [(k, v)] -> pure (k, v)
       _ -> resolveError meta "!$mapListToHash: object item must have exactly one key"
-    extractPair v = resolveError meta $ "!$mapListToHash: invalid item: " <> T.pack (show v)
+    extractPair v = resolveError meta $ "expected 2-element sequence or object, found " <> oValueTypeName v
 
 resolveMapValues :: TagContext -> SrcMeta -> MapValuesTag -> Resolve OValue
 resolveMapValues ctx meta (MapValuesTag itemsAst templateAst var) = do
@@ -537,7 +554,7 @@ resolveMapValues ctx meta (MapValuesTag itemsAst templateAst var) = do
         pure (k, resolved)
         ) kvs
       pure $ OObject pairs
-    _ -> resolveError meta "!$mapValues items must be a mapping"
+    _ -> typeMismatchError meta "object" itemsVal
 
 resolveGroupBy :: TagContext -> SrcMeta -> GroupByTag -> Resolve OValue
 resolveGroupBy ctx meta (GroupByTag itemsAst keyAst var _templateAst) = do
@@ -554,7 +571,7 @@ resolveGroupBy ctx meta (GroupByTag itemsAst keyAst var _templateAst) = do
         pure $ insertO k (OArray (existing ++ [item])) acc
         ) [] arr
       pure $ OObject groups
-    _ -> resolveError meta "!$groupBy items must be a sequence"
+    _ -> typeMismatchError meta "sequence" itemsVal
 
 resolveFromPairs :: TagContext -> SrcMeta -> FromPairsTag -> Resolve OValue
 resolveFromPairs ctx meta (FromPairsTag sourceAst) = do
@@ -563,12 +580,12 @@ resolveFromPairs ctx meta (FromPairsTag sourceAst) = do
     OArray arr -> do
       pairs <- traverse extractPair arr
       pure $ OObject pairs
-    _ -> resolveError meta "!$fromPairs requires a sequence"
+    _ -> typeMismatchError meta "sequence" sourceVal
   where
     extractPair (OArray pair)
       | length pair == 2 =
           pure (oValueToText (pair !! 0), pair !! 1)
-    extractPair _ = resolveError meta "!$fromPairs: each item must be a 2-element sequence"
+    extractPair v = typeMismatchError meta "sequence" v
 
 resolveToYamlString :: TagContext -> SrcMeta -> ToYamlStringTag -> Resolve OValue
 resolveToYamlString ctx _meta (ToYamlStringTag dataAst) = do
@@ -583,7 +600,7 @@ resolveParseYaml ctx meta (ParseYamlTag strAst) = do
       case parseYaml (BL.fromStrict (TE.encodeUtf8 s)) "<parseYaml>" of
         Right ast -> Right (fromValue (astToValueRaw ast))
         Left (ParseError _ msg) -> resolveError meta $ "!$parseYaml: " <> msg
-    _ -> resolveError meta "!$parseYaml requires a string"
+    _ -> typeMismatchError meta "string" val
 
 resolveToJsonString :: TagContext -> SrcMeta -> ToJsonStringTag -> Resolve OValue
 resolveToJsonString ctx _meta (ToJsonStringTag dataAst) = do
@@ -597,7 +614,7 @@ resolveParseJson ctx meta (ParseJsonTag strAst) = do
     OString s -> case Aeson.eitherDecodeStrict' (TE.encodeUtf8 s) of
       Right v  -> pure (fromValue v)
       Left err -> resolveError meta $ "!$parseJson: " <> T.pack err
-    _ -> resolveError meta "!$parseJson requires a string"
+    _ -> typeMismatchError meta "string" val
 
 resolveEscape :: TagContext -> SrcMeta -> EscapeTag -> Resolve OValue
 resolveEscape _ctx _meta (EscapeTag contentAst) =

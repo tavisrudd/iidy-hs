@@ -47,43 +47,46 @@ noColors = ErrorColors "" "" "" "" "" "" ""
 formatError :: ErrorColors -> Text -> EnhancedPreprocessingError -> Text
 formatError c source = \case
   VariableNotFoundError info ->
-    formatHeader c "Variable error" (vnfVariable info <> " not found") (vnfLocation info) (vnfErrorId info)
-    <> formatSourceContext c source (vnfLocation info) (T.length (vnfVariable info)) ("not defined")
-    <> formatSuggestions c "Available variables" (vnfAvailableVars info)
-    <> formatDidYouMean c (vnfSuggestions info)
+    formatHeader c "Variable error" ("'" <> vnfVariable info <> "' not found") (vnfLocation info) (vnfErrorId info)
+    <> formatGuidance c "variable not defined in current scope"
+    <> formatSourceContext c source (vnfLocation info) (T.length (vnfVariable info) + 2) "variable not defined"
+    <> formatAvailableVars c (vnfAvailableVars info)
     <> formatFooter c (vnfErrorId info)
 
   TypeMismatchError info ->
-    formatHeader c "Type error" (tmiContext info) (tmiLocation info) (tmiErrorId info)
-    <> formatGuidance c ("expected " <> tmiExpected info <> ", found " <> tmiFound info)
-    <> formatSourceContext c source (tmiLocation info) 1 (tmiFound info)
-    <> formatHelp c (tmiHelp info)
+    formatHeader c "Type error" ("expected " <> tmiExpected info <> ", found " <> tmiFound info) (tmiLocation info) (tmiErrorId info)
+    <> formatGuidance c "data type mismatch"
+    <> formatSourceContext c source (tmiLocation info) 8 ("expected " <> tmiExpected info)
+    <> formatTypeMismatchHelp c (tmiExpected info) (tmiFound info) (tmiHelp info)
     <> formatFooter c (tmiErrorId info)
 
   CfnValidationError info ->
     formatHeader c "CloudFormation error" (cviMessage info) (cviLocation info) (cviErrorId info)
-    <> formatGuidance c (cviHelpText info)
-    <> formatSourceContext c source (cviLocation info) (T.length (cviTagName info)) (cviMessage info)
+    <> formatGuidance c "invalid CloudFormation intrinsic function"
+    <> formatSourceContext c source (cviLocation info) 4 "invalid CloudFormation tag"
+    <> formatCfnHelp c (cviTagName info) (cviHelpText info)
     <> formatFooter c (cviErrorId info)
 
   YamlSyntaxError info ->
     formatHeader c "Syntax error" (ysiShortMessage info) (ysiLocation info) (ysiErrorId info)
     <> formatGuidance c (ysiGuidance info)
     <> formatSourceContext c source (ysiLocation info) 1 (ysiShortMessage info)
-    <> formatHelp c (ysiFixHint info)
+    <> formatFixHint c (ysiFixHint info)
     <> formatExample c (ysiExample info)
     <> formatFooter c (ysiErrorId info)
 
   TagParsingError info ->
     formatHeader c "Tag error" (tpiMessage info) (tpiLocation info) (tpiErrorId info)
-    <> formatSourceContext c source (tpiLocation info) (tpiSpanLen info) (tpiMessage info)
-    <> formatHelp c (tpiSuggestion info)
+    <> maybe "" (formatGuidance c) (tpiGuidance info)
+    <> formatSourceContextNoCarets c source (tpiLocation info)
+    <> formatExample c (tpiSuggestion info)
     <> formatFooter c (tpiErrorId info)
 
   LookupQueryError info ->
     formatHeader c "Lookup error" (lqiMessage info) (lqiLocation info) (lqiErrorId info)
+    <> formatGuidance c ("query failed on variable '" <> lqiVariablePath info <> "'")
     <> formatSourceContext c source (lqiLocation info) 1 (lqiMessage info)
-    <> formatSuggestions c "Available keys" (lqiAvailableKeys info)
+    <> formatAvailableKeys c (lqiAvailableKeys info)
     <> formatFooter c (lqiErrorId info)
 
 ------------------------------------------------------------------------
@@ -104,6 +107,7 @@ formatGuidance :: ErrorColors -> Text -> Text
 formatGuidance c msg =
   "  " <> ecLightBlue c <> "-> " <> msg <> ecReset c <> "\n\n"
 
+-- | Format source context with carets on the current line.
 formatSourceContext :: ErrorColors -> Text -> SourceLocation -> Int -> Text -> Text
 formatSourceContext c source loc spanLen inlineDesc =
   let allLines = T.lines source
@@ -112,26 +116,49 @@ formatSourceContext c source loc spanLen inlineDesc =
       prevLine = getSourceLine allLines (lineNum - 1)
       currLine = getSourceLine allLines lineNum
       nextLine = getSourceLine allLines (lineNum + 1)
-      gutterWidth = length (show (lineNum + 1))
+      gutterWidth = length (show (max lineNum (lineNum + 1)))
       padGutter n = let s = show n
                     in T.replicate (gutterWidth - length s) " " <> T.pack s
       emptyGutter = T.replicate gutterWidth " "
   in T.concat
     [ -- Previous line (grey)
       maybe "" (\l ->
-        ecDarkGrey c <> padGutter (lineNum - 1) <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
+        "   " <> ecDarkGrey c <> padGutter (lineNum - 1) <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
         ) prevLine
-    , -- Current line (highlighted line number)
+    , -- Current line
       maybe "" (\l ->
-        ecRed c <> padGutter lineNum <> ecReset c <> " | " <> l <> "\n"
+        "   " <> ecRed c <> padGutter lineNum <> ecReset c <> " | " <> l <> "\n"
         ) currLine
     , -- Caret line
-      emptyGutter <> " | " <> T.replicate (max 0 (col - 1)) " "
+      "   " <> emptyGutter <> " | " <> T.replicate (max 0 (col - 1)) " "
       <> ecRed c <> T.replicate (max 1 spanLen) "^" <> ecReset c
       <> " " <> inlineDesc <> "\n"
     , -- Next line (grey)
       maybe "" (\l ->
-        ecDarkGrey c <> padGutter (lineNum + 1) <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
+        "   " <> ecDarkGrey c <> padGutter (lineNum + 1) <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
+        ) nextLine
+    ]
+
+-- | Format source context without caret line (for tag errors with missing fields).
+formatSourceContextNoCarets :: ErrorColors -> Text -> SourceLocation -> Text
+formatSourceContextNoCarets c source loc =
+  let allLines = T.lines source
+      lineNum = srcLocLine loc  -- 1-based
+      prevLine = getSourceLine allLines (lineNum - 1)
+      currLine = getSourceLine allLines lineNum
+      nextLine = getSourceLine allLines (lineNum + 1)
+      gutterWidth = length (show (max lineNum (lineNum + 1)))
+      padGutter n = let s = show n
+                    in T.replicate (gutterWidth - length s) " " <> T.pack s
+  in T.concat
+    [ maybe "" (\l ->
+        "   " <> ecDarkGrey c <> padGutter (lineNum - 1) <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
+        ) prevLine
+    , maybe "" (\l ->
+        "   " <> ecRed c <> padGutter lineNum <> ecReset c <> " | " <> l <> "\n"
+        ) currLine
+    , maybe "" (\l ->
+        "   " <> ecDarkGrey c <> padGutter (lineNum + 1) <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
         ) nextLine
     ]
 
@@ -140,29 +167,49 @@ getSourceLine lns n
   | n >= 1 && n <= length lns = Just (lns !! (n - 1))
   | otherwise = Nothing
 
-formatSuggestions :: ErrorColors -> Text -> [Text] -> Text
-formatSuggestions _ _ [] = ""
-formatSuggestions c label items =
-  "\n  " <> ecLightBlue c <> label <> ": " <> ecReset c
-  <> T.intercalate ", " items <> "\n"
+-- | Format available variables list (trailing \n for blank line before footer).
+formatAvailableVars :: ErrorColors -> [Text] -> Text
+formatAvailableVars _ [] = ""
+formatAvailableVars c vars =
+  "\n   " <> ecLightBlue c <> "available variables: " <> ecReset c
+  <> T.intercalate ", " vars <> "\n\n"
 
-formatDidYouMean :: ErrorColors -> [Text] -> Text
-formatDidYouMean _ [] = ""
-formatDidYouMean c suggestions =
-  "  " <> ecLightBlue c <> "Did you mean: " <> ecReset c
-  <> T.intercalate " or " suggestions <> "?\n"
+-- | Format available keys list (trailing \n for blank line before footer).
+formatAvailableKeys :: ErrorColors -> [Text] -> Text
+formatAvailableKeys _ [] = ""
+formatAvailableKeys c keys =
+  "\n   " <> ecLightBlue c <> "available keys: " <> ecReset c
+  <> T.intercalate ", " keys <> "\n\n"
 
-formatHelp :: ErrorColors -> Maybe Text -> Text
-formatHelp _ Nothing = ""
-formatHelp c (Just help) =
-  "\n  " <> ecLightBlue c <> "Help: " <> ecReset c <> help <> "\n"
+-- | Format type mismatch help text (trailing \n for blank line before footer).
+formatTypeMismatchHelp :: ErrorColors -> Text -> Text -> Maybe Text -> Text
+formatTypeMismatchHelp _c expected found extraHelp =
+  let mainHelp = "\n   " <> "expected " <> expected <> ", found " <> found <> "\n"
+      extra = case extraHelp of
+        Nothing -> ""
+        Just h  -> "   " <> h <> "\n"
+  in mainHelp <> extra <> "\n"
 
+-- | Format CloudFormation help text (trailing \n for blank line before footer).
+formatCfnHelp :: ErrorColors -> Text -> Text -> Text
+formatCfnHelp _c _tagName helpText =
+  "\n   " <> helpText <> "\n\n"
+
+-- | Format fix hint.
+formatFixHint :: ErrorColors -> Maybe Text -> Text
+formatFixHint _ Nothing = ""
+formatFixHint _c (Just hint) =
+  "\n   " <> hint <> "\n"
+
+-- | Format example block (3-space indent, matching Rust format).
 formatExample :: ErrorColors -> Maybe Text -> Text
 formatExample _ Nothing = ""
-formatExample c (Just ex) =
-  "\n  " <> ecLightBlue c <> "Example:" <> ecReset c <> "\n"
-  <> "  " <> ex <> "\n"
+formatExample _ (Just ex)
+  | T.null ex = ""
+  | otherwise =
+      "\n   example:\n   " <> ex <> "\n"
 
+-- | Format footer. The leading blank line is controlled by preceding sections.
 formatFooter :: ErrorColors -> ErrorId -> Text
 formatFooter c eid =
-  "\n  " <> ecGrey c <> "For more info: iidy explain " <> showErrorId eid <> ecReset c <> "\n"
+  "   " <> ecGrey c <> "For more info: iidy explain " <> showErrorId eid <> ecReset c <> "\n"
