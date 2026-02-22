@@ -350,7 +350,14 @@ adjustLocationForTag source loc msg =
               Nothing -> loc
       -- Type mismatch errors: use Rust-style find_tag_column logic
       | isTypeMismatchError msg ->
-          adjustForTypeMismatch allLines loc
+          adjustForTypeMismatch allLines loc msg
+      -- Variable not found: search for variable reference pattern
+      | "Variable not found: " `T.isPrefixOf` msg ->
+          let rest = T.drop (T.length "Variable not found: ") msg
+              varPath = fst (T.breakOn ". Available: " rest)
+          in case findVariableColumn allLines lineNum varPath of
+            Just (ln, col) -> loc { srcLocLine = ln, srcLocColumn = col }
+            Nothing -> loc
       | otherwise -> loc
 
 -- | Check if message is a type mismatch error
@@ -360,20 +367,25 @@ isTypeMismatchError msg = "expected " `T.isPrefixOf` msg && ", found " `T.isInfi
 -- | Adjust location for type mismatch errors.
 -- Searches for the tag on the source line, then uses tag-specific logic
 -- to find the correct column (matching Rust's find_tag_column behavior).
-adjustForTypeMismatch :: [Text] -> SourceLocation -> SourceLocation
-adjustForTypeMismatch allLines loc =
+adjustForTypeMismatch :: [Text] -> SourceLocation -> Text -> SourceLocation
+adjustForTypeMismatch allLines loc msg =
   let lineNum = srcLocLine loc
       -- First: find which line has the tag
       tagInfo = findAnyTagOnLine allLines lineNum
             <|> findAnyTagOnLine allLines (lineNum - 1)
   in case tagInfo of
     Just (tagLn, tagCol0, tagText) ->
-      -- Try searching for field keyword on subsequent lines
+      -- Try searching for field keyword on subsequent lines (block-style)
       case findFieldColumn allLines tagLn tagText of
         Just (fieldLn, fieldCol) -> loc { srcLocLine = fieldLn, srcLocColumn = fieldCol }
         Nothing ->
-          -- Fallback: point just past the tag on its line
-          loc { srcLocLine = tagLn, srcLocColumn = tagCol0 + T.length tagText + 1 }
+          -- Try flow-style position adjustment on the tag line
+          let tagLine = allLines !! (tagLn - 1)
+          in case findFlowColumn tagLine tagText msg of
+            Just flowCol -> loc { srcLocLine = tagLn, srcLocColumn = flowCol }
+            Nothing ->
+              -- Fallback: point just past the tag on its line
+              loc { srcLocLine = tagLn, srcLocColumn = tagCol0 + T.length tagText + 1 }
     Nothing -> loc
 
 -- | Find a !$ tag on a line, returning (lineNum, 0-based col, tag text).
@@ -408,8 +420,83 @@ findFieldColumn allLines tagLn tagText
         ((n, Just col):_) -> Just (n, col)
         _ -> Nothing
 
+-- | Find the column for flow-style tag arguments on the same line.
+-- Handles !$join [delim, array] patterns.
+findFlowColumn :: Text -> Text -> Text -> Maybe Int
+findFlowColumn tagLine tagText msg
+  | tagLower == "!$join" =
+      if "expected string" `T.isPrefixOf` msg
+      then -- Delimiter (first arg): find '[' + 1
+           fmap (+ 1) (findSubstring "[" tagLine)
+      else -- Sequence (second arg): find after first comma
+           findSecondBracketArg tagLine
+  | otherwise = Nothing
+  where
+    tagLower = T.toLower tagText
+
+-- | Find the second argument in a bracket expression [first, second].
+-- Returns 0-based column of the second argument.
+findSecondBracketArg :: Text -> Maybe Int
+findSecondBracketArg line = do
+  bracketPos <- findSubstring "[" line
+  let after = T.drop (bracketPos + 1) line
+      -- Skip to the comma, handling quoted strings
+      commaIdx = findUnquotedComma after
+  case commaIdx of
+    Just ci ->
+      let afterComma = T.drop (ci + 1) after
+          ws = T.length (T.takeWhile (== ' ') afterComma)
+      in Just (bracketPos + 1 + ci + 1 + ws + 1)  -- +1 for Rust compat
+    Nothing -> Nothing
+
+-- | Find unquoted comma position in text.
+findUnquotedComma :: Text -> Maybe Int
+findUnquotedComma = go 0 False
+  where
+    go _ _ t | T.null t = Nothing
+    go i inQ t =
+      let c = T.head t
+          rest = T.tail t
+      in if inQ
+         then if c == '"' then go (i+1) False rest else go (i+1) True rest
+         else case c of
+           ',' -> Just i
+           '"' -> go (i+1) True rest
+           _   -> go (i+1) False rest
+
+-- | Find column after '[' and whitespace.
+findAfterBracket :: Text -> Maybe Int
+findAfterBracket line = do
+  bracketPos <- findSubstring "[" line
+  let after = T.drop (bracketPos + 1) line
+      ws = T.length (T.takeWhile (== ' ') after)
+  Just (bracketPos + 1 + ws + 1)
+
+-- | Find column after first comma and whitespace.
+findAfterFirstComma :: Text -> Maybe Int
+findAfterFirstComma line = do
+  commaPos <- findSubstring "," line
+  let after = T.drop (commaPos + 1) line
+      ws = T.length (T.takeWhile (== ' ') after)
+  Just (commaPos + 1 + ws + 1)
+
+-- | Find the position of a variable reference in source lines.
+-- Searches for patterns like "!$ variable", "!$variable", "{{variable}}".
+-- Returns (lineNum, column) matching Rust's find_variable_column.
+findVariableColumn :: [Text] -> Int -> Text -> Maybe (Int, Int)
+findVariableColumn allLines lineNum varPath
+  | lineNum >= 1 && lineNum <= length allLines =
+      let line = allLines !! (lineNum - 1)
+      in case findSubstring ("!$ " <> varPath) line of
+           Just col -> Just (lineNum, col + 4)  -- skip "!$ " + 1 for Rust compat
+           Nothing -> case findSubstring ("!$" <> varPath) line of
+             Just col -> Just (lineNum, col + 3)
+             Nothing -> case findSubstring ("{{" <> varPath <> "}}") line of
+               Just col -> Just (lineNum, col + 2)
+               Nothing -> Nothing
+  | otherwise = Nothing
+
 -- | Find the column after a keyword and whitespace (Rust-compatible).
--- Returns the 0-based position of the first non-whitespace char after the keyword value.
 findAfterKeyword :: Text -> Text -> Maybe Int
 findAfterKeyword line keyword =
   case findSubstring keyword line of

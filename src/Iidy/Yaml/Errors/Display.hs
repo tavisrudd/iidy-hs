@@ -49,7 +49,7 @@ formatError c source = \case
   VariableNotFoundError info ->
     formatHeader c "Variable error" ("'" <> vnfVariable info <> "' not found") (vnfLocation info) (vnfErrorId info)
     <> formatGuidance c "variable not defined in current scope"
-    <> formatSourceContext c source (vnfLocation info) (T.length (vnfVariable info) + 2) "variable not defined"
+    <> formatSourceContext c source (vnfLocation info) (T.length (vnfVariable info)) "variable not defined"
     <> formatAvailableVars c (vnfAvailableVars info)
     <> formatFooter c (vnfErrorId info)
 
@@ -117,6 +117,10 @@ formatSourceContext c source loc spanLen inlineDesc =
       prevLine = getSourceLine allLines (lineNum - 1)
       currLine = getSourceLine allLines lineNum
       nextLine = getSourceLine allLines (lineNum + 1)
+      -- Skip carets when column is past the end of the line content
+      showCarets = case currLine of
+        Just l  -> col <= T.length l
+        Nothing -> False
   in T.concat
     [ -- Previous line (grey)
       maybe "" (\l ->
@@ -126,10 +130,12 @@ formatSourceContext c source loc spanLen inlineDesc =
       maybe "" (\l ->
         ecRed c <> padGutter4 lineNum <> ecReset c <> " | " <> l <> "\n"
         ) currLine
-    , -- Caret line
-      "     | " <> T.replicate (max 0 (col - 1)) " "
-      <> ecRed c <> T.replicate (max 1 spanLen) "^" <> ecReset c
-      <> " " <> inlineDesc <> "\n"
+    , -- Caret line (only when column is within the line)
+      if showCarets
+      then "     | " <> T.replicate (max 0 (col - 1)) " "
+           <> ecRed c <> T.replicate (max 1 spanLen) "^" <> ecReset c
+           <> " " <> inlineDesc <> "\n"
+      else ""
     , -- Next line (grey)
       maybe "" (\l ->
         ecDarkGrey c <> padGutter4 (lineNum + 1) <> ecReset c <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
