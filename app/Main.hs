@@ -21,7 +21,7 @@ import Iidy.Cfn.Operations.ConvertStack (convertStackToIidy)
 import Iidy.Cfn.Operations.CreateOrUpdate (createOrUpdate)
 import Iidy.Cfn.Operations.CreateStack (createStack)
 import Iidy.Cfn.Operations.DeleteStack (deleteStack)
-import Iidy.Cfn.Operations.DescribeStack (describeStack)
+import Iidy.Cfn.Operations.DescribeStack (describeStack, convertEvent)
 import Iidy.Cfn.Operations.DescribeStackDrift (detectStackDrift)
 import Iidy.Cfn.Operations.EstimateCost (estimateCost)
 import Iidy.Cfn.Operations.GetStackTemplate (getStackTemplate)
@@ -38,7 +38,8 @@ import Iidy.Demo (runDemo)
 import Iidy.Explain (explainErrors)
 import Iidy.GetImport (runGetImport)
 import Iidy.InitStackArgs (runInitStackArgs)
-import Iidy.Output.Types (OutputData)
+import Iidy.Output.Manager (mkOutputDispatch, renderOutput)
+import Iidy.Output.Types (OutputData(..), StackEventWithTiming(..))
 import Iidy.Params.Client (paramGet, paramSet, paramGetByPath, paramGetHistory)
 import Iidy.Params.Review (paramReview)
 import Iidy.Render (runRender)
@@ -128,14 +129,19 @@ runCommand cli = case cliCommand cli of
   -- Read-only CloudFormation operations
   CmdDescribeStack args -> do
       ctx <- createSimpleContext cli OpDescribeStack
+      dispatch <- mkOutputDispatch (cliGlobalOpts cli)
       result <- describeStack ctx (daStackname args) (daEvents args)
       case result of
         Left err    -> dieTxt err
-        Right datas -> mapM_ (TIO.putStrLn . showOutputData) datas
+        Right datas -> mapM_ (renderOutput dispatch) datas
 
   CmdWatchStack args -> do
       ctx <- createSimpleContext cli OpWatchStack
-      result <- watchStack ctx (waStackname args) (waInactivityTimeout args) TIO.putStrLn
+      dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+      let onEvents cfnEvents = do
+            let converted = map (\e -> StackEventWithTiming (convertEvent e) Nothing) cfnEvents
+            renderOutput dispatch (OdNewStackEvents converted)
+      result <- watchStack ctx (waStackname args) (waInactivityTimeout args) onEvents
       case result of
         Left err -> dieTxt err
         Right rc -> exitCode rc
@@ -163,11 +169,12 @@ runCommand cli = case cliCommand cli of
 
   CmdListStacks args -> do
       ctx <- createSimpleContext cli OpListStacks
+      dispatch <- mkOutputDispatch (cliGlobalOpts cli)
       let tagFilters = if null (laTagFilter args) then Nothing else Just (laTagFilter args)
       result <- listStacks ctx tagFilters
       case result of
         Left err    -> dieTxt err
-        Right datas -> mapM_ (TIO.putStrLn . showOutputData) datas
+        Right datas -> mapM_ (renderOutput dispatch) datas
 
   -- SSM Parameter commands
   CmdParam pcmd -> do
@@ -331,9 +338,6 @@ dieTxt msg = do
   TIO.hPutStrLn stderr $ "iidy-hs: " <> msg
   exitWith (ExitFailure 1)
 
--- | Basic display for OutputData (used for describe/list operations)
-showOutputData :: OutputData -> Text
-showOutputData = T.pack . show
 
 ------------------------------------------------------------------------
 -- Shell completion scripts

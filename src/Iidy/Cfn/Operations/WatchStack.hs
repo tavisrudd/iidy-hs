@@ -48,16 +48,16 @@ allTerminalStatuses =
 
 -- | Watch a CloudFormation stack operation until it reaches a terminal state.
 --
--- Polls for events and calls the callback with formatted event summaries.
+-- Polls for events and calls the callback with each batch of new events.
 -- Returns @Right 0@ when watching completes (regardless of the final status,
 -- since watch merely observes).  Returns @Left err@ if the stack is not found.
 watchStack
   :: CfnContext
-  -> Text           -- ^ stack name
-  -> Int            -- ^ inactivity timeout in seconds
-  -> (Text -> IO ()) -- ^ callback for new events (event summary text)
+  -> Text                    -- ^ stack name
+  -> Int                     -- ^ inactivity timeout in seconds
+  -> ([CF.StackEvent] -> IO ()) -- ^ callback for each batch of new events
   -> IO (Either Text Int)
-watchStack ctx stackName _timeoutSeconds onEvent = do
+watchStack ctx stackName _timeoutSeconds onEvents = do
   -- 1. Verify stack exists
   mStack <- getStack ctx stackName
   case mStack of
@@ -74,14 +74,12 @@ watchStack ctx stackName _timeoutSeconds onEvent = do
 
       -- 4. Poll until terminal status, firing callback for each new event batch
       let pollCfg = defaultPollConfig
-            { pcOnNewEvents = \newEvents ->
-                mapM_ (onEvent . formatEvent) newEvents
+            { pcOnNewEvents = \newEvents -> do
+                -- Filter out already-seen events (first call may overlap with initial fetch)
+                let fresh = filter (\e -> e.eventId `notElem` seenIds) newEvents
+                if null fresh then pure () else onEvents fresh
             }
-      finalStatus <- pollForCompletion ctx sId allTerminalStatuses pollCfg { pcOnNewEvents = \newEvents -> do
-          -- Filter out already-seen events (first call may overlap with initial fetch)
-          let fresh = filter (\e -> e.eventId `notElem` seenIds) newEvents
-          mapM_ (onEvent . formatEvent) fresh
-        }
+      finalStatus <- pollForCompletion ctx sId allTerminalStatuses pollCfg
 
       -- 5. If DELETE_COMPLETE, nothing more to collect; otherwise collect contents
       if finalStatus == "DELETE_COMPLETE"

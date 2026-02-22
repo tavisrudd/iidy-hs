@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 module Iidy.Cfn.Operations.DescribeStack
   ( describeStack
+  , convertEvent
   ) where
 
 import Data.Maybe (fromMaybe)
