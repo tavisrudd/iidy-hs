@@ -384,9 +384,25 @@ adjustForTypeMismatch allLines loc msg =
           in case findFlowColumn tagLine tagText msg of
             Just flowCol -> loc { srcLocLine = tagLn, srcLocColumn = flowCol }
             Nothing ->
-              -- Fallback: point just past the tag on its line
-              loc { srcLocLine = tagLn, srcLocColumn = tagCol0 + T.length tagText + 1 }
+              -- Fallback: use Rust-style tag_fallback with family-specific offset
+              loc { srcLocLine = tagLn, srcLocColumn = tagCol0 + tagFallbackOffset tagText }
     Nothing -> loc
+
+-- | Get the fallback offset for a tag, matching Rust's tag_fallback patterns.
+-- Rust matches tag families in order: !$split, !$join, !$groupBy, !$mapListToHash,
+-- !$fromPairs, !$merge, !$map. Each uses find(short_tag) + offset.
+-- The offset = short_tag_length + 1.
+tagFallbackOffset :: Text -> Int
+tagFallbackOffset tagText
+  | "!$split" `T.isPrefixOf` tt     = 8    -- !$split (7) + 1
+  | "!$join" `T.isPrefixOf` tt      = 7    -- !$join (6) + 1
+  | "!$groupBy" `T.isPrefixOf` tt   = 9    -- !$groupBy (9) + 0
+  | "!$mapListToHash" `T.isPrefixOf` tt = 15 -- !$mapListToHash (15) + 0
+  | "!$fromPairs" `T.isPrefixOf` tt = 12   -- !$fromPairs (11) + 1
+  | "!$merge" `T.isPrefixOf` tt     = 8    -- !$merge (7) + 1 (matches !$mergeMap)
+  | "!$map" `T.isPrefixOf` tt       = 6    -- !$map (5) + 1 (matches !$mapValues)
+  | otherwise = T.length tagText + 1
+  where tt = tagText
 
 -- | Find a !$ tag on a line, returning (lineNum, 0-based col, tag text).
 findAnyTagOnLine :: [Text] -> Int -> Maybe (Int, Int, Text)

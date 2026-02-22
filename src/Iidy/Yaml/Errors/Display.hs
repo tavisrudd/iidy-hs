@@ -132,9 +132,11 @@ formatSourceContext c source loc spanLen inlineDesc =
         ) currLine
     , -- Caret line (only when column is within the line)
       if showCarets
-      then "     | " <> T.replicate (max 0 (col - 1)) " "
-           <> ecRed c <> T.replicate (max 1 spanLen) "^" <> ecReset c
-           <> " " <> inlineDesc <> "\n"
+      then let lineLen = maybe 0 T.length currLine
+               effectiveSpan = max 1 (min spanLen (lineLen - col + 1))
+           in "     | " <> T.replicate (max 0 (col - 1)) " "
+              <> ecRed c <> T.replicate effectiveSpan "^" <> ecReset c
+              <> " " <> inlineDesc <> "\n"
       else ""
     , -- Next line (grey)
       maybe "" (\l ->
