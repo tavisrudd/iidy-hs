@@ -208,13 +208,13 @@ After 7.1, compare each snapshot and adjust:
 ### 7.3: Fix 11 UNEXPECTED_OK validation gaps
 
 Add validation checks in resolver for:
-- [ ] Unknown !$ tags (typo detection)
-- [ ] Unknown fields in tag mappings
-- [ ] CFN intrinsic validation (!Ref, !Join, !GetAtt args)
-- [ ] Mutual exclusivity (query vs jmespath)
-- [ ] Non-string items in !$join
-- [ ] Missing keys in query results
-- [ ] Handlebars variable not in scope
+- [x] Unknown !$ tags (typo detection)
+- [x] Unknown fields in tag mappings
+- [x] CFN intrinsic validation (!Ref, !Join, !GetAtt args)
+- [x] Mutual exclusivity (query vs jmespath)
+- [x] Non-string items in !$join
+- [x] Missing keys in query results
+- [x] Handlebars variable not in scope
 
 ### 7.4: Final verification — 49/49 PASS
 
