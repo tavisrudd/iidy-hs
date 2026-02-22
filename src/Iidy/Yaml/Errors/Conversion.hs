@@ -376,7 +376,13 @@ adjustForTypeMismatch allLines loc msg =
   in case tagInfo of
     Just (tagLn, tagCol0, tagText) ->
       -- Try searching for field keyword on subsequent lines (block-style)
-      case findFieldColumn allLines tagLn tagText of
+      -- Skip field search for template-result errors (they should use tag fallback)
+      let isItemsError = "expected sequence" `T.isPrefixOf` msg
+                       || "expected object" `T.isPrefixOf` msg
+          fieldResult = if isItemsError
+                        then findFieldColumn allLines tagLn tagText
+                        else Nothing
+      in case fieldResult of
         Just (fieldLn, fieldCol) -> loc { srcLocLine = fieldLn, srcLocColumn = fieldCol }
         Nothing ->
           -- Try flow-style position adjustment on the tag line
