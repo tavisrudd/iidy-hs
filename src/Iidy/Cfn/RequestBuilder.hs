@@ -11,8 +11,10 @@ module Iidy.Cfn.RequestBuilder
   , buildCreateChangeSetRequest
     -- * Helpers
   , mapCapability
+  , mapCapabilities
   , mapParameters
   , mapTags
+  , mapOnFailure
   ) where
 
 import Data.Map.Strict (Map)

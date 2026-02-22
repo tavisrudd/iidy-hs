@@ -18,7 +18,9 @@ import Test.Tasty.HUnit
 
 import Options.Applicative (execParserPure, prefs, showHelpOnEmpty, ParserResult(..))
 
+import qualified Amazonka.CloudFormation.Types as CF
 import Iidy.Aws.CredentialSource (AwsSettings(..))
+import Iidy.Cfn.RequestBuilder (mapCapability, mapCapabilities, mapParameters, mapTags, mapOnFailure)
 import Iidy.Cfn.Operations.ConvertStack
   ( parameterizeEnv
   , parameterizeStackName
@@ -41,6 +43,7 @@ import Iidy.Yaml.Engine
 import Iidy.Yaml.Handlebars.Engine (interpolate, defaultHelpers)
 import Iidy.Yaml.Imports.Loaders.File (loadFileImport)
 import Iidy.Yaml.JMESPath (applyJmesPath)
+import Iidy.Yaml.CustomResources.JsonSchema (validateSchema)
 import Iidy.Yaml.OValue (OValue(..), oIsTruthy, toValue, fromValue)
 import Iidy.Yaml.Parser (parseYaml)
 
@@ -77,6 +80,8 @@ main = do
     , testGroup "TemplateHash" templateHashTests
     , testGroup "CliParser" cliParserTests
     , testGroup "OValue" oValueTests
+    , testGroup "RequestBuilder" requestBuilderTests
+    , testGroup "JsonSchema" jsonSchemaTests
     ]
 
 ------------------------------------------------------------------------
@@ -885,4 +890,181 @@ oValueTests =
       assertBool "starts with newline-dash" (T.isPrefixOf "\n-" result)
       assertBool "contains k: v1" (T.isInfixOf "k: v1" result)
       assertBool "contains k: v2" (T.isInfixOf "k: v2" result)
+  ]
+
+------------------------------------------------------------------------
+-- RequestBuilder tests
+------------------------------------------------------------------------
+
+requestBuilderTests :: [TestTree]
+requestBuilderTests =
+  [ testCase "mapCapability: CAPABILITY_IAM" $
+      mapCapability "CAPABILITY_IAM" @?= Just CF.Capability_CAPABILITY_IAM
+
+  , testCase "mapCapability: CAPABILITY_NAMED_IAM" $
+      mapCapability "CAPABILITY_NAMED_IAM" @?= Just CF.Capability_CAPABILITY_NAMED_IAM
+
+  , testCase "mapCapability: CAPABILITY_AUTO_EXPAND" $
+      mapCapability "CAPABILITY_AUTO_EXPAND" @?= Just CF.Capability_CAPABILITY_AUTO_EXPAND
+
+  , testCase "mapCapability: case insensitive" $
+      mapCapability "capability_iam" @?= Just CF.Capability_CAPABILITY_IAM
+
+  , testCase "mapCapability: unknown returns Nothing" $
+      mapCapability "INVALID_CAP" @?= Nothing
+
+  , testCase "mapCapabilities: Nothing -> Nothing" $
+      mapCapabilities Nothing @?= Nothing
+
+  , testCase "mapCapabilities: empty list -> Nothing" $
+      mapCapabilities (Just []) @?= Nothing
+
+  , testCase "mapCapabilities: filters invalid" $
+      mapCapabilities (Just ["CAPABILITY_IAM", "INVALID"])
+        @?= Just [CF.Capability_CAPABILITY_IAM]
+
+  , testCase "mapParameters: Nothing -> Nothing" $
+      mapParameters Nothing @?= Nothing
+
+  , testCase "mapParameters: empty map -> Nothing" $
+      mapParameters (Just Data.Map.Strict.empty) @?= Nothing
+
+  , testCase "mapParameters: non-empty map has params" $
+      let result = mapParameters (Just (Data.Map.Strict.singleton "key" "value"))
+      in assertBool "Just with params" (result /= Nothing)
+
+  , testCase "mapTags: Nothing -> Nothing" $
+      mapTags Nothing @?= Nothing
+
+  , testCase "mapTags: empty map -> Nothing" $
+      mapTags (Just Data.Map.Strict.empty) @?= Nothing
+
+  , testCase "mapTags: non-empty map has tags" $
+      let result = mapTags (Just (Data.Map.Strict.singleton "env" "prod"))
+      in assertBool "Just with tags" (result /= Nothing)
+
+  , testCase "mapOnFailure: DELETE" $
+      mapOnFailure (Just "DELETE") @?= Just CF.OnFailure_DELETE
+
+  , testCase "mapOnFailure: ROLLBACK" $
+      mapOnFailure (Just "ROLLBACK") @?= Just CF.OnFailure_ROLLBACK
+
+  , testCase "mapOnFailure: DO_NOTHING" $
+      mapOnFailure (Just "DO_NOTHING") @?= Just CF.OnFailure_DO_NOTHING
+
+  , testCase "mapOnFailure: case insensitive" $
+      mapOnFailure (Just "delete") @?= Just CF.OnFailure_DELETE
+
+  , testCase "mapOnFailure: Nothing -> Nothing" $
+      mapOnFailure Nothing @?= Nothing
+
+  , testCase "mapOnFailure: unknown -> Nothing" $
+      mapOnFailure (Just "INVALID") @?= Nothing
+  ]
+
+------------------------------------------------------------------------
+-- JsonSchema tests
+------------------------------------------------------------------------
+
+jsonSchemaTests :: [TestTree]
+jsonSchemaTests =
+  [ testCase "validates string type" $
+      validateSchema (Object (KM.fromList [("type", String "string")])) (String "hello")
+        @?= Right ()
+
+  , testCase "rejects wrong type" $ do
+      let result = validateSchema (Object (KM.fromList [("type", String "string")])) (Number 42)
+      assertBool "Left" (either (const True) (const False) result)
+
+  , testCase "validates integer type" $
+      validateSchema (Object (KM.fromList [("type", String "integer")])) (Number 42)
+        @?= Right ()
+
+  , testCase "validates object with required fields" $ do
+      let schema = Object (KM.fromList
+            [ ("type", String "object")
+            , ("required", Array (V.fromList [String "host", String "port"]))
+            , ("properties", Object (KM.fromList
+                [ ("host", Object (KM.fromList [("type", String "string")]))
+                , ("port", Object (KM.fromList [("type", String "integer")]))
+                ]))
+            ])
+          value = Object (KM.fromList
+            [ ("host", String "db.example.com")
+            , ("port", Number 5432)
+            ])
+      validateSchema schema value @?= Right ()
+
+  , testCase "rejects missing required field" $ do
+      let schema = Object (KM.fromList
+            [ ("type", String "object")
+            , ("required", Array (V.fromList [String "host", String "port"]))
+            ])
+          value = Object (KM.fromList [("host", String "db.example.com")])
+      assertBool "Left" (either (const True) (const False) (validateSchema schema value))
+
+  , testCase "validates array items" $ do
+      let schema = Object (KM.fromList
+            [ ("type", String "array")
+            , ("items", Object (KM.fromList [("type", String "string")]))
+            ])
+          value = Array (V.fromList [String "a", String "b"])
+      validateSchema schema value @?= Right ()
+
+  , testCase "rejects invalid array item" $ do
+      let schema = Object (KM.fromList
+            [ ("type", String "array")
+            , ("items", Object (KM.fromList [("type", String "string")]))
+            ])
+          value = Array (V.fromList [String "a", Number 42])
+      assertBool "Left" (either (const True) (const False) (validateSchema schema value))
+
+  , testCase "validates minimum" $
+      validateSchema
+        (Object (KM.fromList [("type", String "integer"), ("minimum", Number 1)]))
+        (Number 5)
+        @?= Right ()
+
+  , testCase "rejects below minimum" $ do
+      let result = validateSchema
+            (Object (KM.fromList [("type", String "integer"), ("minimum", Number 10)]))
+            (Number 5)
+      assertBool "Left" (either (const True) (const False) result)
+
+  , testCase "validates maximum" $
+      validateSchema
+        (Object (KM.fromList [("type", String "integer"), ("maximum", Number 100)]))
+        (Number 50)
+        @?= Right ()
+
+  , testCase "validates string pattern" $
+      validateSchema
+        (Object (KM.fromList [("type", String "string"), ("pattern", String "^[a-z]+$")]))
+        (String "hello")
+        @?= Right ()
+
+  , testCase "rejects invalid pattern match" $ do
+      let result = validateSchema
+            (Object (KM.fromList [("type", String "string"), ("pattern", String "^[a-z]+$")]))
+            (String "HELLO")
+      assertBool "Left" (either (const True) (const False) result)
+
+  , testCase "validates minItems" $
+      validateSchema
+        (Object (KM.fromList [("type", String "array"), ("minItems", Number 1)]))
+        (Array (V.fromList [String "a"]))
+        @?= Right ()
+
+  , testCase "rejects below minItems" $ do
+      let result = validateSchema
+            (Object (KM.fromList [("type", String "array"), ("minItems", Number 2)]))
+            (Array (V.fromList [String "a"]))
+      assertBool "Left" (either (const True) (const False) result)
+
+  , testCase "boolean schema true accepts anything" $
+      validateSchema (Bool True) (String "anything") @?= Right ()
+
+  , testCase "boolean schema false rejects everything" $ do
+      let result = validateSchema (Bool False) (String "anything")
+      assertBool "Left" (either (const True) (const False) result)
   ]
