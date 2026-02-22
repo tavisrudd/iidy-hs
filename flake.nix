@@ -40,6 +40,7 @@
             hp.unliftio
             hp.optparse-applicative
             hp.http-conduit
+            hp.tasty-hunit
           ]))
           pkgs.haskellPackages.cabal-install
           pkgs.pkg-config
