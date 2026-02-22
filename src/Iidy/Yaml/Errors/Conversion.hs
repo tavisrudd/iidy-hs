@@ -319,19 +319,33 @@ adjustLocationForTag source loc msg =
       lineNum = srcLocLine loc  -- 1-based
       tagName = extractTagName msg
   in case tagName of
-    Nothing -> loc
     Just tag ->
-      -- Search current line, then previous line for the tag
+      -- Search current line, then previous line for the specific tag
       case findTagInLine allLines lineNum tag of
         Just (ln, col) -> loc { srcLocLine = ln, srcLocColumn = col }
         Nothing ->
           case findTagInLine allLines (lineNum - 1) tag of
             Just (ln, col) -> loc { srcLocLine = ln, srcLocColumn = col }
             Nothing ->
-              -- Search two lines back (for deeper block mappings)
               case findTagInLine allLines (lineNum - 2) tag of
                 Just (ln, col) -> loc { srcLocLine = ln, srcLocColumn = col }
                 Nothing -> loc
+    Nothing
+      -- Parse errors (must be/must have): Rust points at the tag
+      | isParseStyleError msg ->
+          case findAnyTagInLine allLines lineNum of
+            Just (ln, col) | col < srcLocColumn loc ->
+              loc { srcLocLine = ln, srcLocColumn = col }
+            _ -> case findAnyTagInLine allLines (lineNum - 1) of
+              Just (ln, col) -> loc { srcLocLine = ln, srcLocColumn = col }
+              Nothing -> loc
+      -- Resolve errors (expected/found): Rust points at the tag for block,
+      -- at the value for flow
+      | srcLocColumn loc == 0 ->
+          case findAnyTagInLine allLines (lineNum - 1) of
+            Just (ln, col) -> loc { srcLocLine = ln, srcLocColumn = col }
+            Nothing -> loc
+      | otherwise -> loc
 
 -- | Find a tag in a specific source line. Returns (lineNum, 1-based column).
 findTagInLine :: [Text] -> Int -> Text -> Maybe (Int, Int)
@@ -339,6 +353,16 @@ findTagInLine allLines lineNum tag
   | lineNum >= 1 && lineNum <= length allLines =
       let line = allLines !! (lineNum - 1)
       in case findSubstring tag line of
+           Just col -> Just (lineNum, col + 1)  -- 1-based
+           Nothing  -> Nothing
+  | otherwise = Nothing
+
+-- | Find any !$ tag on a source line. Returns (lineNum, 1-based column).
+findAnyTagInLine :: [Text] -> Int -> Maybe (Int, Int)
+findAnyTagInLine allLines lineNum
+  | lineNum >= 1 && lineNum <= length allLines =
+      let line = allLines !! (lineNum - 1)
+      in case findSubstring "!$" line of
            Just col -> Just (lineNum, col + 1)  -- 1-based
            Nothing  -> Nothing
   | otherwise = Nothing
@@ -351,6 +375,14 @@ findSubstring needle haystack
       let (before, _) = T.breakOn needle haystack
       in Just (T.length before)
   | otherwise = Nothing
+
+-- | Check if this is a parse-time error (not a resolve-time type mismatch).
+-- Parse errors need the position adjusted to point at the tag, not the value.
+isParseStyleError :: Text -> Bool
+isParseStyleError msg =
+  "must be " `T.isPrefixOf` msg ||
+  "must have " `T.isPrefixOf` msg ||
+  "invalid format" `T.isPrefixOf` msg
 
 -- | Extract the tag name from an error message.
 -- Looks for patterns like "!$map", "!$join", "!$if", etc.

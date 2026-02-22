@@ -275,7 +275,9 @@ parsePairTag meta name format mk = \case
   AstSequence _ _ -> parseErrorAt meta (if name == "!$eq"
     then "must have exactly 2 elements to compare"
     else "must be a sequence with format " <> format)
-  _ -> parseErrorAt meta ("must be a sequence with format " <> format)
+  _ -> parseErrorAt meta (if name == "!$eq"
+    then "must be a sequence with exactly 2 elements"
+    else "must be a sequence with format " <> format)
 
 parseSeqTag :: SrcMeta -> Text -> Text -> ([YamlAst] -> PreprocessingTag) -> YamlAst -> Parse YamlAst
 parseSeqTag meta _name desc mk = \case
