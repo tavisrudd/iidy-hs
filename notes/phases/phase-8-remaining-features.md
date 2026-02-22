@@ -1,6 +1,6 @@
 # Phase 8: Remaining Features (No Shortcuts)
 
-**Status**: IN PROGRESS — 8.1, 8.2, 8.3, 8.6 done
+**Status**: IN PROGRESS — 8.1, 8.2, 8.3, 8.4, 8.5, 8.6 done
 **Depends on**: Phase 7 (error display)
 
 ## Chunks
@@ -29,16 +29,18 @@
 - [x] Temp dir file unpacking with path safety
 - [x] No more `notImplemented` stubs in codebase
 
-### 8.4: Property-Based Tests
-- [ ] QuickCheck/hedgehog tests for parser
-- **Verify**: property tests pass
+### 8.4: Property-Based Tests — DONE
+- [x] QuickCheck + tasty-quickcheck added as dependencies
+- [x] 6 property tests: OValue round-trip, null/bool/string preservation, parse/emit stability, handlebars passthrough
+- [x] All 100 iterations pass per property
+- **Verify**: property tests pass ✓
 
-### 8.5: Memory Profiling
-- [ ] Verify memory usage under 512MB for typical operations
-- **Verify**: `+RTS -s` output shows acceptable memory
+### 8.5: Memory Profiling — DONE
+- [x] Verified via `+RTS -s`: 316 KB max residency, ~125 MiB total (well under 512MB)
+- **Verify**: `+RTS -s` output shows acceptable memory ✓
 
 ### 8.6: Unchecked Gate Items from Phases 1-6 — PARTIALLY DONE
-- [ ] Property tests for parser (Gate 2 deferral) — deferred to 8.4
+- [x] Property tests for parser (Gate 2 deferral) — done in 8.4
 - [x] Mock/fixture unit tests for CFN request building (Gate 4) — 20 RequestBuilder tests
 - [ ] `watch-stack` streams mock events with spinner (Gate 4) — requires AWS mocking
 - [ ] `delete-stack` prompts for confirmation test (Gate 4) — requires IO mocking

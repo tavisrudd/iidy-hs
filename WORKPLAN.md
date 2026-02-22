@@ -1,7 +1,7 @@
 # iidy-hs Workplan
 
 **Target**: Feature-complete, behavior-identical, output-identical Haskell port. No shortcuts, no dropped features.
-**Status**: Phases 1-7 done. Error display complete (49/49 snapshots match).
+**Status**: Phases 1-8 done (8.6 partial). Phase 9 verified. 226 tests, 37/37 render + 49/49 error snapshots.
 
 ## Critical Rules
 
@@ -31,8 +31,8 @@
 | 5 | CLI + remaining commands | DONE (Session 5) | — |
 | 6 | Tests + polish | DONE (Sessions 6-11) | — |
 | 7 | Error display system | **DONE** (Sessions 13-17) | [phase-7-error-display.md](notes/phases/phase-7-error-display.md) |
-| 8 | Remaining features (NTP, schema, demo, exception handling) | **IN PROGRESS** (8.1-8.3, 8.6 done) | [phase-8-remaining-features.md](notes/phases/phase-8-remaining-features.md) |
-| 9 | Final verification | NOT STARTED | [phase-9-final-verification.md](notes/phases/phase-9-final-verification.md) |
+| 8 | Remaining features (NTP, schema, demo, exception handling) | **DONE** (8.1-8.5 done, 8.6 partial) | [phase-8-remaining-features.md](notes/phases/phase-8-remaining-features.md) |
+| 9 | Final verification | **DONE** (9.1-9.5 verified) | [phase-9-final-verification.md](notes/phases/phase-9-final-verification.md) |
 
 ## Session Log
 
@@ -56,8 +56,9 @@
 | 16 | 7 | Phase 7.3: Validation gaps (11 UNEXPECTED_OK → 0), unknown tags, field validation, CFN validation — 35→44/49 error snapshots pass. |
 | 17 | 7-8 | Phase 7.4: Final 5 error snapshots fixed — 49/49 pass. Phase 7 complete. Ctrl-C + exception handling fixed. |
 | 18 | 8 | Phase 8.1-8.3, 8.6: NTP time sync, JSON Schema validation, demo command, gate item tests. |
+| 19 | 8-9 | YAML 1.1 auto-detection fix, missing fixtures, property tests, memory profiling, final verification. |
 
-**Current: 78 modules, 217 tests, 36/36 render snapshots, 49/49 error snapshots match**
+**Current: 78 modules, 226 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
 ## Key Architecture Decisions
 

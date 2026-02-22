@@ -24,3 +24,7 @@
 2026-02-22 00:40 — Session 18: Phase 8.2 — JSON Schema validation: Custom Draft 7 validator (type, required, properties, items, pattern, min/max, minItems, enum, additionalProperties). AllowedPattern regex now works.
 2026-02-22 00:40 — Session 18: Phase 8.3 — Demo command: Full port (shell exec, silent, sleep, setenv, banner, typing display, AWS account masking, iidy substitution). No more notImplemented stubs.
 2026-02-22 00:40 — Session 18: Phase 8.6 — Gate item tests: 36 new tests (20 RequestBuilder, 16 JsonSchema). 217 total tests, all passing.
+2026-02-22 00:55 — Session 19: YAML 1.1 auto-detection bug fix in Render.hs — YamlAuto now calls detectYamlSpec (was hardcoded to preprocessYaml). Added missing fixtures (toUpperCase, handlebars-in-tags, yaml-11-booleans). 37/37 render snapshots, 49/49 error snapshots. 220 tests.
+2026-02-22 00:55 — Session 19: Phase 8.4 — Property-based tests: 6 QuickCheck properties (OValue round-trip, null/bool/string, parse/emit stability, handlebars passthrough). Added QuickCheck + tasty-quickcheck deps.
+2026-02-22 00:55 — Session 19: Phase 8.5 — Memory profiling: 316 KB max residency, ~125 MiB total. Well under 512MB target.
+2026-02-22 00:55 — Session 19: Phase 9 — Final verification: snapshot comparison (37+49), CLI help parity, feature audit (no stubs), memory check, nix build all verified. 226 tests.
