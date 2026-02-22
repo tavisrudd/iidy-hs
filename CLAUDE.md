@@ -66,11 +66,14 @@ Before wrapping up, verify ALL of these:
 - All doc updates committed alongside code
 - No orphaned TODOs — anything deferred is tracked in a phase doc
 
-## Session Size
+## Session Size & Delegation
 - Keep sessions SHORT. Each session = 1-2 good green commits, then exit.
 - If a subphase is too large for 1-2 commits, split it across sessions.
 - Exit cleanly so the ralph loop continues with fresh context.
 - Don't try to do everything in one session. Small, focused, done.
+- Use sub-agents (Task tool) for research, exploration, and parallel work to keep main context clean.
+- Delegate to Sonnet sub-agents for straightforward implementation after Opus designs the interface.
+- Use Explore agents for codebase searches rather than flooding main context with grep results.
 
 ## Workflow
 You are running inside a 'ralph loop' headlessly with the -p argument.
