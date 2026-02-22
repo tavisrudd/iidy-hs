@@ -2,12 +2,15 @@ module Iidy.Render
   ( runRender
   ) where
 
-import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Encode.Pretty as Pretty
 import qualified Data.ByteString.Lazy as BL
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Encoding as TLE
+import System.Directory (doesFileExist)
 import System.Exit (exitWith, ExitCode(..))
 import System.IO (stderr)
 
@@ -22,7 +25,8 @@ import Iidy.Yaml.Engine
   )
 import Iidy.Yaml.Errors.Conversion (formatPreprocessErrorEnhanced, formatParseErrorEnhanced)
 import Iidy.Yaml.Imports.Loaders.File (loadFileImport)
-import Iidy.Yaml.OValue (OValue, toValue)
+import Iidy.Yaml.JMESPath (applyJmesPath)
+import Iidy.Yaml.OValue (OValue, toValue, fromValue)
 import Iidy.Yaml.Parser (parseYaml, ParseError(..))
 
 ------------------------------------------------------------------------
@@ -68,16 +72,46 @@ runRender args gopts = do
           exitWith (ExitFailure 1)
 
         Right (PreprocessResult val _manifest) -> do
-          -- Format output
-          let rendered = case T.toLower (raFormat args) of
-                           "json" -> formatJson val
-                           _      -> emitYaml val
+          -- Apply JMESPath query if provided
+          outputVal <- case raQuery args of
+                Nothing -> pure val
+                Just query ->
+                  case applyJmesPath query (toValue val) of
+                    Left _err -> do
+                      TIO.hPutStrLn stderr ("Invalid JMESPath query: " <> query)
+                      exitWith (ExitFailure 1)
+                    Right filtered -> pure (fromValue filtered)
 
-          -- Write output: "-" means stdout, otherwise write to file.
+          -- Validate format
+          let fmt = T.toLower (raFormat args)
+          case fmt of
+            "json" -> pure ()
+            "yaml" -> pure ()
+            "yml"  -> pure ()
+            "yaml-cloudformation" -> pure ()
+            _ -> do
+              TIO.hPutStrLn stderr ("Unsupported format: " <> raFormat args <> ". Use 'yaml' or 'json'")
+              exitWith (ExitFailure 1)
+
+          -- Format output
+          let rendered = case fmt of
+                           "json" -> formatJson outputVal
+                           _      -> emitYaml outputVal
+
+          -- Write output: "-" or "stdout" means stdout, otherwise write to file.
           let outPath = T.unpack (raOutfile args)
-          if outPath == "-"
+          if outPath == "-" || outPath == "stdout"
             then TIO.putStrLn rendered
-            else TIO.writeFile outPath rendered
+            else do
+              -- Check overwrite protection
+              exists <- doesFileExist outPath
+              if exists && not (raOverwrite args)
+                then do
+                  TIO.hPutStrLn stderr ("Output file '" <> T.pack outPath <> "' exists. Use --overwrite to overwrite it.")
+                  exitWith (ExitFailure 1)
+                else do
+                  TIO.writeFile outPath rendered
+                  TIO.hPutStrLn stderr ("Template rendered to: " <> T.pack outPath)
 
           pure 0
 
@@ -87,8 +121,4 @@ runRender args gopts = do
 
 formatJson :: OValue -> Text
 formatJson val =
-  T.pack
-    . show
-    . Aeson.encode
-    $ toValue val
-
+  TL.toStrict (TLE.decodeUtf8 (Pretty.encodePretty (toValue val)))

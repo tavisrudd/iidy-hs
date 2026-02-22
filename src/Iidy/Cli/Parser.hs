@@ -72,7 +72,7 @@ globalOptsParser = GlobalOpts
   <$> option textReader
       ( long "environment"
       <> short 'e'
-      <> value ""
+      <> value "development"
       <> metavar "ENV"
       <> help "Used to load environment based settings: AWS Profile, Region, etc."
       )
@@ -300,9 +300,9 @@ createChangeSetArgsParser = CreateChangeSetArgs
   <*> switch (long "watch" <> help "Watch the changeset after creation")
   <*> option auto
       ( long "watch-inactivity-timeout"
-      <> value 3600
+      <> value 180
       <> metavar "SECONDS"
-      <> help "Inactivity timeout for watch mode in seconds (default: 3600)"
+      <> help "Inactivity timeout for watch mode in seconds (default: 180)"
       )
   <*> optional (option textReader
       ( long "description"
@@ -330,9 +330,9 @@ describeArgsParser = DescribeArgs
   <$> argument textReader (metavar "STACKNAME" <> help "Name of the stack to describe")
   <*> option auto
       ( long "events"
-      <> value 10
+      <> value 50
       <> metavar "N"
-      <> help "Number of events to display (default: 10)"
+      <> help "Number of events to display (default: 50)"
       )
   <*> optional (option textReader
       ( long "query"
@@ -345,9 +345,9 @@ watchArgsParser = WatchArgs
   <$> argument textReader (metavar "STACKNAME" <> help "Name of the stack to watch")
   <*> option auto
       ( long "inactivity-timeout"
-      <> value 3600
+      <> value 180
       <> metavar "SECONDS"
-      <> help "Inactivity timeout in seconds (default: 3600)"
+      <> help "Inactivity timeout in seconds (default: 180)"
       )
 
 driftArgsParser :: Parser DriftArgs
@@ -355,9 +355,9 @@ driftArgsParser = DriftArgs
   <$> argument textReader (metavar "STACKNAME" <> help "Name of the stack to check drift on")
   <*> option auto
       ( long "drift-cache"
-      <> value 3600
+      <> value 300
       <> metavar "SECONDS"
-      <> help "Cache duration for drift results in seconds (default: 3600)"
+      <> help "Cache duration for drift results in seconds (default: 300)"
       )
 
 deleteArgsParser :: Parser DeleteArgs
@@ -434,9 +434,9 @@ paramSetArgsParser = ParamSetArgs
   <*> switch (long "with-approval" <> help "Require approval before setting")
   <*> option textReader
       ( long "type"
-      <> value "String"
+      <> value "SecureString"
       <> metavar "TYPE"
-      <> help "Parameter type: String|StringList|SecureString (default: String)"
+      <> help "Parameter type: String|StringList|SecureString (default: SecureString)"
       )
 
 paramPathArgParser :: Parser ParamPathArg
@@ -449,9 +449,9 @@ paramGetArgsParser = ParamGetArgs
   <*> switch (long "decrypt" <> help "Decrypt SecureString values")
   <*> option textReader
       ( long "format"
-      <> value "raw"
+      <> value "simple"
       <> metavar "FORMAT"
-      <> help "Output format (default: raw)"
+      <> help "Output format (default: simple)"
       )
 
 paramGetByPathArgsParser :: Parser ParamGetByPathArgs
@@ -460,16 +460,16 @@ paramGetByPathArgsParser = ParamGetByPathArgs
   <*> switch (long "decrypt" <> help "Decrypt SecureString values")
   <*> option textReader
       ( long "format"
-      <> value "raw"
+      <> value "simple"
       <> metavar "FORMAT"
-      <> help "Output format (default: raw)"
+      <> help "Output format (default: simple)"
       )
   <*> switch (long "recursive" <> help "Recursively list parameters under path")
 
 approvalRequestArgsParser :: Parser ApprovalRequestArgs
 approvalRequestArgsParser = ApprovalRequestArgs
   <$> argument textReader (metavar "ARGSFILE" <> help "Path to stack-args.yaml")
-  <*> switch (long "lint-template" <> help "Lint the template before requesting approval")
+  <*> flag True False (long "no-lint-template" <> help "Skip linting the template before requesting approval")
 
 approvalReviewArgsParser :: Parser ApprovalReviewArgs
 approvalReviewArgsParser = ApprovalReviewArgs
@@ -517,9 +517,9 @@ getImportArgsParser = GetImportArgs
   <$> argument textReader (metavar "IMPORT" <> help "Import specifier to retrieve")
   <*> option textReader
       ( long "format"
-      <> value "raw"
+      <> value "yaml"
       <> metavar "FORMAT"
-      <> help "Output format (default: raw)"
+      <> help "Output format (default: yaml)"
       )
   <*> optional (option textReader
       ( long "query"

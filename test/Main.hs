@@ -814,7 +814,7 @@ cliParserTests =
         Right cli -> case cliCommand cli of
           CmdDescribeStack args -> do
             daStackname args @?= "my-stack"
-            daEvents args @?= 10  -- default
+            daEvents args @?= 50  -- default (matches Rust)
           _ -> assertFailure "Expected CmdDescribeStack"
 
   , testCase "parse describe-stack with events" $ do
