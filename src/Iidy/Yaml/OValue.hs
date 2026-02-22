@@ -7,6 +7,7 @@ module Iidy.Yaml.OValue
   , oIsTruthy
   , oValuesEqual
   , oValueToText
+  , lookupO
   ) where
 
 import Data.Aeson (Value(..))
@@ -97,3 +98,12 @@ oValueToText = \case
   OBool False -> "false"
   ONull      -> "null"
   other      -> T.pack (show other)
+
+------------------------------------------------------------------------
+-- Lookup
+------------------------------------------------------------------------
+
+lookupO :: Text -> [(Text, OValue)] -> Maybe OValue
+lookupO k kvs = case [v | (k', v) <- kvs, k' == k] of
+  (v:_) -> Just v
+  []    -> Nothing

@@ -3,9 +3,6 @@ module Iidy.Yaml.CustomResources.Expansion
   , ExpansionResult(..)
   ) where
 
-import Data.Aeson (Value(..))
-import qualified Data.Aeson.Key as Key
-import qualified Data.Aeson.KeyMap as KM
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
@@ -13,14 +10,15 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import Iidy.Yaml.CustomResources.Params (TemplateInfo(..), mergeParams, validateParams)
 import Iidy.Yaml.CustomResources.RefRewriting (rewriteRefs, collectGlobalRefs)
+import Iidy.Yaml.OValue
 
 ------------------------------------------------------------------------
 -- Types
 ------------------------------------------------------------------------
 
 data ExpansionResult = ExpansionResult
-  { erResources      :: ![(Text, Value)]
-  , erGlobalSections :: !(Map Text Value)
+  { erResources      :: ![(Text, OValue)]
+  , erGlobalSections :: !(Map Text OValue)
   } deriving stock (Show)
 
 ------------------------------------------------------------------------
@@ -29,12 +27,13 @@ data ExpansionResult = ExpansionResult
 
 expandCustomResource
   :: Text              -- ^ Resource instance name (e.g., "OrderEvents")
-  -> Value             -- ^ Resource definition (Properties, Overrides, etc.)
+  -> OValue            -- ^ Resource definition (Properties, Overrides, etc.)
   -> TemplateInfo      -- ^ Template definition
-  -> (Map Text Value -> Text -> Either Text Value)
+  -> (Map Text OValue -> Text -> Either Text OValue)
      -- ^ Re-parser: given params, re-parse and resolve template body
+  -> Set Text          -- ^ Additional global refs (parent resource names, not rewritten)
   -> Either Text ExpansionResult
-expandCustomResource name resourceDef templateInfo reparse = do
+expandCustomResource name resourceDef templateInfo reparse additionalGlobals = do
   let prefix = extractPrefix name resourceDef
       properties = extractProperties resourceDef
       overrides = extractOverrides resourceDef
@@ -55,7 +54,7 @@ expandCustomResource name resourceDef templateInfo reparse = do
 
   -- Collect global refs from template
   let globals = collectGlobalRefs withOverrides
-      allGlobals = Set.union globals (awsPseudoRefs)
+      allGlobals = Set.unions [globals, awsPseudoRefs, additionalGlobals]
 
   -- Extract resources section
   let resources = extractResources withOverrides
@@ -72,64 +71,83 @@ expandCustomResource name resourceDef templateInfo reparse = do
     }
 
 ------------------------------------------------------------------------
--- Extraction helpers
+-- Extraction helpers (work with OValue to preserve key ordering)
 ------------------------------------------------------------------------
 
-extractPrefix :: Text -> Value -> Text
+extractPrefix :: Text -> OValue -> Text
 extractPrefix defaultName = \case
-  Object obj -> case KM.lookup "NamePrefix" obj of
-    Just (String p) -> p
+  OObject kvs -> case lookupO "NamePrefix" kvs of
+    Just (OString p) -> p
     _ -> defaultName
   _ -> defaultName
 
-extractProperties :: Value -> Map Text Value
+extractProperties :: OValue -> Map Text OValue
 extractProperties = \case
-  Object obj -> case KM.lookup "Properties" obj of
-    Just (Object props) ->
-      Map.fromList [(Key.toText k, v) | (k, v) <- KM.toList props]
+  OObject kvs -> case lookupO "Properties" kvs of
+    Just (OObject props) -> Map.fromList props
     _ -> Map.empty
   _ -> Map.empty
 
-extractOverrides :: Value -> Maybe Value
+extractOverrides :: OValue -> Maybe OValue
 extractOverrides = \case
-  Object obj -> KM.lookup "Overrides" obj
+  OObject kvs -> lookupO "Overrides" kvs
   _ -> Nothing
 
-extractResources :: Value -> [(Text, Value)]
+extractResources :: OValue -> [(Text, OValue)]
 extractResources = \case
-  Object obj -> case KM.lookup "Resources" obj of
-    Just (Object res) -> [(Key.toText k, v) | (k, v) <- KM.toList res]
+  OObject kvs -> case lookupO "Resources" kvs of
+    Just (OObject res) -> res
     _ -> []
   _ -> []
 
-extractGlobalSections :: Text -> Set Text -> Value -> Map Text Value
+extractGlobalSections :: Text -> Set Text -> OValue -> Map Text OValue
 extractGlobalSections prefix globals = \case
-  Object obj ->
+  OObject kvs ->
     let sections = ["Parameters", "Outputs", "Metadata", "Mappings", "Conditions", "Transform"]
-        extractSection name = case KM.lookup (Key.fromText name) obj of
+        extractSection name = case lookupO name kvs of
           Just section -> Just (name, prefixAndRewriteSection prefix globals section)
           Nothing -> Nothing
     in Map.fromList (concatMap (maybe [] (:[]) . extractSection) sections)
   _ -> Map.empty
 
--- | Prefix keys in a section and rewrite refs within values
-prefixAndRewriteSection :: Text -> Set Text -> Value -> Value
+-- | Prefix keys in a section and rewrite refs within values.
+-- Keys marked with $global: true are NOT prefixed (they're shared).
+-- $global entries are stripped from the output.
+prefixAndRewriteSection :: Text -> Set Text -> OValue -> OValue
 prefixAndRewriteSection prefix globals = \case
-  Object obj ->
-    let prefixed = KM.fromList
-          [ (Key.fromText (prefix <> Key.toText k), rewriteRefs prefix globals v)
-          | (k, v) <- KM.toList obj
-          ]
-    in Object prefixed
+  OObject kvs ->
+    OObject [ (key', stripGlobal (rewriteRefs prefix globals v))
+            | (k, v) <- kvs
+            , k /= "$global"  -- strip top-level $global
+            , let key' = if isMarkedGlobal v then k else prefix <> k
+            ]
   other -> rewriteRefs prefix globals other
+
+isMarkedGlobal :: OValue -> Bool
+isMarkedGlobal (OObject kvs) = case lookupO "$global" kvs of
+  Just (OBool True) -> True
+  _ -> False
+isMarkedGlobal _ = False
+
+stripGlobal :: OValue -> OValue
+stripGlobal (OObject kvs) = OObject [(k, v) | (k, v) <- kvs, k /= "$global"]
+stripGlobal other = other
 
 ------------------------------------------------------------------------
 -- Deep merge
 ------------------------------------------------------------------------
 
-deepMerge :: Value -> Value -> Value
-deepMerge (Object base) (Object overlay) =
-  Object (KM.unionWith deepMerge base overlay)
+deepMerge :: OValue -> OValue -> OValue
+deepMerge (OObject base) (OObject overlay) =
+  OObject (mergeKvs base overlay)
+  where
+    mergeKvs bs [] = bs
+    mergeKvs bs ((k, v):rest) =
+      let bs' = case lookupO k bs of
+            Just existing -> updateKv k (deepMerge existing v) bs
+            Nothing -> bs ++ [(k, v)]
+      in mergeKvs bs' rest
+    updateKv key val = map (\(k, v) -> if k == key then (k, val) else (k, v))
 deepMerge _ overlay = overlay
 
 ------------------------------------------------------------------------

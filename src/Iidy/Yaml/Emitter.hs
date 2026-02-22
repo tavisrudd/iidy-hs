@@ -65,6 +65,7 @@ needsQuotes s
   | T.null s = True
   | isAmbiguousType s = True
   | T.head s == ' ' = True
+  | T.any (== '\t') s = True
   | not (isPlainSafeFirst (T.head s)) = True
   | T.last s == ':' || T.last s == ' ' = True
   | T.head s `elem` ("[]{},:" :: [Char]) = True
@@ -151,6 +152,10 @@ emitArrayValue indent = \case
   OArray items
     | null items -> "[]"
     | otherwise -> emitArrayInline indent items
+  OString s
+    | T.any (== '\n') s -> emitMultilineStringIndented indent s
+    | needsQuotes s -> quoteString s
+    | otherwise -> s
   other -> emitValue indent False other
 
 ------------------------------------------------------------------------
@@ -238,4 +243,6 @@ emitTagArgument indent = \case
   ONull -> " null"
   OArray [single] -> emitTagArgument indent single
   OArray items -> emitArray indent items
-  OObject kvs -> emitMapping indent False kvs
+  OObject kvs
+    | isTaggedKvs kvs -> " " <> emitTaggedKvs indent kvs
+    | otherwise -> emitMapping indent False kvs

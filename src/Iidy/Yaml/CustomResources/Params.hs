@@ -13,6 +13,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Vector as V
+import Iidy.Yaml.OValue
 
 ------------------------------------------------------------------------
 -- Types
@@ -20,9 +21,9 @@ import qualified Data.Vector as V
 
 data ParamDef = ParamDef
   { pdName          :: !Text
-  , pdDefault       :: !(Maybe Value)
+  , pdDefault       :: !(Maybe OValue)
   , pdType          :: !(Maybe Text)
-  , pdAllowedValues :: !(Maybe [Value])
+  , pdAllowedValues :: !(Maybe [OValue])
   , pdAllowedPattern :: !(Maybe Text)
   , pdSchema        :: !(Maybe Value)
   , pdIsGlobal      :: !Bool
@@ -52,12 +53,12 @@ parseParamDef (Object obj) = do
   let getOptText key = case KM.lookup (Key.fromText key) obj of
         Just (String s) -> Just s
         _ -> Nothing
-      getOptVal key = KM.lookup (Key.fromText key) obj
+      getOptVal key = fmap fromValue (KM.lookup (Key.fromText key) obj)
       isGlobal = case KM.lookup "$global" obj of
         Just (Bool True) -> True
         _ -> False
       allowedValues = case KM.lookup "AllowedValues" obj of
-        Just (Array vs) -> Just (V.toList vs)
+        Just (Array vs) -> Just (map fromValue (V.toList vs))
         _ -> Nothing
   Right ParamDef
     { pdName          = name
@@ -65,7 +66,7 @@ parseParamDef (Object obj) = do
     , pdType          = getOptText "Type"
     , pdAllowedValues = allowedValues
     , pdAllowedPattern = getOptText "AllowedPattern"
-    , pdSchema        = getOptVal "Schema"
+    , pdSchema        = KM.lookup (Key.fromText "Schema") obj
     , pdIsGlobal      = isGlobal
     }
 parseParamDef _ = Left "$params entries must be mappings"
@@ -74,7 +75,7 @@ parseParamDef _ = Left "$params entries must be mappings"
 -- Validation
 ------------------------------------------------------------------------
 
-validateParams :: [ParamDef] -> Map Text Value -> Either Text ()
+validateParams :: [ParamDef] -> Map Text OValue -> Either Text ()
 validateParams defs provided = traverse_ validateOne defs
   where
     validateOne pd =
@@ -89,7 +90,7 @@ validateParams defs provided = traverse_ validateOne defs
           validateAllowedPattern pd val
           validateType pd val
 
-validateAllowedValues :: ParamDef -> Value -> Either Text ()
+validateAllowedValues :: ParamDef -> OValue -> Either Text ()
 validateAllowedValues pd val = case pdAllowedValues pd of
   Nothing -> Right ()
   Just allowed
@@ -97,38 +98,42 @@ validateAllowedValues pd val = case pdAllowedValues pd of
     | isCfnRef val -> Right ()  -- skip for CFN references
     | otherwise -> Left $ pdName pd <> ": value not in AllowedValues"
 
-validateAllowedPattern :: ParamDef -> Value -> Either Text ()
+validateAllowedPattern :: ParamDef -> OValue -> Either Text ()
 validateAllowedPattern pd val = case pdAllowedPattern pd of
   Nothing -> Right ()
   Just _pattern -> case val of
-    String _s -> Right ()  -- TODO: regex matching
+    OString _s -> Right ()  -- TODO: regex matching
     _ -> Right ()
 
-validateType :: ParamDef -> Value -> Either Text ()
+validateType :: ParamDef -> OValue -> Either Text ()
 validateType pd val = case pdType pd of
   Nothing -> Right ()
   Just "String" -> case val of
-    String _ -> Right ()
+    OString _ -> Right ()
     _ | isCfnRef val -> Right ()
     _ -> Left $ pdName pd <> ": expected String"
   Just "Number" -> case val of
-    Number _ -> Right ()
+    ONumber _ -> Right ()
     _ | isCfnRef val -> Right ()
     _ -> Left $ pdName pd <> ": expected Number"
   Just _ -> Right ()  -- AWS types etc
 
-isCfnRef :: Value -> Bool
-isCfnRef (Object obj) = any (`KM.member` obj)
-  [ "Ref", "Fn::Sub", "Fn::Join", "Fn::Select", "Fn::If"
-  , "Fn::GetAtt", "Fn::ImportValue", "Fn::FindInMap"
-  ]
+isCfnRef :: OValue -> Bool
+isCfnRef (OObject kvs) = any (`elem` keys) cfnRefKeys
+  where
+    keys = map fst kvs
+    cfnRefKeys = [ "Ref", "Fn::Sub", "Fn::Join", "Fn::Select", "Fn::If"
+                 , "Fn::GetAtt", "Fn::ImportValue", "Fn::FindInMap"
+                 , "!Ref", "!Sub", "!Join", "!Select", "!If"
+                 , "!GetAtt", "!ImportValue", "!FindInMap"
+                 ]
 isCfnRef _ = False
 
 ------------------------------------------------------------------------
 -- Merging
 ------------------------------------------------------------------------
 
-mergeParams :: [ParamDef] -> Map Text Value -> Map Text Value
+mergeParams :: [ParamDef] -> Map Text OValue -> Map Text OValue
 mergeParams defs provided =
   foldl' addDefault provided defs
   where

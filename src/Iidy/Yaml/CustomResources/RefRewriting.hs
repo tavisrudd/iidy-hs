@@ -3,47 +3,44 @@ module Iidy.Yaml.CustomResources.RefRewriting
   , collectGlobalRefs
   ) where
 
-import Data.Aeson (Value(..))
-import qualified Data.Aeson.Key as Key
-import qualified Data.Aeson.KeyMap as KM
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Vector as V
+import Iidy.Yaml.OValue
 
 ------------------------------------------------------------------------
 -- Public API
 ------------------------------------------------------------------------
 
-rewriteRefs :: Text -> Set Text -> Value -> Value
+rewriteRefs :: Text -> Set Text -> OValue -> OValue
 rewriteRefs prefix globals = rewrite
   where
     rewrite val = case val of
-      Object obj -> Object (rewriteObject prefix globals obj)
-      Array arr  -> Array (V.map rewrite arr)
-      _          -> val
+      OObject kvs -> OObject (rewriteObject prefix globals kvs)
+      OArray items -> OArray (map rewrite items)
+      _ -> val
 
-collectGlobalRefs :: Value -> Set Text
+collectGlobalRefs :: OValue -> Set Text
 collectGlobalRefs val = case val of
-  Object obj ->
-    let resources = maybe KM.empty extractMapping (KM.lookup "Resources" obj)
-        params = maybe KM.empty extractMapping (KM.lookup "Parameters" obj)
+  OObject kvs ->
+    let resources = maybe [] extractKvs (lookupO "Resources" kvs)
+        params = maybe [] extractKvs (lookupO "Parameters" kvs)
     in Set.union (globalFromSection resources) (globalFromSection params)
   _ -> Set.empty
   where
-    extractMapping (Object o) = o
-    extractMapping _ = KM.empty
+    extractKvs (OObject o) = o
+    extractKvs _ = []
 
     globalFromSection section =
       Set.fromList
-        [ Key.toText k
-        | (k, v) <- KM.toList section
+        [ k
+        | (k, v) <- section
         , isMarkedGlobal v
         ]
 
-    isMarkedGlobal (Object obj) = case KM.lookup "$global" obj of
-      Just (Bool True) -> True
+    isMarkedGlobal (OObject kvs) = case lookupO "$global" kvs of
+      Just (OBool True) -> True
       _ -> False
     isMarkedGlobal _ = False
 
@@ -51,68 +48,61 @@ collectGlobalRefs val = case val of
 -- Internal rewriting
 ------------------------------------------------------------------------
 
-rewriteObject :: Text -> Set Text -> KM.KeyMap Value -> KM.KeyMap Value
-rewriteObject prefix globals obj
+rewriteObject :: Text -> Set Text -> [(Text, OValue)] -> [(Text, OValue)]
+rewriteObject prefix globals kvs
   -- Standard Fn:: format
-  | Just refVal <- KM.lookup "Ref" obj, KM.size obj == 1 =
-      KM.singleton "Ref" (rewriteRefValue prefix globals refVal)
-  | Just attVal <- KM.lookup "Fn::GetAtt" obj, KM.size obj == 1 =
-      KM.singleton "Fn::GetAtt" (rewriteGetAtt prefix globals attVal)
-  | Just subVal <- KM.lookup "Fn::Sub" obj, KM.size obj == 1 =
-      KM.singleton "Fn::Sub" (rewriteSub prefix globals subVal)
+  | length kvs == 1, Just refVal <- lookupO "Ref" kvs =
+      [("Ref", rewriteRefValue prefix globals refVal)]
+  | length kvs == 1, Just attVal <- lookupO "Fn::GetAtt" kvs =
+      [("Fn::GetAtt", rewriteGetAtt prefix globals attVal)]
+  | length kvs == 1, Just subVal <- lookupO "Fn::Sub" kvs =
+      [("Fn::Sub", rewriteSub prefix globals subVal)]
   -- Short tag format (used by our resolver)
-  | Just refVal <- KM.lookup "!Ref" obj, KM.size obj == 1 =
-      KM.singleton "!Ref" (rewriteRefValue prefix globals refVal)
-  | Just attVal <- KM.lookup "!GetAtt" obj, KM.size obj == 1 =
-      KM.singleton "!GetAtt" (rewriteGetAtt prefix globals attVal)
-  | Just subVal <- KM.lookup "!Sub" obj, KM.size obj == 1 =
-      KM.singleton "!Sub" (rewriteSub prefix globals subVal)
+  | length kvs == 1, Just refVal <- lookupO "!Ref" kvs =
+      [("!Ref", rewriteRefValue prefix globals refVal)]
+  | length kvs == 1, Just attVal <- lookupO "!GetAtt" kvs =
+      [("!GetAtt", rewriteGetAtt prefix globals attVal)]
+  | length kvs == 1, Just subVal <- lookupO "!Sub" kvs =
+      [("!Sub", rewriteSub prefix globals subVal)]
   | otherwise =
-      KM.mapWithKey (\k v -> rewriteField prefix globals k v) obj
+      map (\(k, v) -> (k, rewriteField prefix globals k v)) kvs
 
-rewriteRefValue :: Text -> Set Text -> Value -> Value
+rewriteRefValue :: Text -> Set Text -> OValue -> OValue
 rewriteRefValue prefix globals = \case
-  String s
-    | shouldRewrite globals s -> String (prefix <> s)
-    | otherwise -> String s
+  OString s
+    | shouldRewrite globals s -> OString (prefix <> s)
+    | otherwise -> OString s
   other -> other
 
-rewriteGetAtt :: Text -> Set Text -> Value -> Value
+rewriteGetAtt :: Text -> Set Text -> OValue -> OValue
 rewriteGetAtt prefix globals = \case
-  String s ->
+  OString s ->
     case T.breakOn "." s of
       (resource, rest)
         | not (T.null rest) && shouldRewrite globals resource ->
-            String (prefix <> resource <> rest)
-        | otherwise -> String s
-  Array arr
-    | V.length arr >= 1 ->
-        let first = arr V.! 0
-            rewritten = case first of
-              String s | shouldRewrite globals s -> String (prefix <> s)
+            OString (prefix <> resource <> rest)
+        | otherwise -> OString s
+  OArray items
+    | (first:rest) <- items ->
+        let rewritten = case first of
+              OString s | shouldRewrite globals s -> OString (prefix <> s)
               _ -> first
-        in Array (arr V.// [(0, rewritten)])
-    | otherwise -> Array arr
+        in OArray (rewritten : rest)
+    | otherwise -> OArray items
   other -> other
 
-rewriteSub :: Text -> Set Text -> Value -> Value
+rewriteSub :: Text -> Set Text -> OValue -> OValue
 rewriteSub prefix globals = \case
-  String template -> String (rewriteSubTemplate prefix globals template)
-  Array arr
-    | V.length arr == 2 ->
-        let template = case arr V.! 0 of
-              String t -> t
-              _ -> ""
-            varsObj = arr V.! 1
-            varNames = case varsObj of
-              Object obj -> Set.fromList (map Key.toText (KM.keys obj))
-              _ -> Set.empty
-            extendedGlobals = Set.union globals varNames
-        in Array (V.fromList
-            [ String (rewriteSubTemplate prefix extendedGlobals template)
-            , rewriteRefs prefix globals varsObj
-            ])
-    | otherwise -> Array arr
+  OString template -> OString (rewriteSubTemplate prefix globals template)
+  OArray [OString template, varsObj] ->
+    let varNames = case varsObj of
+          OObject kvs -> Set.fromList (map fst kvs)
+          _ -> Set.empty
+        extendedGlobals = Set.union globals varNames
+    in OArray
+        [ OString (rewriteSubTemplate prefix extendedGlobals template)
+        , rewriteRefs prefix globals varsObj
+        ]
   other -> other
 
 rewriteSubTemplate :: Text -> Set Text -> Text -> Text
@@ -133,24 +123,24 @@ rewriteSubTemplate prefix globals = go
                 | otherwise ->
                     before <> "${" <> ref <> "}" <> go (T.drop 1 closing)
 
-rewriteField :: Text -> Set Text -> Key.Key -> Value -> Value
+rewriteField :: Text -> Set Text -> Text -> OValue -> OValue
 rewriteField prefix globals key val
   | key == "Condition" = case val of
-      String s | shouldRewrite globals s -> String (prefix <> s)
+      OString s | shouldRewrite globals s -> OString (prefix <> s)
       _ -> val
   | key == "DependsOn" = rewriteDependsOn prefix globals val
   | otherwise = rewriteRefs prefix globals val
 
-rewriteDependsOn :: Text -> Set Text -> Value -> Value
+rewriteDependsOn :: Text -> Set Text -> OValue -> OValue
 rewriteDependsOn prefix globals = \case
-  String s
-    | shouldRewrite globals s -> String (prefix <> s)
-    | otherwise -> String s
-  Array arr -> Array (V.map rewriteOne arr)
+  OString s
+    | shouldRewrite globals s -> OString (prefix <> s)
+    | otherwise -> OString s
+  OArray items -> OArray (map rewriteOne items)
   other -> other
   where
-    rewriteOne (String s)
-      | shouldRewrite globals s = String (prefix <> s)
+    rewriteOne (OString s)
+      | shouldRewrite globals s = OString (prefix <> s)
     rewriteOne v = v
 
 ------------------------------------------------------------------------

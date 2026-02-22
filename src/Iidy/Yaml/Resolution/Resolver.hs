@@ -12,6 +12,7 @@ import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map.Strict as Map
 import qualified Data.Scientific as Sci
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -104,7 +105,7 @@ resolveMappingWithExpansion ctx pairs = do
       (expanded, globalSections) <- expandResources resources
       -- Merge: before + expanded Resources + after + global sections (if not already present)
       let existingKeys = map fst filtered
-          newGlobals = [(k, fromValue v) | (k, v) <- Map.toList globalSections, k `notElem` existingKeys]
+          newGlobals = [(k, v) | (k, v) <- Map.toList globalSections, k `notElem` existingKeys]
       pure $ OObject (beforeRes ++ [("Resources", OObject expanded)] ++ afterRes ++ newGlobals)
   where
     resolvePair (keyAst, valAst) = do
@@ -121,24 +122,50 @@ resolveMappingWithExpansion ctx pairs = do
            (("Resources", OObject resources) : after) -> Just (before, resources, after)
            _ -> Nothing
 
-    expandResources :: [(Text, OValue)] -> Resolve ([(Text, OValue)], Map.Map Text Value)
-    expandResources resources = foldM expandOne ([], Map.empty) resources
+    expandResources :: [(Text, OValue)] -> Resolve ([(Text, OValue)], Map.Map Text OValue)
+    expandResources resources = do
+      -- Collect all non-custom resource names as additional globals for ref rewriting.
+      -- This prevents refs to parent resources from being prefixed.
+      let parentResourceNames = Set.fromList
+            [ name | (name, val) <- resources
+            , case getResourceType val of
+                Just typeName -> not (Map.member typeName (tcCustomTemplateDefs ctx))
+                Nothing -> True
+            ]
+      (expanded, globals) <- foldM (expandOne parentResourceNames) ([], Map.empty) resources
+      -- Deduplicate: if a raw resource has the same name as an expanded one, keep the raw version.
+      let deduped = deduplicateResources expanded
+      pure (deduped, globals)
       where
-        expandOne (acc, globals) (resName, resVal) =
+        expandOne parentNames (acc, globals) (resName, resVal) =
           case getResourceType resVal of
             Just typeName | Just tmplInfo <- Map.lookup typeName (tcCustomTemplateDefs ctx) -> do
-              let valAsValue = toValue resVal
-                  reparseF = buildReparse ctx
-              case expandCustomResource resName valAsValue tmplInfo reparseF of
+              let reparseF = buildReparse ctx
+              case expandCustomResource resName resVal tmplInfo reparseF parentNames of
                 Left err -> Left (ResolveError zeroPosition ("Custom resource expansion error: " <> err))
                 Right expansionResult ->
-                  let expandedResources = [(k, fromValue v) | (k, v) <- erResources expansionResult]
-                      mergedGlobals = Map.unionWith mergeGlobalSection globals (erGlobalSections expansionResult)
-                  in pure (acc ++ expandedResources, mergedGlobals)
+                  let mergedGlobals = Map.unionWith mergeGlobalSection globals (erGlobalSections expansionResult)
+                  in pure (acc ++ erResources expansionResult, mergedGlobals)
             _ -> pure (acc ++ [(resName, resVal)], globals)
 
-    mergeGlobalSection :: Value -> Value -> Value
-    mergeGlobalSection (Object a) (Object b) = Object (KM.union a b)
+    -- | When a raw resource has the same name as an expanded resource,
+    -- the raw resource wins. Keep the first occurrence's position but use
+    -- the last occurrence's value (raw resources override expanded ones).
+    deduplicateResources :: [(Text, OValue)] -> [(Text, OValue)]
+    deduplicateResources kvs =
+      let -- Build a map with last-seen values
+          lastVals = Map.fromList kvs
+          -- Walk the list, emitting each key only once (first position) with last value
+          go _seen [] = []
+          go seen ((k, _v):rest)
+            | Set.member k seen = go seen rest
+            | otherwise = case Map.lookup k lastVals of
+                Just v' -> (k, v') : go (Set.insert k seen) rest
+                Nothing -> go seen rest
+      in go Set.empty kvs
+
+    mergeGlobalSection :: OValue -> OValue -> OValue
+    mergeGlobalSection (OObject a) (OObject b) = OObject (a ++ [(k, v) | (k, v) <- b, k `notElem` map fst a])
     mergeGlobalSection _ b = b
 
 -- | Resolve a mapping that represents the Resources section.
@@ -147,8 +174,15 @@ resolveResourcesMapping :: TagContext -> [(YamlAst, YamlAst)] -> Resolve OValue
 resolveResourcesMapping ctx pairs = do
   resolved <- traverse resolvePair pairs
   let filtered = [(k, v) | (k, v) <- resolved, not (isSpecialKey k)]
-  expanded <- foldM expandIfCustom [] filtered
-  pure $ OObject expanded
+      parentResourceNames = Set.fromList
+        [ name | (name, val) <- filtered
+        , case getResourceType val of
+            Just typeName -> not (Map.member typeName (tcCustomTemplateDefs ctx))
+            Nothing -> True
+        ]
+  expanded <- foldM (expandIfCustom parentResourceNames) [] filtered
+  let deduped = deduplicateResources' expanded
+  pure $ OObject deduped
   where
     resolvePair (keyAst, valAst) = do
       kv <- resolveAst ctx keyAst
@@ -157,17 +191,25 @@ resolveResourcesMapping ctx pairs = do
       pure (k, vv)
     isSpecialKey k = k `elem` ["$imports", "$defs", "$envValues", "$params"]
 
-    expandIfCustom acc (resName, resVal) =
+    expandIfCustom parentNames acc (resName, resVal) =
       case getResourceType resVal of
         Just typeName | Just tmplInfo <- Map.lookup typeName (tcCustomTemplateDefs ctx) -> do
-          let valAsValue = toValue resVal
-              reparseF = buildReparse ctx
-          case expandCustomResource resName valAsValue tmplInfo reparseF of
+          let reparseF = buildReparse ctx
+          case expandCustomResource resName resVal tmplInfo reparseF parentNames of
             Left err -> Left (ResolveError zeroPosition ("Custom resource expansion error: " <> err))
-            Right expansionResult ->
-              let expandedResources = [(k, fromValue v) | (k, v) <- erResources expansionResult]
-              in pure (acc ++ expandedResources)
+            Right expansionResult -> pure (acc ++ erResources expansionResult)
         _ -> pure (acc ++ [(resName, resVal)])
+
+    deduplicateResources' :: [(Text, OValue)] -> [(Text, OValue)]
+    deduplicateResources' kvs =
+      let lastVals = Map.fromList kvs
+          go _seen [] = []
+          go seen ((k, _v):rest)
+            | Set.member k seen = go seen rest
+            | otherwise = case Map.lookup k lastVals of
+                Just v' -> (k, v') : go (Set.insert k seen) rest
+                Nothing -> go seen rest
+      in go Set.empty kvs
 
 getResourceType :: OValue -> Maybe Text
 getResourceType (OObject kvs) = case lookupO "Type" kvs of
@@ -175,20 +217,20 @@ getResourceType (OObject kvs) = case lookupO "Type" kvs of
   _ -> Nothing
 getResourceType _ = Nothing
 
--- | Build the reparse function for expandCustomResource
-buildReparse :: TagContext -> Map.Map Text Value -> Text -> Either Text Value
+-- | Build the reparse function for expandCustomResource.
+-- Returns OValue to preserve key ordering from the template.
+buildReparse :: TagContext -> Map.Map Text OValue -> Text -> Either Text OValue
 buildReparse parentCtx params rawBody =
   case parseYaml (BL.fromStrict (TE.encodeUtf8 rawBody)) (maybe "<template>" id (tcInputUri parentCtx)) of
     Left (ParseError _ msg) -> Left ("Parse error: " <> msg)
     Right templateAst ->
-      let paramBindings = Map.map fromValue params
-          subCtx = parentCtx
-            { tcVariables = Map.union paramBindings (tcVariables parentCtx)
+      let subCtx = parentCtx
+            { tcVariables = Map.union params (tcVariables parentCtx)
             , tcInResourcesSection = False
             }
       in case resolveAst subCtx templateAst of
            Left (ResolveError _ msg) -> Left msg
-           Right resolved -> Right (toValue resolved)
+           Right resolved -> Right resolved
 
 ------------------------------------------------------------------------
 -- Template strings (handlebars)
@@ -573,7 +615,7 @@ resolveExpand ctx meta (ExpandTag templateRefAst paramsAst) = do
       -- 3. Resolve provided params
       providedParams <- resolveAst ctx paramsAst
       let provided = case providedParams of
-            OObject kvs -> Map.fromList [(k, fromValue (toValue v)) | (k, v) <- kvs]
+            OObject kvs -> Map.fromList kvs
             _ -> Map.empty
       -- 4. Merge with defaults from $params (defaults are Value, convert to OValue)
       let merged = mergeExpandParams (tiParams tmplInfo) provided
@@ -596,7 +638,7 @@ mergeExpandParams defs provided = foldl' addParam provided defs
       case Map.lookup (pdName pd) acc of
         Just _ -> acc
         Nothing -> case pdDefault pd of
-          Just defVal -> Map.insert (pdName pd) (fromValue defVal) acc
+          Just defVal -> Map.insert (pdName pd) defVal acc
           Nothing -> acc
 
 ------------------------------------------------------------------------
@@ -630,11 +672,6 @@ rawKeyText _ = ""
 ------------------------------------------------------------------------
 -- OValue list helpers
 ------------------------------------------------------------------------
-
-lookupO :: Text -> [(Text, OValue)] -> Maybe OValue
-lookupO k kvs = case [v | (k', v) <- kvs, k' == k] of
-  (v:_) -> Just v
-  []    -> Nothing
 
 insertO :: Text -> OValue -> [(Text, OValue)] -> [(Text, OValue)]
 insertO k v [] = [(k, v)]
