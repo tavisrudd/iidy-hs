@@ -1,7 +1,7 @@
 # iidy-hs Workplan
 
 **Target**: Feature-complete, behavior-identical, output-identical Haskell port. No shortcuts, no dropped features.
-**Status**: ALL PHASES COMPLETE. Feature-complete Haskell port verified against Rust original.
+**Status**: IN PROGRESS — Phase 13. Live AWS testing revealed output divergences missed by offline audit.
 
 ## Critical Rules
 
@@ -36,10 +36,25 @@
 | 10 | Output pipeline wiring | **DONE** | [phase-10-output-wiring.md](notes/phases/phase-10-output-wiring.md) |
 | 11 | Renderer output tests | **DONE** | [phase-11-renderer-tests.md](notes/phases/phase-11-renderer-tests.md) |
 | 12 | Completion audit vs Rust (iterative) | **DONE** (Sessions 25-27) | [phase-12-completion-audit.md](notes/phases/phase-12-completion-audit.md) |
+| 13 | Output sequencing + feature gaps (full audit) | **PLANNED** (9 sub-phases) | [phase-13-cli-output-fixes.md](notes/phases/phase-13-cli-output-fixes.md) |
+| 14 | Live AWS verification — ALL commands | **PLANNED** | — |
 
-Phase 12 is iterative: audit → triage → create fix phases (13, 14, ...) → re-audit.
-Loop until a full audit pass finds zero new offline-testable gaps. "Done" means every
-behavior testable without live AWS matches Rust, with automated tests and documented divergences.
+Phase 12 offline audit found zero gaps, but live AWS testing (Session 28) on just 3 commands
+revealed 8 divergences. A full sequencing audit of all 22 commands then uncovered:
+
+- **4 CRITICAL gaps**: changeset paths in update-stack/create-or-update unimplemented
+  (CLI flags accepted but ignored), create-changeset result never rendered,
+  describe-stack-drift only initiates detection without showing results
+- **8 HIGH gaps**: missing section headings, no CommandMetadata/FinalCommandSummary ever
+  emitted, no pre-confirmation display in delete-stack, no StackDefinition before live
+  events in create/update/watch, no previous events in exec-changeset
+- **7 MEDIUM gaps**: console URL encoding, region priority, lint/approval/cost bypass
+  renderer, no spinners, auth timeout
+
+Phase 13 has 9 sub-phases (13.1-13.9). See per-command research files in
+`notes/phases/phase-13-research/` for detailed Rust-vs-Haskell analysis.
+
+Phase 14 is systematic live verification of ALL 22 commands after Phase 13 fixes.
 
 ## Session Log
 
@@ -72,14 +87,13 @@ behavior testable without live AWS matches Rust, with automated tests and docume
 | 25 | 11-12 | Phase 11 COMPLETE (352 tests). Phase 12.1: render fixes (JSON, query, overwrite), CLI defaults aligned, list-stacks query/tags wired. |
 | 26 | 12 | Phase 12.2: Fix 7 CLI divergences, add 3 missing handlebars helpers, full command audit, DIVERGENCES.md. |
 | 27 | 12 | Phase 12.3: Final re-audit pass — zero gaps found. Phase 12 COMPLETE. Port DONE. |
+| 28 | 13 | Phase 13 planned: 8 output divergences from live AWS testing. |
 
-**Final: 78 modules, 352 tests, 37/37 render snapshots, 49/49 error snapshots match**
+**Offline audit: 78 modules, 352 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
-## Completion Summary
+## Phase 12 Offline Audit Summary
 
-All 12 phases complete. The Haskell port is feature-complete and verified against the Rust original.
-
-**Final re-audit (Session 27) confirmed:**
+Phase 12 offline audit (Session 27) confirmed code-level completeness:
 - All 22 CLI commands match Rust behavior
 - All 19 CloudFormation intrinsics implemented
 - All 21 preprocessing tags implemented
@@ -88,6 +102,9 @@ All 12 phases complete. The Haskell port is feature-complete and verified agains
 - All environment variables (NO_COLOR, FORCE_COLOR, COLORTERM, COLUMNS, AWS_*)
 - Zero `undefined`, zero TODO stubs, zero `Debug.Trace`, zero dead code, zero warnings
 - All known divergences documented in DIVERGENCES.md
+
+**However**, live AWS testing (Session 28) revealed 8 output divergences that offline
+snapshot testing could not catch — see Phase 13 doc for details.
 
 ## Key Architecture Decisions
 

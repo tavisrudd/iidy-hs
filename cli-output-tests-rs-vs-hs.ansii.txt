@@ -1,0 +1,185 @@
+
+## Hello world stack use in tests:
+> cat ../iidy/example-stacks/hello-world/stack-args.yaml
+StackName: iidy-demo-hello-world
+Template: ./cfn-template.yaml # details are irrelevant for the demo
+
+Region: us-east-1
+
+Parameters:
+  Name: world
+
+Tags:
+  project: iidy-demo
+  environment: development
+  lifetime: short
+
+
+## hs version is missing numerous sections in the output to create-stack
+
+> ./iidy-rs --region us-west-2 describe-stack iidy-demo-hello-world
+Stack Details:
+ Name:                    iidy-demo-hello-world
+ Status:                  CREATE_COMPLETE
+ Capabilities:            None
+ Service Role:            None
+ Region:                  us-west-2
+ Tags:                    environment=development, lifetime=short, project=iidy-demo
+ Parameters:              Name=world
+ DisableRollback:         false
+ TerminationProtection:   false
+ Creation Time:           Sun Feb 22 2026 22:25:34
+ NotificationARNs:        None
+ ARN:                     arn:aws:cloudformation:us-west-2:903405759226:stack/iidy-demo-hello-world/67dea510-103d-11f1-b5c7-028b4692204d
+ Console URL:             https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/stackinfo?stackId=arn:aws:cloudformation:us-west-2:903405759226:stack/iidy-demo-hello-world/67dea510-103d-11f1-b5c7-028b4692204d
+
+Previous Stack Events (max 50):
+ Sun Feb 22 2026 22:25:34 CREATE_IN_PROGRESS AWS::CloudFormation::Stack               iidy-demo-hello-world
+ Sun Feb 22 2026 22:25:36 CREATE_COMPLETE    AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:25:36 CREATE_IN_PROGRESS AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:25:36 CREATE_IN_PROGRESS AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:25:37 CREATE_COMPLETE    AWS::CloudFormation::Stack               iidy-demo-hello-world (3s)
+
+Stack Resources:
+ TestWaitHandle    AWS::CloudFormation::WaitConditionHandle https://cloudformation-waitcondition-us-west-2.s3-us-west-2.amazonaws.com/arn%3Aaws%3Acloudformation%3Aus-west-2%3A903405759226%3Astack/iidy-demo-hello-world/67dea510-103d-11f1-b5c7-028b4692204d/67df4150-103d-11f1-b5c7-028b4692204d/TestWaitHandle?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20260222T222536Z&X-Amz-SignedHeaders=host&X-Amz-Expires=43199&X-Amz-Credential=AKIA54RCMT6SHHHS7Z75%2F20260222%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Signature=aa5a172e9b1909abaacdbbabcaa7f4bf31c2420dabf32aa0cb918b0ce3207a9b
+
+Stack Outputs: None
+
+Current Stack Status: CREATE_COMPLETE
+
+> ./iidy-hs --region us-west-2 create-stack ../iidy/example-stacks/hello-world/stack-args.yaml
+ Sun Feb 22 2026 22:25:34 CREATE_IN_PROGRESS AWS::CloudFormation::Stack               iidy-demo-hello-world
+ Sun Feb 22 2026 22:25:36 CREATE_IN_PROGRESS AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:25:36 CREATE_IN_PROGRESS AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:25:36 CREATE_COMPLETE    AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:25:37 CREATE_COMPLETE    AWS::CloudFormation::Stack               iidy-demo-hello-world
+ TestWaitHandle    AWS::CloudFormation::WaitConditionHandle https://cloudformation-waitcondition-us-west-2.s3-us-west-2.amazonaws.com/arn%3Aaws%3Acloudformation%3Aus-west-2%3A903405759226%3Astack/iidy-demo-hello-world/67dea510-103d-11f1-b5c7-028b4692204d/67df4150-103d-11f1-b5c7-028b4692204d/TestWaitHandle?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20260222T222536Z&X-Amz-SignedHeaders=host&X-Amz-Expires=43199&X-Amz-Credential=AKIA54RCMT6SHHHS7Z75%2F20260222%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Signature=aa5a172e9b1909abaacdbbabcaa7f4bf31c2420dabf32aa0cb918b0ce3207a9b
+Stack Outputs: None
+
+Current Stack Status: CREATE_COMPLETE
+
+## Describe stack appears correct, but verify:
+
+> ./iidy-rs --region us-west-2 describe-stack iidy-demo-hello-world
+Stack Details:
+ Name:                    iidy-demo-hello-world
+ Status:                  CREATE_COMPLETE
+ Capabilities:            None
+ Service Role:            None
+ Region:                  us-west-2
+ Tags:                    environment=development, lifetime=short, project=iidy-demo
+ Parameters:              Name=world
+ DisableRollback:         false
+ TerminationProtection:   false
+ Creation Time:           Sun Feb 22 2026 22:25:34
+ NotificationARNs:        None
+ ARN:                     arn:aws:cloudformation:us-west-2:903405759226:stack/iidy-demo-hello-world/67dea510-103d-11f1-b5c7-028b4692204d
+ Console URL:             https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/stackinfo?stackId=arn:aws:cloudformation:us-west-2:903405759226:stack/iidy-demo-hello-world/67dea510-103d-11f1-b5c7-028b4692204d
+
+Previous Stack Events (max 50):
+ Sun Feb 22 2026 22:25:34 CREATE_IN_PROGRESS AWS::CloudFormation::Stack               iidy-demo-hello-world
+ Sun Feb 22 2026 22:25:36 CREATE_COMPLETE    AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:25:36 CREATE_IN_PROGRESS AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:25:36 CREATE_IN_PROGRESS AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:25:37 CREATE_COMPLETE    AWS::CloudFormation::Stack               iidy-demo-hello-world (3s)
+
+Stack Resources:
+ TestWaitHandle    AWS::CloudFormation::WaitConditionHandle https://cloudformation-waitcondition-us-west-2.s3-us-west-2.amazonaws.com/arn%3Aaws%3Acloudformation%3Aus-west-2%3A903405759226%3Astack/iidy-demo-hello-world/67dea510-103d-11f1-b5c7-028b4692204d/67df4150-103d-11f1-b5c7-028b4692204d/TestWaitHandle?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20260222T222536Z&X-Amz-SignedHeaders=host&X-Amz-Expires=43199&X-Amz-Credential=AKIA54RCMT6SHHHS7Z75%2F20260222%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Signature=aa5a172e9b1909abaacdbbabcaa7f4bf31c2420dabf32aa0cb918b0ce3207a9b
+
+Stack Outputs: None
+
+Current Stack Status: CREATE_COMPLETE
+
+> ./iidy-hs --region us-west-2 describe-stack iidy-demo-hello-world
+Stack Details:
+ Name:                    iidy-demo-hello-world
+ Status:                  CREATE_COMPLETE
+ Capabilities:            None
+ Service Role:            None
+ Region:                  us-west-2
+ Tags:                    environment=development, lifetime=short, project=iidy-demo
+ Parameters:              Name=world
+ DisableRollback:         false
+ TerminationProtection:   false
+ Creation Time:           Sun Feb 22 2026 22:25:34
+ NotificationARNs:        None
+ ARN:                     arn:aws:cloudformation:us-west-2:903405759226:stack/iidy-demo-hello-world/67dea510-103d-11f1-b5c7-028b4692204d
+ Console URL:             https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/stackinfo?stackId=arn:aws:cloudformation:us-west-2:903405759226:stack%2Fiidy-demo-hello-world%2F67dea510-103d-11f1-b5c7-028b4692204d
+ Sun Feb 22 2026 22:25:34 CREATE_IN_PROGRESS AWS::CloudFormation::Stack               iidy-demo-hello-world
+ Sun Feb 22 2026 22:25:36 CREATE_IN_PROGRESS AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:25:36 CREATE_IN_PROGRESS AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:25:36 CREATE_COMPLETE    AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:25:37 CREATE_COMPLETE    AWS::CloudFormation::Stack               iidy-demo-hello-world
+ TestWaitHandle    AWS::CloudFormation::WaitConditionHandle https://cloudformation-waitcondition-us-west-2.s3-us-west-2.amazonaws.com/arn%3Aaws%3Acloudformation%3Aus-west-2%3A903405759226%3Astack/iidy-demo-hello-world/67dea510-103d-11f1-b5c7-028b4692204d/67df4150-103d-11f1-b5c7-028b4692204d/TestWaitHandle?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20260222T222536Z&X-Amz-SignedHeaders=host&X-Amz-Expires=43199&X-Amz-Credential=AKIA54RCMT6SHHHS7Z75%2F20260222%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Signature=aa5a172e9b1909abaacdbbabcaa7f4bf31c2420dabf32aa0cb918b0ce3207a9b
+
+Stack Outputs: None
+
+Current Stack Status: CREATE_COMPLETE
+
+## hs is missing all sections prior to confirmation prompt on delete-stack
+
+> ./iidy-hs --region us-west-2 delete-stack iidy-demo-hello-world
+Are you sure you want to DELETE the stack iidy-demo-hello-world? [y/N] y
+ Sun Feb 22 2026 22:25:34 CREATE_IN_PROGRESS AWS::CloudFormation::Stack               iidy-demo-hello-world
+ Sun Feb 22 2026 22:25:36 CREATE_IN_PROGRESS AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:25:36 CREATE_IN_PROGRESS AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:25:36 CREATE_COMPLETE    AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:25:37 CREATE_COMPLETE    AWS::CloudFormation::Stack               iidy-demo-hello-world
+ Sun Feb 22 2026 22:26:24 DELETE_IN_PROGRESS AWS::CloudFormation::Stack               iidy-demo-hello-world
+ Sun Feb 22 2026 22:26:26 DELETE_IN_PROGRESS AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:26:26 DELETE_COMPLETE    AWS::CloudFormation::WaitConditionHandle TestWaitHandle
+ Sun Feb 22 2026 22:26:27 DELETE_COMPLETE    AWS::CloudFormation::Stack               iidy-demo-hello-world
+
+
+## hs has poor error formating for missing stacks:
+
+> ./iidy-rs --region us-east-1 describe-stack iidy-demo-hello-world
+Stack Details:
+
+ERROR The stack iidy-demo-hello-world is absent
+      env = development
+      region = us-east-1
+      account = 903405759226
+      auth_arn = arn:aws:iam::903405759226:user/tavis-cli.
+
+> ./iidy-hs --region us-west-2 describe-stack iidy-demo-hello-world
+ERROR: ServiceError (ServiceError' {abbrev = Abbrev {fromAbbrev = "CloudFormation"}, status = Status {statusCode = 400, statusMessage = "Bad Request"}, headers = [("x-amzn-RequestId","cf6f6db9-700f-4040-bb11-20a4e7700478"),("Date","Sun, 22 Feb 2026 22:27:05 GMT"),("Content-Type","text/xml"),("Content-Length","307"),("connection","keep-alive")], code = ErrorCode "ValidationError", message = Just (ErrorMessage {fromErrorMessage = "Stack with id iidy-demo-hello-world does not exist"}), requestId = Just (RequestId {fromRequestId = "cf6f6db9-700f-4040-bb11-20a4e7700478"})})
+  • Check the AWS CloudFormation console for more details
+
+
+
+
+## In hs incorrect region chosen when --region is not specified
+> echo $AWS_REGION
+us-west-2
+
+> ./iidy-rs list-stacks
+Stack List:
+No stacks found
+
+> ./iidy-hs list-stacks
+Creation/Update Time,    Status,           Name
+Sun Jul 10 2016 21:00:07 CREATE_COMPLETE   CloudWatchAlarmsForCloudTrail
+Wed Nov 03 2021 00:28:25 UPDATE_COMPLETE   xxx-api
+Thu May 07 2020 02:39:33 CREATE_COMPLETE   xxx-api-custom-domain
+Wed Jul 09 2025 02:55:04 CREATE_COMPLETE   iidy-template-approval-bucket
+Wed Jul 09 2025 16:14:27 UPDATE_COMPLETE   iidy-template-approval-iam
+
+> ./iidy-hs --region us-west-2 list-stacks
+No stacks found
+
+
+## I didn't notice any spinners in the output from the hs version
+None at all.
+
+## hs version hangs indefinitely when aws auth env vars and other auth options are not present. rs timesout with clear message in ~4 seconds
+> ./iidy-hs --region us-west-2 list-stacks
+^C # waited 40 seconds
+
+> ./iidy-rs --region us-west-2 list-stacks
+Stack List:
+
+ERROR: AWS credentials not found. Please configure your AWS credentials.
+  • Run 'aws configure' to set up your credentials
+  • Set AWS_PROFILE environment variable if using named profiles
+  • Ensure ~/.aws/credentials file exists and is properly formatted
