@@ -43,8 +43,8 @@
 - [x] Property tests for parser (Gate 2 deferral) — done in 8.4
 - [x] Mock/fixture unit tests for CFN request building (Gate 4) — 20 RequestBuilder tests
 - [ ] `watch-stack` streams mock events with spinner (Gate 4) — requires AWS mocking
-- [ ] `delete-stack` prompts for confirmation test (Gate 4) — requires IO mocking
-- [ ] Changeset data structures serialize/deserialize correctly (Gate 4) — requires AWS types
+- [x] `delete-stack` confirmation logic test (Gate 4) — pure `isConfirmation` function, 10 tests
+- [x] Changeset conversion tests (Gate 4) — `convertChange`/`convertDetail` unit tests, 7 tests
 - [x] Shell completion works for bash/zsh (Gate 5) — hardcoded scripts exist, tested via CLI parser
 
 ## Gate Criteria

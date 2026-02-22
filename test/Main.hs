@@ -1,9 +1,10 @@
+{-# LANGUAGE DisambiguateRecordFields #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Main (main) where
 
 import Control.Exception (try, SomeException)
 import Control.Monad (forM, when)
 import Data.Aeson (Value(..))
-import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL
 import Data.List (nubBy, sort, sortBy)
@@ -23,11 +24,17 @@ import Options.Applicative (execParserPure, prefs, showHelpOnEmpty, ParserResult
 
 import qualified Amazonka.CloudFormation.Types as CF
 import Iidy.Aws.CredentialSource (AwsSettings(..))
+import Iidy.Cfn.Operations.Changeset (convertChange, convertDetail)
+import Iidy.Cfn.Operations.DeleteStack (isConfirmation)
+import Iidy.Output.Types (ChangeInfo(..), ChangeDetail(..))
 import Iidy.Cfn.RequestBuilder (mapCapability, mapCapabilities, mapParameters, mapTags, mapOnFailure)
+import qualified Amazonka.CloudFormation.Types.Change as CChange
+import qualified Amazonka.CloudFormation.Types.ResourceChange as CRC
+import qualified Amazonka.CloudFormation.Types.ResourceChangeDetail as CRCD
+import qualified Amazonka.CloudFormation.Types.ResourceTargetDefinition as CRTD
 import Iidy.Cfn.Operations.ConvertStack
   ( parameterizeEnv
   , parameterizeStackName
-  , sortCfnKeys
   , templateBodyToYaml
   , buildStackArgsYaml
   )
@@ -87,6 +94,8 @@ main = do
     , testGroup "OValue" oValueTests
     , testGroup "RequestBuilder" requestBuilderTests
     , testGroup "JsonSchema" jsonSchemaTests
+    , testGroup "DeleteStack" deleteStackTests
+    , testGroup "Changeset" changesetTests
     , testGroup "Properties" propertyTests
     ]
 
@@ -1115,6 +1124,118 @@ genOValue n = oneof
 genSafeText :: Gen T.Text
 genSafeText = T.pack <$> listOf (elements safeChars)
   where safeChars = ['a'..'z'] <> ['A'..'Z'] <> ['0'..'9'] <> [' ', '_', '-']
+
+------------------------------------------------------------------------
+-- DeleteStack tests
+------------------------------------------------------------------------
+
+deleteStackTests :: [TestTree]
+deleteStackTests =
+  [ testCase "isConfirmation: y" $
+      isConfirmation "y" @?= True
+  , testCase "isConfirmation: Y" $
+      isConfirmation "Y" @?= True
+  , testCase "isConfirmation: yes" $
+      isConfirmation "yes" @?= True
+  , testCase "isConfirmation: YES" $
+      isConfirmation "YES" @?= True
+  , testCase "isConfirmation: Yes" $
+      isConfirmation "Yes" @?= True
+  , testCase "isConfirmation: n" $
+      isConfirmation "n" @?= False
+  , testCase "isConfirmation: no" $
+      isConfirmation "no" @?= False
+  , testCase "isConfirmation: empty" $
+      isConfirmation "" @?= False
+  , testCase "isConfirmation: yep" $
+      isConfirmation "yep" @?= False
+  , testCase "isConfirmation: random text" $
+      isConfirmation "delete it" @?= False
+  ]
+
+------------------------------------------------------------------------
+-- Changeset conversion tests
+------------------------------------------------------------------------
+
+changesetTests :: [TestTree]
+changesetTests =
+  [ testCase "convertChange: Nothing resourceChange returns Nothing" $ do
+      let ch = CChange.newChange
+      convertChange ch @?= Nothing
+
+  , testCase "convertChange: missing logicalResourceId returns Nothing" $ do
+      let rc = CRC.newResourceChange { CRC.resourceType = Just "AWS::S3::Bucket" }
+          ch = CChange.newChange { CChange.resourceChange = Just rc }
+      convertChange ch @?= Nothing
+
+  , testCase "convertChange: missing resourceType returns Nothing" $ do
+      let rc = CRC.newResourceChange { CRC.logicalResourceId = Just "MyBucket" }
+          ch = CChange.newChange { CChange.resourceChange = Just rc }
+      convertChange ch @?= Nothing
+
+  , testCase "convertChange: valid change extracts fields" $ do
+      let rc = CRC.newResourceChange
+                 { CRC.logicalResourceId = Just "MyBucket"
+                 , CRC.resourceType = Just "AWS::S3::Bucket"
+                 , CRC.physicalResourceId = Just "arn:aws:s3:::my-bucket"
+                 , CRC.action = Just CF.ChangeAction_Add
+                 }
+          ch = CChange.newChange { CChange.resourceChange = Just rc }
+      case convertChange ch of
+        Nothing -> assertFailure "Expected Just ChangeInfo"
+        Just ci -> do
+          ciLogicalResourceId ci @?= "MyBucket"
+          ciResourceType ci @?= "AWS::S3::Bucket"
+          ciPhysicalResourceId ci @?= Just "arn:aws:s3:::my-bucket"
+          ciAction ci @?= "Add"
+
+  , testCase "convertChange: minimal valid change (no optionals)" $ do
+      let rc = CRC.newResourceChange
+                 { CRC.logicalResourceId = Just "MyFunc"
+                 , CRC.resourceType = Just "AWS::Lambda::Function"
+                 }
+          ch = CChange.newChange { CChange.resourceChange = Just rc }
+      case convertChange ch of
+        Nothing -> assertFailure "Expected Just ChangeInfo"
+        Just ci -> do
+          ciLogicalResourceId ci @?= "MyFunc"
+          ciResourceType ci @?= "AWS::Lambda::Function"
+          ciPhysicalResourceId ci @?= Nothing
+          ciReplacement ci @?= Nothing
+          ciScope ci @?= Nothing
+          ciDetails ci @?= []
+
+  , testCase "convertDetail: all fields populated" $ do
+      let tgt = CRTD.newResourceTargetDefinition
+                  { CRTD.attribute = Just CF.ResourceAttribute_Properties }
+          det = CRCD.newResourceChangeDetail
+                  { CRCD.target = Just tgt
+                  , CRCD.evaluation = Just CF.EvaluationType_Static
+                  , CRCD.changeSource = Just CF.ChangeSource_DirectModification
+                  , CRCD.causingEntity = Just "MyParam"
+                  }
+      case convertDetail det of
+        Nothing -> assertFailure "Expected Just ChangeDetail"
+        Just cd -> do
+          cdTarget cd @?= "Properties"
+          cdEvaluation cd @?= Just "Static"
+          cdChangeSource cd @?= Just "DirectModification"
+          cdCausingEntity cd @?= Just "MyParam"
+
+  , testCase "convertDetail: empty detail" $ do
+      let det = CRCD.newResourceChangeDetail
+      case convertDetail det of
+        Nothing -> assertFailure "Expected Just ChangeDetail"
+        Just cd -> do
+          cdTarget cd @?= ""
+          cdEvaluation cd @?= Nothing
+          cdChangeSource cd @?= Nothing
+          cdCausingEntity cd @?= Nothing
+  ]
+
+------------------------------------------------------------------------
+-- Property-based tests
+------------------------------------------------------------------------
 
 propertyTests :: [TestTree]
 propertyTests =

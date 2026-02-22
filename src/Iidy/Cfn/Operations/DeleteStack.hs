@@ -5,6 +5,8 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 module Iidy.Cfn.Operations.DeleteStack
   ( deleteStack
+  -- * Internal (exported for testing)
+  , isConfirmation
   ) where
 
 import Data.Char (toLower)
@@ -105,4 +107,8 @@ requestConfirmation prompt = do
   putStr $ prompt <> " [y/N] "
   hFlush stdout
   answer <- getLine
-  pure $ map toLower answer `elem` ["y", "yes"]
+  pure $ isConfirmation answer
+
+-- | Pure check: is the user's input a confirmation ("y" or "yes", case-insensitive)?
+isConfirmation :: String -> Bool
+isConfirmation answer = map toLower answer `elem` ["y", "yes"]

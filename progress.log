@@ -28,3 +28,4 @@
 2026-02-22 00:55 — Session 19: Phase 8.4 — Property-based tests: 6 QuickCheck properties (OValue round-trip, null/bool/string, parse/emit stability, handlebars passthrough). Added QuickCheck + tasty-quickcheck deps.
 2026-02-22 00:55 — Session 19: Phase 8.5 — Memory profiling: 316 KB max residency, ~125 MiB total. Well under 512MB target.
 2026-02-22 00:55 — Session 19: Phase 9 — Final verification: snapshot comparison (37+49), CLI help parity, feature audit (no stubs), memory check, nix build all verified. 226 tests.
+2026-02-22 01:05 — Session 20: Phase 8.6 — delete-stack confirmation tests (10), changeset conversion tests (7), fixed 2 pre-existing test warnings. 243 tests, zero warnings.

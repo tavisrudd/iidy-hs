@@ -33,7 +33,7 @@
 - **Verify**: ✓
 
 ## Remaining Items
-- 8.6 partial: `watch-stack` mock events, `delete-stack` confirmation IO test, changeset serialization — all require AWS mocking infrastructure (deferred)
+- 8.6 partial: `watch-stack` mock events — requires AWS mocking infrastructure (deferred)
 
 ## Gate Criteria (FINAL)
 ```bash

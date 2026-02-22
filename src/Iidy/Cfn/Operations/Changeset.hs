@@ -9,6 +9,9 @@ module Iidy.Cfn.Operations.Changeset
   ( createChangeset
   , executeChangeset
   , describeChangeset
+  -- * Internal (exported for testing)
+  , convertChange
+  , convertDetail
   ) where
 
 import Control.Concurrent (threadDelay)

@@ -57,8 +57,9 @@
 | 17 | 7-8 | Phase 7.4: Final 5 error snapshots fixed — 49/49 pass. Phase 7 complete. Ctrl-C + exception handling fixed. |
 | 18 | 8 | Phase 8.1-8.3, 8.6: NTP time sync, JSON Schema validation, demo command, gate item tests. |
 | 19 | 8-9 | YAML 1.1 auto-detection fix, missing fixtures, property tests, memory profiling, final verification. |
+| 20 | 8.6 | delete-stack confirmation + changeset conversion tests, warning cleanup. 243 tests. |
 
-**Current: 78 modules, 226 tests, 37/37 render snapshots, 49/49 error snapshots match**
+**Current: 78 modules, 243 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
 ## Key Architecture Decisions
 
