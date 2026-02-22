@@ -131,6 +131,7 @@ executable iidy-hs
     , amazonka
     , bytestring
     , text
+    , unix
     , uuid
     , iidy-hs
 

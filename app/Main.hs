@@ -7,6 +7,7 @@ import Data.UUID.V4 (nextRandom)
 import qualified Data.UUID as UUID
 import System.Exit (exitWith, ExitCode(..))
 import System.IO (hPutStrLn, stderr)
+import System.Posix.Signals (installHandler, sigINT, Handler(..))
 
 import Iidy.Aws.ClientReqToken (TokenInfo(..), TokenSource(..))
 import Iidy.Aws.Config (createAwsEnv, createAwsEnvFromSettings)
@@ -36,6 +37,8 @@ import Iidy.Render (runRender)
 
 main :: IO ()
 main = do
+  -- Install SIGINT handler for exit code 130 (matching Rust iidy behavior)
+  _ <- installHandler sigINT (CatchOnce $ exitWith (ExitFailure 130)) Nothing
   cli <- parseCliOpts
   runCommand cli
 

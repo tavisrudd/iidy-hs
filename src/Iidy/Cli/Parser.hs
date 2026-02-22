@@ -4,6 +4,10 @@ module Iidy.Cli.Parser
 
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified System.Environment
+import qualified System.Exit
+import qualified System.IO
+import System.IO (hPutStrLn)
 import Options.Applicative
 
 import Iidy.Cli
@@ -14,7 +18,23 @@ import Iidy.Types (ColorChoice(..), OutputMode(..), Theme(..), YamlSpec(..))
 ------------------------------------------------------------------------
 
 parseCliOpts :: IO Cli
-parseCliOpts = execParser cliParserInfo
+parseCliOpts = do
+  args <- System.Environment.getArgs
+  case execParserPure (prefs showHelpOnEmpty) cliParserInfo args of
+    Success cli -> pure cli
+    Failure failure -> do
+      let (msg, exitCode) = renderFailure failure "iidy-hs"
+      case exitCode of
+        System.Exit.ExitSuccess -> putStrLn msg >> System.Exit.exitSuccess
+        _           -> do
+          -- Show help (exit 0) when no args given; error (exit 1) for bad args
+          if null args
+            then putStrLn msg >> System.Exit.exitSuccess
+            else hPutStrLn System.IO.stderr msg >> System.Exit.exitWith exitCode
+    CompletionInvoked compl -> do
+      msg <- execCompletion compl "iidy-hs"
+      putStr msg
+      System.Exit.exitSuccess
 
 cliParserInfo :: ParserInfo Cli
 cliParserInfo = info (cliParser <**> helper)

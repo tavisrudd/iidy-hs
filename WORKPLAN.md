@@ -193,11 +193,11 @@ Layer 13 (ancillary):  Demo, explain, render command, template approval, convert
 - [ ] Shell completion works for bash/zsh
 - [x] All param commands compile and pass mock tests (no real SSM)
 - [x] Render command handles stdin, file, and all formats
-- [x] Exit codes match (0, 1, 130)
+- [x] Exit codes match (0, 1, 130) — SIGINT handler installed for 130
 
 ### Gate 6 (after Phase 6): Production Ready
 - [ ] All 98 Rust snapshot files produce identical output from Haskell
-- [ ] `nix build` produces static binary
+- [x] `nix build` produces binary (12MB, dynamically linked)
 - [x] No GHC warnings with `-Wall -Wcompat`
 - [ ] Memory usage under 512MB for typical operations
 
@@ -447,9 +447,9 @@ build-depends:
 | 4 | Phase 4 | 4.1-4.15 | DONE (all operations + AWS loaders) |
 | 5 | Phase 5 | 5.1-5.11 | DONE (CLI parser, commands, loaders) |
 | 6 | Phase 6 | 6.1-6.5 | DONE (81 tests passing) |
-| 7 | Phase 6 | 6.6-6.8 + Gate 6 | In progress |
+| 7 | Phase 6 | 6.6-6.8 + Gate 6 | In progress — StackArgsLoader, Main.hs wiring, 89 tests |
 
-**Actual: 7 sessions. 67 modules, ~11,156 LOC**
+**Actual: 7 sessions. 69 modules, ~11,700 LOC, 89 tests**
 
 ## Estimated LOC Summary
 
