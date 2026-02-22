@@ -16,13 +16,16 @@ import qualified Amazonka
 import qualified Amazonka.CloudFormation.CreateStack as CS
 
 import Iidy.Cfn.Context (CfnContext(..), createSuccessStates)
+import Iidy.Cfn.Operations.DescribeStack (convertEvent)
 import Iidy.Cfn.RequestBuilder (buildCreateStackRequest)
 import Iidy.Cfn.StackOperations
   ( collectStackContents
   , defaultPollConfig
+  , PollConfig(..)
   , pollForCompletion
   )
 import Iidy.Cfn.Types (StackArgs(..))
+import Iidy.Output.Types (OutputData(..), StackEventWithTiming(..))
 
 ------------------------------------------------------------------------
 -- Terminal statuses for create-stack polling
@@ -57,17 +60,18 @@ allTerminalStatuses =
 --   1. Build the CreateStack request via RequestBuilder.
 --   2. Send the request to CloudFormation.
 --   3. Extract the new stack ID from the response.
---   4. Poll until a terminal status is reached.
+--   4. Poll until a terminal status is reached, emitting events.
 --   5. On DELETE_COMPLETE, return exit code 1 (stack was rolled back and deleted).
 --   6. Collect stack contents for display.
 --   7. Return 0 if the final status is in CREATE_SUCCESS_STATES, 1 otherwise.
 createStack
   :: CfnContext
   -> StackArgs
-  -> Maybe FilePath  -- ^ argsfile path for template resolution
-  -> Text            -- ^ environment name
+  -> Maybe FilePath       -- ^ argsfile path for template resolution
+  -> Text                 -- ^ environment name
+  -> (OutputData -> IO ()) -- ^ output emitter for progress display
   -> IO (Either Text Int)
-createStack ctx args argsfilePath env = do
+createStack ctx args argsfilePath env emit = do
   -- Step 1: Build the request (use primary token for create)
   (req, _token) <- buildCreateStackRequest ctx args True argsfilePath env
 
@@ -78,15 +82,21 @@ createStack ctx args argsfilePath env = do
   let stackId = fromMaybe stackName resp.stackId
       stackName = fromMaybe "unnamed-stack" (saStackName args)
 
-  -- Step 4: Poll for completion using all terminal statuses
-  finalStatus <- pollForCompletion ctx stackId allTerminalStatuses defaultPollConfig
+  -- Step 4: Poll for completion, emitting events through renderer
+  let pollCfg = defaultPollConfig
+        { pcOnNewEvents = \newEvents -> do
+            let converted = map (\e -> StackEventWithTiming (convertEvent e) Nothing) newEvents
+            emit (OdNewStackEvents converted)
+        }
+  finalStatus <- pollForCompletion ctx stackId allTerminalStatuses pollCfg
 
   -- Step 5: Handle DELETE_COMPLETE (rollback caused stack deletion)
   if finalStatus == "DELETE_COMPLETE"
     then pure (Right 1)
     else do
-      -- Step 6: Collect stack contents (ignore result, side-effect for callers)
-      _contents <- collectStackContents ctx stackName
+      -- Step 6: Collect and emit stack contents
+      contents <- collectStackContents ctx stackName
+      emit (OdStackContents contents)
 
       -- Step 7: Return exit code based on success/failure
       if finalStatus `elem` createSuccessStates

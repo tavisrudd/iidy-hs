@@ -37,13 +37,18 @@ import Iidy.Cfn.Context
   , ctxDeriveToken
   )
 import Iidy.Cfn.RequestBuilder (buildCreateChangeSetRequest)
+import Iidy.Cfn.Operations.DescribeStack (convertEvent)
 import Iidy.Cfn.StackOperations
   ( defaultPollConfig
+  , PollConfig(..)
   , getStackId
   , pollForCompletion
   )
 import Iidy.Cfn.Types (StackArgs(..))
-import Iidy.Output.Types (ChangeSetInfo(..), ChangeInfo(..), ChangeDetail(..))
+import Iidy.Output.Types
+  ( OutputData(..), StackEventWithTiming(..)
+  , ChangeSetInfo(..), ChangeInfo(..), ChangeDetail(..)
+  )
 
 ------------------------------------------------------------------------
 -- Terminal statuses for post-execute stack polling
@@ -139,10 +144,11 @@ pollChangesetCompletion ctx stackName csId = go
 --   4. Return exit code (0 = success, 1 = failure).
 executeChangeset
   :: CfnContext
-  -> Text  -- ^ stack name
-  -> Text  -- ^ changeset name
+  -> Text                   -- ^ stack name
+  -> Text                   -- ^ changeset name
+  -> (OutputData -> IO ())  -- ^ output emitter for progress display
   -> IO (Either Text Int)
-executeChangeset ctx stackName csName = do
+executeChangeset ctx stackName csName emit = do
   -- Step 1: Build and send ExecuteChangeSet request
   token <- ctxDeriveToken ctx "execute-changeset"
   let baseReq = ECS.newExecuteChangeSet csName
@@ -156,8 +162,13 @@ executeChangeset ctx stackName csName = do
   mStackId <- getStackId ctx stackName
   let stackId = fromMaybe stackName mStackId
 
-  -- Step 3: Poll for completion
-  finalStatus <- pollForCompletion ctx stackId allTerminalStatuses defaultPollConfig
+  -- Step 3: Poll for completion, emitting events through renderer
+  let pollCfg = defaultPollConfig
+        { pcOnNewEvents = \newEvents -> do
+            let converted = map (\e -> StackEventWithTiming (convertEvent e) Nothing) newEvents
+            emit (OdNewStackEvents converted)
+        }
+  finalStatus <- pollForCompletion ctx stackId allTerminalStatuses pollCfg
 
   -- Step 4: Return exit code
   let successStates = createSuccessStates ++ updateSuccessStates

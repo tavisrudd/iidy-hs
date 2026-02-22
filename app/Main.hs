@@ -91,19 +91,19 @@ runCommand cli = case cliCommand cli of
   -- CloudFormation operations with stack-args
   CmdCreateStack args   ->
     runCfnWithArgs cli OpCreateStack (csaArgsfile args) (csaStackName args)
-      $ \ctx sa fp env -> createStack ctx sa fp env >>= handleEither
+      $ \ctx sa fp env emit -> createStack ctx sa fp env emit >>= handleEither
 
   CmdUpdateStack args   ->
     runCfnWithArgs cli OpUpdateStack (sfaArgsfile (usaBase args)) (sfaStackName (usaBase args))
-      $ \ctx sa fp env -> updateStack ctx sa fp env >>= handleEither
+      $ \ctx sa fp env emit -> updateStack ctx sa fp env emit >>= handleEither
 
   CmdCreateOrUpdate args ->
     runCfnWithArgs cli OpCreateOrUpdate (sfaArgsfile (usaBase args)) (sfaStackName (usaBase args))
-      $ \ctx sa fp env -> createOrUpdate ctx sa (usaChangeset args) fp env >>= handleEither
+      $ \ctx sa fp env emit -> createOrUpdate ctx sa (usaChangeset args) fp env emit >>= handleEither
 
   CmdEstimateCost args  ->
     runCfnWithArgs cli OpEstimateCost (sfaArgsfile args) (sfaStackName args)
-      $ \ctx sa fp env -> do
+      $ \ctx sa fp env _emit -> do
           result <- estimateCost ctx sa fp env
           case result of
             Left err  -> dieTxt err
@@ -111,7 +111,7 @@ runCommand cli = case cliCommand cli of
 
   CmdCreateChangeset args ->
     runCfnWithArgs cli OpCreateChangeset (ccsArgsfile args) (ccsStackName args)
-      $ \ctx sa fp env -> do
+      $ \ctx sa fp env _emit -> do
           let csName = maybe "changeset" id (ccsChangesetName args)
           result <- createChangeset ctx sa csName True fp env
           case result of
@@ -121,7 +121,8 @@ runCommand cli = case cliCommand cli of
   CmdExecChangeset args -> do
       let stackName = maybe "" id (ecsStackName args)
       ctx <- createSimpleContext cli OpExecuteChangeset
-      result <- executeChangeset ctx stackName (ecsChangesetName args)
+      dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+      result <- executeChangeset ctx stackName (ecsChangesetName args) (renderOutput dispatch)
       case result of
         Left err -> dieTxt err
         Right rc -> exitCode rc
@@ -155,7 +156,8 @@ runCommand cli = case cliCommand cli of
 
   CmdDeleteStack args -> do
       ctx <- createSimpleContext cli OpDeleteStack
-      result <- deleteStack ctx (delStackname args) (delYes args)
+      dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+      result <- deleteStack ctx (delStackname args) (delYes args) (renderOutput dispatch)
       case result of
         Left err -> dieTxt err
         Right rc -> exitCode rc
@@ -217,7 +219,7 @@ runCommand cli = case cliCommand cli of
   CmdTemplateApproval acmd -> case acmd of
     ApprovalRequest args ->
       runCfnWithArgs cli OpTemplateApprovalRequest (araArgsfile args) Nothing
-        $ \ctx sa fp env -> do
+        $ \ctx sa fp env _emit -> do
             result <- templateApprovalRequest ctx sa (araLintTemplate args) fp env
             handleEither result
     ApprovalReview args -> do
@@ -230,7 +232,7 @@ runCommand cli = case cliCommand cli of
   CmdDemo args           -> runDemo (daDemoscript args) (daTimescaling args) (daMaskSecrets args) >>= exitCode
   CmdLintTemplate args   ->
     runCfnWithArgs cli OpLintTemplate (ltaArgsfile args) Nothing
-      $ \ctx sa fp env -> do
+      $ \ctx sa fp env _emit -> do
           result <- lintTemplate ctx sa fp env
           handleEither result
   CmdConvertStackToIidy args -> do
@@ -257,17 +259,21 @@ runCommand cli = case cliCommand cli of
 ------------------------------------------------------------------------
 
 -- | Run a CFN operation that requires loading stack args from an argsfile.
+-- Creates an output dispatch and passes an emitter to the action callback.
 runCfnWithArgs
   :: Cli
   -> CfnOperation
   -> Text            -- ^ argsfile path
   -> Maybe Text      -- ^ stack name override from CLI
-  -> (CfnContext -> StackArgs -> Maybe FilePath -> Text -> IO Int)
+  -> (CfnContext -> StackArgs -> Maybe FilePath -> Text -> (OutputData -> IO ()) -> IO Int)
   -> IO ()
 runCfnWithArgs cli operation argsfile stackNameOverride action = do
   let env = goEnvironment (cliGlobalOpts cli)
       cliAws = cliToAwsSettings cli
       argsfilePath = T.unpack argsfile
+
+  dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+  let emit = renderOutput dispatch
 
   result <- loadStackArgs argsfilePath env operation cliAws
   case result of
@@ -281,7 +287,7 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
       token <- generateToken cli
       let tp = timeProviderForOperation operation
       ctx <- createContextFromEnv awsEnv credStack operation tp token
-      rc <- action ctx sa' (Just argsfilePath) env
+      rc <- action ctx sa' (Just argsfilePath) env emit
       exitCode rc
 
 -- | Create a simple CfnContext for operations that don't load stack args

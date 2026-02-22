@@ -19,13 +19,16 @@ import Control.Monad.Trans.Resource (runResourceT)
 import qualified Amazonka
 
 import Iidy.Cfn.Context (CfnContext(..), deleteSuccessStates)
+import Iidy.Cfn.Operations.DescribeStack (convertEvent)
 import Iidy.Cfn.RequestBuilder (buildDeleteStackRequest)
 import Iidy.Cfn.StackOperations
   ( defaultPollConfig
+  , PollConfig(..)
   , getStackId
   , pollForCompletion
   , stackExists
   )
+import Iidy.Output.Types (OutputData(..), StackEventWithTiming(..))
 
 ------------------------------------------------------------------------
 -- Terminal statuses for delete-stack polling
@@ -59,10 +62,11 @@ allTerminalStatuses =
 --
 deleteStack
   :: CfnContext
-  -> Text     -- ^ stack name
-  -> Bool     -- ^ skip confirmation (--yes flag)
+  -> Text                   -- ^ stack name
+  -> Bool                   -- ^ skip confirmation (--yes flag)
+  -> (OutputData -> IO ())  -- ^ output emitter for progress display
   -> IO (Either Text Int)
-deleteStack ctx stackName skipConfirmation = do
+deleteStack ctx stackName skipConfirmation emit = do
   -- Step 1: Check stack existence
   exists <- stackExists ctx stackName
   if not exists
@@ -86,8 +90,13 @@ deleteStack ctx stackName skipConfirmation = do
           -- Step 4: Send the DeleteStack request
           _resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
 
-          -- Step 5: Poll for completion using stack ID (survives name deregistration)
-          finalStatus <- pollForCompletion ctx pollTarget allTerminalStatuses defaultPollConfig
+          -- Step 5: Poll for completion, emitting events through renderer
+          let pollCfg = defaultPollConfig
+                { pcOnNewEvents = \newEvents -> do
+                    let converted = map (\e -> StackEventWithTiming (convertEvent e) Nothing) newEvents
+                    emit (OdNewStackEvents converted)
+                }
+          finalStatus <- pollForCompletion ctx pollTarget allTerminalStatuses pollCfg
 
           -- Step 6: Return exit code based on final status
           if finalStatus `elem` deleteSuccessStates

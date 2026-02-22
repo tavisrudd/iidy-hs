@@ -19,14 +19,17 @@ import qualified Amazonka
 import qualified Amazonka.CloudFormation.UpdateStack as US
 
 import Iidy.Cfn.Context (CfnContext(..), updateSuccessStates)
+import Iidy.Cfn.Operations.DescribeStack (convertEvent)
 import Iidy.Cfn.RequestBuilder (buildUpdateStackRequest)
 import Iidy.Cfn.StackOperations
   ( collectStackContents
   , defaultPollConfig
+  , PollConfig(..)
   , getStackId
   , pollForCompletion
   )
 import Iidy.Cfn.Types (StackArgs(..))
+import Iidy.Output.Types (OutputData(..), StackEventWithTiming(..))
 
 ------------------------------------------------------------------------
 -- Terminal statuses for update-stack polling
@@ -72,10 +75,11 @@ noUpdatesMessage = "No updates are to be performed"
 updateStack
   :: CfnContext
   -> StackArgs
-  -> Maybe FilePath  -- ^ argsfile path for template resolution
-  -> Text            -- ^ environment name
+  -> Maybe FilePath       -- ^ argsfile path for template resolution
+  -> Text                 -- ^ environment name
+  -> (OutputData -> IO ()) -- ^ output emitter for progress display
   -> IO (Either Text Int)
-updateStack ctx args argsfilePath env = do
+updateStack ctx args argsfilePath env emit = do
   let stackName = fromMaybe "unnamed-stack" (saStackName args)
 
   -- Step 1: Build the UpdateStack request (use primary token)
@@ -101,11 +105,17 @@ updateStack ctx args argsfilePath env = do
 
       let stackId = fromMaybe stackName mStackId
 
-      -- Step 5: Poll for completion using all terminal statuses
-      finalStatus <- pollForCompletion ctx stackId allTerminalStatuses defaultPollConfig
+      -- Step 5: Poll for completion, emitting events through renderer
+      let pollCfg = defaultPollConfig
+            { pcOnNewEvents = \newEvents -> do
+                let converted = map (\e -> StackEventWithTiming (convertEvent e) Nothing) newEvents
+                emit (OdNewStackEvents converted)
+            }
+      finalStatus <- pollForCompletion ctx stackId allTerminalStatuses pollCfg
 
-      -- Step 6: Collect stack contents (callers may use this for display)
-      _contents <- collectStackContents ctx stackName
+      -- Step 6: Collect and emit stack contents
+      contents <- collectStackContents ctx stackName
+      emit (OdStackContents contents)
 
       -- Step 7: Return exit code based on success/failure
       if finalStatus `elem` updateSuccessStates

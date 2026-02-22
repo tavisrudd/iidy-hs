@@ -15,6 +15,7 @@ import Iidy.Cfn.StackOperations (stackExists)
 import Iidy.Cfn.Types (StackArgs(..))
 import Iidy.Cfn.Operations.CreateStack (createStack)
 import Iidy.Cfn.Operations.UpdateStack (updateStack)
+import Iidy.Output.Types (OutputData)
 
 ------------------------------------------------------------------------
 -- Create-or-update operation
@@ -33,11 +34,12 @@ import Iidy.Cfn.Operations.UpdateStack (updateStack)
 createOrUpdate
   :: CfnContext
   -> StackArgs
-  -> Bool            -- ^ useChangeset flag (reserved; currently ignored)
-  -> Maybe FilePath  -- ^ argsfile path for template resolution
-  -> Text            -- ^ environment name
+  -> Bool                   -- ^ useChangeset flag (reserved; currently ignored)
+  -> Maybe FilePath         -- ^ argsfile path for template resolution
+  -> Text                   -- ^ environment name
+  -> (OutputData -> IO ())  -- ^ output emitter for progress display
   -> IO (Either Text Int)
-createOrUpdate ctx args _useChangeset argsfilePath env = do
+createOrUpdate ctx args _useChangeset argsfilePath env emit = do
   let stackName = fromMaybe "unnamed-stack" (saStackName args)
 
   -- Step 2: Check stack existence
@@ -45,5 +47,5 @@ createOrUpdate ctx args _useChangeset argsfilePath env = do
 
   -- Step 3/4: Dispatch based on existence
   if exists
-    then updateStack ctx args argsfilePath env
-    else createStack ctx args argsfilePath env
+    then updateStack ctx args argsfilePath env emit
+    else createStack ctx args argsfilePath env emit
