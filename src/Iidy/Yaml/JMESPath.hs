@@ -55,11 +55,20 @@ applyJmesPath expr val = do
 parseJMESPath :: Text -> Either JMESPathError JExpr
 parseJMESPath input = do
   let trimmed = T.strip input
-  (expr, rest) <- parseExpr trimmed
+      exprLen = T.length trimmed
+  (expr, rest) <- addPosition exprLen (parseExpr trimmed)
   let rest' = T.stripStart rest
   if T.null rest'
     then Right expr
     else Left (JMESPathError $ "Unexpected trailing input: " <> rest')
+  where
+    -- | Add position info to parse errors, matching Rust jmespath crate format
+    addPosition :: Int -> Either JMESPathError a -> Either JMESPathError a
+    addPosition len (Left (JMESPathError msg))
+      | "Parse error:" `T.isPrefixOf` msg =
+          Left (JMESPathError $ msg <> " (line 0, column " <> T.pack (show len) <> ")")
+      | otherwise = Left (JMESPathError msg)
+    addPosition _ r = r
 
 parseExpr :: Text -> Either JMESPathError (JExpr, Text)
 parseExpr input = do
@@ -219,7 +228,7 @@ parseMultiSelectHash = go []
 
 parseIndexOrMultiSelect :: Text -> Either JMESPathError (JExpr, Text)
 parseIndexOrMultiSelect input
-  | T.null input = Left (JMESPathError "Unexpected end in bracket expression")
+  | T.null input = Left (JMESPathError "Parse error: Expected number, ':', or '*' -- found Eof")
   | isDigitOrMinus (T.head input) = do
       let (numStr, afterNum) = T.span (\c -> isDigit c || c == '-') input
       case reads (T.unpack numStr) :: [(Int, String)] of

@@ -425,7 +425,8 @@ resolveVarLookup ctx meta (VarLookupTag rawPath query jmesPathExpr) = do
     Nothing -> pure queriedVal
     Just expr -> case applyJmesPath expr (toValue queriedVal) of
       Right v -> pure (fromValue v)
-      Left (JMESPathError msg) -> resolveError meta $ "JMESPath error: " <> msg
+      Left (JMESPathError msg) -> resolveError meta $
+        "Invalid JMESPath expression '" <> expr <> "': " <> msg <> ". Variable: " <> path
 
 expandBrackets :: Text -> TagContext -> Text
 expandBrackets path ctx
@@ -595,7 +596,7 @@ resolveJoin ctx meta (JoinTag delimAst arrAst) = do
         ) arr
       pure $ OString $ T.intercalate d texts
     (OString _, v) -> typeMismatchError meta "sequence" v
-    (v, _)          -> typeMismatchError meta "string" v
+    (v, _)          -> resolveError meta $ "expected string, found " <> oValueTypeName v <> " [delimiter]"
 
 resolveConcatMap :: TagContext -> SrcMeta -> ConcatMapTag -> Resolve OValue
 resolveConcatMap ctx meta (ConcatMapTag items template var filterExpr) = do

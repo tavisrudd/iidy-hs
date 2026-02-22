@@ -70,10 +70,10 @@ formatError c source = \case
   YamlSyntaxError info ->
     formatHeader c "Syntax error" (ysiShortMessage info) (ysiLocation info) (ysiErrorId info)
     <> formatGuidance c (ysiGuidance info)
-    <> formatSourceContext c source (ysiLocation info) 1 (ysiShortMessage info)
+    <> formatSourceContext c source (ysiLocation info) 1 ""
     <> formatFixHint c (ysiFixHint info)
-    <> formatExample c (ysiExample info)
-    <> formatFooter c (ysiErrorId info)
+    <> formatExampleInline c (ysiExample info)
+    <> "\n" <> formatFooter c (ysiErrorId info)
 
   TagParsingError info
     | tpiSpanLen info > 0 ->
@@ -91,10 +91,12 @@ formatError c source = \case
         <> formatFooter c (tpiErrorId info)
 
   LookupQueryError info ->
-    formatHeader c "Lookup error" (lqiMessage info) (lqiLocation info) (lqiErrorId info)
+    let keys = lqiAvailableKeys info
+        keysSection = if null keys then "\n\n" else formatAvailableKeys c keys
+    in formatHeader c "Lookup error" (lqiMessage info) (lqiLocation info) (lqiErrorId info)
     <> formatGuidance c ("query failed on variable '" <> lqiVariablePath info <> "'")
     <> formatSourceContext c source (lqiLocation info) 1 (lqiMessage info)
-    <> formatAvailableKeys c (lqiAvailableKeys info)
+    <> keysSection
     <> formatFooter c (lqiErrorId info)
 
 ------------------------------------------------------------------------
@@ -125,9 +127,9 @@ formatSourceContext c source loc spanLen inlineDesc =
       prevLine = getSourceLine allLines (lineNum - 1)
       currLine = getSourceLine allLines lineNum
       nextLine = getSourceLine allLines (lineNum + 1)
-      -- Skip carets when column is past the end of the line content
+      -- Skip carets when column is 0 (no position) or past end of line
       showCarets = case currLine of
-        Just l  -> col <= T.length l
+        Just l  -> col > 0 && col <= T.length l
         Nothing -> False
   in T.concat
     [ -- Previous line (grey)
@@ -217,15 +219,23 @@ formatCfnHelp _c _tagName helpText =
 formatFixHint :: ErrorColors -> Maybe Text -> Text
 formatFixHint _ Nothing = ""
 formatFixHint _c (Just hint) =
-  "\n   " <> hint <> "\n"
+  "\n   fix: " <> hint <> "\n"
 
--- | Format example block (3-space indent, matching Rust format).
+-- | Format example block for tag errors (always multi-line, matching Rust's tag_example).
 formatExample :: ErrorColors -> Maybe Text -> Text
 formatExample _ Nothing = ""
 formatExample _ (Just ex)
   | T.null ex = ""
   | otherwise =
       "\n   example:\n   " <> ex <> "\n"
+
+-- | Format example inline for syntax errors (single line, matching Rust's render_yaml_syntax).
+formatExampleInline :: ErrorColors -> Maybe Text -> Text
+formatExampleInline _ Nothing = ""
+formatExampleInline _ (Just ex)
+  | T.null ex = ""
+  | otherwise =
+      "   example: " <> ex <> "\n"
 
 -- | Format footer. The leading blank line is controlled by preceding sections.
 formatFooter :: ErrorColors -> ErrorId -> Text

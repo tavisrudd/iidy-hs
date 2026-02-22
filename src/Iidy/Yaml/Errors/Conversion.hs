@@ -34,10 +34,45 @@ formatParseErrorEnhanced :: Text -> Text -> Position -> Text -> IO Text
 formatParseErrorEnhanced filePath source pos msg = do
   isTty <- hIsTerminalDevice stderr
   let colors = if isTty then defaultColors else noColors
-      loc = posToSourceLocation filePath pos
-      adjustedLoc = adjustLocationForTag source loc msg
-      enhanced = classifyMessage source adjustedLoc msg
+      -- Translate HsYAML-specific parse errors to Rust-compatible format
+      (adjustedMsg, adjustedPos) = translateParseError source pos msg
+      adjustedLoc = adjustLocationForTag source (posToSourceLocation filePath adjustedPos) adjustedMsg
+      enhanced = classifyMessage source adjustedLoc adjustedMsg
   pure $ formatError colors source enhanced
+
+-- | Translate HsYAML parse errors to Rust-compatible messages.
+-- HsYAML and serde_yaml report certain errors differently.
+translateParseError :: Text -> Position -> Text -> (Text, Position)
+translateParseError source pos msg
+  -- HsYAML "Lexical error" with chained tags: Rust sees "invalid YAML structure"
+  | "Lexical error" `T.isPrefixOf` msg =
+      let allLines = T.lines source
+          lineNum = posLine pos
+          line = if lineNum >= 1 && lineNum <= length allLines
+                 then Just (allLines !! (lineNum - 1))
+                 else Nothing
+          -- Check if the line has chained tags (two !$ on same line)
+          hasChainedTags = case line of
+            Just l -> let idxs = findAllSubstring "!$" l
+                      in length idxs >= 2
+            Nothing -> False
+      in if hasChainedTags
+         then case line of
+           Just l -> case findSecondTag l of
+             Just col -> ("invalid YAML structure", pos { posColumn = col + 1 })  -- 1-based
+             Nothing -> ("invalid YAML structure", pos)
+           Nothing -> ("invalid YAML structure", pos)
+         else (msg, pos)
+  -- HsYAML "Unexpected '<newline>'" with unterminated string: Rust sees "unexpected end of file"
+  | "Unexpected '" `T.isPrefixOf` msg && T.any (== '\n') msg =
+      -- Rust reports the error on the NEXT line, at the end of it
+      let allLines = T.lines source
+          nextLine = posLine pos + 1
+          nextCol = if nextLine >= 1 && nextLine <= length allLines
+                    then T.length (allLines !! (nextLine - 1)) + 1
+                    else 0
+      in ("unexpected end of file", pos { posLine = nextLine, posColumn = nextCol })
+  | otherwise = (msg, pos)
 
 -- | Convert PreprocessError to EnhancedPreprocessingError.
 convertToEnhanced :: Text -> Text -> PreprocessError -> EnhancedPreprocessingError
@@ -253,13 +288,17 @@ classifyMessage source loc msg
   | "expected " `T.isPrefixOf` msg && ", found " `T.isInfixOf` msg =
       let (expPart, rest) = T.breakOn ", found " msg
           expected = T.drop (T.length "expected ") expPart
-          found = T.drop (T.length ", found ") rest
+          rawFound = T.drop (T.length ", found ") rest
+          -- Strip context tags like " [delimiter]" from found type
+          found = T.strip $ fst $ T.breakOn " [" rawFound
+          -- Clean message for display (no context tags)
+          cleanMsg = "expected " <> expected <> ", found " <> found
       in TypeMismatchError TypeMismatchInfo
         { tmiErrorId  = TypeMismatchInOperation
         , tmiExpected = expected
         , tmiFound    = found
         , tmiLocation = loc
-        , tmiContext  = msg
+        , tmiContext  = cleanMsg
         , tmiHelp     = generateTypeConversionHelp expected found
         }
 
@@ -286,12 +325,21 @@ classifyMessage source loc msg
         , tmiHelp     = Nothing
         }
 
-  -- JMESPath errors
-  | "JMESPath error: " `T.isPrefixOf` msg =
-      LookupQueryError LookupQueryInfo
+  -- JMESPath errors: "Invalid JMESPath expression 'expr': detail. Variable: path"
+  | "Invalid JMESPath expression " `T.isPrefixOf` msg =
+      let -- Extract variable path from ". Variable: path" suffix
+          varPath = case T.breakOn ". Variable: " msg of
+            (_, rest) | not (T.null rest) ->
+              T.drop (T.length ". Variable: ") rest
+            _ -> ""
+          -- Strip the ". Variable: path" suffix for display message
+          displayMsg = case T.breakOn ". Variable: " msg of
+            (before, rest) | not (T.null rest) -> before
+            _ -> msg
+      in LookupQueryError LookupQueryInfo
         { lqiErrorId       = LookupQueryFailed
-        , lqiVariablePath  = ""
-        , lqiMessage       = msg
+        , lqiVariablePath  = varPath
+        , lqiMessage       = displayMsg
         , lqiLocation      = loc
         , lqiAvailableKeys = []
         }
@@ -451,9 +499,9 @@ adjustLocationForTag source loc msg =
       -- CFN validation: +1 for 1-based column
       | isCfnValidationMessage msg ->
           loc { srcLocColumn = srcLocColumn loc + 1 }
-      -- Property not found in query
+      -- Property not found in query: column 0 suppresses caret (matching Rust)
       | "property '" `T.isPrefixOf` msg ->
-          loc
+          loc { srcLocColumn = 0 }
       | otherwise -> loc
 
 -- | Check if message is a type mismatch error
@@ -539,32 +587,34 @@ findFieldColumn allLines tagLn tagText
         _ -> Nothing
 
 -- | Find the column for flow-style tag arguments on the same line.
--- Handles !$join [delim, array] patterns.
+-- Handles !$join [delim, array] and !$split [delim, string] patterns.
 findFlowColumn :: Text -> Text -> Text -> Maybe Int
 findFlowColumn tagLine tagText msg
   | tagLower == "!$join" =
-      if "expected string" `T.isPrefixOf` msg
+      if "[delimiter]" `T.isSuffixOf` msg
       then -- Delimiter (first arg): find '[' + 1
            fmap (+ 1) (findSubstring "[" tagLine)
-      else -- Sequence (second arg): find after first comma
+      else if "expected sequence" `T.isPrefixOf` msg
+      then -- Sequence (second arg): find after first comma
            findSecondBracketArg tagLine
+      else -- Item error: use tag fallback (returns Nothing)
+           Nothing
   | otherwise = Nothing
   where
     tagLower = T.toLower tagText
 
 -- | Find the second argument in a bracket expression [first, second].
--- Returns 0-based column of the second argument.
+-- Returns 1-based column of the second argument.
 findSecondBracketArg :: Text -> Maybe Int
 findSecondBracketArg line = do
   bracketPos <- findSubstring "[" line
   let after = T.drop (bracketPos + 1) line
-      -- Skip to the comma, handling quoted strings
       commaIdx = findUnquotedComma after
   case commaIdx of
     Just ci ->
       let afterComma = T.drop (ci + 1) after
           ws = T.length (T.takeWhile (== ' ') afterComma)
-      in Just (bracketPos + 1 + ci + 1 + ws + 1)  -- +1 for Rust compat
+      in Just (bracketPos + 1 + ci + 1 + ws + 1)  -- 1-based
     Nothing -> Nothing
 
 -- | Find unquoted comma position in text.
@@ -637,6 +687,23 @@ findSubstring needle haystack
       let (before, _) = T.breakOn needle haystack
       in Just (T.length before)
   | otherwise = Nothing
+
+-- | Find all occurrences of a substring, returning 0-based positions.
+findAllSubstring :: Text -> Text -> [Int]
+findAllSubstring needle haystack = go 0 haystack
+  where
+    nLen = T.length needle
+    go _ t | T.null t = []
+    go offset t = case findSubstring needle t of
+      Nothing -> []
+      Just pos -> (offset + pos) : go (offset + pos + nLen) (T.drop (pos + nLen) t)
+
+-- | Find the second !$ tag on a line, returning its 0-based column position.
+findSecondTag :: Text -> Maybe Int
+findSecondTag line =
+  case findAllSubstring "!$" line of
+    (_:second:_) -> Just second
+    _ -> Nothing
 
 -- | Find the full tag name (e.g., "!$mapListToHash") on the source line at the given location.
 findTagOnSourceLine :: Text -> SourceLocation -> Maybe Text
