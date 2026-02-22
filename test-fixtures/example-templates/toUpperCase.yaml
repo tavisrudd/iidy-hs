@@ -1,0 +1,4 @@
+$defs:
+  a: abc
+
+out: '{{toUpperCase a}}'

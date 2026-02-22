@@ -1,0 +1,9 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  TestInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      Monitoring: true
+      EbsOptimized: false
+      SourceDestCheck: true
+      DisableApiTermination: false

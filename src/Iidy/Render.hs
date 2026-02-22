@@ -13,6 +13,7 @@ import System.IO (stderr)
 
 import Iidy.Cli (RenderArgs(..), GlobalOpts(..))
 import Iidy.Types (YamlSpec(..))
+import Iidy.Yaml.Detection (detectYamlSpec, shouldUseYaml11Compatibility)
 import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.Engine
   ( preprocessYaml
@@ -52,14 +53,16 @@ runRender args _gopts = do
 
     Right ast -> do
       -- Select YAML spec (1.1 vs 1.2)
-      let preprocess = case raYamlSpec args of
-                         YamlV11  -> preprocessYaml11
-                         _        -> preprocessYaml
+      let source = TE.decodeUtf8 (BL.toStrict content)
+          useYaml11 = case raYamlSpec args of
+                        YamlV11  -> True
+                        YamlV12  -> False
+                        YamlAuto -> shouldUseYaml11Compatibility (detectYamlSpec source)
+          preprocess = if useYaml11 then preprocessYaml11 else preprocessYaml
 
       result <- preprocess loadFileImport ast baseLocation
       case result of
         Left err -> do
-          let source = TE.decodeUtf8 (BL.toStrict content)
           formatted <- formatPreprocessErrorEnhanced baseLocation source err
           TIO.hPutStr stderr formatted
           exitWith (ExitFailure 1)

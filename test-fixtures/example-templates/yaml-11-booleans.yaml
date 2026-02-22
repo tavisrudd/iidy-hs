@@ -1,0 +1,11 @@
+%YAML 1.1
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  TestInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      Monitoring: yes
+      EbsOptimized: no
+      SourceDestCheck: on
+      DisableApiTermination: off

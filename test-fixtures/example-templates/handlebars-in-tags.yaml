@@ -1,0 +1,13 @@
+$defs:
+  app_name: "my-app"
+  environment: "prod"
+
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  TestBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "{{app_name}}-${AWS::StackName}-bucket"
+      Tags:
+        - Key: Environment
+          Value: !Ref "{{environment}}"

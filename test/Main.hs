@@ -35,8 +35,10 @@ import Iidy.Cli (Cli(..), Commands(..), GlobalOpts(..), AwsOpts(..), DeleteArgs(
 import Iidy.Cli.Parser (cliParserInfo)
 import Iidy.Types (ColorChoice(..), Theme(..), YamlSpec(..))
 import Iidy.Yaml.Emitter (emitYaml)
+import Iidy.Yaml.Detection (detectYamlSpec, shouldUseYaml11Compatibility)
 import Iidy.Yaml.Engine
   ( preprocessYaml
+  , preprocessYaml11
   , PreprocessResult(..)
   , PreprocessError(..)
   )
@@ -423,8 +425,11 @@ runFixtureTest inPath outPath = do
       "Parse error in " <> inPath <> ": " <> show pe
     Right a -> return a
 
-  -- Preprocess with file loader
-  preprocessResult <- preprocessYaml loadFileImport ast (T.pack inPath)
+  -- Preprocess with file loader (auto-detect YAML spec)
+  let source = TE.decodeUtf8 (BL.toStrict rawInput)
+      useYaml11 = shouldUseYaml11Compatibility (detectYamlSpec source)
+      preprocess = if useYaml11 then preprocessYaml11 else preprocessYaml
+  preprocessResult <- preprocess loadFileImport ast (T.pack inPath)
   pr <- case preprocessResult of
     Left err -> assertFailure $
       "Preprocess error in " <> inPath <> ": " <> describePreprocessError err
