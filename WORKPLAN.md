@@ -68,9 +68,9 @@ behavior testable without live AWS matches Rust, with automated tests and docume
 | 21 | 8.6 | watch-stack pure function tests (formatEvent, stackNameFromId). 252 tests. |
 | 22 | 8.6 | watch-stack mock polling tests (pollForCompletionWith + DI). 258 tests. Phase 8.6 COMPLETE. |
 | 23 | 8-9 | Error color audit: --color flag wiring, detectErrorColors, 7 color tests. 265 tests. |
-| 24 | 10 | Phase 10 COMPLETE: Output pipeline wiring. OutputDispatch, mkOutputDispatch, emitter threading. |
+| 24 | 10-11 | Phase 10 COMPLETE: Output pipeline wiring. Phase 11.1: 28 renderer formatting tests. 293 tests. |
 
-**Current: 78 modules, 265 tests, 37/37 render snapshots, 49/49 error snapshots match**
+**Current: 78 modules, 293 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
 ## Remaining Work
 
