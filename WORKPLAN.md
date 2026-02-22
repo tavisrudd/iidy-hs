@@ -1,8 +1,7 @@
 # iidy-hs Workplan
 
-**Source**: 16,615 LOC Rust across 96 modules
 **Target**: Feature-complete, behavior-identical, output-identical Haskell port. No shortcuts, no dropped features.
-**Status**: Phases 1-6 done. Error display and remaining features in progress.
+**Status**: Phases 1-6 done. Error display in progress (18/49 snapshots match).
 
 ## Critical Rules
 
@@ -52,8 +51,9 @@
 | 11 | Polish | Error snapshot audit: 0/49 match. Gap analysis done. |
 | 12 | Meta | Workflow restructuring: per-phase docs, session handoffs, quality gates. |
 | 13 | 7 | Phase 7.1: Enhanced error display wired up (Conversion module), research documented. |
+| 14 | 7 | Phase 7.2: Error message matching, position tracking — 0→18/49 error snapshots pass. |
 
-**Current: 76 modules, ~13,800 LOC, 181 tests, 36/36 render snapshots match**
+**Current: 76 modules, 181 tests, 36/36 render snapshots, 18/49 error snapshots match**
 
 ## Key Architecture Decisions
 
