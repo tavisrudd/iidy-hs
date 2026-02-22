@@ -4,11 +4,13 @@ module Main (main) where
 
 import Control.Exception (try, SomeException)
 import Control.Monad (forM, when)
+import Data.IORef (newIORef, readIORef, writeIORef, modifyIORef')
 import Data.Aeson (Value(..))
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL
 import Data.List (nubBy, sort, sortBy)
 import qualified Data.Map.Strict
+import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
@@ -26,7 +28,7 @@ import qualified Amazonka.CloudFormation.Types as CF
 import Iidy.Aws.CredentialSource (AwsSettings(..))
 import Iidy.Cfn.Operations.Changeset (convertChange, convertDetail)
 import Iidy.Cfn.Operations.WatchStack (formatEvent, allTerminalStatuses)
-import Iidy.Cfn.StackOperations (stackNameFromId)
+import Iidy.Cfn.StackOperations (stackNameFromId, pollForCompletionWith, PollConfig(..), defaultPollConfig)
 import qualified Amazonka.CloudFormation.Types.StackEvent as SE
 import Data.Time.Clock (UTCTime(..))
 import Data.Time.Calendar (fromGregorian)
@@ -1363,9 +1365,141 @@ watchStackTests =
   , testCase "stackNameFromId - stack ID with slashes" $
       stackNameFromId "prefix/stack-name/suffix"
         @?= "stack-name"
+  -- Mock event polling tests (using pollForCompletionWith)
+  , testCase "pollForCompletionWith - detects terminal status" $ do
+      -- Provide a single batch with a terminal CREATE_COMPLETE event
+      let events = [mkStackEvt "evt-1" CF.ResourceStatus_CREATE_COMPLETE]
+      eventsRef <- newIORef [events]
+      let fetchEvents = do
+            batches <- readIORef eventsRef
+            case batches of
+              (b:rest) -> writeIORef eventsRef rest >> pure b
+              []       -> pure events  -- keep returning terminal
+      result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
+                  allTerminalStatuses
+                  (testPollConfig { pcOnNewEvents = const (pure ()) })
+      result @?= "CREATE_COMPLETE"
+
+  , testCase "pollForCompletionWith - polls multiple times until terminal" $ do
+      -- Round 1: in-progress, Round 2: complete (most-recent-first like AWS)
+      let inProgress = [mkStackEvt "evt-1" CF.ResourceStatus_CREATE_IN_PROGRESS]
+          complete   = [ mkStackEvt "evt-2" CF.ResourceStatus_CREATE_COMPLETE
+                       , mkStackEvt "evt-1" CF.ResourceStatus_CREATE_IN_PROGRESS
+                       ]
+      eventsRef <- newIORef [inProgress, complete]
+      pollCount <- newIORef (0 :: Int)
+      let fetchEvents = do
+            modifyIORef' pollCount (+1)
+            batches <- readIORef eventsRef
+            case batches of
+              (b:rest) -> writeIORef eventsRef rest >> pure b
+              []       -> pure complete
+      result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
+                  allTerminalStatuses
+                  (testPollConfig { pcOnNewEvents = const (pure ()) })
+      result @?= "CREATE_COMPLETE"
+      polls <- readIORef pollCount
+      assertBool "should poll at least twice" (polls >= 2)
+
+  , testCase "pollForCompletionWith - fires callback with new events only" $ do
+      -- Round 1: evt-1 (in-progress), Round 2: evt-2 + evt-1 (most-recent-first)
+      let inProgress = [mkStackEvt "evt-1" CF.ResourceStatus_CREATE_IN_PROGRESS]
+          complete   = [ mkStackEvt "evt-2" CF.ResourceStatus_CREATE_COMPLETE
+                       , mkStackEvt "evt-1" CF.ResourceStatus_CREATE_IN_PROGRESS
+                       ]
+      eventsRef <- newIORef [inProgress, complete]
+      callbackEvents <- newIORef ([] :: [[Text]])
+      let fetchEvents = do
+            batches <- readIORef eventsRef
+            case batches of
+              (b:rest) -> writeIORef eventsRef rest >> pure b
+              []       -> pure complete
+          onNew evts = modifyIORef' callbackEvents (++ [map SE.eventId evts])
+      _ <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
+             allTerminalStatuses
+             (testPollConfig { pcOnNewEvents = onNew })
+      callbacks <- readIORef callbackEvents
+      -- First call gets evt-1, second gets only evt-2 (evt-1 is deduped)
+      case callbacks of
+        (first:second:_) -> do
+          assertEqual "first callback has evt-1" ["evt-1"] first
+          assertEqual "second callback has evt-2 only" ["evt-2"] second
+        _ -> assertFailure ("expected at least 2 callback batches, got " ++ show (length callbacks))
+
+  , testCase "pollForCompletionWith - ignores non-stack resource terminal status" $ do
+      -- A nested resource reaches CREATE_COMPLETE but the stack itself is still in progress
+      -- Events are most-recent-first (like AWS API returns)
+      let nestedComplete = [ mkResourceEvt "evt-1" "MyBucket" "AWS::S3::Bucket" CF.ResourceStatus_CREATE_COMPLETE
+                           , mkStackEvt "evt-0" CF.ResourceStatus_CREATE_IN_PROGRESS
+                           ]
+          stackComplete  = [ mkStackEvt "evt-2" CF.ResourceStatus_CREATE_COMPLETE
+                           , mkResourceEvt "evt-1" "MyBucket" "AWS::S3::Bucket" CF.ResourceStatus_CREATE_COMPLETE
+                           , mkStackEvt "evt-0" CF.ResourceStatus_CREATE_IN_PROGRESS
+                           ]
+      eventsRef <- newIORef [nestedComplete, stackComplete]
+      let fetchEvents = do
+            batches <- readIORef eventsRef
+            case batches of
+              (b:rest) -> writeIORef eventsRef rest >> pure b
+              []       -> pure stackComplete
+      result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
+                  allTerminalStatuses
+                  (testPollConfig { pcOnNewEvents = const (pure ()) })
+      result @?= "CREATE_COMPLETE"
+
+  , testCase "pollForCompletionWith - detects DELETE_COMPLETE" $ do
+      let events = [mkStackEvt "evt-1" CF.ResourceStatus_DELETE_COMPLETE]
+      eventsRef <- newIORef [events]
+      let fetchEvents = do
+            batches <- readIORef eventsRef
+            case batches of
+              (b:rest) -> writeIORef eventsRef rest >> pure b
+              []       -> pure events
+      result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
+                  allTerminalStatuses
+                  (testPollConfig { pcOnNewEvents = const (pure ()) })
+      result @?= "DELETE_COMPLETE"
+
+  , testCase "pollForCompletionWith - detects UPDATE_ROLLBACK_COMPLETE" $ do
+      let inProgress = [mkStackEvt "evt-1" CF.ResourceStatus_UPDATE_IN_PROGRESS]
+          rollback   = [ mkStackEvt "evt-2" CF.ResourceStatus_UPDATE_ROLLBACK_COMPLETE
+                       , mkStackEvt "evt-1" CF.ResourceStatus_UPDATE_IN_PROGRESS
+                       ]
+      eventsRef <- newIORef [inProgress, rollback]
+      let fetchEvents = do
+            batches <- readIORef eventsRef
+            case batches of
+              (b:rest) -> writeIORef eventsRef rest >> pure b
+              []       -> pure rollback
+      result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
+                  allTerminalStatuses
+                  (testPollConfig { pcOnNewEvents = const (pure ()) })
+      result @?= "UPDATE_ROLLBACK_COMPLETE"
   ]
   where
     epoch :: UTCTime
     epoch = UTCTime (fromGregorian 2024 1 1) 0
     mkEvent :: SE.StackEvent
     mkEvent = SE.newStackEvent "stack-id" "event-1" "test-stack" epoch
+
+    -- | PollConfig with 0-second delay for fast tests
+    testPollConfig :: PollConfig
+    testPollConfig = defaultPollConfig { pcIntervalSeconds = 0 }
+
+    -- | Create a stack-level event (logicalResourceId = stack name, type = Stack)
+    mkStackEvt :: Text -> CF.ResourceStatus -> SE.StackEvent
+    mkStackEvt evtId status =
+      (SE.newStackEvent "arn:aws:cloudformation:us-east-1:123:stack/demo/guid" evtId "demo" epoch)
+        { SE.logicalResourceId = Just "demo"
+        , SE.resourceType = Just "AWS::CloudFormation::Stack"
+        , SE.resourceStatus = Just status
+        }
+
+    -- | Create a nested resource event
+    mkResourceEvt :: Text -> Text -> Text -> CF.ResourceStatus -> SE.StackEvent
+    mkResourceEvt evtId logicalId resType status =
+      (SE.newStackEvent "arn:aws:cloudformation:us-east-1:123:stack/demo/guid" evtId "demo" epoch)
+        { SE.logicalResourceId = Just logicalId
+        , SE.resourceType = Just resType
+        , SE.resourceStatus = Just status
+        }

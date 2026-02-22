@@ -13,6 +13,7 @@ module Iidy.Cfn.StackOperations
   , collectStackContents
     -- * Event polling
   , pollForCompletion
+  , pollForCompletionWith
   , PollConfig(..)
   , defaultPollConfig
     -- * Helpers (exported for testing)
@@ -142,12 +143,21 @@ pollForCompletion
   -> [Text]        -- ^ terminal status strings
   -> PollConfig
   -> IO Text       -- ^ final status
-pollForCompletion ctx sId terminalStatuses config = go []
+pollForCompletion ctx sId = pollForCompletionWith (fetchStackEvents ctx sId) sId
+
+-- | Testable polling loop — takes an event-fetching action instead of CfnContext.
+pollForCompletionWith
+  :: IO [CF.StackEvent]  -- ^ event fetcher
+  -> Text                -- ^ stack ID (for isStackEvent check)
+  -> [Text]              -- ^ terminal status strings
+  -> PollConfig
+  -> IO Text             -- ^ final status
+pollForCompletionWith fetchEvents sId terminalStatuses config = go []
   where
     go :: [Text] -> IO Text
     go lastEventIds = do
       threadDelay (pcIntervalSeconds config * 1000000)
-      events <- fetchStackEvents ctx sId
+      events <- fetchEvents
       -- Filter to new events only
       let newEvents = filter (\e -> e.eventId `notElem` lastEventIds) events
       when (not (null newEvents)) $

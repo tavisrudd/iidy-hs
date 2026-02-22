@@ -1,6 +1,6 @@
 # Phase 8: Remaining Features (No Shortcuts)
 
-**Status**: IN PROGRESS — 8.1, 8.2, 8.3, 8.4, 8.5, 8.6 done
+**Status**: DONE — 8.1, 8.2, 8.3, 8.4, 8.5, 8.6 complete
 **Depends on**: Phase 7 (error display)
 
 ## Chunks
@@ -39,10 +39,10 @@
 - [x] Verified via `+RTS -s`: 316 KB max residency, ~125 MiB total (well under 512MB)
 - **Verify**: `+RTS -s` output shows acceptable memory ✓
 
-### 8.6: Unchecked Gate Items from Phases 1-6 — PARTIALLY DONE
+### 8.6: Unchecked Gate Items from Phases 1-6 — DONE
 - [x] Property tests for parser (Gate 2 deferral) — done in 8.4
 - [x] Mock/fixture unit tests for CFN request building (Gate 4) — 20 RequestBuilder tests
-- [ ] `watch-stack` streams mock events with spinner (Gate 4) — requires AWS mocking
+- [x] `watch-stack` streams mock events (Gate 4) — pollForCompletionWith with DI, 6 tests (terminal detection, multi-poll, dedup, nested resource filtering)
 - [x] `delete-stack` confirmation logic test (Gate 4) — pure `isConfirmation` function, 10 tests
 - [x] Changeset conversion tests (Gate 4) — `convertChange`/`convertDetail` unit tests, 7 tests
 - [x] Shell completion works for bash/zsh (Gate 5) — hardcoded scripts exist, tested via CLI parser

@@ -30,3 +30,4 @@
 2026-02-22 00:55 — Session 19: Phase 9 — Final verification: snapshot comparison (37+49), CLI help parity, feature audit (no stubs), memory check, nix build all verified. 226 tests.
 2026-02-22 01:05 — Session 20: Phase 8.6 — delete-stack confirmation tests (10), changeset conversion tests (7), fixed 2 pre-existing test warnings. 243 tests, zero warnings.
 2026-02-22 01:12 — Session 21: Phase 8.6 — watch-stack pure function tests: formatEvent (4), allTerminalStatuses (2), stackNameFromId (3). Exported formatEvent, allTerminalStatuses, stackNameFromId for testing. 252 tests, zero warnings.
+2026-02-22 03:20 — Session 22: Phase 8.6 COMPLETE — watch-stack mock polling tests via pollForCompletionWith (DI pattern): terminal detection, multi-poll, dedup, nested resource filtering, DELETE_COMPLETE, UPDATE_ROLLBACK_COMPLETE. 258 tests, zero warnings. All gate items done.

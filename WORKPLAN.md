@@ -31,8 +31,8 @@
 | 5 | CLI + remaining commands | DONE (Session 5) | — |
 | 6 | Tests + polish | DONE (Sessions 6-11) | — |
 | 7 | Error display system | **DONE** (Sessions 13-17) | [phase-7-error-display.md](notes/phases/phase-7-error-display.md) |
-| 8 | Remaining features (NTP, schema, demo, exception handling) | **DONE** (8.1-8.5 done, 8.6 partial) | [phase-8-remaining-features.md](notes/phases/phase-8-remaining-features.md) |
-| 9 | Final verification | **DONE** (9.1-9.5 verified) | [phase-9-final-verification.md](notes/phases/phase-9-final-verification.md) |
+| 8 | Remaining features (NTP, schema, demo, exception handling) | **DONE** (8.1-8.6 complete) | [phase-8-remaining-features.md](notes/phases/phase-8-remaining-features.md) |
+| 9 | Final verification | **DONE** (all verified) | [phase-9-final-verification.md](notes/phases/phase-9-final-verification.md) |
 
 ## Session Log
 
@@ -59,8 +59,9 @@
 | 19 | 8-9 | YAML 1.1 auto-detection fix, missing fixtures, property tests, memory profiling, final verification. |
 | 20 | 8.6 | delete-stack confirmation + changeset conversion tests, warning cleanup. 243 tests. |
 | 21 | 8.6 | watch-stack pure function tests (formatEvent, stackNameFromId). 252 tests. |
+| 22 | 8.6 | watch-stack mock polling tests (pollForCompletionWith + DI). 258 tests. Phase 8.6 COMPLETE. |
 
-**Current: 78 modules, 252 tests, 37/37 render snapshots, 49/49 error snapshots match**
+**Current: 78 modules, 258 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
 ## Key Architecture Decisions
 

@@ -1,6 +1,6 @@
 # Phase 9: Final Verification
 
-**Status**: MOSTLY DONE — 9.1-9.5 verified
+**Status**: DONE — 9.1-9.5 verified, all gate items complete
 **Depends on**: Phase 7, Phase 8
 
 ## Chunks
@@ -32,13 +32,10 @@
 - [x] `result/bin/iidy-hs --help` works
 - **Verify**: ✓
 
-## Remaining Items
-- 8.6 partial: `watch-stack` mock events — requires AWS mocking infrastructure (deferred)
-
 ## Gate Criteria (FINAL)
 ```bash
 nix build                              # ✓ clean build
-cabal test                             # ✓ 226 tests pass
+cabal test                             # ✓ 258 tests pass
 scripts/snapshot-compare.sh            # ✓ 37/37 pass
 scripts/error-snapshot-compare.sh      # ✓ 49/49 pass
 grep -r 'undefined\|TODO\|STUB' src/   # ✓ only 1 comment, no code
