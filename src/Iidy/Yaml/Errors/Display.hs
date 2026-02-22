@@ -4,10 +4,14 @@ module Iidy.Yaml.Errors.Display
   , ErrorColors(..)
   , defaultColors
   , noColors
+  , detectErrorColors
   ) where
 
 import Data.Text (Text)
 import qualified Data.Text as T
+import System.Environment (lookupEnv)
+import System.IO (hIsTerminalDevice, stderr)
+import Iidy.Types (ColorChoice(..))
 import Iidy.Yaml.Errors.Enhanced
 import Iidy.Yaml.Errors.Ids (ErrorId, showErrorId)
 import Iidy.Yaml.Location (SourceLocation(..))
@@ -39,6 +43,20 @@ defaultColors = ErrorColors
 
 noColors :: ErrorColors
 noColors = ErrorColors "" "" "" "" "" "" ""
+
+-- | Detect error colors from CLI --color flag, NO_COLOR, FORCE_COLOR, and stderr TTY.
+detectErrorColors :: ColorChoice -> IO ErrorColors
+detectErrorColors ColorAlways = pure defaultColors
+detectErrorColors ColorNever  = pure noColors
+detectErrorColors ColorAuto   = do
+  noColorEnv <- lookupEnv "NO_COLOR"
+  forceColorEnv <- lookupEnv "FORCE_COLOR"
+  case (noColorEnv, forceColorEnv) of
+    (Just _, _)  -> pure noColors      -- NO_COLOR takes precedence
+    (_, Just _)  -> pure defaultColors  -- FORCE_COLOR forces colors on
+    _ -> do
+      isTty <- hIsTerminalDevice stderr
+      pure $ if isTty then defaultColors else noColors
 
 ------------------------------------------------------------------------
 -- Format enhanced errors
@@ -146,7 +164,7 @@ formatSourceContext c source loc spanLen inlineDesc =
                effectiveSpan = max 1 (min spanLen (lineLen - col + 1))
            in "     | " <> T.replicate (max 0 (col - 1)) " "
               <> ecRed c <> T.replicate effectiveSpan "^" <> ecReset c
-              <> (if T.null inlineDesc then "" else " " <> inlineDesc) <> "\n"
+              <> (if T.null inlineDesc then "" else " " <> ecGrey c <> inlineDesc <> ecReset c) <> "\n"
       else ""
     , -- Next line (grey)
       maybe "" (\l ->
@@ -191,53 +209,53 @@ getSourceLine lns n
 formatAvailableVars :: ErrorColors -> [Text] -> Text
 formatAvailableVars _ [] = ""
 formatAvailableVars c vars =
-  "\n   " <> ecLightBlue c <> "available variables: " <> ecReset c
-  <> T.intercalate ", " vars <> "\n\n"
+  "\n" <> ecLightBlue c <> "   available variables: "
+  <> T.intercalate ", " vars <> ecReset c <> "\n\n"
 
 -- | Format available keys list (trailing \n for blank line before footer).
 formatAvailableKeys :: ErrorColors -> [Text] -> Text
 formatAvailableKeys _ [] = ""
 formatAvailableKeys c keys =
-  "\n   " <> ecLightBlue c <> "available keys: " <> ecReset c
-  <> T.intercalate ", " keys <> "\n\n"
+  "\n" <> ecLightBlue c <> "   available keys: "
+  <> T.intercalate ", " keys <> ecReset c <> "\n\n"
 
 -- | Format type mismatch help text (trailing \n for blank line before footer).
 formatTypeMismatchHelp :: ErrorColors -> Text -> Text -> Maybe Text -> Text
-formatTypeMismatchHelp _c expected found extraHelp =
-  let mainHelp = "\n   " <> "expected " <> expected <> ", found " <> found <> "\n"
+formatTypeMismatchHelp c expected found extraHelp =
+  let mainHelp = "\n   " <> ecLightBlue c <> "expected " <> expected <> ", found " <> found <> ecReset c <> "\n"
       extra = case extraHelp of
         Nothing -> ""
-        Just h  -> "   " <> h <> "\n"
+        Just h  -> "   " <> ecLightBlue c <> h <> ecReset c <> "\n"
   in mainHelp <> extra <> "\n"
 
 -- | Format CloudFormation help text (trailing \n for blank line before footer).
 formatCfnHelp :: ErrorColors -> Text -> Text -> Text
-formatCfnHelp _c _tagName helpText =
-  "\n   " <> helpText <> "\n\n"
+formatCfnHelp c _tagName helpText =
+  "\n   " <> ecLightBlue c <> helpText <> ecReset c <> "\n\n"
 
 -- | Format fix hint.
 formatFixHint :: ErrorColors -> Maybe Text -> Text
 formatFixHint _ Nothing = ""
-formatFixHint _c (Just hint) =
-  "\n   fix: " <> hint <> "\n"
+formatFixHint c (Just hint) =
+  "\n   " <> ecLightBlue c <> "fix: " <> hint <> ecReset c <> "\n"
 
 -- | Format example block for tag errors (always multi-line, matching Rust's tag_example).
 formatExample :: ErrorColors -> Maybe Text -> Text
 formatExample _ Nothing = ""
-formatExample _ (Just ex)
+formatExample c (Just ex)
   | T.null ex = ""
   | otherwise =
-      "\n   example:\n   " <> ex <> "\n"
+      "\n" <> ecLightBlue c <> "   example:\n   " <> ex <> ecReset c <> "\n"
 
 -- | Format example inline for syntax errors (single line, matching Rust's render_yaml_syntax).
 formatExampleInline :: ErrorColors -> Maybe Text -> Text
 formatExampleInline _ Nothing = ""
-formatExampleInline _ (Just ex)
+formatExampleInline c (Just ex)
   | T.null ex = ""
   | otherwise =
-      "   example: " <> ex <> "\n"
+      ecLightBlue c <> "   example: " <> ex <> ecReset c <> "\n"
 
 -- | Format footer. The leading blank line is controlled by preceding sections.
 formatFooter :: ErrorColors -> ErrorId -> Text
 formatFooter c eid =
-  "   " <> ecGrey c <> "For more info: iidy explain " <> showErrorId eid <> ecReset c <> "\n"
+  "   " <> ecLightBlue c <> "For more info: iidy explain " <> showErrorId eid <> ecReset c <> "\n"

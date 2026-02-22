@@ -33,7 +33,7 @@ import Iidy.Yaml.Parser (parseYaml, ParseError(..))
 -- The function also calls 'exitWith' on failure so callers do not
 -- need to inspect the return value when running as the main action.
 runRender :: RenderArgs -> GlobalOpts -> IO Int
-runRender args _gopts = do
+runRender args gopts = do
   let templatePath = T.unpack (raTemplate args)
 
   -- Read input: "-" means stdin, otherwise treat as a file path.
@@ -47,7 +47,7 @@ runRender args _gopts = do
   case parseYaml content baseLocation of
     Left (ParseError pos msg) -> do
       let source = TE.decodeUtf8 (BL.toStrict content)
-      formatted <- formatParseErrorEnhanced baseLocation source pos msg
+      formatted <- formatParseErrorEnhanced (goColor gopts) baseLocation source pos msg
       TIO.hPutStr stderr formatted
       exitWith (ExitFailure 1)
 
@@ -63,7 +63,7 @@ runRender args _gopts = do
       result <- preprocess loadFileImport ast baseLocation
       case result of
         Left err -> do
-          formatted <- formatPreprocessErrorEnhanced baseLocation source err
+          formatted <- formatPreprocessErrorEnhanced (goColor gopts) baseLocation source err
           TIO.hPutStr stderr formatted
           exitWith (ExitFailure 1)
 

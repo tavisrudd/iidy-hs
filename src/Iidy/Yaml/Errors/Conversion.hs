@@ -10,10 +10,10 @@ import Control.Applicative ((<|>))
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
-import System.IO (hIsTerminalDevice, stderr)
 
+import Iidy.Types (ColorChoice(..))
 import Iidy.Yaml.Engine (PreprocessError(..))
-import Iidy.Yaml.Errors.Display (formatError, defaultColors, noColors)
+import Iidy.Yaml.Errors.Display (formatError, detectErrorColors)
 import Iidy.Yaml.Errors.Enhanced
 import Iidy.Yaml.Errors.Ids
 import Iidy.Yaml.Handlebars.Engine (InterpolateError(..))
@@ -22,19 +22,17 @@ import Iidy.Yaml.Location (Position(..), SourceLocation(..))
 import Iidy.Yaml.Resolution.Resolver (ResolveError(..))
 
 -- | Format a PreprocessError with enhanced display (matching Rust output format).
-formatPreprocessErrorEnhanced :: Text -> Text -> PreprocessError -> IO Text
-formatPreprocessErrorEnhanced filePath source err = do
-  isTty <- hIsTerminalDevice stderr
-  let colors = if isTty then defaultColors else noColors
+formatPreprocessErrorEnhanced :: ColorChoice -> Text -> Text -> PreprocessError -> IO Text
+formatPreprocessErrorEnhanced colorChoice filePath source err = do
+  colors <- detectErrorColors colorChoice
   let enhanced = convertToEnhanced filePath source err
   pure $ formatError colors source enhanced
 
 -- | Format a ParseError with enhanced display.
-formatParseErrorEnhanced :: Text -> Text -> Position -> Text -> IO Text
-formatParseErrorEnhanced filePath source pos msg = do
-  isTty <- hIsTerminalDevice stderr
-  let colors = if isTty then defaultColors else noColors
-      -- Translate HsYAML-specific parse errors to Rust-compatible format
+formatParseErrorEnhanced :: ColorChoice -> Text -> Text -> Position -> Text -> IO Text
+formatParseErrorEnhanced colorChoice filePath source pos msg = do
+  colors <- detectErrorColors colorChoice
+  let -- Translate HsYAML-specific parse errors to Rust-compatible format
       (adjustedMsg, adjustedPos) = translateParseError source pos msg
       adjustedLoc = adjustLocationForTag source (posToSourceLocation filePath adjustedPos) adjustedMsg
       enhanced = classifyMessage source adjustedLoc adjustedMsg

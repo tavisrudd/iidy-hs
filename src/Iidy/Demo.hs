@@ -31,6 +31,7 @@ import System.Process (createProcess, proc, waitForProcess,
                        CreateProcess(..), StdStream(..))
 import Text.Regex.Posix ((=~))
 
+import Iidy.Types (ColorChoice(..))
 import Iidy.Yaml.Engine (preprocessYaml11, PreprocessResult(..))
 import Iidy.Yaml.Errors.Conversion (formatPreprocessErrorEnhanced, formatParseErrorEnhanced)
 import Iidy.Yaml.Imports.Loaders.File (loadFileImport)
@@ -63,7 +64,7 @@ runDemo scriptPath timescaling maskSecrets = do
   case parseYaml content baseLocation of
     Left (ParseError pos msg) -> do
       let source = TE.decodeUtf8 (BL.toStrict content)
-      formatted <- formatParseErrorEnhanced baseLocation source pos msg
+      formatted <- formatParseErrorEnhanced ColorAuto baseLocation source pos msg
       TIO.hPutStr stderr formatted
       pure 1
 
@@ -72,7 +73,7 @@ runDemo scriptPath timescaling maskSecrets = do
       case result of
         Left err -> do
           let source = TE.decodeUtf8 (BL.toStrict content)
-          formatted <- formatPreprocessErrorEnhanced baseLocation source err
+          formatted <- formatPreprocessErrorEnhanced ColorAuto baseLocation source err
           TIO.hPutStr stderr formatted
           pure 1
 

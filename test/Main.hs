@@ -46,6 +46,10 @@ import Iidy.Cfn.Operations.ConvertStack
   , buildStackArgsYaml
   )
 import Iidy.Cfn.TemplateHash (calculateTemplateHash, generateVersionedLocation, parseS3Url)
+import Iidy.Yaml.Errors.Display (formatError, ErrorColors(..), defaultColors, noColors)
+import Iidy.Yaml.Errors.Enhanced
+import Iidy.Yaml.Errors.Ids (ErrorId(..))
+import Iidy.Yaml.Location (SourceLocation(..))
 import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..))
 import Iidy.Cfn.Types (CfnOperation(..), StackArgs(..))
 import Iidy.Cli (Cli(..), Commands(..), GlobalOpts(..), AwsOpts(..), DeleteArgs(..), DescribeArgs(..), RenderArgs(..))
@@ -105,6 +109,7 @@ main = do
     , testGroup "Changeset" changesetTests
     , testGroup "Properties" propertyTests
     , testGroup "WatchStack" watchStackTests
+    , testGroup "ErrorColors" errorColorTests
     ]
 
 ------------------------------------------------------------------------
@@ -1503,3 +1508,96 @@ watchStackTests =
         , SE.resourceType = Just resType
         , SE.resourceStatus = Just status
         }
+
+------------------------------------------------------------------------
+-- Error color tests
+------------------------------------------------------------------------
+
+-- | Shared test source and location
+testSource :: Text
+testSource = "line1: foo\nline2: !$ myvar\nline3: bar"
+
+testLoc :: SourceLocation
+testLoc = SourceLocation "test.yaml" 2 8 "<root>"
+
+-- | A sample VariableNotFound error for color testing
+sampleVarError :: EnhancedPreprocessingError
+sampleVarError = VariableNotFoundError VariableNotFoundInfo
+  { vnfErrorId       = VariableNotFound
+  , vnfVariable      = "myvar"
+  , vnfLocation      = testLoc
+  , vnfAvailableVars = ["env", "region"]
+  , vnfSuggestions   = []
+  }
+
+errorColorTests :: [TestTree]
+errorColorTests =
+  [ testCase "colored output contains ANSI escapes" $ do
+      let output = formatError defaultColors testSource sampleVarError
+      assertBool "bold red header" ("\ESC[1;31m" `T.isInfixOf` output)
+      assertBool "cyan file location" ("\ESC[36m" `T.isInfixOf` output)
+      assertBool "light blue guidance" ("\ESC[38;5;75m" `T.isInfixOf` output)
+      assertBool "red carets" ("\ESC[31m" `T.isInfixOf` output)
+      assertBool "dark grey line numbers" ("\ESC[90m" `T.isInfixOf` output)
+      assertBool "reset codes present" ("\ESC[0m" `T.isInfixOf` output)
+
+  , testCase "noColors output has no ANSI escapes" $ do
+      let output = formatError noColors testSource sampleVarError
+      assertBool "no ESC in output" (not $ "\ESC[" `T.isInfixOf` output)
+
+  , testCase "footer uses light blue (not grey)" $ do
+      let output = formatError defaultColors testSource sampleVarError
+          footer = last (T.lines output)
+      assertBool "footer has light blue" ("\ESC[38;5;75m" `T.isInfixOf` footer)
+      assertBool "footer has no grey" (not $ "\ESC[38;5;245m" `T.isInfixOf` footer)
+
+  , testCase "available variables line is fully colored" $ do
+      let output = formatError defaultColors testSource sampleVarError
+          avLine = head $ filter ("available variables" `T.isInfixOf`) (T.lines output)
+      -- light blue wraps entire line including variable names
+      assertBool "light blue before label" ("\ESC[38;5;75m" `T.isInfixOf` avLine)
+      assertBool "reset after vars" ("\ESC[0m" `T.isInfixOf` avLine)
+      -- variable names should be inside the colored span (no reset between label and vars)
+      let afterLabel = snd $ T.breakOn "available variables: " avLine
+      let resetCount = length $ T.splitOn "\ESC[0m" afterLabel
+      assertEqual "single reset at end of vars" 2 resetCount  -- split produces 2 parts for 1 occurrence
+
+  , testCase "type mismatch help is colored" $ do
+      let err = TypeMismatchError TypeMismatchInfo
+            { tmiErrorId  = TypeMismatchInOperation
+            , tmiExpected = "array"
+            , tmiFound    = "string"
+            , tmiLocation = testLoc
+            , tmiContext  = "test"
+            , tmiHelp     = Just "try using !$split"
+            }
+          output = formatError defaultColors testSource err
+          helpLines = filter ("try using" `T.isInfixOf`) (T.lines output)
+      assertBool "has help line" (not $ null helpLines)
+      assertBool "help is colored" ("\ESC[38;5;75m" `T.isInfixOf` head helpLines)
+
+  , testCase "syntax error fix hint is colored" $ do
+      let err = YamlSyntaxError YamlSyntaxInfo
+            { ysiErrorId      = InvalidYamlSyntax
+            , ysiShortMessage = "bad syntax"
+            , ysiGuidance     = "check your yaml"
+            , ysiLocation     = testLoc
+            , ysiFixHint      = Just "add a colon"
+            , ysiExample      = Just "key: value"
+            }
+          output = formatError defaultColors testSource err
+          fixLines = filter ("fix:" `T.isInfixOf`) (T.lines output)
+          exLines = filter ("example:" `T.isInfixOf`) (T.lines output)
+      assertBool "has fix line" (not $ null fixLines)
+      assertBool "fix is colored" ("\ESC[38;5;75m" `T.isInfixOf` head fixLines)
+      assertBool "has example line" (not $ null exLines)
+      assertBool "example is colored" ("\ESC[38;5;75m" `T.isInfixOf` head exLines)
+
+  , testCase "inline description on caret line is colored grey" $ do
+      let output = formatError defaultColors testSource sampleVarError
+          caretLines = filter ("^" `T.isInfixOf`) (T.lines output)
+      assertBool "has caret line" (not $ null caretLines)
+      let caretLine = head caretLines
+      -- inline desc "variable not defined" should be in grey (245)
+      assertBool "inline desc has grey" ("\ESC[38;5;245m" `T.isInfixOf` caretLine)
+  ]
