@@ -58,8 +58,9 @@
 | 18 | 8 | Phase 8.1-8.3, 8.6: NTP time sync, JSON Schema validation, demo command, gate item tests. |
 | 19 | 8-9 | YAML 1.1 auto-detection fix, missing fixtures, property tests, memory profiling, final verification. |
 | 20 | 8.6 | delete-stack confirmation + changeset conversion tests, warning cleanup. 243 tests. |
+| 21 | 8.6 | watch-stack pure function tests (formatEvent, stackNameFromId). 252 tests. |
 
-**Current: 78 modules, 243 tests, 37/37 render snapshots, 49/49 error snapshots match**
+**Current: 78 modules, 252 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
 ## Key Architecture Decisions
 
