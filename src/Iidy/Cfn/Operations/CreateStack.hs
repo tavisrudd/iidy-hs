@@ -16,10 +16,11 @@ import qualified Amazonka
 import qualified Amazonka.CloudFormation.CreateStack as CS
 
 import Iidy.Cfn.Context (CfnContext(..), createSuccessStates)
-import Iidy.Cfn.Operations.DescribeStack (convertEvent)
+import Iidy.Cfn.Operations.DescribeStack (convertEvent, convertStack)
 import Iidy.Cfn.RequestBuilder (buildCreateStackRequest)
 import Iidy.Cfn.StackOperations
   ( collectStackContents
+  , getStack
   , defaultPollConfig
   , PollConfig(..)
   , pollForCompletion
@@ -81,6 +82,13 @@ createStack ctx args argsfilePath env emit = do
   -- Step 3: Extract stack ID from response
   let stackId = fromMaybe stackName resp.stackId
       stackName = fromMaybe "unnamed-stack" (saStackName args)
+      regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
+
+  -- Step 3b: Fetch and emit StackDefinition
+  mStack <- getStack ctx stackId
+  case mStack of
+    Just cfnStack -> emit (OdStackDefinition (convertStack cfnStack regionText) True)
+    Nothing -> pure ()
 
   -- Step 4: Poll for completion, emitting events through renderer
   let pollCfg = defaultPollConfig

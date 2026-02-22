@@ -22,7 +22,7 @@ import Iidy.Cfn.Operations.ConvertStack (convertStackToIidy)
 import Iidy.Cfn.Operations.CreateOrUpdate (createOrUpdate)
 import Iidy.Cfn.Operations.CreateStack (createStack)
 import Iidy.Cfn.Operations.DeleteStack (deleteStack)
-import Iidy.Cfn.Operations.DescribeStack (describeStack, convertEvent)
+import Iidy.Cfn.Operations.DescribeStack (describeStack)
 import Iidy.Cfn.Operations.DescribeStackDrift (detectStackDrift)
 import Iidy.Cfn.Operations.EstimateCost (estimateCost)
 import Iidy.Cfn.Operations.GetStackTemplate (getStackTemplate)
@@ -40,7 +40,7 @@ import Iidy.Explain (explainErrors)
 import Iidy.GetImport (runGetImport)
 import Iidy.InitStackArgs (runInitStackArgs)
 import Iidy.Output.Manager (mkOutputDispatch, renderOutput)
-import Iidy.Output.Types (OutputData(..), StackEventWithTiming(..))
+import Iidy.Output.Types (OutputData(..))
 import Iidy.Params.Client (paramGet, paramSet, paramGetByPath, paramGetHistory)
 import Iidy.Params.Review (paramReview)
 import Iidy.Render (runRender)
@@ -140,10 +140,7 @@ runCommand cli = case cliCommand cli of
   CmdWatchStack args -> do
       ctx <- createSimpleContext cli OpWatchStack
       dispatch <- mkOutputDispatch (cliGlobalOpts cli)
-      let onEvents cfnEvents = do
-            let converted = map (\e -> StackEventWithTiming (convertEvent e) Nothing) cfnEvents
-            renderOutput dispatch (OdNewStackEvents converted)
-      result <- watchStack ctx (waStackname args) (waInactivityTimeout args) onEvents
+      result <- watchStack ctx (waStackname args) (waInactivityTimeout args) (renderOutput dispatch)
       case result of
         Left err -> dieTxt err
         Right rc -> exitCode rc

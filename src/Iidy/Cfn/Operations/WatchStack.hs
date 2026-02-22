@@ -13,10 +13,12 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 
+import qualified Amazonka
 import qualified Amazonka.CloudFormation as CF
 import qualified Amazonka.CloudFormation.Types as CF
 
 import Iidy.Cfn.Context (CfnContext(..))
+import Iidy.Cfn.Operations.DescribeStack (convertStack, convertEvent, buildEventsDisplay)
 import Iidy.Cfn.StackOperations
   ( getStack
   , getStackId
@@ -26,6 +28,7 @@ import Iidy.Cfn.StackOperations
   , PollConfig(..)
   , defaultPollConfig
   )
+import Iidy.Output.Types (OutputData(..), StackEventWithTiming(..))
 
 ------------------------------------------------------------------------
 -- Terminal statuses
@@ -55,38 +58,47 @@ watchStack
   :: CfnContext
   -> Text                    -- ^ stack name
   -> Int                     -- ^ inactivity timeout in seconds
-  -> ([CF.StackEvent] -> IO ()) -- ^ callback for each batch of new events
+  -> (OutputData -> IO ())   -- ^ output emitter
   -> IO (Either Text Int)
-watchStack ctx stackName _timeoutSeconds onEvents = do
+watchStack ctx stackName _timeoutSeconds emit = do
   -- 1. Verify stack exists
   mStack <- getStack ctx stackName
   case mStack of
     Nothing ->
       pure $ Left ("Stack not found: " <> stackName)
-    Just _ -> do
-      -- 2. Get stable stack ID (use ID for deletes so we keep tracking after name gone)
+    Just cfnStack -> do
+      -- 2. Emit StackDefinition
+      let regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
+          stackDef = convertStack cfnStack regionText
+      emit (OdStackDefinition stackDef True)
+
+      -- 3. Get stable stack ID
       mStackId <- getStackId ctx stackName
       let sId = fromMaybe stackName mStackId
 
-      -- 3. Fetch initial events to mark as already-seen
+      -- 4. Fetch and emit previous events
       initialEvents <- fetchStackEvents ctx sId
+      let prevEventsDisplay = buildEventsDisplay stackName 10 initialEvents
+      emit (OdStackEvents prevEventsDisplay)
       let seenIds = map (.eventId) initialEvents
 
-      -- 4. Poll until terminal status, firing callback for each new event batch
+      -- 5. Poll until terminal status, emitting live events
       let pollCfg = defaultPollConfig
             { pcOnNewEvents = \newEvents -> do
-                -- Filter out already-seen events (first call may overlap with initial fetch)
                 let fresh = filter (\e -> e.eventId `notElem` seenIds) newEvents
-                if null fresh then pure () else onEvents fresh
+                if null fresh then pure ()
+                else do
+                  let converted = map (\e -> StackEventWithTiming (convertEvent e) Nothing) fresh
+                  emit (OdNewStackEvents converted)
             }
       finalStatus <- pollForCompletion ctx sId allTerminalStatuses pollCfg
 
-      -- 5. If DELETE_COMPLETE, nothing more to collect; otherwise collect contents
+      -- 6. If DELETE_COMPLETE, nothing more to collect; otherwise collect contents
       if finalStatus == "DELETE_COMPLETE"
         then pure (Right 0)
         else do
-          _ <- collectStackContents ctx stackName
-          -- 6. Watch just observes — always return 0
+          contents <- collectStackContents ctx stackName
+          emit (OdStackContents contents)
           pure (Right 0)
 
 ------------------------------------------------------------------------

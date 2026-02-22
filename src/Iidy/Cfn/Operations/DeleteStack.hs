@@ -20,14 +20,16 @@ import qualified Amazonka
 
 import Iidy.Aws.Sts (getCallerIdentity)
 import Iidy.Cfn.Context (CfnContext(..), deleteSuccessStates)
-import Iidy.Cfn.Operations.DescribeStack (convertEvent)
+import Iidy.Cfn.Operations.DescribeStack (convertEvent, convertStack, buildEventsDisplay)
 import Iidy.Cfn.RequestBuilder (buildDeleteStackRequest)
 import Iidy.Cfn.StackOperations
-  ( defaultPollConfig
+  ( collectStackContents
+  , defaultPollConfig
+  , fetchStackEvents
+  , getStack
   , PollConfig(..)
   , getStackId
   , pollForCompletion
-  , stackExists
   )
 import Iidy.Output.Types (OutputData(..), StackAbsentInfo(..), StackEventWithTiming(..))
 
@@ -69,12 +71,12 @@ deleteStack
   -> (OutputData -> IO ())  -- ^ output emitter for progress display
   -> IO (Either Text Int)
 deleteStack ctx stackName skipConfirmation env emit = do
-  -- Step 1: Check stack existence
-  exists <- stackExists ctx stackName
-  if not exists
-    then do
+  let regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
+  -- Step 1: Check stack existence (fetch full stack for pre-confirmation display)
+  mStack <- getStack ctx stackName
+  case mStack of
+    Nothing -> do
       -- Emit StackAbsentInfo like Rust does
-      let regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
       (account, authArn) <- getCallerIdentity (cfnEnv ctx)
       emit $ OdStackAbsentInfo StackAbsentInfo
         { saiStackName   = stackName
@@ -84,8 +86,17 @@ deleteStack ctx stackName skipConfirmation env emit = do
         , saiAuthArn     = authArn
         }
       pure (Right 0)
-    else do
-      -- Step 1b: Prompt for confirmation unless --yes
+    Just cfnStack -> do
+      -- Step 1a: Show stack definition before confirmation
+      emit (OdStackDefinition (convertStack cfnStack regionText) True)
+
+      -- Step 1b: Show previous events and contents before confirmation
+      events <- fetchStackEvents ctx stackName
+      emit (OdStackEvents (buildEventsDisplay stackName 10 events))
+      contents <- collectStackContents ctx stackName
+      emit (OdStackContents contents)
+
+      -- Step 1c: Prompt for confirmation unless --yes
       confirmed <- if skipConfirmation
         then pure True
         else requestConfirmation
