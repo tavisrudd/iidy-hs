@@ -60,6 +60,7 @@ library
     Iidy.Output.Renderers.Json
     Iidy.Cli
     Iidy.Cli.Parser
+    Iidy.Demo
     Iidy.Explain
     Iidy.Render
     Iidy.GetImport

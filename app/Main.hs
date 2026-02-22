@@ -34,6 +34,7 @@ import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..))
 import Iidy.Cfn.Types (CfnOperation(..), StackArgs(..), isReadOnlyOperation)
 import Iidy.Cli
 import Iidy.Cli.Parser (parseCliOpts)
+import Iidy.Demo (runDemo)
 import Iidy.Explain (explainErrors)
 import Iidy.GetImport (runGetImport)
 import Iidy.InitStackArgs (runInitStackArgs)
@@ -219,7 +220,7 @@ runCommand cli = case cliCommand cli of
         Left err -> dieTxt err
         Right rc -> exitCode rc
   CmdGetImport args      -> runGetImport args >>= exitCode
-  CmdDemo _              -> notImplemented "demo"
+  CmdDemo args           -> runDemo (daDemoscript args) (daTimescaling args) (daMaskSecrets args) >>= exitCode
   CmdLintTemplate args   ->
     runCfnWithArgs cli OpLintTemplate (ltaArgsfile args) Nothing
       $ \ctx sa fp env -> do
@@ -328,11 +329,6 @@ exitCode n = exitWith (ExitFailure n)
 dieTxt :: Text -> IO a
 dieTxt msg = do
   TIO.hPutStrLn stderr $ "iidy-hs: " <> msg
-  exitWith (ExitFailure 1)
-
-notImplemented :: String -> IO ()
-notImplemented cmd = do
-  hPutStrLn stderr $ "iidy-hs: command '" <> cmd <> "' not yet implemented"
   exitWith (ExitFailure 1)
 
 -- | Basic display for OutputData (used for describe/list operations)
