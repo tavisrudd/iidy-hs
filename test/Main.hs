@@ -34,7 +34,7 @@ import qualified Amazonka.CloudFormation.Types.ResourceChangeDetail as CRCD
 import qualified Amazonka.CloudFormation.Types.ResourceTargetDefinition as CRTD
 import qualified Amazonka.CloudFormation.Types.StackEvent as SE
 import Data.Time.Calendar (fromGregorian)
-import Data.Time.Clock (UTCTime(..))
+import Data.Time.Clock (UTCTime(..), addUTCTime, secondsToNominalDiffTime)
 
 import Iidy.Aws.ClientReqToken (TokenInfo(..), TokenSource(..), DerivedTokenInfo(..))
 import Iidy.Aws.CredentialSource (AwsSettings(..))
@@ -54,6 +54,7 @@ import Iidy.Cfn.TemplateHash (calculateTemplateHash, generateVersionedLocation, 
 import Iidy.Cfn.Types (CfnOperation(..), StackArgs(..), StackChangeType(..))
 import Iidy.Cli (Cli(..), Commands(..), GlobalOpts(..), AwsOpts(..), DeleteArgs(..), DescribeArgs(..), RenderArgs(..))
 import Iidy.Cli.Parser (cliParserInfo)
+import Iidy.Cfn.Operations.DescribeStack (calculateEventDurations)
 import Iidy.Output.Color (darkTheme, lightTheme, highContrastTheme, noColorTheme, IidyTheme(..), colorize, colorizeResourceStatus)
 import Iidy.Output.Renderers.Interactive
   ( InteractiveRenderer(..)
@@ -1710,6 +1711,22 @@ mkPlainRenderer = do
     , irTimingThread       = timingThreadRef
     }
 
+-- | Create a test StackEvent with the given fields.
+mkEvent :: Text -> Text -> Text -> Text -> Maybe UTCTime -> StackEvent
+mkEvent eid logId rtype status mTs = StackEvent
+  { seEventId              = eid
+  , seStackId              = "arn:stack"
+  , seStackName            = "test-stack"
+  , seLogicalResourceId    = logId
+  , sePhysicalResourceId   = Nothing
+  , seResourceType         = rtype
+  , seTimestamp            = mTs
+  , seResourceStatus       = status
+  , seResourceStatusReason = Nothing
+  , seResourceProperties   = Nothing
+  , seClientRequestToken   = Nothing
+  }
+
 rendererTests :: [TestTree]
 rendererTests =
   -- Pure formatting function tests
@@ -1834,6 +1851,51 @@ rendererTests =
       assertEqual "zero"
         "0 seconds elapsed total."
         (formatTimingText 0 Nothing)
+
+  -- Event duration calculation tests
+  , testCase "calculateEventDurations - IN_PROGRESS then COMPLETE" $ do
+      let t0 = UTCTime (fromGregorian 2026 1 1) 0
+          t5 = addUTCTime (secondsToNominalDiffTime 5) t0
+          events =
+            [ mkEvent "e1" "MyResource" "AWS::S3::Bucket" "CREATE_IN_PROGRESS" (Just t0)
+            , mkEvent "e2" "MyResource" "AWS::S3::Bucket" "CREATE_COMPLETE" (Just t5)
+            ]
+          result = calculateEventDurations events
+      assertEqual "IN_PROGRESS has no duration" Nothing (sewDurationSeconds (result !! 0))
+      assertEqual "COMPLETE has 5s duration" (Just 5) (sewDurationSeconds (result !! 1))
+
+  , testCase "calculateEventDurations - no matching start" $ do
+      let t0 = UTCTime (fromGregorian 2026 1 1) 0
+          events =
+            [ mkEvent "e1" "MyResource" "AWS::S3::Bucket" "CREATE_COMPLETE" (Just t0)
+            ]
+          result = calculateEventDurations events
+      assertEqual "no start = no duration" Nothing (sewDurationSeconds (head result))
+
+  , testCase "calculateEventDurations - FAILED event gets duration" $ do
+      let t0 = UTCTime (fromGregorian 2026 1 1) 0
+          t3 = addUTCTime (secondsToNominalDiffTime 3) t0
+          events =
+            [ mkEvent "e1" "MyResource" "AWS::EC2::Instance" "CREATE_IN_PROGRESS" (Just t0)
+            , mkEvent "e2" "MyResource" "AWS::EC2::Instance" "CREATE_FAILED" (Just t3)
+            ]
+          result = calculateEventDurations events
+      assertEqual "FAILED has 3s duration" (Just 3) (sewDurationSeconds (result !! 1))
+
+  , testCase "calculateEventDurations - multiple resources" $ do
+      let t0 = UTCTime (fromGregorian 2026 1 1) 0
+          t2 = addUTCTime (secondsToNominalDiffTime 2) t0
+          t4 = addUTCTime (secondsToNominalDiffTime 4) t0
+          t7 = addUTCTime (secondsToNominalDiffTime 7) t0
+          events =
+            [ mkEvent "e1" "Bucket" "AWS::S3::Bucket" "CREATE_IN_PROGRESS" (Just t0)
+            , mkEvent "e2" "Instance" "AWS::EC2::Instance" "CREATE_IN_PROGRESS" (Just t2)
+            , mkEvent "e3" "Bucket" "AWS::S3::Bucket" "CREATE_COMPLETE" (Just t4)
+            , mkEvent "e4" "Instance" "AWS::EC2::Instance" "CREATE_COMPLETE" (Just t7)
+            ]
+          result = calculateEventDurations events
+      assertEqual "Bucket = 4s" (Just 4) (sewDurationSeconds (result !! 2))
+      assertEqual "Instance = 5s" (Just 5) (sewDurationSeconds (result !! 3))
 
   -- Color function tests
   , testCase "colorize - dark theme applies ANSI" $ do

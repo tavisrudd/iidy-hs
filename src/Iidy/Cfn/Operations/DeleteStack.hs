@@ -20,7 +20,7 @@ import qualified Amazonka
 
 import Iidy.Aws.Sts (getCallerIdentity)
 import Iidy.Cfn.Context (CfnContext(..), deleteSuccessStates)
-import Iidy.Cfn.Operations.DescribeStack (convertEvent, convertStack, buildEventsDisplay)
+import Iidy.Cfn.Operations.DescribeStack (convertEventWithDuration, convertStack, buildEventsDisplay)
 import Iidy.Cfn.RequestBuilder (buildDeleteStackRequest)
 import Iidy.Cfn.StackOperations
   ( collectStackContents
@@ -31,7 +31,7 @@ import Iidy.Cfn.StackOperations
   , getStackId
   , pollForCompletion
   )
-import Iidy.Output.Types (OutputData(..), StackAbsentInfo(..), StackEventWithTiming(..))
+import Iidy.Output.Types (OutputData(..), StackAbsentInfo(..))
 
 ------------------------------------------------------------------------
 -- Terminal statuses for delete-stack polling
@@ -118,7 +118,7 @@ deleteStack ctx stackName skipConfirmation env emit = do
           emit (OdPollingStarted "Loading live events...")
           let pollCfg = defaultPollConfig
                 { pcOnNewEvents = \newEvents -> do
-                    let converted = map (\e -> StackEventWithTiming (convertEvent e) Nothing) newEvents
+                    let converted = map (convertEventWithDuration (cfnStartTime ctx)) newEvents
                     emit (OdNewStackEvents converted)
                 , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
                 }

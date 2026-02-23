@@ -6,18 +6,22 @@
 module Iidy.Cfn.Operations.DescribeStack
   ( describeStack
   , convertEvent
+  , convertEventWithDuration
+  , calculateEventDurations
   , convertStack
   , buildEventsDisplay
   , buildConsoleUrl
   ) where
 
+import Data.List (sortBy)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
+import Data.Ord (comparing)
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Map.Strict as Map
 
 import Data.Coerce (coerce)
-import Data.Time (UTCTime)
+import Data.Time (UTCTime, diffUTCTime)
 import qualified Amazonka
 import qualified Amazonka.CloudFormation as CF
 import qualified Amazonka.CloudFormation.Types as CF
@@ -110,7 +114,7 @@ buildEventsDisplay _sName numEvents events =
   let total      = length events
       taken      = take numEvents events
       converted  = map convertEvent taken
-      wrapped    = map (\e -> StackEventWithTiming { sewEvent = e, sewDurationSeconds = Nothing }) converted
+      wrapped    = calculateEventDurations converted
       truncInfo  = if total > numEvents
                      then Just TruncationInfo { truncShown = numEvents, truncTotal = total }
                      else Nothing
@@ -136,6 +140,48 @@ convertEvent e = StackEvent
   , seResourceProperties   = e.resourceProperties
   , seClientRequestToken   = e.clientRequestToken
   }
+
+-- | Calculate per-resource durations by matching IN_PROGRESS → COMPLETE/FAILED pairs.
+-- Used for past/historical events (describe-stack). Sorts events chronologically
+-- to properly track start/end pairs, then returns them in the original order.
+calculateEventDurations :: [StackEvent] -> [StackEventWithTiming]
+calculateEventDurations events =
+  let -- Sort chronologically (oldest first) for duration tracking
+      sorted = sortBy (comparing seTimestamp) events
+      -- Track start times per resource key (logicalId/resourceType)
+      durations = go Map.empty [] sorted
+      -- Build lookup by event ID
+      durMap = Map.fromList durations
+  in map (\e -> StackEventWithTiming e (Map.lookup (seEventId e) durMap >>= id)) events
+  where
+    go :: Map.Map Text UTCTime -> [(Text, Maybe Int)] -> [StackEvent] -> [(Text, Maybe Int)]
+    go _ acc [] = acc
+    go starts acc (e:es) =
+      let key = seLogicalResourceId e <> "/" <> seResourceType e
+          status = seResourceStatus e
+          (starts', dur) = case seTimestamp e of
+            Nothing -> (starts, Nothing)
+            Just ts
+              | "_IN_PROGRESS" `T.isSuffixOf` status ->
+                  (Map.insert key ts starts, Nothing)
+              | "_COMPLETE" `T.isSuffixOf` status || "_FAILED" `T.isSuffixOf` status ->
+                  case Map.lookup key starts of
+                    Just startTs ->
+                      let secs = max 0 (floor (diffUTCTime ts startTs)) :: Int
+                      in (starts, Just secs)
+                    Nothing -> (starts, Nothing)
+              | otherwise -> (starts, Nothing)
+      in go starts' ((seEventId e, dur) : acc) es
+
+-- | Convert a raw CF.StackEvent to a StackEventWithTiming using the operation start time.
+-- Duration = event_time - operation_start_time (used for live events during polling).
+convertEventWithDuration :: UTCTime -> CF.StackEvent -> StackEventWithTiming
+convertEventWithDuration startTime e =
+  let converted = convertEvent e
+      dur = case seTimestamp converted of
+        Just ts -> Just (max 0 (floor (diffUTCTime ts startTime) :: Int))
+        Nothing -> Nothing
+  in StackEventWithTiming converted dur
 
 ------------------------------------------------------------------------
 -- Console URL helper

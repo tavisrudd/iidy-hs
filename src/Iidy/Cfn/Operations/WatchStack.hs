@@ -18,7 +18,7 @@ import qualified Amazonka.CloudFormation as CF
 import qualified Amazonka.CloudFormation.Types as CF
 
 import Iidy.Cfn.Context (CfnContext(..))
-import Iidy.Cfn.Operations.DescribeStack (convertStack, convertEvent, buildEventsDisplay)
+import Iidy.Cfn.Operations.DescribeStack (convertStack, convertEventWithDuration, buildEventsDisplay)
 import Iidy.Cfn.StackOperations
   ( getStack
   , getStackId
@@ -28,7 +28,7 @@ import Iidy.Cfn.StackOperations
   , PollConfig(..)
   , defaultPollConfig
   )
-import Iidy.Output.Types (OutputData(..), StackEventWithTiming(..))
+import Iidy.Output.Types (OutputData(..))
 
 ------------------------------------------------------------------------
 -- Terminal statuses
@@ -90,7 +90,7 @@ watchStack ctx stackName timeoutSeconds emit = do
                 let fresh = filter (\e -> e.eventId `notElem` seenIds) newEvents
                 if null fresh then pure ()
                 else do
-                  let converted = map (\e -> StackEventWithTiming (convertEvent e) Nothing) fresh
+                  let converted = map (convertEventWithDuration (cfnStartTime ctx)) fresh
                   emit (OdNewStackEvents converted)
             , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
             , pcOnInactivityTimeout = \info -> emit (OdInactivityTimeout info)

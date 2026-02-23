@@ -32,7 +32,7 @@ import Iidy.Cfn.Operations.Changeset
   , buildChangeSetCreationResult
   , confirmChangesetExecution
   )
-import Iidy.Cfn.Operations.DescribeStack (convertEvent, convertStack)
+import Iidy.Cfn.Operations.DescribeStack (convertEventWithDuration, convertStack)
 import Iidy.Cfn.RequestBuilder (buildUpdateStackRequest)
 import Iidy.Cfn.StackOperations
   ( collectStackContents
@@ -43,7 +43,7 @@ import Iidy.Cfn.StackOperations
   , pollForCompletion
   )
 import Iidy.Cfn.Types (StackArgs(..))
-import Iidy.Output.Types (OutputData(..), StackEventWithTiming(..))
+import Iidy.Output.Types (OutputData(..))
 
 ------------------------------------------------------------------------
 -- Terminal statuses for update-stack polling
@@ -130,7 +130,7 @@ updateStack ctx args argsfilePath env emit = do
       emit (OdPollingStarted "Loading live events...")
       let pollCfg = defaultPollConfig
             { pcOnNewEvents = \newEvents -> do
-                let converted = map (\e -> StackEventWithTiming (convertEvent e) Nothing) newEvents
+                let converted = map (convertEventWithDuration (cfnStartTime ctx)) newEvents
                 emit (OdNewStackEvents converted)
             , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
             }

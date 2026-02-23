@@ -51,7 +51,7 @@ import Iidy.Cfn.Context
   , ctxDeriveToken
   )
 import Iidy.Cfn.RequestBuilder (buildCreateChangeSetRequest)
-import Iidy.Cfn.Operations.DescribeStack (convertEvent, convertStack, buildEventsDisplay)
+import Iidy.Cfn.Operations.DescribeStack (convertEventWithDuration, convertStack, buildEventsDisplay)
 import Iidy.Cfn.StackOperations
   ( defaultPollConfig
   , PollConfig(..)
@@ -63,7 +63,7 @@ import Iidy.Cfn.StackOperations
   )
 import Iidy.Cfn.Types (StackArgs(..))
 import Iidy.Output.Types
-  ( OutputData(..), StackEventWithTiming(..), StackEventsDisplay(..)
+  ( OutputData(..), StackEventsDisplay(..)
   , ChangeSetInfo(..), ChangeInfo(..), ChangeDetail(..)
   , ChangeSetCreationResult(..)
   )
@@ -198,7 +198,7 @@ executeChangeset ctx stackName csName emit = do
   emit (OdPollingStarted "Loading live events...")
   let pollCfg = defaultPollConfig
         { pcOnNewEvents = \newEvents -> do
-            let converted = map (\e -> StackEventWithTiming (convertEvent e) Nothing) newEvents
+            let converted = map (convertEventWithDuration (cfnStartTime ctx)) newEvents
             emit (OdNewStackEvents converted)
         , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
         }
