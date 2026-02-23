@@ -148,13 +148,13 @@ credentialDisplayName (CredentialSourceStack (active:overridden)) =
       overriddenNames = map sourceDisplayName overridden
   in if null overriddenNames
      then activeName
-     else activeName <> " (overrides: " <> T.intercalate ", " overriddenNames <> ")"
+     else activeName <> " (overriding " <> T.intercalate " and " overriddenNames <> ")"
 
 -- | Display name for a single credential source
 sourceDisplayName :: CredentialSource -> Text
 sourceDisplayName = \case
-  EnvironmentVariablesStatic -> "environment variables (static)"
-  EnvironmentVariablesTemporary -> "environment variables (temporary)"
+  EnvironmentVariablesStatic -> "environment variables (AWS_ACCESS_KEY_ID)"
+  EnvironmentVariablesTemporary -> "environment variables (AWS_ACCESS_KEY_ID + AWS_SESSION_TOKEN)"
   ProfileCredential pinfo ->
     "profile '" <> piName pinfo <> "' (" <> profileSourceName (piSource pinfo) <> ")"
   AssumeRoleCredential ari ->

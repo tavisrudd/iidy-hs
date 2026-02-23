@@ -12,7 +12,7 @@ module Iidy.Cfn.Operations.DeleteStack
 import Data.Char (toLower)
 import Data.Text (Text)
 import qualified Data.Text as T
-import System.IO (hFlush, hSetBuffering, stdin, stdout, BufferMode(..))
+import System.IO (hFlush, hSetBuffering, hIsTerminalDevice, stdin, stdout, BufferMode(..))
 
 import Control.Monad.Trans.Resource (runResourceT)
 
@@ -135,11 +135,16 @@ deleteStack ctx stackName skipConfirmation env emit = do
 
 -- | Ask the user to confirm an action on the terminal.
 -- Returns True if the user types "y" or "yes", False otherwise.
+-- Formats with "? " prefix and bold bright red message text to match Rust.
 requestConfirmation :: String -> IO Bool
 requestConfirmation prompt = do
   hSetBuffering stdin LineBuffering
   hSetBuffering stdout NoBuffering
-  putStr $ prompt <> " [y/N] "
+  isTty <- hIsTerminalDevice stdout
+  putStrLn ""  -- blank line before prompt
+  if isTty
+    then putStr $ "? \ESC[1;91m" <> prompt <> "\ESC[0m (y/N) "
+    else putStr $ "? " <> prompt <> " (y/N) "
   hFlush stdout
   answer <- getLine
   pure $ isConfirmation answer

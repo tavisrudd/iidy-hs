@@ -126,7 +126,7 @@ After:  [AssumeRoleCredential (AssumeRoleInfo EnvironmentVariablesStatic "arn:..
 ```
 
 This allows the display to show chained provenance:
-`"assume-role arn:aws:iam::123:role/Foo via environment variables (static)"`
+`"assume-role arn:aws:iam::123:role/Foo via environment variables (AWS_ACCESS_KEY_ID)"`
 
 ---
 
@@ -140,8 +140,8 @@ Examples:
 | Stack                                                | Display                                                          |
 |------------------------------------------------------|------------------------------------------------------------------|
 | `[ProfileCredential ("default", ProfileDefault)]`    | `profile 'default' (default)`                                    |
-| `[EnvironmentVariablesTemporary, ProfileCredential…]`| `environment variables (temporary) (overrides: profile 'default' (default))` |
-| `[AssumeRoleCredential (EnvStatic, arn, CliFlag)]`   | `assume-role arn:... via environment variables (static)`         |
+| `[EnvironmentVariablesTemporary, ProfileCredential…]`| `environment variables (AWS_ACCESS_KEY_ID + AWS_SESSION_TOKEN) (overriding profile 'default' (default))` |
+| `[AssumeRoleCredential (EnvStatic, arn, CliFlag)]`   | `assume-role arn:... via environment variables (AWS_ACCESS_KEY_ID)`         |
 
 ```haskell
 credentialDisplayName :: CredentialSourceStack -> Text

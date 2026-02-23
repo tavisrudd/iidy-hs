@@ -227,7 +227,8 @@ runCommand cli = case cliCommand cli of
         Left err -> dieTxt err
         Right rc -> do
           elapsed <- ctxElapsedSeconds ctx
-          emit (createFinalCommandSummary (rc == 0) elapsed)
+          -- rc=0 is success, rc=130 is user declined (also success per Rust)
+          emit (createFinalCommandSummary (rc == 0 || rc == 130) elapsed)
           exitCode rc
 
   CmdGetStackTemplate args -> do
