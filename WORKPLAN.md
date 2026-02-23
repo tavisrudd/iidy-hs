@@ -37,8 +37,8 @@
 | 11 | Renderer output tests | **DONE** | [done/phase-11](notes/phases/done/phase-11-renderer-tests.md) |
 | 12 | Completion audit vs Rust (iterative) | **DONE** (Sessions 25-27) | [done/phase-12](notes/phases/done/phase-12-completion-audit.md) |
 | 13 | Output sequencing + feature gaps (full audit) | **DONE** (Sessions 28-34) | [phase-13-cli-output-fixes.md](notes/phases/phase-13-cli-output-fixes.md) |
-| 14 | Live AWS verification — ALL commands | **PLANNED** | — |
-| 15 | AWS auth chain: profile, assume-role, region | **PLANNED** | [aws-auth-chain-analysis.md](notes/aws-auth-chain-analysis.md) |
+| 14 | Live AWS verification — ALL commands | **IN PROGRESS** (Sessions 36-39) | — |
+| 15 | AWS auth chain: profile, assume-role, region | **DONE** (Session 39) | [aws-auth-chain-analysis.md](notes/aws-auth-chain-analysis.md) |
 
 Phase 12 offline audit found zero gaps, but live AWS testing (Session 28) on just 3 commands
 revealed 8 divergences. A full sequencing audit of all 22 commands then uncovered:
@@ -99,8 +99,9 @@ Phase 14 is systematic live verification of ALL 22 commands now that Phase 13 is
 | 36 | 14 | Fix 3 live-testing bugs: watch-stack terminal polling, update-stack no-changes error, CLI Arguments display. |
 | 37 | 14 | Fix 3 delete-stack confirmation bugs: prompt format, decline=success, credential display. |
 | 38 | 14 | Fix 5 live-testing bugs: changeset timestamps, event duration min, FAILED changeset check, tag type validation, confirmation prompt consistency. |
+| 39 | 14-15 | Add 21 tests for Phase 14 fixes (400 tests). Phase 15 COMPLETE: --profile wired, STS AssumeRole, region error on missing. |
 
-**Offline audit: 81 modules, 379 tests, 37/37 render snapshots, 49/49 error snapshots match**
+**Offline audit: 81 modules, 400 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
 ## Phase 12 Offline Audit Summary
 
