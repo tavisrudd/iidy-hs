@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Control.Exception (SomeException, IOException, catch, fromException, displayException)
+import qualified Amazonka
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -66,9 +67,13 @@ main = do
 
 -- | Format unhandled exceptions matching Rust's error output style.
 -- Strips GHC backtrace noise and formats IO errors cleanly.
+-- Amazonka ServiceErrors get the message extracted; other errors get best-effort formatting.
 handleUncaughtException :: SomeException -> IO ()
 handleUncaughtException e
   | Just ec <- fromException e = exitWith (ec :: ExitCode)
+  | Just awsErr <- fromException e = do
+      handleAwsError (awsErr :: Amazonka.Error)
+      exitWith (ExitFailure 1)
   | Just ioe <- fromException e = do
       -- IO exceptions: format like Rust's "No such file or directory (os error 2)"
       let msg = displayException (ioe :: IOException)
@@ -84,6 +89,36 @@ handleUncaughtException e
     firstLine s = case lines s of
       (l:_) -> l
       []    -> s
+
+-- | Format an Amazonka error with the service error message extracted.
+handleAwsError :: Amazonka.Error -> IO ()
+handleAwsError (Amazonka.ServiceError se) = do
+  -- Extract the error message from the ServiceError using show and parsing
+  let rendered = show se
+      errMsg = extractServiceErrorMessage rendered
+  hPutStrLn stderr $ "ERROR: " <> errMsg
+  hPutStrLn stderr "  \x2022 Check the AWS CloudFormation console for more details"
+handleAwsError err = do
+  hPutStrLn stderr $ "ERROR: " <> firstLine' (displayException err)
+  hPutStrLn stderr "  \x2022 Check the AWS CloudFormation console for more details"
+  where
+    firstLine' s = case lines s of
+      (l:_) -> l
+      []    -> s
+
+-- | Extract a readable error message from a ServiceError's Show output.
+-- Looks for ErrorMessage content between quotes.
+extractServiceErrorMessage :: String -> String
+extractServiceErrorMessage s =
+  case T.breakOn "ErrorMessage {fromErrorMessage = \"" (T.pack s) of
+    (_, after) | not (T.null after) ->
+      let trimmed = T.drop (T.length "ErrorMessage {fromErrorMessage = \"") after
+      in T.unpack (T.takeWhile (/= '"') trimmed)
+    _ -> case T.breakOn "ErrorCode \"" (T.pack s) of
+      (_, after') | not (T.null after') ->
+        let trimmed = T.drop (T.length "ErrorCode \"") after'
+        in T.unpack (T.takeWhile (/= '"') trimmed)
+      _ -> "AWS service error"
 
 ------------------------------------------------------------------------
 -- Command dispatch

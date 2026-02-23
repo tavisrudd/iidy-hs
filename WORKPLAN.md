@@ -30,13 +30,13 @@
 | 4 | AWS + CloudFormation | DONE (Session 4) | — |
 | 5 | CLI + remaining commands | DONE (Session 5) | — |
 | 6 | Tests + polish | DONE (Sessions 6-11) | — |
-| 7 | Error display system | **DONE** (Sessions 13-17) | [phase-7-error-display.md](notes/phases/phase-7-error-display.md) |
-| 8 | Remaining features (NTP, schema, demo, exception handling) | **DONE** (8.1-8.6 complete) | [phase-8-remaining-features.md](notes/phases/phase-8-remaining-features.md) |
-| 9 | Final verification | **DONE** (all verified) | [phase-9-final-verification.md](notes/phases/phase-9-final-verification.md) |
-| 10 | Output pipeline wiring | **DONE** | [phase-10-output-wiring.md](notes/phases/phase-10-output-wiring.md) |
-| 11 | Renderer output tests | **DONE** | [phase-11-renderer-tests.md](notes/phases/phase-11-renderer-tests.md) |
-| 12 | Completion audit vs Rust (iterative) | **DONE** (Sessions 25-27) | [phase-12-completion-audit.md](notes/phases/phase-12-completion-audit.md) |
-| 13 | Output sequencing + feature gaps (full audit) | **IN PROGRESS** (13.1-13.5 done, Session 31) | [phase-13-cli-output-fixes.md](notes/phases/phase-13-cli-output-fixes.md) |
+| 7 | Error display system | **DONE** (Sessions 13-17) | [done/phase-7](notes/phases/done/phase-7-error-display.md) |
+| 8 | Remaining features (NTP, schema, demo, exception handling) | **DONE** (8.1-8.6 complete) | [done/phase-8](notes/phases/done/phase-8-remaining-features.md) |
+| 9 | Final verification | **DONE** (all verified) | [done/phase-9](notes/phases/done/phase-9-final-verification.md) |
+| 10 | Output pipeline wiring | **DONE** | [done/phase-10](notes/phases/done/phase-10-output-wiring.md) |
+| 11 | Renderer output tests | **DONE** | [done/phase-11](notes/phases/done/phase-11-renderer-tests.md) |
+| 12 | Completion audit vs Rust (iterative) | **DONE** (Sessions 25-27) | [done/phase-12](notes/phases/done/phase-12-completion-audit.md) |
+| 13 | Output sequencing + feature gaps (full audit) | **IN PROGRESS** (13.1-13.8+ done, Session 33) | [phase-13-cli-output-fixes.md](notes/phases/phase-13-cli-output-fixes.md) |
 | 14 | Live AWS verification — ALL commands | **PLANNED** | — |
 | 15 | AWS auth chain: profile, assume-role, region | **PLANNED** | [aws-auth-chain-analysis.md](notes/aws-auth-chain-analysis.md) |
 
@@ -92,8 +92,10 @@ Phase 14 is systematic live verification of ALL 22 commands after Phase 13 fixes
 | 29 | 13.1-13.3 | Phase 13.1-13.3: Section headings, console URL, region priority, STS getCallerIdentity, StackAbsentInfo, StackDefinition before polling in all ops. |
 | 30 | 13.4 | Phase 13.4: CommandMetadata + FinalCommandSummary emission. AWS auth chain analysis (3 critical gaps found). |
 | 31 | 13.5 | Phase 13.5: Changeset consistency — all changeset paths implemented (update-stack, create-or-update, create-changeset fixes). |
+| 32 | 13.6-13.8 | Phase 13.6-13.8: Drift completion, minor ops through output pipeline, spinner + polling infrastructure. |
+| 33 | 13.8+ | Spinner timing display, event duration calculation, describe-stack absent error fix. |
 
-**Offline audit: 80 modules, 355 tests, 37/37 render snapshots, 49/49 error snapshots match**
+**Offline audit: 80 modules, 362 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
 ## Phase 12 Offline Audit Summary
 
