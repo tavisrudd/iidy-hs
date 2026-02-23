@@ -26,6 +26,7 @@ import qualified Amazonka
 import qualified Amazonka.CloudFormation as CF
 import qualified Amazonka.CloudFormation.Types as CF
 
+import Iidy.Aws.Sts (getCallerIdentity)
 import Iidy.Cfn.Context (CfnContext(..))
 import Iidy.Cfn.StackOperations
   ( getStack
@@ -42,24 +43,37 @@ import Iidy.Output.Types
 --
 -- Fetches the stack definition, takes the first @numEvents@ events,
 -- and collects current stack contents (resources, outputs, changesets).
--- Returns a list of OutputData suitable for rendering.
-describeStack :: CfnContext -> Text -> Int -> IO (Either Text [OutputData])
-describeStack ctx stackName numEvents = do
+-- Emits OdStackAbsentInfo with STS context for missing stacks.
+describeStack
+  :: CfnContext
+  -> Text          -- ^ stack name
+  -> Int           -- ^ max events
+  -> Text          -- ^ environment name
+  -> (OutputData -> IO ())  -- ^ emit function
+  -> IO (Either Text ())
+describeStack ctx stackName numEvents env emit = do
+  let regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
   mStack <- getStack ctx stackName
   case mStack of
-    Nothing ->
-      pure $ Left ("Stack not found: " <> stackName)
+    Nothing -> do
+      (account, authArn) <- getCallerIdentity (cfnEnv ctx)
+      emit $ OdStackAbsentInfo StackAbsentInfo
+        { saiStackName   = stackName
+        , saiEnvironment = env
+        , saiRegion      = regionText
+        , saiAccount     = account
+        , saiAuthArn     = authArn
+        }
+      pure (Right ())
     Just cfnStack -> do
       events    <- fetchStackEvents ctx stackName
       contents  <- collectStackContents ctx stackName
-      let regionText    = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
-          stackDef      = convertStack cfnStack regionText
+      let stackDef      = convertStack cfnStack regionText
           eventsDisplay = buildEventsDisplay stackName numEvents events
-      pure $ Right
-        [ OdStackDefinition stackDef True
-        , OdStackEvents eventsDisplay
-        , OdStackContents contents
-        ]
+      emit (OdStackDefinition stackDef True)
+      emit (OdStackEvents eventsDisplay)
+      emit (OdStackContents contents)
+      pure (Right ())
 
 ------------------------------------------------------------------------
 -- Stack definition conversion

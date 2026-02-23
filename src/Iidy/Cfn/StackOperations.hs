@@ -21,6 +21,7 @@ module Iidy.Cfn.StackOperations
   ) where
 
 import Control.Concurrent (threadDelay)
+import Control.Exception (try, throwIO)
 import Control.Monad (when)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.IORef
@@ -46,14 +47,26 @@ import Iidy.Output.Types
 ------------------------------------------------------------------------
 
 -- | Get a stack by name. Returns Nothing if stack doesn't exist.
+-- Catches AWS ValidationError (stack does not exist) and returns Nothing.
 getStack :: CfnContext -> Text -> IO (Maybe CF.Stack)
 getStack ctx stackName = do
   let req = DStacks.newDescribeStacks
               { DStacks.stackName = Just stackName }
-  resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
-  pure $ case resp.stacks of
-    Just (s:_) -> Just s
-    _          -> Nothing
+  result <- try (runResourceT $ Amazonka.send (cfnEnv ctx) req)
+  case result of
+    Left e | isStackNotFoundError e -> pure Nothing
+    Left e  -> throwIO e  -- re-throw non-existence errors
+    Right resp -> pure $ case resp.stacks of
+      Just (s:_) -> Just s
+      _          -> Nothing
+
+-- | Check if an Amazonka error indicates the stack does not exist.
+isStackNotFoundError :: Amazonka.Error -> Bool
+isStackNotFoundError (Amazonka.ServiceError se) =
+  case se.message of
+    Just msg -> "does not exist" `T.isInfixOf` Amazonka.fromErrorMessage msg
+    Nothing  -> False
+isStackNotFoundError _ = False
 
 -- | Get stack ID from stack name.
 getStackId :: CfnContext -> Text -> IO (Maybe Text)

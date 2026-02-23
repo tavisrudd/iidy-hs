@@ -156,10 +156,12 @@ runCommand cli = case cliCommand cli of
   CmdDescribeStack args -> do
       ctx <- createSimpleContext cli OpDescribeStack
       dispatch <- mkOutputDispatch (cliGlobalOpts cli)
-      result <- describeStack ctx (daStackname args) (daEvents args)
+      let env = goEnvironment (cliGlobalOpts cli)
+          emit = renderOutput dispatch
+      result <- describeStack ctx (daStackname args) (daEvents args) env emit
       case result of
-        Left err    -> dieTxt err
-        Right datas -> mapM_ (renderOutput dispatch) datas
+        Left err -> dieTxt err
+        Right () -> pure ()
 
   CmdWatchStack args -> do
       ctx <- createSimpleContext cli OpWatchStack
