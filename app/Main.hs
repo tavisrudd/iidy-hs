@@ -18,7 +18,7 @@ import Iidy.Aws.CredentialSource (AwsSettings(..))
 import Iidy.Aws.Timing (TimeProvider, systemTimeProvider, reliableTimeProvider)
 import Iidy.Cfn.CommandMetadata (constructCommandMetadata, createFinalCommandSummary)
 import Iidy.Cfn.Context (CfnContext, createContext, createContextFromEnv, ctxElapsedSeconds)
-import Iidy.Cfn.Operations.Changeset (createChangeset, executeChangeset)
+import Iidy.Cfn.Operations.Changeset (createChangeset, executeChangeset, buildChangeSetCreationResult)
 import Iidy.Cfn.Operations.ConvertStack (convertStackToIidy)
 import Iidy.Cfn.Operations.CreateOrUpdate (createOrUpdate)
 import Iidy.Cfn.Operations.CreateStack (createStack)
@@ -113,12 +113,15 @@ runCommand cli = case cliCommand cli of
 
   CmdCreateChangeset args ->
     runCfnWithArgs cli OpCreateChangeset (ccsArgsfile args) (ccsStackName args)
-      $ \ctx sa fp env _emit -> do
+      $ \ctx sa fp env emit -> do
           let csName = maybe "changeset" id (ccsChangesetName args)
           result <- createChangeset ctx sa csName True fp env
           case result of
             Left err -> dieTxt err
-            Right _  -> pure 0
+            Right info -> do
+              let csResult = buildChangeSetCreationResult info True (ccsArgsfile args)
+              emit (OdChangeSetResult csResult)
+              pure 0
 
   CmdExecChangeset args -> do
       let stackName = maybe "" id (ecsStackName args)

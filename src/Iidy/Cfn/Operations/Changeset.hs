@@ -9,6 +9,7 @@ module Iidy.Cfn.Operations.Changeset
   ( createChangeset
   , executeChangeset
   , describeChangeset
+  , buildChangeSetCreationResult
   -- * Internal (exported for testing)
   , convertChange
   , convertDetail
@@ -37,17 +38,21 @@ import Iidy.Cfn.Context
   , ctxDeriveToken
   )
 import Iidy.Cfn.RequestBuilder (buildCreateChangeSetRequest)
-import Iidy.Cfn.Operations.DescribeStack (convertEvent)
+import Iidy.Cfn.Operations.DescribeStack (convertEvent, convertStack, buildEventsDisplay)
 import Iidy.Cfn.StackOperations
   ( defaultPollConfig
   , PollConfig(..)
+  , fetchStackEvents
   , getStackId
+  , getStack
+  , collectStackContents
   , pollForCompletion
   )
 import Iidy.Cfn.Types (StackArgs(..))
 import Iidy.Output.Types
-  ( OutputData(..), StackEventWithTiming(..)
+  ( OutputData(..), StackEventWithTiming(..), StackEventsDisplay(..)
   , ChangeSetInfo(..), ChangeInfo(..), ChangeDetail(..)
+  , ChangeSetCreationResult(..)
   )
 
 ------------------------------------------------------------------------
@@ -139,9 +144,10 @@ pollChangesetCompletion ctx stackName csId = go
 --
 -- Steps:
 --   1. Build and send ExecuteChangeSet.
---   2. Get the stack ID for polling.
+--   2. Emit StackDefinition + previous events.
 --   3. Poll for completion; both CREATE_COMPLETE and UPDATE_COMPLETE are success states.
---   4. Return exit code (0 = success, 1 = failure).
+--   4. Emit StackContents on completion.
+--   5. Return exit code (0 = success, 1 = failure).
 executeChangeset
   :: CfnContext
   -> Text                   -- ^ stack name
@@ -161,6 +167,19 @@ executeChangeset ctx stackName csName emit = do
   -- Step 2: Get stack ID for polling
   mStackId <- getStackId ctx stackName
   let stackId = fromMaybe stackName mStackId
+      regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
+
+  -- Step 2b: Emit StackDefinition
+  mStack <- getStack ctx stackId
+  case mStack of
+    Just cfnStack -> emit (OdStackDefinition (convertStack cfnStack regionText) True)
+    Nothing -> pure ()
+
+  -- Step 2c: Emit previous events (unique to exec-changeset)
+  prevEvents <- fetchStackEvents ctx stackName
+  let eventsDisplay = buildEventsDisplay stackName 10 prevEvents
+      eventsWithTitle = eventsDisplay { sedTitle = "Previous Stack Events (max 10):" }
+  emit (OdStackEvents eventsWithTitle)
 
   -- Step 3: Poll for completion, emitting events through renderer
   let pollCfg = defaultPollConfig
@@ -170,8 +189,15 @@ executeChangeset ctx stackName csName emit = do
         }
   finalStatus <- pollForCompletion ctx stackId allTerminalStatuses pollCfg
 
-  -- Step 4: Return exit code
+  -- Step 4: Emit StackContents
   let successStates = createSuccessStates ++ updateSuccessStates
+  if finalStatus /= "DELETE_COMPLETE"
+    then do
+      contents <- collectStackContents ctx stackName
+      emit (OdStackContents contents)
+    else pure ()
+
+  -- Step 5: Return exit code
   if finalStatus `elem` successStates
     then pure (Right 0)
     else pure (Right 1)
@@ -256,3 +282,65 @@ convertDetail d =
        , cdChangeSource  = CF.fromChangeSource <$> d.changeSource
        , cdCausingEntity = d.causingEntity
        }
+
+------------------------------------------------------------------------
+-- Changeset creation result
+------------------------------------------------------------------------
+
+-- | Build a ChangeSetCreationResult from a ChangeSetInfo for rendering.
+-- Constructs the console URL and next-steps instructions.
+buildChangeSetCreationResult
+  :: ChangeSetInfo
+  -> Bool            -- ^ stack existed before? (True = UPDATE, False = CREATE)
+  -> Text            -- ^ argsfile path
+  -> ChangeSetCreationResult
+buildChangeSetCreationResult info stackExists argsfile =
+  let csType = if stackExists then "UPDATE" else "CREATE" :: Text
+      regionText = extractRegionFromArn (csiStackId info)
+      consoleUrl = buildChangesetConsoleUrl regionText (csiStackId info) (csiChangeSetId info)
+      hasChanges = not (null (csiChanges info))
+      nextSteps =
+        [ "Your new stack is now in REVIEW_IN_PROGRESS state. To create the resources run the following"
+        , "  iidy --region " <> regionText <> " exec-changeset --stack-name "
+          <> csiStackName info <> " " <> argsfile <> " " <> csiChangeSetName info
+        ]
+  in ChangeSetCreationResult
+    { csrChangesetName     = csiChangeSetName info
+    , csrStackName         = csiStackName info
+    , csrChangesetType     = csType
+    , csrStatus            = csiStatus info
+    , csrConsoleUrl        = consoleUrl
+    , csrHasChanges        = hasChanges
+    , csrPendingChangesets = [info]
+    , csrNextSteps         = nextSteps
+    }
+
+-- | Build a changeset console URL with URL-encoded ARNs.
+-- Changeset URLs DO encode ARN characters (unlike stack info URLs).
+buildChangesetConsoleUrl :: Text -> Text -> Text -> Text
+buildChangesetConsoleUrl region stackArn changesetArn =
+  "https://" <> region <> ".console.aws.amazon.com/cloudformation/home?region="
+  <> region <> "#/changeset/detail?stackId="
+  <> percentEncode stackArn <> "&changeSetId=" <> percentEncode changesetArn
+
+-- | Extract region from a CloudFormation ARN.
+-- ARN format: arn:aws:cloudformation:REGION:ACCOUNT:stack/NAME/ID
+extractRegionFromArn :: Text -> Text
+extractRegionFromArn arn =
+  case drop 3 (T.splitOn ":" arn) of
+    (region:_) -> region
+    _          -> "us-east-1"
+
+-- | Percent-encode a text string for use in URLs.
+-- Encodes everything except unreserved characters (RFC 3986).
+percentEncode :: Text -> Text
+percentEncode = T.concatMap encChar
+  where
+    encChar c
+      | isUnreserved c = T.singleton c
+      | otherwise      = T.pack ['%', hexDigit (fromEnum c `div` 16), hexDigit (fromEnum c `mod` 16)]
+    isUnreserved c = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+                  || (c >= '0' && c <= '9') || c `elem` ("-_.~" :: [Char])
+    hexDigit n
+      | n < 10    = toEnum (fromEnum '0' + n)
+      | otherwise = toEnum (fromEnum 'A' + n - 10)
