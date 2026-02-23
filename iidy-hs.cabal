@@ -10,6 +10,10 @@ common warnings
 library
   import:           warnings
   hs-source-dirs:   src
+  autogen-modules:
+    Paths_iidy_hs
+  other-modules:
+    Paths_iidy_hs
   default-language: GHC2021
   default-extensions:
     DerivingStrategies
@@ -60,6 +64,7 @@ library
     Iidy.Output.Renderers.Json
     Iidy.Confirm
     Iidy.Cli
+    Iidy.Cli.Help
     Iidy.Cli.Parser
     Iidy.Demo
     Iidy.Explain
@@ -100,6 +105,7 @@ library
   build-depends:
       base >= 4.17 && < 5
     , aeson
+    , ansi-terminal
     , amazonka
     , amazonka-cloudformation
     , amazonka-s3
@@ -118,6 +124,8 @@ library
     , mtl
     , network
     , optparse-applicative
+    , prettyprinter
+    , prettyprinter-ansi-terminal
     , random
     , regex-posix
     , resourcet

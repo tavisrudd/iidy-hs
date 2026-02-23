@@ -3,16 +3,18 @@ module Iidy.Cli.Parser
   , cliParserInfo  -- exported for testing
   ) where
 
+import Control.Monad (when)
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Version (showVersion)
+import qualified Paths_iidy_hs as Paths
 import qualified System.Environment
 import qualified System.Exit
-import qualified System.IO
-import System.IO (hPutStrLn)
 import Options.Applicative
 import Options.Applicative.Help.Pretty (Doc, hardline, pretty)
 
 import Iidy.Cli
+import Iidy.Cli.Help
 import Iidy.Types (ColorChoice(..), OutputMode(..), Theme(..), YamlSpec(..))
 
 ------------------------------------------------------------------------
@@ -22,29 +24,42 @@ import Iidy.Types (ColorChoice(..), OutputMode(..), Theme(..), YamlSpec(..))
 parseCliOpts :: IO Cli
 parseCliOpts = do
   args <- System.Environment.getArgs
-  case execParserPure (prefs showHelpOnEmpty) cliParserInfo args of
+  when (shouldShowTopLevelHelp args) $ do
+    renderTopLevelHelp
+    System.Exit.exitSuccess
+  let parserPrefs = prefs mempty
+  case execParserPure parserPrefs cliParserInfo args of
     Success cli -> pure cli
     Failure failure -> do
-      let (msg, exitCode) = renderFailure failure "iidy-hs"
+      let (msg, _) = renderFailure failure "iidy-hs"
+          (parserHelp, exitCode, _) = execFailure failure "iidy-hs"
       case exitCode of
-        System.Exit.ExitSuccess -> putStrLn msg >> System.Exit.exitSuccess
-        _           -> do
-          -- Show help (exit 0) when no args given; error (exit 1) for bad args
-          if null args
-            then putStrLn msg >> System.Exit.exitSuccess
-            else hPutStrLn System.IO.stderr msg >> System.Exit.exitWith exitCode
+        System.Exit.ExitSuccess -> do
+          renderHelpForArgs args msg
+          System.Exit.exitSuccess
+        _ -> do
+          renderParserFailure parserHelp
+          System.Exit.exitWith exitCode
     CompletionInvoked compl -> do
       msg <- execCompletion compl "iidy-hs"
       putStr msg
       System.Exit.exitSuccess
 
 cliParserInfo :: ParserInfo Cli
-cliParserInfo = info (cliParser <**> helper)
+cliParserInfo = info (cliParser <**> helper <**> versionOption)
   ( fullDesc
   <> progDesc "CloudFormation with Confidence"
   <> header "iidy-hs - Is it done yet? CloudFormation preprocessor and deployer"
   <> footerDoc (Just statusCodesDoc)
   )
+
+versionOption :: Parser (a -> a)
+versionOption =
+  infoOption ("iidy-hs " <> showVersion Paths.version)
+    ( long "version"
+   <> short 'V'
+   <> help "Print version"
+    )
 
 statusCodesDoc :: Doc
 statusCodesDoc =
@@ -53,9 +68,7 @@ statusCodesDoc =
   <> pretty ("  Error (1)         An error was encountered while executing command" :: String) <> hardline
   <> pretty ("  Cancelled (130)   User responded 'No' to iidy prompt or interrupt (CTRL-C) was received" :: String)
 
-------------------------------------------------------------------------
--- Top-level parser
-------------------------------------------------------------------------
+
 
 cliParser :: Parser Cli
 cliParser = Cli
