@@ -44,7 +44,6 @@ import Iidy.Aws.CredentialSource
   ( AwsSettings(..)
   , CredentialSource(..), CredentialSourceStack(..)
   , ProfileInfo(..), ProfileSource(..)
-  , AssumeRoleInfo(..), AssumeRoleSource(..)
   )
 import Iidy.Cfn.CommandMetadata (buildCliArguments)
 import Iidy.Cfn.Operations.Changeset (convertChange, convertDetail, generateDashedName)
@@ -2809,7 +2808,7 @@ interactiveRendererIntegrationTests =
   , testCase "renderOutputData processes create-stack sequence in order" $ do
       r <- newInteractiveRenderer plainInteractiveOptions
       -- Simulate a create-stack output sequence
-      let sequence =
+      let createSeq =
             [ OdCommandMetadata testCommandMetadata
             , OdStackChangeDetails testStackChangeDetails
             , OdStackDefinition testStackDef True
@@ -2820,22 +2819,22 @@ interactiveRendererIntegrationTests =
             , OdFinalCommandSummary testFinalCommandSummary
             ]
       -- All should render without exception
-      mapM_ (renderOutputData r) sequence
+      mapM_ (renderOutputData r) createSeq
 
   , testCase "renderOutputData processes describe-stack sequence in order" $ do
       r <- newInteractiveRenderer plainInteractiveOptions
-      let sequence =
+      let describeSeq =
             [ OdCommandMetadata testCommandMetadata
             , OdStackDefinition testStackDef True
             , OdStackEvents testStackEventsDisplay
             , OdStackContents testStackContents
             , OdFinalCommandSummary testFinalCommandSummary
             ]
-      mapM_ (renderOutputData r) sequence
+      mapM_ (renderOutputData r) describeSeq
 
   , testCase "renderOutputData processes delete-stack sequence in order" $ do
       r <- newInteractiveRenderer plainInteractiveOptions
-      let sequence =
+      let deleteSeq =
             [ OdCommandMetadata testCommandMetadata
             , OdStackDefinition testStackDef True
             , OdStackEvents testStackEventsDisplay
@@ -2846,47 +2845,47 @@ interactiveRendererIntegrationTests =
             , OdOperationComplete testOperationComplete
             , OdFinalCommandSummary testFinalCommandSummary
             ]
-      mapM_ (renderOutputData r) sequence
+      mapM_ (renderOutputData r) deleteSeq
 
   , testCase "renderOutputData processes changeset sequence in order" $ do
       r <- newInteractiveRenderer plainInteractiveOptions
-      let sequence =
+      let changeSetSeq =
             [ OdCommandMetadata testCommandMetadata
             , OdStackDefinition testStackDef True
             , OdChangeSetResult testChangeSetResult
             , OdFinalCommandSummary testFinalCommandSummary
             ]
-      mapM_ (renderOutputData r) sequence
+      mapM_ (renderOutputData r) changeSetSeq
 
   , testCase "renderOutputData processes drift sequence in order" $ do
       r <- newInteractiveRenderer plainInteractiveOptions
-      let sequence =
+      let driftSeq =
             [ OdCommandMetadata testCommandMetadata
             , OdStackDefinition testStackDef False
             , OdPollingStarted "Detecting drift..."
             , OdStackDrift testStackDrift
             , OdFinalCommandSummary testFinalCommandSummary
             ]
-      mapM_ (renderOutputData r) sequence
+      mapM_ (renderOutputData r) driftSeq
 
   , testCase "renderOutputData processes stack-absent error" $ do
       r <- newInteractiveRenderer plainInteractiveOptions
-      let sequence =
+      let absentSeq =
             [ OdCommandMetadata testCommandMetadata
             , OdStackAbsentInfo testAbsentInfo
             ]
-      mapM_ (renderOutputData r) sequence
+      mapM_ (renderOutputData r) absentSeq
 
   , testCase "renderOutputData processes lint+approval sequence" $ do
       r <- newInteractiveRenderer plainInteractiveOptions
-      let sequence =
+      let approvalSeq =
             [ OdTemplateValidation testTemplateValidation
             , OdApprovalRequestResult testApprovalRequestResult
             , OdApprovalStatus testApprovalStatus
             , OdTemplateDiff testTemplateDiff
             , OdApprovalResult testApprovalResult
             ]
-      mapM_ (renderOutputData r) sequence
+      mapM_ (renderOutputData r) approvalSeq
 
   , testCase "renderOutputData handles empty events list" $ do
       r <- newInteractiveRenderer plainInteractiveOptions
@@ -2913,7 +2912,7 @@ jsonRendererIntegrationTests =
 
   , testCase "renderOutputDataJson handles create-stack sequence" $ do
       let jr = newJsonRenderer defaultJsonOptions
-      let sequence =
+      let jsonCreateSeq =
             [ OdCommandMetadata testCommandMetadata
             , OdStackChangeDetails testStackChangeDetails
             , OdStackDefinition testStackDef True
@@ -2923,7 +2922,7 @@ jsonRendererIntegrationTests =
             , OdStackContents testStackContents
             , OdFinalCommandSummary testFinalCommandSummary
             ]
-      mapM_ (renderOutputDataJson jr) sequence
+      mapM_ (renderOutputDataJson jr) jsonCreateSeq
   ]
 
 -- | Test that OutputData variants cover all constructors.
@@ -2939,7 +2938,7 @@ outputSequenceTests =
         (length uniqueTypes)
 
   , testCase "create-stack sequence has correct order" $ do
-      let sequence =
+      let createSeq =
             [ OdCommandMetadata testCommandMetadata
             , OdStackChangeDetails testStackChangeDetails
             , OdStackDefinition testStackDef True
@@ -2949,7 +2948,7 @@ outputSequenceTests =
             , OdStackContents testStackContents
             , OdFinalCommandSummary testFinalCommandSummary
             ]
-          names = map odConstructorName sequence
+          names = map odConstructorName createSeq
       assertEqual "sequence order"
         ["CommandMetadata", "StackChangeDetails", "StackDefinition"
         ,"PollingStarted", "NewStackEvents", "OperationComplete"
@@ -2957,21 +2956,21 @@ outputSequenceTests =
         names
 
   , testCase "describe-stack sequence has correct order" $ do
-      let sequence =
+      let describeSeq =
             [ OdCommandMetadata testCommandMetadata
             , OdStackDefinition testStackDef True
             , OdStackEvents testStackEventsDisplay
             , OdStackContents testStackContents
             , OdFinalCommandSummary testFinalCommandSummary
             ]
-          names = map odConstructorName sequence
+          names = map odConstructorName describeSeq
       assertEqual "sequence order"
         ["CommandMetadata", "StackDefinition", "StackEvents"
         ,"StackContents", "FinalCommandSummary"]
         names
 
   , testCase "delete-stack sequence has correct order" $ do
-      let sequence =
+      let deleteSeq =
             [ OdCommandMetadata testCommandMetadata
             , OdStackDefinition testStackDef True
             , OdStackEvents testStackEventsDisplay
@@ -2982,7 +2981,7 @@ outputSequenceTests =
             , OdOperationComplete testOperationComplete
             , OdFinalCommandSummary testFinalCommandSummary
             ]
-          names = map odConstructorName sequence
+          names = map odConstructorName deleteSeq
       assertEqual "sequence order"
         ["CommandMetadata", "StackDefinition", "StackEvents"
         ,"StackContents", "ConfirmationPrompt", "PollingStarted"
