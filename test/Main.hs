@@ -62,6 +62,7 @@ import Iidy.Output.Renderers.Interactive
   , formatLogicalId, styleMuted, renderTimestamp, calcPadding, padRight
   , prettyFormatTags, prettyFormatParameters, formatTokenSource
   , column2Start, minStatusPadding, maxPadding, defaultScreenWidth
+  , formatTimingText
   )
 import Iidy.Output.Renderers.Json
   ( JsonOptions(..), defaultJsonOptions
@@ -1677,6 +1678,8 @@ mkColoredRenderer = do
   hasRendered <- newIORef False
   spinnerRef <- newIORef Nothing
   spinnerThreadRef <- newIORef Nothing
+  timingStateRef <- newIORef Nothing
+  timingThreadRef <- newIORef Nothing
   pure InteractiveRenderer
     { irTheme              = darkTheme
     , irOptions            = defaultInteractiveOptions
@@ -1684,6 +1687,8 @@ mkColoredRenderer = do
     , irHasRenderedContent = hasRendered
     , irSpinner            = spinnerRef
     , irSpinnerThread      = spinnerThreadRef
+    , irTimingState        = timingStateRef
+    , irTimingThread       = timingThreadRef
     }
 
 -- | Create a plain renderer for testing (no colors, no spinners).
@@ -1692,6 +1697,8 @@ mkPlainRenderer = do
   hasRendered <- newIORef False
   spinnerRef <- newIORef Nothing
   spinnerThreadRef <- newIORef Nothing
+  timingStateRef <- newIORef Nothing
+  timingThreadRef <- newIORef Nothing
   pure InteractiveRenderer
     { irTheme              = noColorTheme
     , irOptions            = plainInteractiveOptions
@@ -1699,6 +1706,8 @@ mkPlainRenderer = do
     , irHasRenderedContent = hasRendered
     , irSpinner            = spinnerRef
     , irSpinnerThread      = spinnerThreadRef
+    , irTimingState        = timingStateRef
+    , irTimingThread       = timingThreadRef
     }
 
 rendererTests :: [TestTree]
@@ -1809,6 +1818,22 @@ rendererTests =
       let dti = DerivedTokenInfo { dtiFrom = "primary", dtiStep = "create-stack" }
       let result = formatTokenSource (Derived dti)
       assertBool "derived from" ("derived from primary" `T.isInfixOf` result)
+
+  -- Timing text tests
+  , testCase "formatTimingText - no last event" $ do
+      assertEqual "elapsed only"
+        "5 seconds elapsed total."
+        (formatTimingText 5 Nothing)
+
+  , testCase "formatTimingText - with last event" $ do
+      assertEqual "elapsed + since last"
+        "10 seconds elapsed total. 3 since last event."
+        (formatTimingText 10 (Just 3))
+
+  , testCase "formatTimingText - zero elapsed" $ do
+      assertEqual "zero"
+        "0 seconds elapsed total."
+        (formatTimingText 0 Nothing)
 
   -- Color function tests
   , testCase "colorize - dark theme applies ANSI" $ do

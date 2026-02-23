@@ -31,6 +31,7 @@ module Iidy.Output.Renderers.Interactive
     -- * Spinner management
   , startSpinner
   , stopSpinner
+  , formatTimingText
   ) where
 
 import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
@@ -43,7 +44,7 @@ import Data.Ord (comparing)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import Data.Time (UTCTime, defaultTimeLocale, formatTime)
+import Data.Time (UTCTime, defaultTimeLocale, formatTime, getCurrentTime, diffUTCTime)
 import System.IO (stdout, hFlush, hIsTerminalDevice, stderr)
 
 import Iidy.Aws.ClientReqToken (TokenInfo(..), TokenSource(..), DerivedTokenInfo(..))
@@ -118,6 +119,10 @@ data InteractiveRenderer = InteractiveRenderer
   , irHasRenderedContent :: !(IORef Bool)
   , irSpinner            :: !(IORef (Maybe Spinner))
   , irSpinnerThread      :: !(IORef (Maybe ThreadId))
+  , irTimingState        :: !(IORef (Maybe (UTCTime, Maybe UTCTime)))
+    -- ^ (start_time, last_event_time) for elapsed time display
+  , irTimingThread       :: !(IORef (Maybe ThreadId))
+    -- ^ Background thread updating spinner message with elapsed time
   }
 
 newInteractiveRenderer :: InteractiveOptions -> IO InteractiveRenderer
@@ -129,6 +134,8 @@ newInteractiveRenderer opts = do
   hasRendered <- newIORef False
   spinnerRef <- newIORef Nothing
   spinnerThreadRef <- newIORef Nothing
+  timingStateRef <- newIORef Nothing
+  timingThreadRef <- newIORef Nothing
   pure InteractiveRenderer
     { irTheme              = theme
     , irOptions            = opts
@@ -136,15 +143,18 @@ newInteractiveRenderer opts = do
     , irHasRenderedContent = hasRendered
     , irSpinner            = spinnerRef
     , irSpinnerThread      = spinnerThreadRef
+    , irTimingState        = timingStateRef
+    , irTimingThread       = timingThreadRef
     }
 
 ------------------------------------------------------------------------
 -- Spinner management
 ------------------------------------------------------------------------
 
--- | Start a spinner with a message. Creates a background tick thread.
+-- | Start a spinner with a message. Creates a background tick thread
+-- and a timing task that updates the spinner message with elapsed time.
 startSpinner :: InteractiveRenderer -> Text -> IO ()
-startSpinner r msg = do
+startSpinner r _msg = do
   -- Only start if spinners are enabled and ANSI is available
   isTty <- hIsTerminalDevice stdout
   if not (ioEnableSpinners (irOptions r)) || not isTty
@@ -153,13 +163,15 @@ startSpinner r msg = do
       -- Stop any existing spinner first
       stopSpinner r
       sp <- newSpinner SpinnerDots12
-      spinnerSetMessage sp msg
+      spinnerSetMessage sp ""
       writeIORef (irSpinner r) (Just sp)
       -- Start background tick thread
       let colorCode = "\ESC[36;1m"  -- cyan bold for Dots/Dots12
           interval  = spinnerIntervalMs SpinnerDots12 * 1000  -- microseconds
       tid <- forkIO $ spinnerTickLoop sp colorCode interval
       writeIORef (irSpinnerThread r) (Just tid)
+      -- Start timing task
+      startTimingTask r
 
 -- | Background spinner tick loop
 spinnerTickLoop :: Spinner -> Text -> Int -> IO ()
@@ -168,9 +180,11 @@ spinnerTickLoop sp colorCode interval = do
   threadDelay interval
   spinnerTickLoop sp colorCode interval
 
--- | Stop and clear the current spinner
+-- | Stop and clear the current spinner and timing task
 stopSpinner :: InteractiveRenderer -> IO ()
 stopSpinner r = do
+  -- Stop timing task first
+  stopTimingTask r
   -- Kill tick thread
   mTid <- readIORef (irSpinnerThread r)
   case mTid of
@@ -183,6 +197,69 @@ stopSpinner r = do
     Just sp -> spinnerFinishAndClear sp
     Nothing -> pure ()
   writeIORef (irSpinner r) Nothing
+
+------------------------------------------------------------------------
+-- Timing task (updates spinner message with elapsed time every 1s)
+------------------------------------------------------------------------
+
+-- | Format timing text matching Rust's display format.
+-- "X seconds elapsed total." or "X seconds elapsed total. Y since last event."
+formatTimingText :: Int -> Maybe Int -> Text
+formatTimingText totalElapsed mSinceLastEvent =
+  case mSinceLastEvent of
+    Just sinceLastEvent ->
+      T.pack (show totalElapsed) <> " seconds elapsed total. "
+        <> T.pack (show sinceLastEvent) <> " since last event."
+    Nothing ->
+      T.pack (show totalElapsed) <> " seconds elapsed total."
+
+-- | Start the background timing task that updates spinner message every second.
+startTimingTask :: InteractiveRenderer -> IO ()
+startTimingTask r = do
+  now <- getCurrentTime
+  writeIORef (irTimingState r) (Just (now, Nothing))
+  mSp <- readIORef (irSpinner r)
+  case mSp of
+    Nothing -> pure ()
+    Just sp -> do
+      tid <- forkIO $ timingLoop r sp
+      writeIORef (irTimingThread r) (Just tid)
+
+-- | Background loop that updates spinner message with elapsed time every 1 second.
+timingLoop :: InteractiveRenderer -> Spinner -> IO ()
+timingLoop r sp = do
+  threadDelay 1000000  -- 1 second
+  now <- getCurrentTime
+  mState <- readIORef (irTimingState r)
+  case mState of
+    Nothing -> pure ()  -- stopped
+    Just (startTime, mLastEventTime) -> do
+      let totalElapsed = floor (diffUTCTime now startTime) :: Int
+          mSinceLastEvent = case mLastEventTime of
+            Just lastTime -> Just (floor (diffUTCTime now lastTime) :: Int)
+            Nothing       -> Nothing
+          text = styleMuted r (formatTimingText totalElapsed mSinceLastEvent)
+      spinnerSetMessage sp text
+      timingLoop r sp
+
+-- | Stop the timing task.
+stopTimingTask :: InteractiveRenderer -> IO ()
+stopTimingTask r = do
+  mTid <- readIORef (irTimingThread r)
+  case mTid of
+    Just tid -> killThread tid
+    Nothing  -> pure ()
+  writeIORef (irTimingThread r) Nothing
+  writeIORef (irTimingState r) Nothing
+
+-- | Update the last event time for timing display.
+updateLastEventTime :: InteractiveRenderer -> UTCTime -> IO ()
+updateLastEventTime r eventTime = do
+  mState <- readIORef (irTimingState r)
+  case mState of
+    Just (startTime, _) ->
+      writeIORef (irTimingState r) (Just (startTime, Just eventTime))
+    Nothing -> pure ()
 
 ------------------------------------------------------------------------
 -- Main dispatch
@@ -775,12 +852,22 @@ renderNewStackEvents :: InteractiveRenderer -> [StackEventWithTiming] -> IO ()
 renderNewStackEvents r events = do
   if null events then pure ()
   else do
+    -- Preserve timing start time across spinner restart
+    preservedState <- readIORef (irTimingState r)
     stopSpinner r
     let statusPad = calcPadding events (seResourceStatus . sewEvent)
         rtypePad = calcPadding events (seResourceType . sewEvent)
     mapM_ (renderSingleStackEvent r statusPad rtypePad) events
     -- Restart spinner for continued polling
     startSpinner r "Loading live events..."
+    -- Restore preserved start time and update last event time
+    case preservedState of
+      Just (startTime, _) -> do
+        let mLastEventTime = case events of
+              [] -> Nothing
+              _  -> seTimestamp (sewEvent (last events))
+        writeIORef (irTimingState r) (Just (startTime, mLastEventTime))
+      Nothing -> pure ()
 
 renderOperationComplete :: InteractiveRenderer -> OperationCompleteInfo -> IO ()
 renderOperationComplete r info = do
