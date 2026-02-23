@@ -10,6 +10,7 @@ import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.List as List
 import qualified Data.Map.Strict as Map
 import qualified Data.Scientific as Sci
 import qualified Data.Set as Set
@@ -745,7 +746,7 @@ resolveExpand ctx meta (ExpandTag templateRefAst paramsAst) = do
           resolveAst subCtx templateAst'
 
 mergeExpandParams :: [ParamDef] -> Map.Map Text OValue -> Map.Map Text OValue
-mergeExpandParams defs provided = foldl' addParam provided defs
+mergeExpandParams defs provided = List.foldl' addParam provided defs
   where
     addParam acc pd =
       case Map.lookup (pdName pd) acc of
