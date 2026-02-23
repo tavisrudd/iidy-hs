@@ -21,9 +21,10 @@ module Iidy.Aws.Config
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import System.Environment (lookupEnv)
+import System.Environment (lookupEnv, setEnv)
 
 import qualified Amazonka
+import qualified Amazonka.Auth.STS as STS
 
 import Iidy.Aws.CredentialSource
 
@@ -37,12 +38,29 @@ createAwsEnv :: CredentialDetectionContext -> AwsSettings -> IO (Amazonka.Env, C
 createAwsEnv detectionCtx settings = do
   -- Detect credential sources for provenance tracking
   credStack <- detectCredentialSources detectionCtx
+
+  -- Set AWS_PROFILE before credential discovery if profile is specified.
+  -- This ensures amazonka's discover chain uses the correct profile
+  -- for both credentials and config (region, role_arn, etc.).
+  case awsProfile settings of
+    Just profile -> setEnv "AWS_PROFILE" (T.unpack profile)
+    Nothing -> pure ()
+
   -- Create base env with default credential chain
   env <- Amazonka.newEnv Amazonka.discover
+
   -- Apply region override if specified
   region <- resolveRegion (awsRegion settings)
   let env' = env { Amazonka.region = region }
-  pure (env', credStack)
+
+  -- Apply assume-role if specified.
+  -- Uses the base credentials to call STS AssumeRole, returns a new env
+  -- with temporary credentials and automatic background refresh.
+  env'' <- case awsAssumeRoleArn settings of
+    Just roleArn -> STS.fromAssumedRole roleArn "iidy" env'
+    Nothing -> pure env'
+
+  pure (env'', credStack)
 
 -- | Create AWS Env from simple settings (no detection context).
 -- Uses default detection context with CLI settings only.
@@ -60,8 +78,10 @@ createAwsEnvFromSettings settings =
 -- Region handling
 ------------------------------------------------------------------------
 
--- | Resolve region from settings or environment, defaulting to us-east-1.
--- Priority: explicit setting > AWS_REGION > AWS_DEFAULT_REGION > us-east-1
+-- | Resolve region from settings or environment.
+-- Priority: explicit setting > AWS_REGION > AWS_DEFAULT_REGION > error.
+-- Matches Rust behavior: errors if no region is configured anywhere,
+-- rather than silently defaulting to us-east-1.
 resolveRegion :: Maybe Text -> IO Amazonka.Region
 resolveRegion (Just r) = pure (textToRegion r)
 resolveRegion Nothing = do
@@ -72,7 +92,13 @@ resolveRegion Nothing = do
       envRegion2 <- lookupEnv "AWS_DEFAULT_REGION"
       case envRegion2 of
         Just r  -> pure (textToRegion (T.pack r))
-        Nothing -> pure Amazonka.NorthVirginia
+        Nothing -> fail $ unlines
+          [ "No AWS region configured. Please specify a region via:"
+          , "  - CLI flag: --region us-east-1"
+          , "  - Stack args: Region: us-east-1"
+          , "  - Environment variable: AWS_REGION or AWS_DEFAULT_REGION"
+          , "  - AWS config file: ~/.aws/config"
+          ]
 
 -- | Convert text region name to amazonka Region
 textToRegion :: Text -> Amazonka.Region
