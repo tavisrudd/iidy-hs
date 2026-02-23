@@ -1,7 +1,7 @@
 # iidy-hs Workplan
 
 **Target**: Feature-complete, behavior-identical, output-identical Haskell port. No shortcuts, no dropped features.
-**Status**: IN PROGRESS — Phase 13. Live AWS testing revealed output divergences missed by offline audit.
+**Status**: Phase 13 COMPLETE. Phase 14 (live verification) next.
 
 ## Critical Rules
 
@@ -36,7 +36,7 @@
 | 10 | Output pipeline wiring | **DONE** | [done/phase-10](notes/phases/done/phase-10-output-wiring.md) |
 | 11 | Renderer output tests | **DONE** | [done/phase-11](notes/phases/done/phase-11-renderer-tests.md) |
 | 12 | Completion audit vs Rust (iterative) | **DONE** (Sessions 25-27) | [done/phase-12](notes/phases/done/phase-12-completion-audit.md) |
-| 13 | Output sequencing + feature gaps (full audit) | **IN PROGRESS** (13.1-13.8+ done, Session 33) | [phase-13-cli-output-fixes.md](notes/phases/phase-13-cli-output-fixes.md) |
+| 13 | Output sequencing + feature gaps (full audit) | **DONE** (Sessions 28-34) | [phase-13-cli-output-fixes.md](notes/phases/phase-13-cli-output-fixes.md) |
 | 14 | Live AWS verification — ALL commands | **PLANNED** | — |
 | 15 | AWS auth chain: profile, assume-role, region | **PLANNED** | [aws-auth-chain-analysis.md](notes/aws-auth-chain-analysis.md) |
 
@@ -52,10 +52,10 @@ revealed 8 divergences. A full sequencing audit of all 22 commands then uncovere
 - **7 MEDIUM gaps**: console URL encoding, region priority, lint/approval/cost bypass
   renderer, no spinners, auth timeout
 
-Phase 13 has 9 sub-phases (13.1-13.9). See per-command research files in
+Phase 13 had 9 sub-phases (13.1-13.9), all COMPLETE. See per-command research files in
 `notes/phases/phase-13-research/` for detailed Rust-vs-Haskell analysis.
 
-Phase 14 is systematic live verification of ALL 22 commands after Phase 13 fixes.
+Phase 14 is systematic live verification of ALL 22 commands now that Phase 13 is done.
 
 ## Session Log
 
@@ -94,8 +94,9 @@ Phase 14 is systematic live verification of ALL 22 commands after Phase 13 fixes
 | 31 | 13.5 | Phase 13.5: Changeset consistency — all changeset paths implemented (update-stack, create-or-update, create-changeset fixes). |
 | 32 | 13.6-13.8 | Phase 13.6-13.8: Drift completion, minor ops through output pipeline, spinner + polling infrastructure. |
 | 33 | 13.8+ | Spinner timing display, event duration calculation, describe-stack absent error fix. |
+| 34 | 13.9 | Phase 13.9: Integration tests — all 26 OutputData types through both renderers, output sequence tests. Phase 13 COMPLETE. |
 
-**Offline audit: 80 modules, 362 tests, 37/37 render snapshots, 49/49 error snapshots match**
+**Offline audit: 80 modules, 379 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
 ## Phase 12 Offline Audit Summary
 

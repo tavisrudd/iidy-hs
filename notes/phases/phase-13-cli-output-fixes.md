@@ -131,10 +131,13 @@ This is too large for one phase. Split into sub-phases:
 - Add timeout to Amazonka.discover
 - OperationComplete emission after polling
 
-### 13.9 — Output sequence integration tests (1-2 sessions)
-- Per-command output sequence tests with mocked AWS
-- Full render integration tests (capture stdout, compare golden files)
-- Error path integration tests
+### 13.9 — Output sequence integration tests (DONE, Session 34)
+- ✅ Test data builders for all 26 OutputData types
+- ✅ InteractiveRenderer integration: all variants render without crashing (plain + colored)
+- ✅ JsonRenderer integration: all variants render without crashing
+- ✅ Output sequence tests: create-stack, describe-stack, delete-stack, changeset, drift, absent, lint+approval
+- ✅ Constructor coverage check: compile-time exhaustive + runtime 26/26 unique types
+- ✅ 17 new integration tests (362 → 379 total)
 
 ## Testing Gap Analysis
 

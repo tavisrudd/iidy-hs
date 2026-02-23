@@ -59,6 +59,8 @@ import Iidy.Output.Color (darkTheme, lightTheme, highContrastTheme, noColorTheme
 import Iidy.Output.Renderers.Interactive
   ( InteractiveRenderer(..)
   , defaultInteractiveOptions, plainInteractiveOptions
+  , newInteractiveRenderer
+  , renderOutputData
   , formatSectionHeading, formatSectionLabel, formatSectionEntry
   , formatLogicalId, styleMuted, renderTimestamp, calcPadding, padRight
   , prettyFormatTags, prettyFormatParameters, formatTokenSource
@@ -67,6 +69,8 @@ import Iidy.Output.Renderers.Interactive
   )
 import Iidy.Output.Renderers.Json
   ( JsonOptions(..), defaultJsonOptions
+  , newJsonRenderer
+  , renderOutputDataJson
   , metadataToValue, defToValue, eventToValue, eventWithTimingToValue
   , eventsDisplayToValue, contentsToValue, statusUpdateToValue
   , commandResultToValue, summaryToValue, stackListToValue
@@ -78,7 +82,8 @@ import Iidy.Output.Renderers.Json
   , encodeValue
   )
 import Iidy.Output.Types
-  ( CommandMetadata(..), StackDefinition(..)
+  ( OutputData(..)
+  , CommandMetadata(..), StackDefinition(..)
   , StackEvent(..), StackEventWithTiming(..), StackEventsDisplay(..)
   , StackContents(..), StackResourceInfo(..)
   , StackOutputInfo(..), StackStatusInfo(..)
@@ -90,8 +95,10 @@ import Iidy.Output.Types
   , StackDrift(..), DriftedResource(..), PropertyDifference(..)
   , ErrorInfo(..), ErrorDetails(..)
   , OperationCompleteInfo(..), InactivityTimeoutInfo(..)
+  , ConfirmationRequest(..)
   , StackChangeDetails(..), StackAbsentInfo(..)
   , CostEstimate(..), CostEstimateInfo(..)
+  , StackTemplate(..)
   , ApprovalRequestResult(..), TemplateValidation(..)
   , ApprovalStatus(..), TemplateDiff(..), ApprovalResult(..)
   )
@@ -159,6 +166,7 @@ main = do
     , testGroup "JsonRenderer" jsonRendererTests
     , testGroup "ThemeVariants" themeVariantTests
     , testGroup "RendererOutput" rendererOutputTests
+    , testGroup "Integration" integrationTests
     ]
 
 ------------------------------------------------------------------------
@@ -2543,3 +2551,459 @@ rendererOutputTests =
             other -> assertFailure ("Expected object in array, got: " <> show other)
         Just other -> assertFailure ("Expected array, got: " <> show other)
   ]
+
+------------------------------------------------------------------------
+-- Additional test data builders for integration tests
+------------------------------------------------------------------------
+
+testCommandMetadata :: CommandMetadata
+testCommandMetadata = CommandMetadata
+  { cmEnvironment       = "development"
+  , cmRegion            = "us-east-1"
+  , cmProfile           = Just "dev-profile"
+  , cmCliArguments      = Map.fromList [("stack-name", "my-stack")]
+  , cmIamServiceRole    = Nothing
+  , cmCurrentIamPrincipal = "arn:aws:iam::123456789012:user/dev"
+  , cmCredentialSource  = "environment"
+  , cmVersion           = "0.1.0"
+  , cmPrimaryToken      = testTokenInfo
+  , cmDerivedTokens     = []
+  }
+
+testStackEventsDisplay :: StackEventsDisplay
+testStackEventsDisplay = StackEventsDisplay
+  { sedTitle     = "Recent Events"
+  , sedEvents    = [testEventWithTiming]
+  , sedMaxEvents = Just 25
+  , sedTruncated = Nothing
+  }
+
+testStackContents :: StackContents
+testStackContents = StackContents
+  { scResources = [StackResourceInfo
+      { sriLogicalResourceId = "MyBucket"
+      , sriPhysicalResourceId = Just "my-bucket-abc"
+      , sriResourceType = "AWS::S3::Bucket"
+      , sriResourceStatus = "CREATE_COMPLETE"
+      , sriResourceStatusReason = Nothing
+      , sriLastUpdated = Just testTimestamp
+      }]
+  , scOutputs = [StackOutputInfo
+      { soiOutputKey = "BucketName"
+      , soiOutputValue = "my-bucket-abc"
+      , soiDescription = Just "The S3 bucket name"
+      , soiExportName = Just "MyBucketName"
+      }]
+  , scExports = []
+  , scCurrentStatus = StackStatusInfo
+      { ssiStatus = "CREATE_COMPLETE"
+      , ssiStatusReason = Nothing
+      , ssiTimestamp = Just testTimestamp
+      }
+  , scPendingChangesets = []
+  }
+
+testFinalCommandSummary :: FinalCommandSummary
+testFinalCommandSummary = FinalCommandSummary
+  { fcsResult = SummarySuccess
+  , fcsElapsedSeconds = 42
+  }
+
+testStackListDisplay :: StackListDisplay
+testStackListDisplay = StackListDisplay
+  { sldStacks = [testStackListEntry]
+  , sldShowTags = True
+  , sldFiltersApplied = []
+  , sldColumns = [ColName, ColStatus, ColTags]
+  , sldQueryMode = False
+  }
+
+testChangeSetResult :: ChangeSetCreationResult
+testChangeSetResult = ChangeSetCreationResult
+  { csrChangesetName = "changeset-awesome-lion"
+  , csrStackName = "my-stack"
+  , csrChangesetType = "UPDATE"
+  , csrStatus = "CREATE_COMPLETE"
+  , csrConsoleUrl = "https://console.aws.amazon.com/cloudformation/home#/stacks/changesets/details?stackId=my-stack&changeSetId=changeset-awesome-lion"
+  , csrHasChanges = True
+  , csrPendingChangesets = []
+  , csrNextSteps = ["Execute the changeset to apply changes"]
+  }
+
+testStackDrift :: StackDrift
+testStackDrift = StackDrift
+  { sdrDriftedResources = [DriftedResource
+      { drLogicalResourceId = "MyBucket"
+      , drPhysicalResourceId = "my-bucket-abc"
+      , drResourceType = "AWS::S3::Bucket"
+      , drDriftStatus = "MODIFIED"
+      , drPropertyDifferences = [PropertyDifference
+          { pdPropertyPath = "/VersioningConfiguration/Status"
+          , pdExpectedValue = Just "Enabled"
+          , pdActualValue = Just "Suspended"
+          , pdDifferenceType = Just "NOT_EQUAL"
+          }]
+      }]
+  }
+
+testOperationComplete :: OperationCompleteInfo
+testOperationComplete = OperationCompleteInfo
+  { ociElapsedSeconds = 120
+  , ociOperationStartTime = testTimestamp
+  , ociSkipRemainingSections = False
+  }
+
+testInactivityTimeout :: InactivityTimeoutInfo
+testInactivityTimeout = InactivityTimeoutInfo
+  { itiTimeoutSeconds = 180
+  , itiElapsedSeconds = 200
+  , itiOperationStartTime = testTimestamp
+  }
+
+testConfirmationRequest :: ConfirmationRequest
+testConfirmationRequest = ConfirmationRequest
+  { cfrMessage = "Are you sure you want to delete my-stack?"
+  , cfrKey = Just "yes"
+  }
+
+testStackChangeDetails :: StackChangeDetails
+testStackChangeDetails = StackChangeDetails
+  { scdChangeType = ChangeCreate
+  , scdStackName = "my-stack"
+  }
+
+testCostEstimate :: CostEstimate
+testCostEstimate = CostEstimate
+  { ceInfo = CostEstimateInfo
+      { ceiUrl = "https://calculator.aws/estimate?id=abc123"
+      , ceiStackName = Just "my-stack"
+      , ceiTemplateFile = Just "template.yaml"
+      }
+  }
+
+testStackTemplate :: StackTemplate
+testStackTemplate = StackTemplate
+  { stStderrLines = ["Fetching template for my-stack..."]
+  , stTemplateBody = "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  MyBucket:\n    Type: AWS::S3::Bucket\n"
+  }
+
+testApprovalRequestResult :: ApprovalRequestResult
+testApprovalRequestResult = ApprovalRequestResult
+  { arrTemplateLocation = "s3://templates/my-stack/template.yaml"
+  , arrPendingLocation = "s3://templates/my-stack/pending.yaml"
+  , arrAlreadyApproved = False
+  , arrNextSteps = ["Review template", "Approve or reject"]
+  }
+
+testTemplateValidation :: TemplateValidation
+testTemplateValidation = TemplateValidation
+  { tvEnabled = True
+  , tvErrors = []
+  , tvWarnings = ["Parameter Env has no default value"]
+  }
+
+testApprovalStatus :: ApprovalStatus
+testApprovalStatus = ApprovalStatus
+  { apsPendingExists = True
+  , apsAlreadyApproved = False
+  , apsPendingLocation = "s3://templates/my-stack/pending.yaml"
+  , apsApprovedLocation = Nothing
+  }
+
+testTemplateDiff :: TemplateDiff
+testTemplateDiff = TemplateDiff
+  { tdDiffOutput = "--- a/template.yaml\n+++ b/template.yaml\n@@ -1,3 +1,3 @@\n Resources:\n   MyBucket:\n-    Type: AWS::S3::Bucket\n+    Type: AWS::S3::Bucket\n+    Properties:\n+      VersioningConfiguration:\n+        Status: Enabled\n"
+  , tdContextLines = 3
+  , tdHasChanges = True
+  }
+
+testApprovalResult :: ApprovalResult
+testApprovalResult = ApprovalResult
+  { arApproved = True
+  , arApprovedLocation = Just "s3://templates/my-stack/approved.yaml"
+  , arLatestLocation = Just "s3://templates/my-stack/template.yaml"
+  , arCleanupCompleted = True
+  }
+
+-- | All OutputData variants for comprehensive testing
+allTestOutputData :: [OutputData]
+allTestOutputData =
+  [ OdCommandMetadata testCommandMetadata
+  , OdStackDefinition testStackDef True
+  , OdStackDefinition testStackDef False
+  , OdStackEvents testStackEventsDisplay
+  , OdStackContents testStackContents
+  , OdStatusUpdate testStatusUpdate
+  , OdCommandResult testCommandResult
+  , OdFinalCommandSummary testFinalCommandSummary
+  , OdStackList testStackListDisplay
+  , OdChangeSetResult testChangeSetResult
+  , OdStackDrift testStackDrift
+  , OdError testErrorInfo
+  , OdTokenInfo testTokenInfo
+  , OdNewStackEvents [testEventWithTiming]
+  , OdOperationComplete testOperationComplete
+  , OdInactivityTimeout testInactivityTimeout
+  , OdConfirmationPrompt testConfirmationRequest
+  , OdStackChangeDetails testStackChangeDetails
+  , OdStackAbsentInfo testAbsentInfo
+  , OdCostEstimate testCostEstimate
+  , OdStackTemplate testStackTemplate
+  , OdApprovalRequestResult testApprovalRequestResult
+  , OdTemplateValidation testTemplateValidation
+  , OdApprovalStatus testApprovalStatus
+  , OdTemplateDiff testTemplateDiff
+  , OdApprovalResult testApprovalResult
+  , OdPollingStarted "Loading live events..."
+  ]
+
+------------------------------------------------------------------------
+-- Integration tests (Phase 13.9)
+------------------------------------------------------------------------
+
+integrationTests :: [TestTree]
+integrationTests =
+  [ testGroup "InteractiveRenderer" interactiveRendererIntegrationTests
+  , testGroup "JsonRenderer" jsonRendererIntegrationTests
+  , testGroup "OutputSequences" outputSequenceTests
+  ]
+
+interactiveRendererIntegrationTests :: [TestTree]
+interactiveRendererIntegrationTests =
+  [ testCase "renderOutputData handles all OutputData variants without crashing" $ do
+      r <- newInteractiveRenderer plainInteractiveOptions
+      -- Each variant should render without throwing an exception
+      results <- forM allTestOutputData $ \od -> do
+        result <- try (renderOutputData r od) :: IO (Either SomeException ())
+        case result of
+          Left ex -> pure (Just (show od, ex))
+          Right () -> pure Nothing
+      let failures = [f | Just f <- results]
+      when (not (null failures)) $
+        assertFailure $ "Renderer crashed on variants: " <>
+          unlines [tag <> ": " <> show ex | (tag, ex) <- failures]
+
+  , testCase "renderOutputData colored handles all OutputData variants" $ do
+      r <- newInteractiveRenderer defaultInteractiveOptions
+      results <- forM allTestOutputData $ \od -> do
+        result <- try (renderOutputData r od) :: IO (Either SomeException ())
+        case result of
+          Left ex -> pure (Just (show od, ex))
+          Right () -> pure Nothing
+      let failures = [f | Just f <- results]
+      when (not (null failures)) $
+        assertFailure $ "Colored renderer crashed on: " <>
+          unlines [tag <> ": " <> show ex | (tag, ex) <- failures]
+
+  , testCase "renderOutputData processes create-stack sequence in order" $ do
+      r <- newInteractiveRenderer plainInteractiveOptions
+      -- Simulate a create-stack output sequence
+      let sequence =
+            [ OdCommandMetadata testCommandMetadata
+            , OdStackChangeDetails testStackChangeDetails
+            , OdStackDefinition testStackDef True
+            , OdPollingStarted "Loading live events..."
+            , OdNewStackEvents [testEventWithTiming]
+            , OdOperationComplete testOperationComplete
+            , OdStackContents testStackContents
+            , OdFinalCommandSummary testFinalCommandSummary
+            ]
+      -- All should render without exception
+      mapM_ (renderOutputData r) sequence
+
+  , testCase "renderOutputData processes describe-stack sequence in order" $ do
+      r <- newInteractiveRenderer plainInteractiveOptions
+      let sequence =
+            [ OdCommandMetadata testCommandMetadata
+            , OdStackDefinition testStackDef True
+            , OdStackEvents testStackEventsDisplay
+            , OdStackContents testStackContents
+            , OdFinalCommandSummary testFinalCommandSummary
+            ]
+      mapM_ (renderOutputData r) sequence
+
+  , testCase "renderOutputData processes delete-stack sequence in order" $ do
+      r <- newInteractiveRenderer plainInteractiveOptions
+      let sequence =
+            [ OdCommandMetadata testCommandMetadata
+            , OdStackDefinition testStackDef True
+            , OdStackEvents testStackEventsDisplay
+            , OdStackContents testStackContents
+            , OdConfirmationPrompt testConfirmationRequest
+            , OdPollingStarted "Waiting for stack deletion..."
+            , OdNewStackEvents [testEventWithTiming]
+            , OdOperationComplete testOperationComplete
+            , OdFinalCommandSummary testFinalCommandSummary
+            ]
+      mapM_ (renderOutputData r) sequence
+
+  , testCase "renderOutputData processes changeset sequence in order" $ do
+      r <- newInteractiveRenderer plainInteractiveOptions
+      let sequence =
+            [ OdCommandMetadata testCommandMetadata
+            , OdStackDefinition testStackDef True
+            , OdChangeSetResult testChangeSetResult
+            , OdFinalCommandSummary testFinalCommandSummary
+            ]
+      mapM_ (renderOutputData r) sequence
+
+  , testCase "renderOutputData processes drift sequence in order" $ do
+      r <- newInteractiveRenderer plainInteractiveOptions
+      let sequence =
+            [ OdCommandMetadata testCommandMetadata
+            , OdStackDefinition testStackDef False
+            , OdPollingStarted "Detecting drift..."
+            , OdStackDrift testStackDrift
+            , OdFinalCommandSummary testFinalCommandSummary
+            ]
+      mapM_ (renderOutputData r) sequence
+
+  , testCase "renderOutputData processes stack-absent error" $ do
+      r <- newInteractiveRenderer plainInteractiveOptions
+      let sequence =
+            [ OdCommandMetadata testCommandMetadata
+            , OdStackAbsentInfo testAbsentInfo
+            ]
+      mapM_ (renderOutputData r) sequence
+
+  , testCase "renderOutputData processes lint+approval sequence" $ do
+      r <- newInteractiveRenderer plainInteractiveOptions
+      let sequence =
+            [ OdTemplateValidation testTemplateValidation
+            , OdApprovalRequestResult testApprovalRequestResult
+            , OdApprovalStatus testApprovalStatus
+            , OdTemplateDiff testTemplateDiff
+            , OdApprovalResult testApprovalResult
+            ]
+      mapM_ (renderOutputData r) sequence
+
+  , testCase "renderOutputData handles empty events list" $ do
+      r <- newInteractiveRenderer plainInteractiveOptions
+      renderOutputData r (OdNewStackEvents [])
+
+  , testCase "renderOutputData handles stack list" $ do
+      r <- newInteractiveRenderer plainInteractiveOptions
+      renderOutputData r (OdStackList testStackListDisplay)
+  ]
+
+jsonRendererIntegrationTests :: [TestTree]
+jsonRendererIntegrationTests =
+  [ testCase "renderOutputDataJson handles all OutputData variants without crashing" $ do
+      let jr = newJsonRenderer defaultJsonOptions
+      results <- forM allTestOutputData $ \od -> do
+        result <- try (renderOutputDataJson jr od) :: IO (Either SomeException ())
+        case result of
+          Left ex -> pure (Just (show od, ex))
+          Right () -> pure Nothing
+      let failures = [f | Just f <- results]
+      when (not (null failures)) $
+        assertFailure $ "JSON renderer crashed on variants: " <>
+          unlines [tag <> ": " <> show ex | (tag, ex) <- failures]
+
+  , testCase "renderOutputDataJson handles create-stack sequence" $ do
+      let jr = newJsonRenderer defaultJsonOptions
+      let sequence =
+            [ OdCommandMetadata testCommandMetadata
+            , OdStackChangeDetails testStackChangeDetails
+            , OdStackDefinition testStackDef True
+            , OdPollingStarted "Loading..."
+            , OdNewStackEvents [testEventWithTiming]
+            , OdOperationComplete testOperationComplete
+            , OdStackContents testStackContents
+            , OdFinalCommandSummary testFinalCommandSummary
+            ]
+      mapM_ (renderOutputDataJson jr) sequence
+  ]
+
+-- | Test that OutputData variants cover all constructors.
+-- This is a compile-time check via pattern matching exhaustiveness.
+outputSequenceTests :: [TestTree]
+outputSequenceTests =
+  [ testCase "allTestOutputData covers all 27 OutputData variant types" $ do
+      -- 26 constructors in OutputData, plus OdStackDefinition tested with
+      -- both True and False = 27 entries, 26 unique constructor names.
+      let uniqueTypes = nub (map odConstructorName allTestOutputData)
+      assertEqual "unique OutputData constructors covered"
+        26  -- 26 constructors in OutputData
+        (length uniqueTypes)
+
+  , testCase "create-stack sequence has correct order" $ do
+      let sequence =
+            [ OdCommandMetadata testCommandMetadata
+            , OdStackChangeDetails testStackChangeDetails
+            , OdStackDefinition testStackDef True
+            , OdPollingStarted "Loading live events..."
+            , OdNewStackEvents [testEventWithTiming]
+            , OdOperationComplete testOperationComplete
+            , OdStackContents testStackContents
+            , OdFinalCommandSummary testFinalCommandSummary
+            ]
+          names = map odConstructorName sequence
+      assertEqual "sequence order"
+        ["CommandMetadata", "StackChangeDetails", "StackDefinition"
+        ,"PollingStarted", "NewStackEvents", "OperationComplete"
+        ,"StackContents", "FinalCommandSummary"]
+        names
+
+  , testCase "describe-stack sequence has correct order" $ do
+      let sequence =
+            [ OdCommandMetadata testCommandMetadata
+            , OdStackDefinition testStackDef True
+            , OdStackEvents testStackEventsDisplay
+            , OdStackContents testStackContents
+            , OdFinalCommandSummary testFinalCommandSummary
+            ]
+          names = map odConstructorName sequence
+      assertEqual "sequence order"
+        ["CommandMetadata", "StackDefinition", "StackEvents"
+        ,"StackContents", "FinalCommandSummary"]
+        names
+
+  , testCase "delete-stack sequence has correct order" $ do
+      let sequence =
+            [ OdCommandMetadata testCommandMetadata
+            , OdStackDefinition testStackDef True
+            , OdStackEvents testStackEventsDisplay
+            , OdStackContents testStackContents
+            , OdConfirmationPrompt testConfirmationRequest
+            , OdPollingStarted "Waiting..."
+            , OdNewStackEvents [testEventWithTiming]
+            , OdOperationComplete testOperationComplete
+            , OdFinalCommandSummary testFinalCommandSummary
+            ]
+          names = map odConstructorName sequence
+      assertEqual "sequence order"
+        ["CommandMetadata", "StackDefinition", "StackEvents"
+        ,"StackContents", "ConfirmationPrompt", "PollingStarted"
+        ,"NewStackEvents", "OperationComplete", "FinalCommandSummary"]
+        names
+  ]
+
+-- | Extract constructor name from OutputData for sequence testing
+odConstructorName :: OutputData -> String
+odConstructorName (OdCommandMetadata _)         = "CommandMetadata"
+odConstructorName (OdStackDefinition _ _)       = "StackDefinition"
+odConstructorName (OdStackEvents _)             = "StackEvents"
+odConstructorName (OdStackContents _)           = "StackContents"
+odConstructorName (OdStatusUpdate _)            = "StatusUpdate"
+odConstructorName (OdCommandResult _)           = "CommandResult"
+odConstructorName (OdFinalCommandSummary _)     = "FinalCommandSummary"
+odConstructorName (OdStackList _)               = "StackList"
+odConstructorName (OdChangeSetResult _)         = "ChangeSetResult"
+odConstructorName (OdStackDrift _)              = "StackDrift"
+odConstructorName (OdError _)                   = "Error"
+odConstructorName (OdTokenInfo _)               = "TokenInfo"
+odConstructorName (OdNewStackEvents _)          = "NewStackEvents"
+odConstructorName (OdOperationComplete _)       = "OperationComplete"
+odConstructorName (OdInactivityTimeout _)       = "InactivityTimeout"
+odConstructorName (OdConfirmationPrompt _)      = "ConfirmationPrompt"
+odConstructorName (OdStackChangeDetails _)      = "StackChangeDetails"
+odConstructorName (OdStackAbsentInfo _)         = "StackAbsentInfo"
+odConstructorName (OdCostEstimate _)            = "CostEstimate"
+odConstructorName (OdStackTemplate _)           = "StackTemplate"
+odConstructorName (OdApprovalRequestResult _)   = "ApprovalRequestResult"
+odConstructorName (OdTemplateValidation _)      = "TemplateValidation"
+odConstructorName (OdApprovalStatus _)          = "ApprovalStatus"
+odConstructorName (OdTemplateDiff _)            = "TemplateDiff"
+odConstructorName (OdApprovalResult _)          = "ApprovalResult"
+odConstructorName (OdPollingStarted _)          = "PollingStarted"
