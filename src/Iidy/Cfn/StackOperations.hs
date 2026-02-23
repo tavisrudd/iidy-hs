@@ -285,7 +285,7 @@ convertChangeSetSummary cs = do
     , csiDescription = cs.description
     , csiStatus = maybe "" CF.fromChangeSetStatus cs.status
     , csiStatusReason = cs.statusReason
-    , csiCreationTime = Nothing
+    , csiCreationTime = fmap (.fromTime) cs.creationTime
     , csiExecutionStatus = CF.fromExecutionStatus <$> cs.executionStatus
     , csiChanges = []
     }

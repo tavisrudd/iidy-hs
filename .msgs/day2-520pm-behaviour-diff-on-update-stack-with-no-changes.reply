@@ -1,0 +1,5 @@
+Acknowledged. Two issues visible here:
+1. iidy-hs shows "Command Summary: Success" immediately instead of emitting Stack Details and then reporting the AWS ValidationError "No updates are to be performed." like Rust does. The update-stack handler likely catches the error before reaching the polling/definition phase.
+2. iidy-hs also includes "stack-name=iidy-demo-hello-world" in CLI Arguments while Rust only shows "region=us-west-2". The stack-name comes from stack-args.yaml, not from CLI, so it shouldn't be in CLI Arguments.
+
+Both are bugs for Phase 14/15 to address. Noted.

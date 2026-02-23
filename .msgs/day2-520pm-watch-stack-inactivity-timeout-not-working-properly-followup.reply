@@ -1,0 +1,1 @@
+Acknowledged — watch-stack should wait even if the stack is already in a terminal state, so it can catch subsequent changes triggered from CI. This is a Phase 14 live verification item.

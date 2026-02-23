@@ -1,0 +1,1 @@
+Agreed — confirmation prompt display should be consistent across commands and ideally all handled by the renderer, matching Rust's approach. I'll audit the confirmation paths across commands and consolidate into the renderer if needed.

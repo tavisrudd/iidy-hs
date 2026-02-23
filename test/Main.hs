@@ -45,7 +45,7 @@ import Iidy.Cfn.Operations.ConvertStack
   , templateBodyToYaml
   , buildStackArgsYaml
   )
-import Iidy.Cfn.Operations.DeleteStack (isConfirmation)
+import Iidy.Confirm (isConfirmation)
 import Iidy.Cfn.Operations.WatchStack (formatEvent, allTerminalStatuses)
 import Iidy.Cfn.RequestBuilder (mapCapability, mapCapabilities, mapParameters, mapTags, mapOnFailure)
 import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..))

@@ -58,6 +58,7 @@ library
     Iidy.Output.Manager
     Iidy.Output.Renderers.Interactive
     Iidy.Output.Renderers.Json
+    Iidy.Confirm
     Iidy.Cli
     Iidy.Cli.Parser
     Iidy.Demo

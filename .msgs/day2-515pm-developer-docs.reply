@@ -1,0 +1,1 @@
+Acknowledged. Will start with a research phase: inventory the upstream Rust docs in ~/src/iidy/docs/dev, then plan equivalent Haskell developer docs covering architecture, testing, key modules, and ADRs. Will create notes/developer-docs-plan.md with the inventory and plan before writing any docs.

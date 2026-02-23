@@ -12,12 +12,10 @@ module Iidy.Cfn.Operations.TemplateApproval
 
 import Control.Exception (SomeException, try)
 import Control.Monad.Trans.Resource (runResourceT)
-import Data.Char (toLower)
 import qualified Data.ByteString as BS
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import System.IO (hFlush, hSetBuffering, stdin, stdout, BufferMode(..))
 
 import qualified Amazonka
 import qualified Amazonka.Data as AmazonkaData
@@ -28,6 +26,7 @@ import qualified Amazonka.S3.HeadObject as HO
 import qualified Amazonka.S3.DeleteObject as DO
 import qualified Data.Conduit.List as CL
 
+import Iidy.Confirm (requestConfirmation)
 import Iidy.Cfn.Context (CfnContext(..))
 import Iidy.Cfn.TemplateHash (generateVersionedLocation, parseS3Url)
 import Iidy.Cfn.TemplateLoader (loadCfnTemplate, TemplateResult(..))
@@ -256,16 +255,3 @@ generateDiff old new
            map (\l -> "- " <> l) removed ++
            map (\l -> "+ " <> l) added
 
-------------------------------------------------------------------------
--- User confirmation
-------------------------------------------------------------------------
-
--- | Ask the user to confirm an action on the terminal.
-requestConfirmation :: String -> IO Bool
-requestConfirmation prompt = do
-  hSetBuffering stdin LineBuffering
-  hSetBuffering stdout NoBuffering
-  putStr $ prompt <> " [y/N] "
-  hFlush stdout
-  answer <- getLine
-  pure $ map toLower answer `elem` ["y", "yes"]

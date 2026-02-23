@@ -1,0 +1,6 @@
+Acknowledged. Three issues identified:
+1. Missing blank line before delete confirmation prompt + white text instead of red "? " prefix
+2. User saying 'n' should be Success (thumbs up), not Failure (table flip) — declining is not an error
+3. Credential Source display: should show "AWS_ACCESS_KEY_ID + AWS_SESSION_TOKEN" instead of "temporary", and "overriding" instead of "overrides"
+
+Will fix all three in this session.

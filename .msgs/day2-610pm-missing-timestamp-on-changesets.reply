@@ -1,0 +1,3 @@
+Two issues identified:
+1. Changeset timestamps showing "Unknown time" — need to extract CreationTime from the changeset summary and format it properly. Will fix.
+2. Event duration minimum should be 1s, not 0s — Rust uses max(1, seconds) for the duration display. Will fix the duration calculation to use a 1s minimum.

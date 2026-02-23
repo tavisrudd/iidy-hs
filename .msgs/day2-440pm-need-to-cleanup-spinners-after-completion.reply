@@ -1,0 +1,1 @@
+Good catch — the spinner line is persisting because stopSpinner isn't being called before rendering StackContents. I'll fix this by stopping the spinner in renderOutputData before rendering any section that indicates polling is done (StackContents, OperationComplete, FinalCommandSummary, etc.).

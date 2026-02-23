@@ -11,12 +11,11 @@ module Iidy.Params.Review
 
 import Control.Exception (SomeException, try)
 import Control.Monad.Trans.Resource (runResourceT)
-import Data.Char (toLower)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import System.IO (hFlush, hSetBuffering, stdin, stdout, BufferMode(..))
 
+import Iidy.Confirm (requestConfirmation)
 import qualified Amazonka
 import qualified Amazonka.SSM.GetParameter as GP
 import qualified Amazonka.SSM.PutParameter as PP
@@ -106,15 +105,3 @@ applyPendingChange awsEnv path pendingValue pendingPath = do
         Left ex -> pure (Left ("Parameter updated but failed to delete pending: " <> T.pack (show ex)))
         Right _ -> pure (Right ())
 
-------------------------------------------------------------------------
--- User confirmation
-------------------------------------------------------------------------
-
-requestConfirmation :: String -> IO Bool
-requestConfirmation prompt = do
-  hSetBuffering stdin LineBuffering
-  hSetBuffering stdout NoBuffering
-  putStr $ prompt <> " [y/N] "
-  hFlush stdout
-  answer <- getLine
-  pure $ map toLower answer `elem` ["y", "yes"]

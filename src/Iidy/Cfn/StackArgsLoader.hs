@@ -212,29 +212,32 @@ mergeAwsSettings cli argsfile = AwsSettings
 
 -- | Convert a JSON Value (from YAML) to StackArgs
 valueToStackArgs :: Value -> Either Text StackArgs
-valueToStackArgs (Object obj) = Right StackArgs
-  { saStackName                   = getStr obj "StackName"
-  , saTemplate                    = getStr obj "Template"
-  , saApprovedTemplateLocation    = getStr obj "ApprovedTemplateLocation"
-  , saRegion                      = getStr obj "Region"
-  , saProfile                     = getStr obj "Profile"
-  , saCapabilities                = getStrList obj "Capabilities"
-  , saTags                        = getStrMap obj "Tags"
-  , saParameters                  = getStrMap obj "Parameters"
-  , saNotificationArns            = getStrList obj "NotificationARNs"
-  , saAssumeRoleArn               = getStr obj "AssumeRoleARN"
-  , saServiceRoleArn              = getStr obj "ServiceRoleARN"
-  , saRoleArn                     = getStr obj "RoleARN"
-  , saTimeoutInMinutes            = getInt obj "TimeoutInMinutes"
-  , saOnFailure                   = getStr obj "OnFailure"
-  , saDisableRollback             = getBool obj "DisableRollback"
-  , saEnableTerminationProtection = getBool obj "EnableTerminationProtection"
-  , saStackPolicy                 = KM.lookup (Key.fromText "StackPolicy") obj
-  , saResourceTypes               = getStrList obj "ResourceTypes"
-  , saUsePreviousTemplate         = getBool obj "UsePreviousTemplate"
-  , saUsePreviousParameterValues  = getStrList obj "UsePreviousParameterValues"
-  , saCommandsBefore              = getStrList obj "CommandsBefore"
-  }
+valueToStackArgs (Object obj) = do
+  tags   <- getStrMapValidated obj "Tags"
+  params <- getStrMapValidated obj "Parameters"
+  pure StackArgs
+    { saStackName                   = getStr obj "StackName"
+    , saTemplate                    = getStr obj "Template"
+    , saApprovedTemplateLocation    = getStr obj "ApprovedTemplateLocation"
+    , saRegion                      = getStr obj "Region"
+    , saProfile                     = getStr obj "Profile"
+    , saCapabilities                = getStrList obj "Capabilities"
+    , saTags                        = tags
+    , saParameters                  = params
+    , saNotificationArns            = getStrList obj "NotificationARNs"
+    , saAssumeRoleArn               = getStr obj "AssumeRoleARN"
+    , saServiceRoleArn              = getStr obj "ServiceRoleARN"
+    , saRoleArn                     = getStr obj "RoleARN"
+    , saTimeoutInMinutes            = getInt obj "TimeoutInMinutes"
+    , saOnFailure                   = getStr obj "OnFailure"
+    , saDisableRollback             = getBool obj "DisableRollback"
+    , saEnableTerminationProtection = getBool obj "EnableTerminationProtection"
+    , saStackPolicy                 = KM.lookup (Key.fromText "StackPolicy") obj
+    , saResourceTypes               = getStrList obj "ResourceTypes"
+    , saUsePreviousTemplate         = getBool obj "UsePreviousTemplate"
+    , saUsePreviousParameterValues  = getStrList obj "UsePreviousParameterValues"
+    , saCommandsBefore              = getStrList obj "CommandsBefore"
+    }
 valueToStackArgs _ = Left "Stack args must be a YAML mapping"
 
 getStrList :: KM.KeyMap Value -> Text -> Maybe [Text]
@@ -242,11 +245,41 @@ getStrList obj key = case KM.lookup (Key.fromText key) obj of
   Just (Array arr) -> Just [t | String t <- foldr (:) [] arr]
   _                -> Nothing
 
-getStrMap :: KM.KeyMap Value -> Text -> Maybe (Map Text Text)
-getStrMap obj key = case KM.lookup (Key.fromText key) obj of
-  Just (Object m) -> Just $ Map.fromList
-    [ (Key.toText k, t) | (k, String t) <- KM.toList m ]
-  _ -> Nothing
+-- | Extract a string map, validating that all values are strings.
+-- Returns an error if any value has a non-string type (matching Rust/serde behavior).
+getStrMapValidated :: KM.KeyMap Value -> Text -> Either Text (Maybe (Map Text Text))
+getStrMapValidated obj key = case KM.lookup (Key.fromText key) obj of
+  Just (Object m) -> do
+    pairs <- mapM validatePair (KM.toList m)
+    pure (Just (Map.fromList pairs))
+  Just Null -> Right Nothing
+  Nothing   -> Right Nothing
+  Just v    -> Left ("invalid type for " <> key <> ": expected a mapping, got " <> describeType v)
+  where
+    validatePair (k, String t) = Right (Key.toText k, t)
+    validatePair (_, v)        = Left ("invalid type: " <> describeValue v <> ", expected a string")
+
+-- | Describe a JSON value type for error messages (matching Rust/serde style).
+describeType :: Value -> Text
+describeType (Object _) = "a mapping"
+describeType (Array _)  = "a sequence"
+describeType (String _) = "a string"
+describeType (Number _) = "an integer"
+describeType (Bool _)   = "a boolean"
+describeType Null       = "null"
+
+-- | Describe a JSON value for error messages (matching Rust/serde style).
+describeValue :: Value -> Text
+describeValue (Number n) =
+  let i = round n :: Integer
+  in if fromIntegral i == n
+     then "integer `" <> T.pack (show i) <> "`"
+     else "float `" <> T.pack (show n) <> "`"
+describeValue (Bool b)   = "boolean `" <> T.toLower (T.pack (show b)) <> "`"
+describeValue (Array _)  = "a sequence"
+describeValue (Object _) = "a mapping"
+describeValue Null       = "null"
+describeValue (String s) = "string `" <> s <> "`"
 
 getInt :: KM.KeyMap Value -> Text -> Maybe Int
 getInt obj key = case KM.lookup (Key.fromText key) obj of

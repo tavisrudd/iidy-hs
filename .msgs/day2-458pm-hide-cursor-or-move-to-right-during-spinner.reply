@@ -1,0 +1,1 @@
+Acknowledged. The .msg file was empty (EOM). Will implement cursor hiding during spinner if needed — this is what indicatif does in Rust.

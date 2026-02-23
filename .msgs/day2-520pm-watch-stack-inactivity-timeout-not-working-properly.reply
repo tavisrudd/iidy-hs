@@ -1,0 +1,5 @@
+Acknowledged. Two issues:
+1. watch-stack with no timeout argument should default to infinite wait (poll forever until stack reaches a terminal status), matching Rust/JS behavior. Currently it seems to exit immediately after showing current state because the stack is already in a terminal status (CREATE_COMPLETE). This is actually correct behavior for a completed stack -- there's nothing to watch. But if Rust keeps polling, we should match that.
+2. watch-stack with --inactivity-timeout 50 also exits immediately, same reason -- stack already complete.
+
+The real question is: what does Rust's watch-stack do when the stack is already in a terminal state? If Rust shows the same output and exits, then iidy-hs is correct. If Rust keeps polling, we need to adjust. Will investigate in Phase 14.

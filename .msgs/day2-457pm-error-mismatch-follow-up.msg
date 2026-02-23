@@ -1,0 +1,1 @@
+Rather than catching specific operational errors like the ones I've provided examples of, catch *all* and do a best effort formatting in all cases. For those that we specifically know about and expect, format like rust. 

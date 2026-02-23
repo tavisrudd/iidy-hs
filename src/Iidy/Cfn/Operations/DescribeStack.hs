@@ -181,7 +181,7 @@ calculateEventDurations events =
               | "_COMPLETE" `T.isSuffixOf` status || "_FAILED" `T.isSuffixOf` status ->
                   case Map.lookup key starts of
                     Just startTs ->
-                      let secs = max 0 (floor (diffUTCTime ts startTs)) :: Int
+                      let secs = max 1 (floor (diffUTCTime ts startTs)) :: Int
                       in (starts, Just secs)
                     Nothing -> (starts, Nothing)
               | otherwise -> (starts, Nothing)
@@ -193,7 +193,7 @@ convertEventWithDuration :: UTCTime -> CF.StackEvent -> StackEventWithTiming
 convertEventWithDuration startTime e =
   let converted = convertEvent e
       dur = case seTimestamp converted of
-        Just ts -> Just (max 0 (floor (diffUTCTime ts startTime) :: Int))
+        Just ts -> Just (max 1 (floor (diffUTCTime ts startTime) :: Int))
         Nothing -> Nothing
   in StackEventWithTiming converted dur
 

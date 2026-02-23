@@ -28,11 +28,9 @@ import Control.Concurrent (threadDelay)
 import Control.Exception (catch)
 import Control.Lens (set, view)
 import Control.Monad.Trans.Resource (runResourceT)
-import Data.Char (toLower)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
-import System.IO (hFlush, hSetBuffering, stdin, stdout, BufferMode(..))
 import System.Random (randomRIO)
 
 import qualified Amazonka
@@ -43,6 +41,7 @@ import qualified Amazonka.CloudFormation.ExecuteChangeSet as ECS
 import qualified Amazonka.CloudFormation.DescribeChangeSet as DCS
 import qualified Amazonka.CloudFormation.ListChangeSets as LCS
 
+import Iidy.Confirm (requestConfirmation)
 import Iidy.Aws.ClientReqToken (TokenInfo(..))
 import Iidy.Cfn.Context
   ( CfnContext(..)
@@ -260,7 +259,7 @@ convertDescribeResponse resp = ChangeSetInfo
   , csiDescription     = resp.description
   , csiStatus          = CF.fromChangeSetStatus resp.status
   , csiStatusReason    = resp.statusReason
-  , csiCreationTime    = Nothing  -- creationTime is ISO8601, skip for now
+  , csiCreationTime    = fmap (.fromTime) resp.creationTime
   , csiExecutionStatus = CF.fromExecutionStatus <$> resp.executionStatus
   , csiChanges         = mapMaybe convertChange (fromMaybe [] resp.changes)
   }
@@ -420,10 +419,4 @@ generateDashedName = do
 confirmChangesetExecution :: Bool -> IO Bool
 confirmChangesetExecution yesFlag
   | yesFlag   = pure True
-  | otherwise = do
-      hSetBuffering stdin LineBuffering
-      hSetBuffering stdout NoBuffering
-      putStr "Do you want to execute this changeset now? [y/N] "
-      hFlush stdout
-      answer <- getLine
-      pure $ map toLower answer `elem` ["y", "yes"]
+  | otherwise = requestConfirmation "Do you want to execute this changeset now?"

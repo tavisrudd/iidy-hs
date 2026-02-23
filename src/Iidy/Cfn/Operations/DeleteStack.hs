@@ -5,14 +5,10 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 module Iidy.Cfn.Operations.DeleteStack
   ( deleteStack
-  -- * Internal (exported for testing)
-  , isConfirmation
   ) where
 
-import Data.Char (toLower)
 import Data.Text (Text)
 import qualified Data.Text as T
-import System.IO (hFlush, hSetBuffering, hIsTerminalDevice, stdin, stdout, BufferMode(..))
 
 import Control.Monad.Trans.Resource (runResourceT)
 
@@ -31,6 +27,7 @@ import Iidy.Cfn.StackOperations
   , getStackId
   , pollForCompletion
   )
+import Iidy.Confirm (requestConfirmation)
 import Iidy.Output.Types (OutputData(..), StackAbsentInfo(..))
 
 ------------------------------------------------------------------------
@@ -129,26 +126,3 @@ deleteStack ctx stackName skipConfirmation env emit = do
             then pure (Right 0)
             else pure (Right 1)
 
-------------------------------------------------------------------------
--- Confirmation prompt
-------------------------------------------------------------------------
-
--- | Ask the user to confirm an action on the terminal.
--- Returns True if the user types "y" or "yes", False otherwise.
--- Formats with "? " prefix and bold bright red message text to match Rust.
-requestConfirmation :: String -> IO Bool
-requestConfirmation prompt = do
-  hSetBuffering stdin LineBuffering
-  hSetBuffering stdout NoBuffering
-  isTty <- hIsTerminalDevice stdout
-  putStrLn ""  -- blank line before prompt
-  if isTty
-    then putStr $ "? \ESC[1;91m" <> prompt <> "\ESC[0m (y/N) "
-    else putStr $ "? " <> prompt <> " (y/N) "
-  hFlush stdout
-  answer <- getLine
-  pure $ isConfirmation answer
-
--- | Pure check: is the user's input a confirmation ("y" or "yes", case-insensitive)?
-isConfirmation :: String -> Bool
-isConfirmation answer = map toLower answer `elem` ["y", "yes"]

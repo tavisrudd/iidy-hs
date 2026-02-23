@@ -1,0 +1,1 @@
+Make sure that we handle changesets in a consistent way from similar starting stack states across teh commands that support --changeset. Create an analysis document and a phase to review and fix if needed. Ensure we have adequate test coverage for all the cases

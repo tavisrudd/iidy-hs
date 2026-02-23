@@ -1,0 +1,1 @@
+I'm still not seeing the spinner. Try to make it behave exactly the same as in rust. There's a lot of nuance to the time display, etc. Make an analysis doc of all the cases we need to cover and a phase to implement and test, if we don't have that already.

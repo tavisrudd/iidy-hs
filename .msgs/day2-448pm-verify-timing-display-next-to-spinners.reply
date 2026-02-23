@@ -1,0 +1,12 @@
+Acknowledged. Two things to implement:
+
+1. **Spinner timing display** — I just implemented this! The spinner now shows dynamic "X seconds elapsed total. Y since last event." text that updates every 1 second, matching Rust's `format_timing_text`. Timing state preserves start time across event batches and tracks last event time. 3 new tests added for formatTimingText.
+
+2. **Event duration display** — the "(3s)" shown on terminal stack events. This is the `sewDurationSeconds` field in `StackEventWithTiming` which is currently always `Nothing`. I'll:
+   - Research the Rust implementation (how it calculates per-resource durations)
+   - Create a research doc
+   - Implement duration calculation
+   - Add test cases
+   - Fix the event rendering to display it
+
+Will tackle this next.

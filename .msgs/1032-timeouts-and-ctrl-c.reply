@@ -1,0 +1,7 @@
+Two separate issues noted:
+
+1. **Timeout**: Our AWS connection timeout is probably the default amazonka timeout which may be different from the Rust SDK. Will investigate and add to Phase 8 items.
+
+2. **Ctrl-C handling**: The GHC backtrace on SIGINT and the double-ctrl-c to exit is a known GHC 9.10 issue with the new backtrace feature. Need to install a SIGINT handler that exits cleanly without backtrace. Will add to the exception handling phase (per your earlier msg about exception styling).
+
+Both items will go into a new subphase for operational error handling.

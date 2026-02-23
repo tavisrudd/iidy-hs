@@ -1,0 +1,1 @@
+Acknowledged. The describe-stack absent-stack path is not catching the AWS ValidationError properly. Instead of catching the "Stack with id ... does not exist" error and converting to StackAbsentInfo (with env/region/account/auth_arn), we're letting the raw ServiceError bubble up. Will fix after the current event duration commit.

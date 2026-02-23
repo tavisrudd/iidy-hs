@@ -1,0 +1,3 @@
+Two issues here:
+1. Rust catches the invalid tag type earlier during stack-args parsing ("invalid type: integer `1234`, expected a string") before even reaching AWS. We're letting it through and AWS rejects it later as a FAILED changeset. This is a stack-args validation gap — I'll investigate our tag parsing to ensure we validate tag values are strings.
+2. We're trying to execute a FAILED changeset — should check changeset status before prompting for execution. Will fix both.

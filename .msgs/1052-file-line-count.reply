@@ -1,0 +1,1 @@
+Acknowledged. Will split large files when encountered. The CLAUDE.md already has a guideline about 300-500 LOC modules. I will check Interactive.hs and split if over 500 LOC as I encounter it.

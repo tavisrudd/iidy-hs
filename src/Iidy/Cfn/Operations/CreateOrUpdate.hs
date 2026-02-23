@@ -34,7 +34,7 @@ import Iidy.Cfn.Operations.DescribeStack (convertStack)
 import Iidy.Cfn.Operations.UpdateStack (updateStack)
 import Iidy.Cfn.StackOperations (stackExists, getStack)
 import Iidy.Cfn.Types (StackArgs(..))
-import Iidy.Output.Types (OutputData(..))
+import Iidy.Output.Types (OutputData(..), ChangeSetInfo(..))
 
 ------------------------------------------------------------------------
 -- Create-or-update operation
@@ -108,11 +108,15 @@ updateWithChangeset ctx args yesFlag argsfilePath env emit = do
           csResult = buildChangeSetCreationResult info True argsfileText
       emit (OdChangeSetResult csResult)
 
-      -- Confirm execution
-      confirmed <- confirmChangesetExecution yesFlag
-      if not confirmed
-        then pure (Right 130)
-        else executeChangeset ctx stackName csName emit
+      -- Check if changeset failed (e.g. invalid parameters)
+      if csiStatus info == "FAILED"
+        then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
+        else do
+          -- Confirm execution
+          confirmed <- confirmChangesetExecution yesFlag
+          if not confirmed
+            then pure (Right 130)
+            else executeChangeset ctx stackName csName emit
 
 ------------------------------------------------------------------------
 -- Changeset path: create new stack
@@ -152,8 +156,12 @@ createWithChangeset ctx args yesFlag argsfilePath env emit = do
           csResult = buildChangeSetCreationResult info False argsfileText
       emit (OdChangeSetResult csResult)
 
-      -- Confirm execution
-      confirmed <- confirmChangesetExecution yesFlag
-      if not confirmed
-        then pure (Right 130)
-        else executeChangeset ctx stackName csName emit
+      -- Check if changeset failed (e.g. invalid parameters)
+      if csiStatus info == "FAILED"
+        then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
+        else do
+          -- Confirm execution
+          confirmed <- confirmChangesetExecution yesFlag
+          if not confirmed
+            then pure (Right 130)
+            else executeChangeset ctx stackName csName emit

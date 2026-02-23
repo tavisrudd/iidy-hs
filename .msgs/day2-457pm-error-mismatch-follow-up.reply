@@ -1,0 +1,6 @@
+Acknowledged. Will add a top-level exception handler in Main.hs that catches all exceptions and formats them nicely:
+- For known AWS errors (ServiceError with "does not exist"): emit StackAbsentInfo
+- For other ServiceError: extract message and show as styled ERROR with service details
+- For any other exception: show as generic ERROR with toString
+
+This is similar to Rust's `run_command_handler!` macro which wraps every command in convert_aws_error_to_error_info. Will implement in the next session or as part of current work.

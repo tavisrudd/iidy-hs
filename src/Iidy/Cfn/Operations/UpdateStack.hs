@@ -43,7 +43,7 @@ import Iidy.Cfn.StackOperations
   , pollForCompletion
   )
 import Iidy.Cfn.Types (StackArgs(..))
-import Iidy.Output.Types (OutputData(..))
+import Iidy.Output.Types (OutputData(..), ChangeSetInfo(..))
 
 ------------------------------------------------------------------------
 -- Terminal statuses for update-stack polling
@@ -198,13 +198,17 @@ updateStackWithChangeset ctx args yesFlag argsfilePath env emit = do
           csResult = buildChangeSetCreationResult info True argsfileText
       emit (OdChangeSetResult csResult)
 
-      -- Step 5: Confirm execution
-      confirmed <- confirmChangesetExecution yesFlag
-      if not confirmed
-        then pure (Right 130)  -- user cancelled
+      -- Step 5: Check if changeset failed (e.g. invalid parameters)
+      if csiStatus info == "FAILED"
+        then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
         else do
-          -- Step 6: Execute changeset and watch
-          executeChangeset ctx stackName csName emit
+          -- Step 6: Confirm execution
+          confirmed <- confirmChangesetExecution yesFlag
+          if not confirmed
+            then pure (Right 130)  -- user cancelled
+            else do
+              -- Step 7: Execute changeset and watch
+              executeChangeset ctx stackName csName emit
 
 ------------------------------------------------------------------------
 -- Helpers
