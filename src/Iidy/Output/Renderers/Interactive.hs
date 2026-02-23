@@ -189,33 +189,40 @@ stopSpinner r = do
 ------------------------------------------------------------------------
 
 renderOutputData :: InteractiveRenderer -> OutputData -> IO ()
-renderOutputData r = \case
-  OdCommandMetadata meta         -> renderCommandMetadata r meta
-  OdStackDefinition def showT    -> renderStackDefinition r def showT
-  OdStackEvents evts             -> renderStackEvents r evts
-  OdStackContents contents       -> renderStackContents r contents
-  OdStatusUpdate upd             -> renderStatusUpdate r upd
-  OdCommandResult res            -> renderCommandResult r res
-  OdFinalCommandSummary summ     -> renderFinalCommandSummary r summ
-  OdStackList lst                -> renderStackList r lst
-  OdChangeSetResult cs           -> renderChangesetResult r cs
-  OdStackDrift drift             -> renderStackDrift r drift
-  OdError err                    -> renderError r err
-  OdTokenInfo _                  -> pure ()  -- not rendered in interactive mode
-  OdNewStackEvents evts          -> renderNewStackEvents r evts
-  OdOperationComplete info       -> renderOperationComplete r info
-  OdInactivityTimeout info       -> renderInactivityTimeout r info
-  OdConfirmationPrompt req       -> renderConfirmationPrompt r req
-  OdStackChangeDetails details   -> renderStackChangeDetails r details
-  OdStackAbsentInfo info         -> renderStackAbsentInfo r info
-  OdCostEstimate est             -> renderCostEstimate r est
-  OdStackTemplate tmpl           -> renderStackTemplate r tmpl
-  OdApprovalRequestResult res    -> renderApprovalRequestResult r res
-  OdTemplateValidation val       -> renderTemplateValidation r val
-  OdApprovalStatus st            -> renderApprovalStatus r st
-  OdTemplateDiff diff            -> renderTemplateDiff r diff
-  OdApprovalResult res           -> renderApprovalResult r res
-  OdPollingStarted msg           -> startSpinner r msg
+renderOutputData r od = do
+  -- Clear spinner before rendering any output that isn't spinner-managed
+  case od of
+    OdNewStackEvents _  -> pure ()  -- manages its own spinner lifecycle
+    OdPollingStarted _  -> pure ()  -- starts spinner
+    OdTokenInfo _       -> pure ()  -- no-op
+    _                   -> stopSpinner r
+  case od of
+    OdCommandMetadata meta         -> renderCommandMetadata r meta
+    OdStackDefinition def showT    -> renderStackDefinition r def showT
+    OdStackEvents evts             -> renderStackEvents r evts
+    OdStackContents contents       -> renderStackContents r contents
+    OdStatusUpdate upd             -> renderStatusUpdate r upd
+    OdCommandResult res            -> renderCommandResult r res
+    OdFinalCommandSummary summ     -> renderFinalCommandSummary r summ
+    OdStackList lst                -> renderStackList r lst
+    OdChangeSetResult cs           -> renderChangesetResult r cs
+    OdStackDrift drift             -> renderStackDrift r drift
+    OdError err                    -> renderError r err
+    OdTokenInfo _                  -> pure ()
+    OdNewStackEvents evts          -> renderNewStackEvents r evts
+    OdOperationComplete info       -> renderOperationComplete r info
+    OdInactivityTimeout info       -> renderInactivityTimeout r info
+    OdConfirmationPrompt req       -> renderConfirmationPrompt r req
+    OdStackChangeDetails details   -> renderStackChangeDetails r details
+    OdStackAbsentInfo info         -> renderStackAbsentInfo r info
+    OdCostEstimate est             -> renderCostEstimate r est
+    OdStackTemplate tmpl           -> renderStackTemplate r tmpl
+    OdApprovalRequestResult res    -> renderApprovalRequestResult r res
+    OdTemplateValidation val       -> renderTemplateValidation r val
+    OdApprovalStatus st            -> renderApprovalStatus r st
+    OdTemplateDiff diff            -> renderTemplateDiff r diff
+    OdApprovalResult res           -> renderApprovalResult r res
+    OdPollingStarted msg           -> startSpinner r msg
 
 ------------------------------------------------------------------------
 -- Formatting helpers
@@ -751,7 +758,6 @@ renderStackDrift r drift = do
 
 renderError :: InteractiveRenderer -> ErrorInfo -> IO ()
 renderError r err = do
-  stopSpinner r
   TIO.putStrLn ""
   case eiErrorDetails err of
     ErrorStackAbsent ctx -> renderStackAbsentError r ctx
@@ -778,19 +784,16 @@ renderNewStackEvents r events = do
 
 renderOperationComplete :: InteractiveRenderer -> OperationCompleteInfo -> IO ()
 renderOperationComplete r info = do
-  stopSpinner r
   let msg = " " <> T.pack (show (ociElapsedSeconds info)) <> " seconds elapsed total."
   TIO.putStrLn (styleMuted r msg)
 
 renderInactivityTimeout :: InteractiveRenderer -> InactivityTimeoutInfo -> IO ()
 renderInactivityTimeout r info = do
-  stopSpinner r
   let msg = " Inactivity timeout of " <> T.pack (show (itiTimeoutSeconds info)) <> " seconds reached. Stopping watch."
   TIO.putStrLn (styleMuted r msg)
 
 renderConfirmationPrompt :: InteractiveRenderer -> ConfirmationRequest -> IO ()
 renderConfirmationPrompt r req = do
-  stopSpinner r
   isTty <- hIsTerminalDevice stdout
   if not isTty || not (ioEnableAnsi (irOptions r))
     then do
