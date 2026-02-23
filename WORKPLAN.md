@@ -97,6 +97,7 @@ Phase 14 is systematic live verification of ALL 22 commands now that Phase 13 is
 | 34 | 13.9 | Phase 13.9: Integration tests — all 26 OutputData types through both renderers, output sequence tests. Phase 13 COMPLETE. |
 | 35 | Docs | Developer documentation: 12 docs + 4 ADRs (2,316 lines) covering architecture, modules, AWS config, output pipeline, testing, Rust compat, security. |
 | 36 | 14 | Fix 3 live-testing bugs: watch-stack terminal polling, update-stack no-changes error, CLI Arguments display. |
+| 37 | 14 | Fix 3 delete-stack confirmation bugs: prompt format, decline=success, credential display. |
 
 **Offline audit: 80 modules, 379 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
