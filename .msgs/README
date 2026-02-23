@@ -1,0 +1,3 @@
+Claude was running headless inside of scrips/ralph-loop.sh so this is
+my jury rigged message system with it. It is instructed to check in
+here periodically and issue .reply files.

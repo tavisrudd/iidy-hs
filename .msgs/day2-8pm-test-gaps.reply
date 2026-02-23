@@ -1,0 +1,13 @@
+Reviewed all 11 fixes from Sessions 36-38. Found 8 test gaps:
+- update-stack no-changes error path
+- CLI Arguments filtering (exclude derived values)
+- confirmation prompt formatting
+- user decline exit behavior
+- credential display text
+- changeset timestamp extraction
+- FAILED changeset pre-execution check
+- non-string tag/parameter rejection
+
+3 fixes already tested: watch-stack polling (6 tests), event duration min (1 test), Iidy.Confirm parsing (10 tests).
+
+Working on adding the missing tests now.
