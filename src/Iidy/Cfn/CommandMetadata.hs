@@ -5,6 +5,8 @@
 module Iidy.Cfn.CommandMetadata
   ( constructCommandMetadata
   , createFinalCommandSummary
+  -- * Internal (exported for testing)
+  , buildCliArguments
   ) where
 
 import Data.Map.Strict (Map)

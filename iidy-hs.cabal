@@ -167,8 +167,10 @@ test-suite iidy-hs-test
     , tasty >= 1.4
     , tasty-hunit >= 0.10
     , aeson
+    , amazonka
     , amazonka-cloudformation
     , bytestring
+    , http-types
     , containers
     , directory
     , filepath

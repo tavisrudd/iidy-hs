@@ -12,6 +12,8 @@ module Iidy.Aws.Config
     -- * Credential detection
   , detectCredentialSources
   , credentialDisplayName
+    -- * Internal (exported for testing)
+  , sourceDisplayName
     -- * Re-exports
   , Amazonka.Env
   , Amazonka.Region

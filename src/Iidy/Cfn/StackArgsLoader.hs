@@ -10,6 +10,8 @@
 module Iidy.Cfn.StackArgsLoader
   ( loadStackArgs
   , LoadedStackArgs(..)
+  -- * Internal (exported for testing)
+  , getStrMapValidated
   ) where
 
 import Control.Applicative ((<|>))

@@ -12,6 +12,8 @@
 module Iidy.Cfn.Operations.UpdateStack
   ( updateStack
   , updateStackWithChangeset
+  -- * Internal (exported for testing)
+  , isNoUpdatesError
   ) where
 
 import Control.Exception (try, throwIO)
