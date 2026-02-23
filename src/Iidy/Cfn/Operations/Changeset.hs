@@ -3,6 +3,10 @@
 -- Provides createChangeset, executeChangeset, and describeChangeset,
 -- which correspond to the CloudFormation CreateChangeSet, ExecuteChangeSet,
 -- and DescribeChangeSet API calls respectively.
+--
+-- Also provides shared helpers for changeset flows:
+-- generateDashedName (random name gen), checkStackState (existence +
+-- REVIEW_IN_PROGRESS detection), and confirmChangesetExecution.
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 module Iidy.Cfn.Operations.Changeset
@@ -10,6 +14,11 @@ module Iidy.Cfn.Operations.Changeset
   , executeChangeset
   , describeChangeset
   , buildChangeSetCreationResult
+  -- * Shared helpers for changeset flows
+  , generateDashedName
+  , StackState(..)
+  , checkStackState
+  , confirmChangesetExecution
   -- * Internal (exported for testing)
   , convertChange
   , convertDetail
@@ -19,9 +28,12 @@ import Control.Concurrent (threadDelay)
 import Control.Exception (catch)
 import Control.Lens (set, view)
 import Control.Monad.Trans.Resource (runResourceT)
+import Data.Char (toLower)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
+import System.IO (hFlush, hSetBuffering, stdin, stdout, BufferMode(..))
+import System.Random (randomRIO)
 
 import qualified Amazonka
 import qualified Amazonka.CloudFormation as CF
@@ -29,6 +41,7 @@ import qualified Amazonka.CloudFormation.Types as CF
 import qualified Amazonka.CloudFormation.CreateChangeSet as CCS
 import qualified Amazonka.CloudFormation.ExecuteChangeSet as ECS
 import qualified Amazonka.CloudFormation.DescribeChangeSet as DCS
+import qualified Amazonka.CloudFormation.ListChangeSets as LCS
 
 import Iidy.Aws.ClientReqToken (TokenInfo(..))
 import Iidy.Cfn.Context
@@ -344,3 +357,71 @@ percentEncode = T.concatMap encChar
     hexDigit n
       | n < 10    = toEnum (fromEnum '0' + n)
       | otherwise = toEnum (fromEnum 'A' + n - 10)
+
+------------------------------------------------------------------------
+-- Shared helpers for changeset flows
+------------------------------------------------------------------------
+
+-- | Stack state for changeset operations.
+data StackState
+  = StackDoesNotExist                -- ^ No stack with this name
+  | StackNormal                      -- ^ Stack exists in a normal terminal state
+  | StackReviewInProgress Text       -- ^ Stack has a pending changeset (name)
+  deriving stock (Show, Eq)
+
+-- | Check the state of a stack for changeset operations.
+-- Detects REVIEW_IN_PROGRESS (pending changeset) and returns the
+-- existing changeset name if found.
+checkStackState :: CfnContext -> Text -> IO StackState
+checkStackState ctx stackName = do
+  mStack <- getStack ctx stackName
+  case mStack of
+    Nothing -> pure StackDoesNotExist
+    Just s
+      | s.stackStatus == CF.StackStatus_DELETE_COMPLETE ->
+          pure StackDoesNotExist
+      | s.stackStatus == CF.StackStatus_REVIEW_IN_PROGRESS -> do
+          -- Stack is in REVIEW_IN_PROGRESS — find the pending changeset
+          csName <- findPendingChangeset ctx stackName
+          pure (StackReviewInProgress csName)
+      | otherwise ->
+          pure StackNormal
+
+-- | Find the name of a pending changeset on a stack in REVIEW_IN_PROGRESS.
+findPendingChangeset :: CfnContext -> Text -> IO Text
+findPendingChangeset ctx stackName = do
+  let req = LCS.newListChangeSets stackName
+  resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
+  let summaries = fromMaybe [] resp.summaries
+      pending = [ s | s <- summaries
+                , fmap CF.fromExecutionStatus s.executionStatus == Just "AVAILABLE"
+                ]
+  case pending of
+    (s:_) -> pure (fromMaybe "unknown" s.changeSetName)
+    []    -> pure "unknown"
+
+-- | Generate a random dashed name (docker-style: adjective-noun).
+-- Used as default changeset name when user doesn't provide one.
+generateDashedName :: IO Text
+generateDashedName = do
+  adjIdx <- randomRIO (0, length adjectives - 1)
+  nounIdx <- randomRIO (0, length nouns - 1)
+  pure $ (adjectives !! adjIdx) <> "-" <> (nouns !! nounIdx)
+  where
+    adjectives :: [Text]
+    adjectives = ["red", "blue", "green", "happy", "clever", "brave", "swift", "mighty"]
+    nouns :: [Text]
+    nouns = ["cat", "dog", "bird", "fish", "lion", "eagle", "shark", "tiger"]
+
+-- | Prompt the user to confirm changeset execution.
+-- Returns True if confirmed (or if --yes flag was provided), False otherwise.
+confirmChangesetExecution :: Bool -> IO Bool
+confirmChangesetExecution yesFlag
+  | yesFlag   = pure True
+  | otherwise = do
+      hSetBuffering stdin LineBuffering
+      hSetBuffering stdout NoBuffering
+      putStr "Do you want to execute this changeset now? [y/N] "
+      hFlush stdout
+      answer <- getLine
+      pure $ map toLower answer `elem` ["y", "yes"]

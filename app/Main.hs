@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Control.Exception (SomeException, IOException, catch, fromException, displayException)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -18,7 +19,10 @@ import Iidy.Aws.CredentialSource (AwsSettings(..))
 import Iidy.Aws.Timing (TimeProvider, systemTimeProvider, reliableTimeProvider)
 import Iidy.Cfn.CommandMetadata (constructCommandMetadata, createFinalCommandSummary)
 import Iidy.Cfn.Context (CfnContext, createContext, createContextFromEnv, ctxElapsedSeconds)
-import Iidy.Cfn.Operations.Changeset (createChangeset, executeChangeset, buildChangeSetCreationResult)
+import Iidy.Cfn.Operations.Changeset
+  ( createChangeset, executeChangeset, buildChangeSetCreationResult
+  , generateDashedName, checkStackState, StackState(..)
+  )
 import Iidy.Cfn.Operations.ConvertStack (convertStackToIidy)
 import Iidy.Cfn.Operations.CreateOrUpdate (createOrUpdate)
 import Iidy.Cfn.Operations.CreateStack (createStack)
@@ -30,7 +34,7 @@ import Iidy.Cfn.Operations.GetStackTemplate (getStackTemplate)
 import Iidy.Cfn.Operations.LintTemplate (lintTemplate)
 import Iidy.Cfn.Operations.ListStacks (listStacks)
 import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateApprovalReview)
-import Iidy.Cfn.Operations.UpdateStack (updateStack)
+import Iidy.Cfn.Operations.UpdateStack (updateStack, updateStackWithChangeset)
 import Iidy.Cfn.Operations.WatchStack (watchStack)
 import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..))
 import Iidy.Cfn.Types (CfnOperation(..), StackArgs(..), emptyStackArgs, isReadOnlyOperation)
@@ -97,11 +101,14 @@ runCommand cli = case cliCommand cli of
 
   CmdUpdateStack args   ->
     runCfnWithArgs cli OpUpdateStack (sfaArgsfile (usaBase args)) (sfaStackName (usaBase args))
-      $ \ctx sa fp env emit -> updateStack ctx sa fp env emit >>= handleEither
+      $ \ctx sa fp env emit ->
+          if usaChangeset args
+            then updateStackWithChangeset ctx sa (usaYes args) fp env emit >>= handleEither
+            else updateStack ctx sa fp env emit >>= handleEither
 
   CmdCreateOrUpdate args ->
     runCfnWithArgs cli OpCreateOrUpdate (sfaArgsfile (usaBase args)) (sfaStackName (usaBase args))
-      $ \ctx sa fp env emit -> createOrUpdate ctx sa (usaChangeset args) fp env emit >>= handleEither
+      $ \ctx sa fp env emit -> createOrUpdate ctx sa (usaChangeset args) (usaYes args) fp env emit >>= handleEither
 
   CmdEstimateCost args  ->
     runCfnWithArgs cli OpEstimateCost (sfaArgsfile args) (sfaStackName args)
@@ -114,12 +121,19 @@ runCommand cli = case cliCommand cli of
   CmdCreateChangeset args ->
     runCfnWithArgs cli OpCreateChangeset (ccsArgsfile args) (ccsStackName args)
       $ \ctx sa fp env emit -> do
-          let csName = maybe "changeset" id (ccsChangesetName args)
-          result <- createChangeset ctx sa csName True fp env
+          -- Determine changeset name (user-provided or random)
+          csName <- case ccsChangesetName args of
+            Just name -> pure name
+            Nothing   -> generateDashedName
+          -- Check stack state to determine changeset type
+          let stackName = fromMaybe "unnamed-stack" (saStackName sa)
+          state <- checkStackState ctx stackName
+          let exists = case state of { StackNormal -> True; _ -> False }
+          result <- createChangeset ctx sa csName exists fp env
           case result of
             Left err -> dieTxt err
             Right info -> do
-              let csResult = buildChangeSetCreationResult info True (ccsArgsfile args)
+              let csResult = buildChangeSetCreationResult info exists (ccsArgsfile args)
               emit (OdChangeSetResult csResult)
               pure 0
 

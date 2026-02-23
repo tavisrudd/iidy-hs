@@ -10,7 +10,7 @@ import qualified Data.Aeson.Key as AesonKey
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL
 import Data.IORef (newIORef, readIORef, writeIORef, modifyIORef')
-import Data.List (nubBy, sort, sortBy)
+import Data.List (nub, nubBy, sort, sortBy)
 import qualified Data.Map.Strict
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -38,7 +38,7 @@ import Data.Time.Clock (UTCTime(..))
 
 import Iidy.Aws.ClientReqToken (TokenInfo(..), TokenSource(..), DerivedTokenInfo(..))
 import Iidy.Aws.CredentialSource (AwsSettings(..))
-import Iidy.Cfn.Operations.Changeset (convertChange, convertDetail)
+import Iidy.Cfn.Operations.Changeset (convertChange, convertDetail, generateDashedName)
 import Iidy.Cfn.Operations.ConvertStack
   ( parameterizeEnv
   , parameterizeStackName
@@ -1291,6 +1291,24 @@ changesetTests =
           cdEvaluation cd @?= Nothing
           cdChangeSource cd @?= Nothing
           cdCausingEntity cd @?= Nothing
+
+  , testCase "generateDashedName: produces adjective-noun format" $ do
+      name <- generateDashedName
+      let parts = T.splitOn "-" name
+      assertEqual "should have exactly 2 parts" 2 (length parts)
+      assertBool "adjective should not be empty" (T.length (head parts) > 0)
+      assertBool "noun should not be empty" (T.length (parts !! 1) > 0)
+
+  , testCase "generateDashedName: produces non-empty name" $ do
+      name <- generateDashedName
+      assertBool "name should not be empty" (T.length name > 0)
+      assertBool "name should contain a dash" (T.isInfixOf "-" name)
+
+  , testCase "generateDashedName: different calls can produce different names" $ do
+      -- Generate 10 names, at least 2 should be unique (extremely high probability)
+      names <- mapM (\_ -> generateDashedName) [(1::Int)..10]
+      let uniqueNames = length (nub names)
+      assertBool "should produce some variety" (uniqueNames > 1)
   ]
 
 ------------------------------------------------------------------------

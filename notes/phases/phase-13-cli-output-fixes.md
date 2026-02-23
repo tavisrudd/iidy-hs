@@ -103,12 +103,14 @@ This is too large for one phase. Split into sub-phases:
 - Wire into all write operations
 - Build FinalCommandSummary emission after each operation
 
-### 13.5 — Changeset paths (2-3 sessions, largest piece)
-- update-stack --changeset: create changeset, show result, confirm, execute
-- create-or-update --changeset: both create and update changeset paths
-- create-changeset: render ChangeSetResult with console URL
-- exec-changeset: previous events before live events, StackContents after
-- Changeset console URL encoding (DO encode, unlike stack info URLs)
+### 13.5 — Changeset paths (DONE, Sessions 30-31)
+- ✅ update-stack --changeset: create changeset, show result, confirm, execute
+- ✅ create-or-update --changeset: both create and update changeset paths (all 5 paths)
+- ✅ create-changeset: render ChangeSetResult with console URL, random name generation, stack state detection
+- ✅ exec-changeset: previous events before live events, StackContents after
+- ✅ Changeset console URL encoding (DO encode, unlike stack info URLs)
+- ✅ generateDashedName, checkStackState, confirmChangesetExecution shared helpers
+- ✅ Consistency analysis doc: notes/changeset-consistency-analysis.md
 
 ### 13.6 — describe-stack-drift completion (1 session)
 - Poll DescribeStackDriftDetectionStatus until complete
