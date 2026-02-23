@@ -5,11 +5,17 @@ module Iidy.Output.Spinner
   , spinnerTick
   , spinnerClear
   , spinnerFrame
+  , spinnerSetMessage
+  , spinnerRender
+  , spinnerFinishAndClear
+  , spinnerIntervalMs
   ) where
 
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 import Data.IORef
+import System.IO (hFlush, stdout)
 
 -- | Spinner animation style
 data SpinnerStyle
@@ -28,7 +34,7 @@ data Spinner = Spinner
   , spActive    :: !(IORef Bool)
   }
 
--- | Create a new spinner
+-- | Create a new spinner with an initial message
 newSpinner :: SpinnerStyle -> IO Spinner
 newSpinner style = do
   frameRef <- newIORef 0
@@ -51,7 +57,7 @@ spinnerTick sp = do
   writeIORef (spActive sp) True
   pure current
 
--- | Clear the spinner
+-- | Clear the spinner state
 spinnerClear :: Spinner -> IO ()
 spinnerClear sp = do
   writeIORef (spActive sp) False
@@ -64,11 +70,45 @@ spinnerFrame sp = do
   let frames = spinnerFrames (spStyle sp)
   pure $ frames !! (frame `mod` length frames)
 
+-- | Set the spinner message
+spinnerSetMessage :: Spinner -> Text -> IO ()
+spinnerSetMessage sp msg = writeIORef (spMessage sp) msg
+
+-- | Render the spinner to stdout (overwriting current line with \r)
+spinnerRender :: Spinner -> Text -> IO ()
+spinnerRender sp colorCode = do
+  frame <- spinnerTick sp
+  msg <- readIORef (spMessage sp)
+  let line = "\r" <> colorCode <> frame <> "\ESC[0m " <> msg
+  TIO.putStr line
+  hFlush stdout
+
+-- | Clear the spinner line and reset state
+spinnerFinishAndClear :: Spinner -> IO ()
+spinnerFinishAndClear sp = do
+  active <- readIORef (spActive sp)
+  if active
+    then do
+      -- Clear the current line
+      TIO.putStr "\r\ESC[K"
+      hFlush stdout
+      spinnerClear sp
+    else pure ()
+
+-- | Get tick interval in milliseconds for a spinner style
+spinnerIntervalMs :: SpinnerStyle -> Int
+spinnerIntervalMs = \case
+  SpinnerDots   -> 100
+  SpinnerDots12 -> 100
+  SpinnerLine   -> 100
+  SpinnerArrow  -> 200
+  SpinnerPulse  -> 200
+
 -- | Get the frame characters for a spinner style
 spinnerFrames :: SpinnerStyle -> [Text]
 spinnerFrames = \case
   SpinnerDots   -> map T.singleton "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-  SpinnerDots12 -> map T.singleton "⠁⠂⠄⡀⢀⠠⠐⠈"
-  SpinnerLine   -> map T.singleton "⠂⠒⠐⠰⠤⠆"
+  SpinnerDots12 -> map T.singleton "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏⠋⠙"
+  SpinnerLine   -> map T.singleton "⠂⠄⠅⠇⡇⣇⣧⣷⣿⣸⣰⣠⣀"
   SpinnerArrow  -> map T.singleton "←↖↑↗→↘↓↙"
   SpinnerPulse  -> ["⚫", "⚪"]

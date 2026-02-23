@@ -23,9 +23,11 @@ module Iidy.Cfn.StackOperations
 import Control.Concurrent (threadDelay)
 import Control.Monad (when)
 import Control.Monad.Trans.Resource (runResourceT)
+import Data.IORef
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Time (UTCTime, getCurrentTime, diffUTCTime)
 
 import qualified Amazonka
 import qualified Amazonka.CloudFormation as CF
@@ -123,16 +125,26 @@ collectStackContents ctx sName = do
 ------------------------------------------------------------------------
 
 data PollConfig = PollConfig
-  { pcIntervalSeconds :: !Int
-  , pcTimeoutSeconds  :: !(Maybe Int)
-  , pcOnNewEvents     :: [CF.StackEvent] -> IO ()
+  { pcIntervalSeconds       :: !Int
+  , pcTimeoutSeconds        :: !(Maybe Int)         -- ^ overall poll timeout
+  , pcInactivityTimeoutSecs :: !(Maybe Int)         -- ^ inactivity timeout
+  , pcStartTime             :: !(Maybe UTCTime)     -- ^ operation start time (for duration calc)
+  , pcOnNewEvents           :: [CF.StackEvent] -> IO ()
+  , pcOnOperationComplete   :: OperationCompleteInfo -> IO ()
+  , pcOnInactivityTimeout   :: InactivityTimeoutInfo -> IO ()
+  , pcOnPollTick            :: IO ()                -- ^ called each poll cycle (for spinner)
   }
 
 defaultPollConfig :: PollConfig
 defaultPollConfig = PollConfig
-  { pcIntervalSeconds = 2
-  , pcTimeoutSeconds = Nothing
-  , pcOnNewEvents = const (pure ())
+  { pcIntervalSeconds       = 2
+  , pcTimeoutSeconds        = Nothing
+  , pcInactivityTimeoutSecs = Nothing
+  , pcStartTime             = Nothing
+  , pcOnNewEvents           = const (pure ())
+  , pcOnOperationComplete   = const (pure ())
+  , pcOnInactivityTimeout   = const (pure ())
+  , pcOnPollTick            = pure ()
   }
 
 -- | Poll for stack operation completion.
@@ -152,24 +164,56 @@ pollForCompletionWith
   -> [Text]              -- ^ terminal status strings
   -> PollConfig
   -> IO Text             -- ^ final status
-pollForCompletionWith fetchEvents sId terminalStatuses config = go []
+pollForCompletionWith fetchEvents sId terminalStatuses config = do
+  startTime <- maybe getCurrentTime pure (pcStartTime config)
+  lastEventTimeRef <- newIORef startTime
+  go startTime lastEventTimeRef []
   where
-    go :: [Text] -> IO Text
-    go lastEventIds = do
+    go :: UTCTime -> IORef UTCTime -> [Text] -> IO Text
+    go startTime lastEventTimeRef lastEventIds = do
       threadDelay (pcIntervalSeconds config * 1000000)
+      pcOnPollTick config
       events <- fetchEvents
+      now <- getCurrentTime
       -- Filter to new events only
       let newEvents = filter (\e -> e.eventId `notElem` lastEventIds) events
-      when (not (null newEvents)) $
+      when (not (null newEvents)) $ do
+        writeIORef lastEventTimeRef now
         pcOnNewEvents config (reverse newEvents)
-      -- Check if we hit a terminal status (on the stack itself, not nested resources)
-      let stackEvents = filter isStackEvent events
-          currentStatus = case stackEvents of
-            (e:_) -> maybe "" CF.fromResourceStatus e.resourceStatus
-            _     -> ""
-      if currentStatus `elem` terminalStatuses
-        then pure currentStatus
-        else go (map (.eventId) events)
+      -- Check inactivity timeout
+      lastEventTime <- readIORef lastEventTimeRef
+      let inactivityElapsed = round (diffUTCTime now lastEventTime) :: Int
+      case pcInactivityTimeoutSecs config of
+        Just timeout | timeout > 0 && null newEvents && inactivityElapsed > timeout -> do
+          let elapsed = round (diffUTCTime now startTime) :: Int
+          pcOnInactivityTimeout config InactivityTimeoutInfo
+            { itiTimeoutSeconds     = timeout
+            , itiElapsedSeconds     = elapsed
+            , itiOperationStartTime = startTime
+            }
+          pure ""  -- timed out
+        _ -> do
+          -- Check overall timeout
+          let totalElapsed = round (diffUTCTime now startTime) :: Int
+          case pcTimeoutSeconds config of
+            Just t | t > 0 && totalElapsed > t -> pure ""  -- overall timeout
+            _ -> do
+              -- Check if we hit a terminal status
+              let stackEvents = filter isStackEvent events
+                  currentStatus = case stackEvents of
+                    (e:_) -> maybe "" CF.fromResourceStatus e.resourceStatus
+                    _     -> ""
+              if currentStatus `elem` terminalStatuses
+                then do
+                  let elapsed = round (diffUTCTime now startTime) :: Int
+                      isDelete = "DELETE_COMPLETE" `elem` terminalStatuses
+                  pcOnOperationComplete config OperationCompleteInfo
+                    { ociElapsedSeconds        = elapsed
+                    , ociOperationStartTime    = startTime
+                    , ociSkipRemainingSections = isDelete && currentStatus == "DELETE_COMPLETE"
+                    }
+                  pure currentStatus
+                else go startTime lastEventTimeRef (map (.eventId) events)
 
     isStackEvent :: CF.StackEvent -> Bool
     isStackEvent e =

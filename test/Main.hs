@@ -1676,12 +1676,14 @@ mkColoredRenderer :: IO InteractiveRenderer
 mkColoredRenderer = do
   hasRendered <- newIORef False
   spinnerRef <- newIORef Nothing
+  spinnerThreadRef <- newIORef Nothing
   pure InteractiveRenderer
     { irTheme              = darkTheme
     , irOptions            = defaultInteractiveOptions
     , irTerminalWidth      = 130
     , irHasRenderedContent = hasRendered
     , irSpinner            = spinnerRef
+    , irSpinnerThread      = spinnerThreadRef
     }
 
 -- | Create a plain renderer for testing (no colors, no spinners).
@@ -1689,12 +1691,14 @@ mkPlainRenderer :: IO InteractiveRenderer
 mkPlainRenderer = do
   hasRendered <- newIORef False
   spinnerRef <- newIORef Nothing
+  spinnerThreadRef <- newIORef Nothing
   pure InteractiveRenderer
     { irTheme              = noColorTheme
     , irOptions            = plainInteractiveOptions
     , irTerminalWidth      = 130
     , irHasRenderedContent = hasRendered
     , irSpinner            = spinnerRef
+    , irSpinnerThread      = spinnerThreadRef
     }
 
 rendererTests :: [TestTree]

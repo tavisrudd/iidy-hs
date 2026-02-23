@@ -28,8 +28,12 @@ module Iidy.Output.Renderers.Interactive
   , prettyFormatTags
   , prettyFormatParameters
   , formatTokenSource
+    -- * Spinner management
+  , startSpinner
+  , stopSpinner
   ) where
 
+import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
 import Data.IORef
 import Data.List (sortBy)
 import Data.Map.Strict (Map)
@@ -45,7 +49,11 @@ import System.IO (stdout, hFlush, hIsTerminalDevice, stderr)
 import Iidy.Aws.ClientReqToken (TokenInfo(..), TokenSource(..), DerivedTokenInfo(..))
 import Iidy.Cfn.Types (StackChangeType(..))
 import Iidy.Output.Color
-import Iidy.Output.Spinner (Spinner, spinnerClear)
+import Iidy.Output.Spinner
+  ( Spinner, SpinnerStyle(..)
+  , newSpinner, spinnerSetMessage
+  , spinnerRender, spinnerFinishAndClear, spinnerIntervalMs
+  )
 import Iidy.Output.Terminal (TerminalCapabilities(..), detectCapabilities)
 import Iidy.Output.Theme (ColorTheme(..), resolveTheme)
 import Iidy.Output.Types
@@ -109,6 +117,7 @@ data InteractiveRenderer = InteractiveRenderer
   , irTerminalWidth      :: !Int
   , irHasRenderedContent :: !(IORef Bool)
   , irSpinner            :: !(IORef (Maybe Spinner))
+  , irSpinnerThread      :: !(IORef (Maybe ThreadId))
   }
 
 newInteractiveRenderer :: InteractiveOptions -> IO InteractiveRenderer
@@ -119,13 +128,61 @@ newInteractiveRenderer opts = do
       width = fromMaybe (fromMaybe defaultScreenWidth (tcWidth caps)) (ioTerminalWidth opts)
   hasRendered <- newIORef False
   spinnerRef <- newIORef Nothing
+  spinnerThreadRef <- newIORef Nothing
   pure InteractiveRenderer
     { irTheme              = theme
     , irOptions            = opts
     , irTerminalWidth      = width
     , irHasRenderedContent = hasRendered
     , irSpinner            = spinnerRef
+    , irSpinnerThread      = spinnerThreadRef
     }
+
+------------------------------------------------------------------------
+-- Spinner management
+------------------------------------------------------------------------
+
+-- | Start a spinner with a message. Creates a background tick thread.
+startSpinner :: InteractiveRenderer -> Text -> IO ()
+startSpinner r msg = do
+  -- Only start if spinners are enabled and ANSI is available
+  isTty <- hIsTerminalDevice stdout
+  if not (ioEnableSpinners (irOptions r)) || not isTty
+    then pure ()
+    else do
+      -- Stop any existing spinner first
+      stopSpinner r
+      sp <- newSpinner SpinnerDots12
+      spinnerSetMessage sp msg
+      writeIORef (irSpinner r) (Just sp)
+      -- Start background tick thread
+      let colorCode = "\ESC[36;1m"  -- cyan bold for Dots/Dots12
+          interval  = spinnerIntervalMs SpinnerDots12 * 1000  -- microseconds
+      tid <- forkIO $ spinnerTickLoop sp colorCode interval
+      writeIORef (irSpinnerThread r) (Just tid)
+
+-- | Background spinner tick loop
+spinnerTickLoop :: Spinner -> Text -> Int -> IO ()
+spinnerTickLoop sp colorCode interval = do
+  spinnerRender sp colorCode
+  threadDelay interval
+  spinnerTickLoop sp colorCode interval
+
+-- | Stop and clear the current spinner
+stopSpinner :: InteractiveRenderer -> IO ()
+stopSpinner r = do
+  -- Kill tick thread
+  mTid <- readIORef (irSpinnerThread r)
+  case mTid of
+    Just tid -> killThread tid
+    Nothing  -> pure ()
+  writeIORef (irSpinnerThread r) Nothing
+  -- Clear spinner display
+  mSp <- readIORef (irSpinner r)
+  case mSp of
+    Just sp -> spinnerFinishAndClear sp
+    Nothing -> pure ()
+  writeIORef (irSpinner r) Nothing
 
 ------------------------------------------------------------------------
 -- Main dispatch
@@ -693,13 +750,7 @@ renderStackDrift r drift = do
 
 renderError :: InteractiveRenderer -> ErrorInfo -> IO ()
 renderError r err = do
-  -- Clear spinner if active
-  spinnerRef <- readIORef (irSpinner r)
-  case spinnerRef of
-    Just sp -> do
-      spinnerClear sp
-      writeIORef (irSpinner r) Nothing
-    Nothing -> pure ()
+  stopSpinner r
   TIO.putStrLn ""
   case eiErrorDetails err of
     ErrorStackAbsent ctx -> renderStackAbsentError r ctx
@@ -717,22 +768,28 @@ renderNewStackEvents :: InteractiveRenderer -> [StackEventWithTiming] -> IO ()
 renderNewStackEvents r events = do
   if null events then pure ()
   else do
+    stopSpinner r
     let statusPad = calcPadding events (seResourceStatus . sewEvent)
         rtypePad = calcPadding events (seResourceType . sewEvent)
     mapM_ (renderSingleStackEvent r statusPad rtypePad) events
+    -- Restart spinner for continued polling
+    startSpinner r "Loading live events..."
 
 renderOperationComplete :: InteractiveRenderer -> OperationCompleteInfo -> IO ()
 renderOperationComplete r info = do
+  stopSpinner r
   let msg = " " <> T.pack (show (ociElapsedSeconds info)) <> " seconds elapsed total."
   TIO.putStrLn (styleMuted r msg)
 
 renderInactivityTimeout :: InteractiveRenderer -> InactivityTimeoutInfo -> IO ()
 renderInactivityTimeout r info = do
+  stopSpinner r
   let msg = " Inactivity timeout of " <> T.pack (show (itiTimeoutSeconds info)) <> " seconds reached. Stopping watch."
   TIO.putStrLn (styleMuted r msg)
 
 renderConfirmationPrompt :: InteractiveRenderer -> ConfirmationRequest -> IO ()
 renderConfirmationPrompt r req = do
+  stopSpinner r
   isTty <- hIsTerminalDevice stdout
   if not isTty || not (ioEnableAnsi (irOptions r))
     then do

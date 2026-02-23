@@ -106,7 +106,7 @@ convertStack s regionText =
 
 -- | Build a StackEventsDisplay from raw CF events, limited to @n@ entries.
 buildEventsDisplay :: Text -> Int -> [CF.StackEvent] -> StackEventsDisplay
-buildEventsDisplay sName numEvents events =
+buildEventsDisplay _sName numEvents events =
   let total      = length events
       taken      = take numEvents events
       converted  = map convertEvent taken
