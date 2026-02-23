@@ -98,8 +98,9 @@ Phase 14 is systematic live verification of ALL 22 commands now that Phase 13 is
 | 35 | Docs | Developer documentation: 12 docs + 4 ADRs (2,316 lines) covering architecture, modules, AWS config, output pipeline, testing, Rust compat, security. |
 | 36 | 14 | Fix 3 live-testing bugs: watch-stack terminal polling, update-stack no-changes error, CLI Arguments display. |
 | 37 | 14 | Fix 3 delete-stack confirmation bugs: prompt format, decline=success, credential display. |
+| 38 | 14 | Fix 5 live-testing bugs: changeset timestamps, event duration min, FAILED changeset check, tag type validation, confirmation prompt consistency. |
 
-**Offline audit: 80 modules, 379 tests, 37/37 render snapshots, 49/49 error snapshots match**
+**Offline audit: 81 modules, 379 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
 ## Phase 12 Offline Audit Summary
 
