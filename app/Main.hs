@@ -177,7 +177,7 @@ runCommand cli = case cliCommand cli of
       let emit = renderOutput dispatch
           env = goEnvironment (cliGlobalOpts cli)
       -- Emit CommandMetadata before operation
-      meta <- constructCommandMetadata ctx (cliToAwsSettings cli) emptyStackArgs env
+      meta <- constructCommandMetadata ctx (cliToAwsSettings cli) emptyStackArgs env Nothing
       emit (OdCommandMetadata meta)
       result <- executeChangeset ctx stackName (ecsChangesetName args) emit
       case result of
@@ -220,7 +220,7 @@ runCommand cli = case cliCommand cli of
       let env = goEnvironment (cliGlobalOpts cli)
           emit = renderOutput dispatch
       -- Emit CommandMetadata before operation
-      meta <- constructCommandMetadata ctx (cliToAwsSettings cli) emptyStackArgs env
+      meta <- constructCommandMetadata ctx (cliToAwsSettings cli) emptyStackArgs env Nothing
       emit (OdCommandMetadata meta)
       result <- deleteStack ctx (delStackname args) (delYes args) env emit
       case result of
@@ -369,7 +369,7 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
       -- Emit CommandMetadata for write operations (not lint/estimate-cost)
       if emitsCommandMetadata operation
         then do
-          meta <- constructCommandMetadata ctx mergedAws sa' env
+          meta <- constructCommandMetadata ctx mergedAws sa' env stackNameOverride
           emit (OdCommandMetadata meta)
         else pure ()
 

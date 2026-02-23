@@ -142,6 +142,7 @@ data PollConfig = PollConfig
   , pcTimeoutSeconds        :: !(Maybe Int)         -- ^ overall poll timeout
   , pcInactivityTimeoutSecs :: !(Maybe Int)         -- ^ inactivity timeout
   , pcStartTime             :: !(Maybe UTCTime)     -- ^ operation start time (for duration calc)
+  , pcWaitForStatusChange   :: !Bool                -- ^ wait for new events before checking terminal (watch-stack)
   , pcOnNewEvents           :: [CF.StackEvent] -> IO ()
   , pcOnOperationComplete   :: OperationCompleteInfo -> IO ()
   , pcOnInactivityTimeout   :: InactivityTimeoutInfo -> IO ()
@@ -154,6 +155,7 @@ defaultPollConfig = PollConfig
   , pcTimeoutSeconds        = Nothing
   , pcInactivityTimeoutSecs = Nothing
   , pcStartTime             = Nothing
+  , pcWaitForStatusChange   = False
   , pcOnNewEvents           = const (pure ())
   , pcOnOperationComplete   = const (pure ())
   , pcOnInactivityTimeout   = const (pure ())
@@ -180,10 +182,11 @@ pollForCompletionWith
 pollForCompletionWith fetchEvents sId terminalStatuses config = do
   startTime <- maybe getCurrentTime pure (pcStartTime config)
   lastEventTimeRef <- newIORef startTime
-  go startTime lastEventTimeRef []
+  hasSeenNewEventsRef <- newIORef False
+  go startTime lastEventTimeRef hasSeenNewEventsRef []
   where
-    go :: UTCTime -> IORef UTCTime -> [Text] -> IO Text
-    go startTime lastEventTimeRef lastEventIds = do
+    go :: UTCTime -> IORef UTCTime -> IORef Bool -> [Text] -> IO Text
+    go startTime lastEventTimeRef hasSeenNewEventsRef lastEventIds = do
       threadDelay (pcIntervalSeconds config * 1000000)
       pcOnPollTick config
       events <- fetchEvents
@@ -192,12 +195,15 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
       let newEvents = filter (\e -> e.eventId `notElem` lastEventIds) events
       when (not (null newEvents)) $ do
         writeIORef lastEventTimeRef now
+        writeIORef hasSeenNewEventsRef True
         pcOnNewEvents config (reverse newEvents)
-      -- Check inactivity timeout
+      -- Check inactivity timeout (only when we've seen events or not waiting)
+      hasSeenNewEvents <- readIORef hasSeenNewEventsRef
       lastEventTime <- readIORef lastEventTimeRef
       let inactivityElapsed = round (diffUTCTime now lastEventTime) :: Int
       case pcInactivityTimeoutSecs config of
-        Just timeout | timeout > 0 && null newEvents && inactivityElapsed > timeout -> do
+        Just timeout | timeout > 0 && null newEvents && inactivityElapsed > timeout
+                     , not (pcWaitForStatusChange config) || hasSeenNewEvents -> do
           let elapsed = round (diffUTCTime now startTime) :: Int
           pcOnInactivityTimeout config InactivityTimeoutInfo
             { itiTimeoutSeconds     = timeout
@@ -216,7 +222,11 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
                   currentStatus = case stackEvents of
                     (e:_) -> maybe "" CF.fromResourceStatus e.resourceStatus
                     _     -> ""
-              if currentStatus `elem` terminalStatuses
+              -- When pcWaitForStatusChange is True, only exit on terminal
+              -- status after we've seen new events (i.e., a new operation started)
+              let shouldCheckTerminal = not (pcWaitForStatusChange config)
+                                     || hasSeenNewEvents
+              if shouldCheckTerminal && currentStatus `elem` terminalStatuses
                 then do
                   let elapsed = round (diffUTCTime now startTime) :: Int
                       isDelete = "DELETE_COMPLETE" `elem` terminalStatuses
@@ -226,7 +236,7 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
                     , ociSkipRemainingSections = isDelete && currentStatus == "DELETE_COMPLETE"
                     }
                   pure currentStatus
-                else go startTime lastEventTimeRef (map (.eventId) events)
+                else go startTime lastEventTimeRef hasSeenNewEventsRef (map (.eventId) events)
 
     isStackEvent :: CF.StackEvent -> Bool
     isStackEvent e =

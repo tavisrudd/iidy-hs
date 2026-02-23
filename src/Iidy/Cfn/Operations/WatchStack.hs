@@ -85,7 +85,8 @@ watchStack ctx stackName timeoutSeconds emit = do
       -- 5. Poll until terminal status, emitting live events
       emit (OdPollingStarted "Loading live events...")
       let pollCfg = defaultPollConfig
-            { pcInactivityTimeoutSecs = if timeoutSeconds > 0 then Just timeoutSeconds else Nothing
+            { pcWaitForStatusChange = True
+            , pcInactivityTimeoutSecs = if timeoutSeconds > 0 then Just timeoutSeconds else Nothing
             , pcOnNewEvents = \newEvents -> do
                 let fresh = filter (\e -> e.eventId `notElem` seenIds) newEvents
                 if null fresh then pure ()

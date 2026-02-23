@@ -37,8 +37,9 @@ constructCommandMetadata
   -> AwsSettings
   -> StackArgs
   -> Text         -- ^ environment name
+  -> Maybe Text   -- ^ CLI stack name override (only included in CLI Arguments if present)
   -> IO CommandMetadata
-constructCommandMetadata ctx awsSettings sa env = do
+constructCommandMetadata ctx awsSettings sa env cliStackNameOverride = do
   -- Get current IAM principal via STS
   (_account, arn) <- getCallerIdentity (cfnEnv ctx)
 
@@ -50,8 +51,8 @@ constructCommandMetadata ctx awsSettings sa env = do
         (_:rest) -> rest
         []       -> []
 
-  -- Build CLI arguments map
-  let cliArgs = buildCliArguments awsSettings sa
+  -- Build CLI arguments map (only include stack-name if it was a CLI flag)
+  let cliArgs = buildCliArguments awsSettings cliStackNameOverride
 
   -- Get region from env
   let regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
@@ -75,15 +76,15 @@ constructCommandMetadata ctx awsSettings sa env = do
     , cmDerivedTokens      = derivedTokens
     }
 
--- | Build the CLI arguments map from settings and stack args.
-buildCliArguments :: AwsSettings -> StackArgs -> Map Text Text
-buildCliArguments settings sa =
+-- | Build the CLI arguments map from settings and CLI stack name override.
+-- Only includes values that were explicitly passed as CLI flags.
+buildCliArguments :: AwsSettings -> Maybe Text -> Map Text Text
+buildCliArguments settings cliStackName =
   Map.fromList $ concat
     [ maybe [] (\p -> [("profile", p)]) (awsProfile settings)
     , maybe [] (\r -> [("region", r)])  (awsRegion settings)
-    , maybe [] (\n -> [("stack-name", n)]) (saStackName sa)
+    , maybe [] (\n -> [("stack-name", n)]) cliStackName
     , maybe [] (\r -> [("assume-role-arn", r)]) (awsAssumeRoleArn settings)
-    , maybe [] (\r -> [("service-role-arn", r)]) (saServiceRoleArn sa)
     ]
 
 ------------------------------------------------------------------------

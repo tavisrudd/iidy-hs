@@ -14,7 +14,7 @@ module Iidy.Cfn.Operations.UpdateStack
   , updateStackWithChangeset
   ) where
 
-import Control.Exception (try)
+import Control.Exception (try, throwIO)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -80,8 +80,9 @@ noUpdatesMessage = "No updates are to be performed"
 --
 -- Steps:
 --   1. Build the UpdateStack request via RequestBuilder.
---   2. Send the request to CloudFormation, catching the "No updates" error.
---   3. On "No updates" ValidationError, return exit code 0 immediately.
+--   2. Send the request to CloudFormation, catching errors.
+--   3. On "No updates" ValidationError, emit StackDefinition then re-throw
+--      so the error is displayed by the top-level handler (matching Rust).
 --   4. Extract the stack ID from the response (or fall back to DescribeStacks).
 --   5. Poll until a terminal status is reached.
 --   6. Collect stack contents.
@@ -105,9 +106,15 @@ updateStack ctx args argsfilePath env emit = do
 
   case sendResult of
     Left awsErr
-      | isNoUpdatesError awsErr ->
-          -- "No updates are to be performed" is not a real failure
-          pure (Right 0)
+      | isNoUpdatesError awsErr -> do
+          -- Show Stack Details before re-throwing, matching Rust behavior
+          let regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
+          mStack <- getStack ctx stackName
+          case mStack of
+            Just cfnStack -> emit (OdStackDefinition (convertStack cfnStack regionText) True)
+            Nothing -> pure ()
+          -- Re-throw so the error handler displays the ValidationError
+          throwIO awsErr
       | otherwise ->
           pure (Left (T.pack (show awsErr)))
 
