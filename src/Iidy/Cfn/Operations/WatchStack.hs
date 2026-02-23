@@ -60,7 +60,7 @@ watchStack
   -> Int                     -- ^ inactivity timeout in seconds
   -> (OutputData -> IO ())   -- ^ output emitter
   -> IO (Either Text Int)
-watchStack ctx stackName _timeoutSeconds emit = do
+watchStack ctx stackName timeoutSeconds emit = do
   -- 1. Verify stack exists
   mStack <- getStack ctx stackName
   case mStack of
@@ -83,13 +83,17 @@ watchStack ctx stackName _timeoutSeconds emit = do
       let seenIds = map (.eventId) initialEvents
 
       -- 5. Poll until terminal status, emitting live events
+      emit (OdPollingStarted "Loading live events...")
       let pollCfg = defaultPollConfig
-            { pcOnNewEvents = \newEvents -> do
+            { pcInactivityTimeoutSecs = if timeoutSeconds > 0 then Just timeoutSeconds else Nothing
+            , pcOnNewEvents = \newEvents -> do
                 let fresh = filter (\e -> e.eventId `notElem` seenIds) newEvents
                 if null fresh then pure ()
                 else do
                   let converted = map (\e -> StackEventWithTiming (convertEvent e) Nothing) fresh
                   emit (OdNewStackEvents converted)
+            , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
+            , pcOnInactivityTimeout = \info -> emit (OdInactivityTimeout info)
             }
       finalStatus <- pollForCompletion ctx sId allTerminalStatuses pollCfg
 

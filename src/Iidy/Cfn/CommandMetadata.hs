@@ -9,12 +9,11 @@ module Iidy.Cfn.CommandMetadata
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 
 import qualified Amazonka
 
-import Iidy.Aws.ClientReqToken (TokenInfo(..))
+import Iidy.Aws.ClientReqToken ()
 import Iidy.Aws.Config (credentialDisplayName)
 import Iidy.Aws.CredentialSource (AwsSettings(..))
 import Iidy.Aws.Sts (getCallerIdentity)

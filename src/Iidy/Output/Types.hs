@@ -93,6 +93,7 @@ data OutputData
   | OdApprovalStatus !ApprovalStatus
   | OdTemplateDiff !TemplateDiff
   | OdApprovalResult !ApprovalResult
+  | OdPollingStarted !Text                          -- ^ spinner message for polling
   deriving stock (Show, Eq)
 
 ------------------------------------------------------------------------

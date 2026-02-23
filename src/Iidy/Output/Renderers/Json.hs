@@ -124,6 +124,7 @@ renderOutputDataJson r = \case
   OdApprovalStatus st            -> outputJson r "approval_status" (approvalStatusToValue st)
   OdTemplateDiff diff            -> outputJson r "template_diff" (templateDiffToValue diff)
   OdApprovalResult res           -> outputJson r "approval_result" (approvalResultToValue res)
+  OdPollingStarted _             -> pure ()  -- no-op in JSON mode
 
 ------------------------------------------------------------------------
 -- JSON output helpers

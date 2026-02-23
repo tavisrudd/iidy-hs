@@ -91,10 +91,12 @@ createStack ctx args argsfilePath env emit = do
     Nothing -> pure ()
 
   -- Step 4: Poll for completion, emitting events through renderer
+  emit (OdPollingStarted "Loading live events...")
   let pollCfg = defaultPollConfig
         { pcOnNewEvents = \newEvents -> do
             let converted = map (\e -> StackEventWithTiming (convertEvent e) Nothing) newEvents
             emit (OdNewStackEvents converted)
+        , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
         }
   finalStatus <- pollForCompletion ctx stackId allTerminalStatuses pollCfg
 

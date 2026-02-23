@@ -115,10 +115,12 @@ deleteStack ctx stackName skipConfirmation env emit = do
           _resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
 
           -- Step 5: Poll for completion, emitting events through renderer
+          emit (OdPollingStarted "Loading live events...")
           let pollCfg = defaultPollConfig
                 { pcOnNewEvents = \newEvents -> do
                     let converted = map (\e -> StackEventWithTiming (convertEvent e) Nothing) newEvents
                     emit (OdNewStackEvents converted)
+                , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
                 }
           finalStatus <- pollForCompletion ctx pollTarget allTerminalStatuses pollCfg
 

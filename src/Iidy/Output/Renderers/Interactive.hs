@@ -215,6 +215,7 @@ renderOutputData r = \case
   OdApprovalStatus st            -> renderApprovalStatus r st
   OdTemplateDiff diff            -> renderTemplateDiff r diff
   OdApprovalResult res           -> renderApprovalResult r res
+  OdPollingStarted msg           -> startSpinner r msg
 
 ------------------------------------------------------------------------
 -- Formatting helpers
