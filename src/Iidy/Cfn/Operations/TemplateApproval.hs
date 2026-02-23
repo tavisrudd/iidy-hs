@@ -17,7 +17,6 @@ import qualified Data.ByteString as BS
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import qualified Data.Text.IO as TIO
 import System.IO (hFlush, hSetBuffering, stdin, stdout, BufferMode(..))
 
 import qualified Amazonka
@@ -30,9 +29,10 @@ import qualified Amazonka.S3.DeleteObject as DO
 import qualified Data.Conduit.List as CL
 
 import Iidy.Cfn.Context (CfnContext(..))
-import Iidy.Cfn.TemplateHash (calculateTemplateHash, generateVersionedLocation, parseS3Url)
+import Iidy.Cfn.TemplateHash (generateVersionedLocation, parseS3Url)
 import Iidy.Cfn.TemplateLoader (loadCfnTemplate, TemplateResult(..))
 import Iidy.Cfn.Types (StackArgs(..))
+import Iidy.Output.Types
 
 ------------------------------------------------------------------------
 -- Template Approval Request
@@ -45,8 +45,9 @@ templateApprovalRequest
   -> Bool       -- ^ lint template
   -> Maybe FilePath -- ^ argsfile
   -> Text       -- ^ environment
+  -> (OutputData -> IO ())  -- ^ emit callback
   -> IO (Either Text Int)
-templateApprovalRequest ctx sa lintTmpl argsfilePath env = do
+templateApprovalRequest ctx sa _lintTmpl argsfilePath env emit = do
   -- Validate required fields
   case saApprovedTemplateLocation sa of
     Nothing -> pure (Left "ApprovedTemplateLocation is required in stack-args.yaml")
@@ -64,21 +65,32 @@ templateApprovalRequest ctx sa lintTmpl argsfilePath env = do
               case generateVersionedLocation baseLocation body (T.pack tmplPath) of
                 Left err -> pure (Left err)
                 Right (bucket, key) -> do
+                  let s3Loc = "s3://" <> bucket <> "/" <> key
                   -- Check if already approved
                   alreadyApproved <- s3ObjectExists (cfnEnv ctx) bucket key
                   if alreadyApproved
                     then do
-                      TIO.putStrLn $ "Template already approved at s3://" <> bucket <> "/" <> key
+                      emit $ OdApprovalRequestResult ApprovalRequestResult
+                        { arrTemplateLocation = s3Loc
+                        , arrPendingLocation  = s3Loc
+                        , arrAlreadyApproved  = True
+                        , arrNextSteps        = ["Template has already been approved"]
+                        }
                       pure (Right 0)
                     else do
                       -- Upload pending template
                       let pendingKey = key <> ".pending"
+                          pendingLoc = "s3://" <> bucket <> "/" <> pendingKey
                       uploadResult <- uploadToS3 (cfnEnv ctx) bucket pendingKey body
                       case uploadResult of
                         Left err -> pure (Left ("Failed to upload pending template: " <> err))
                         Right () -> do
-                          TIO.putStrLn $ "Pending template uploaded to s3://" <> bucket <> "/" <> pendingKey
-                          TIO.putStrLn $ "Review with: iidy-hs template-approval review s3://" <> bucket <> "/" <> pendingKey
+                          emit $ OdApprovalRequestResult ApprovalRequestResult
+                            { arrTemplateLocation = s3Loc
+                            , arrPendingLocation  = pendingLoc
+                            , arrAlreadyApproved  = False
+                            , arrNextSteps        = ["Review with: iidy-hs template-approval review " <> pendingLoc]
+                            }
                           pure (Right 0)
 
 ------------------------------------------------------------------------
@@ -90,8 +102,9 @@ templateApprovalReview
   :: CfnContext
   -> Text       -- ^ S3 URL of pending template
   -> Int        -- ^ context lines for diff
+  -> (OutputData -> IO ())  -- ^ emit callback
   -> IO (Either Text Int)
-templateApprovalReview ctx url contextLines = do
+templateApprovalReview ctx url contextLines emit = do
   -- Parse S3 URL
   case parseS3Url url of
     Left err -> pure (Left err)
@@ -108,6 +121,7 @@ templateApprovalReview ctx url contextLines = do
               latestKey = if T.null parentDir
                           then "latest"
                           else parentDir <> "/latest"
+              approvedLoc = "s3://" <> bucket <> "/" <> approvedKey
 
           -- Check pending exists
           pendingExists <- s3ObjectExists (cfnEnv ctx) bucket pendingKey
@@ -116,10 +130,17 @@ templateApprovalReview ctx url contextLines = do
             else do
               -- Check if already approved
               alreadyApproved <- s3ObjectExists (cfnEnv ctx) bucket approvedKey
+
+              -- Emit approval status
+              emit $ OdApprovalStatus ApprovalStatus
+                { apsPendingExists    = pendingExists
+                , apsAlreadyApproved  = alreadyApproved
+                , apsPendingLocation  = url
+                , apsApprovedLocation = if alreadyApproved then Just approvedLoc else Nothing
+                }
+
               if alreadyApproved
-                then do
-                  TIO.putStrLn $ "Template already approved at s3://" <> bucket <> "/" <> approvedKey
-                  pure (Right 0)
+                then pure (Right 0)
                 else do
                   -- Download templates
                   pendingTemplate <- downloadFromS3 (cfnEnv ctx) bucket pendingKey
@@ -128,16 +149,25 @@ templateApprovalReview ctx url contextLines = do
                   let pending = either (const "") id pendingTemplate
                       latest = either (const "") id latestTemplate
 
-                  -- Show diff
+                  -- Generate and emit diff
                   let diffOutput = generateDiff latest pending
-                  if T.null diffOutput
+                      hasChanges = not (T.null diffOutput)
+                  emit $ OdTemplateDiff TemplateDiff
+                    { tdDiffOutput   = diffOutput
+                    , tdContextLines = contextLines
+                    , tdHasChanges   = hasChanges
+                    }
+
+                  if not hasChanges
                     then do
-                      TIO.putStrLn "No changes detected."
+                      emit $ OdApprovalResult ApprovalResult
+                        { arApproved         = True
+                        , arApprovedLocation = Just approvedLoc
+                        , arLatestLocation   = Just ("s3://" <> bucket <> "/" <> latestKey)
+                        , arCleanupCompleted = False
+                        }
                       pure (Right 0)
                     else do
-                      TIO.putStrLn "Template diff:"
-                      TIO.putStrLn diffOutput
-
                       -- Request confirmation
                       confirmed <- requestConfirmation "Would you like to approve these changes?"
                       if confirmed
@@ -146,10 +176,20 @@ templateApprovalReview ctx url contextLines = do
                           _ <- uploadToS3 (cfnEnv ctx) bucket approvedKey pending
                           _ <- uploadToS3 (cfnEnv ctx) bucket latestKey pending
                           _ <- deleteFromS3 (cfnEnv ctx) bucket pendingKey
-                          TIO.putStrLn $ "Template approved at s3://" <> bucket <> "/" <> approvedKey
+                          emit $ OdApprovalResult ApprovalResult
+                            { arApproved         = True
+                            , arApprovedLocation = Just approvedLoc
+                            , arLatestLocation   = Just ("s3://" <> bucket <> "/" <> latestKey)
+                            , arCleanupCompleted = True
+                            }
                           pure (Right 0)
                         else do
-                          TIO.putStrLn "Template not approved."
+                          emit $ OdApprovalResult ApprovalResult
+                            { arApproved         = False
+                            , arApprovedLocation = Nothing
+                            , arLatestLocation   = Nothing
+                            , arCleanupCompleted = False
+                            }
                           pure (Right 1)
 
 ------------------------------------------------------------------------

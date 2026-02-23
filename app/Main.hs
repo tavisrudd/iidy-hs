@@ -28,7 +28,7 @@ import Iidy.Cfn.Operations.CreateOrUpdate (createOrUpdate)
 import Iidy.Cfn.Operations.CreateStack (createStack)
 import Iidy.Cfn.Operations.DeleteStack (deleteStack)
 import Iidy.Cfn.Operations.DescribeStack (describeStack)
-import Iidy.Cfn.Operations.DescribeStackDrift (detectStackDrift)
+import Iidy.Cfn.Operations.DescribeStackDrift (describeStackDrift)
 import Iidy.Cfn.Operations.EstimateCost (estimateCost)
 import Iidy.Cfn.Operations.GetStackTemplate (getStackTemplate)
 import Iidy.Cfn.Operations.LintTemplate (lintTemplate)
@@ -112,11 +112,9 @@ runCommand cli = case cliCommand cli of
 
   CmdEstimateCost args  ->
     runCfnWithArgs cli OpEstimateCost (sfaArgsfile args) (sfaStackName args)
-      $ \ctx sa fp env _emit -> do
-          result <- estimateCost ctx sa fp env
-          case result of
-            Left err  -> dieTxt err
-            Right url -> TIO.putStrLn url >> pure 0
+      $ \ctx sa fp env emit -> do
+          result <- estimateCost ctx sa fp env emit
+          handleEither result
 
   CmdCreateChangeset args ->
     runCfnWithArgs cli OpCreateChangeset (ccsArgsfile args) (ccsStackName args)
@@ -173,10 +171,11 @@ runCommand cli = case cliCommand cli of
 
   CmdDescribeStackDrift args -> do
       ctx <- createSimpleContext cli OpDescribeStackDrift
-      result <- detectStackDrift ctx (drfStackname args)
+      dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+      result <- describeStackDrift ctx (drfStackname args) (drfDriftCache args) (renderOutput dispatch)
       case result of
-        Left err   -> dieTxt err
-        Right did' -> TIO.putStrLn $ "Drift detection initiated: " <> did'
+        Left err -> dieTxt err
+        Right () -> pure ()
 
   CmdDeleteStack args -> do
       ctx <- createSimpleContext cli OpDeleteStack
@@ -252,12 +251,13 @@ runCommand cli = case cliCommand cli of
   CmdTemplateApproval acmd -> case acmd of
     ApprovalRequest args ->
       runCfnWithArgs cli OpTemplateApprovalRequest (araArgsfile args) Nothing
-        $ \ctx sa fp env _emit -> do
-            result <- templateApprovalRequest ctx sa (araLintTemplate args) fp env
+        $ \ctx sa fp env emit -> do
+            result <- templateApprovalRequest ctx sa (araLintTemplate args) fp env emit
             handleEither result
     ApprovalReview args -> do
       ctx <- createSimpleContext cli OpTemplateApprovalReview
-      result <- templateApprovalReview ctx (arvUrl args) (arvContext args)
+      dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+      result <- templateApprovalReview ctx (arvUrl args) (arvContext args) (renderOutput dispatch)
       case result of
         Left err -> dieTxt err
         Right rc -> exitCode rc
@@ -265,8 +265,8 @@ runCommand cli = case cliCommand cli of
   CmdDemo args           -> runDemo (daDemoscript args) (daTimescaling args) (daMaskSecrets args) >>= exitCode
   CmdLintTemplate args   ->
     runCfnWithArgs cli OpLintTemplate (ltaArgsfile args) Nothing
-      $ \ctx sa fp env _emit -> do
-          result <- lintTemplate ctx sa fp env
+      $ \ctx sa fp env emit -> do
+          result <- lintTemplate ctx sa fp env emit
           handleEither result
   CmdConvertStackToIidy args -> do
       ctx <- createSimpleContext cli OpConvertStackToIidy
