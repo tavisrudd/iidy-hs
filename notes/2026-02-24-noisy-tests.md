@@ -1,30 +1,53 @@
-# Noisy test cases (captured February 24, 2026)
+# Noisy test cases (corrected February 25, 2026)
 
-> **Note:** This file was written by Codex.
+> **Note:** Original file written by Codex (Feb 24). Corrected after analysis
+> showed Codex misidentified the noisy tests due to parallel interleaving.
 
-Command used:
+## Original (incorrect) claim
 
-```
-cabal test iidy-hs-test | tee test-output.log
-```
+Codex listed 14 `Fixtures.yaml-iidy-syntax/*` tests as noisy. This was wrong.
+Those tests produce zero noise — the apparent noise was stdout from Integration
+tests interleaving with Fixture test names during parallel execution.
 
-The following test cases produced large amounts of stdout/stderr (AWS stack metadata, events, etc.) during the run:
+## Actually noisy tests
 
-- `Fixtures.yaml-iidy-syntax/frompairs`
-- `Fixtures.yaml-iidy-syntax/groupby`
-- `Fixtures.yaml-iidy-syntax/if-conditional`
-- `Fixtures.yaml-iidy-syntax/include-equivalence`
-- `Fixtures.yaml-iidy-syntax/map`
-- `Fixtures.yaml-iidy-syntax/maplisttohash`
-- `Fixtures.yaml-iidy-syntax/mapvalues`
-- `Fixtures.yaml-iidy-syntax/merge`
-- `Fixtures.yaml-iidy-syntax/mergemap`
-- `Fixtures.yaml-iidy-syntax/split`
-- `Fixtures.yaml-iidy-syntax/let`
-- `Fixtures.yaml-iidy-syntax/join`
-- `Fixtures.yaml-iidy-syntax/jmespath-query`
-- `Fixtures.yaml-iidy-syntax/include-handlebars-equivalence`
+All noise (~528 lines per run) comes from **12 tests in `Test.IntegrationTest`**
+that call `renderOutputData` / `renderOutputDataJson`, which write directly to
+stdout/stderr.
 
-Each of these emitted repeated “Command Metadata”, stack descriptions, and event logs even when the test passed. See `test-output.log` for the captured raw output from this run.
+### Integration > InteractiveRenderer (10 noisy)
 
-Next step: introduce a reusable `runSilent` helper for tests and start applying it to these noisy cases so output only appears when a test fails.
+| Test                                             | ~Lines | Content                                       |
+|--------------------------------------------------|--------|-----------------------------------------------|
+| handles all OutputData variants without crashing  |    131 | All 26 OutputData types rendered               |
+| colored handles all OutputData variants           |    131 | Same + ANSI escape codes                       |
+| processes create-stack sequence in order          |     40 | Metadata + definition + events + summary       |
+| processes describe-stack sequence in order        |     41 | Metadata + definition + events + contents      |
+| processes delete-stack sequence in order          |     42 | Metadata + definition + confirmation + polling |
+| processes changeset sequence in order             |     36 | Metadata + definition + changeset result       |
+| processes drift sequence in order                 |     36 | Metadata + definition + drift resources        |
+| processes stack-absent error                      |     15 | Metadata + absent info                         |
+| processes lint+approval sequence                  |     28 | Validation + approval + diff                   |
+| handles stack list                                |      2 | Header + one row                               |
+
+### Integration > JsonRenderer (2 noisy)
+
+| Test                                             | ~Lines | Content                |
+|--------------------------------------------------|--------|------------------------|
+| handles all OutputData variants without crashing  |     32 | One JSON blob per variant |
+| handles create-stack sequence                     |      8 | JSON blobs per step      |
+
+### Integration > OutputSequences (0 noisy)
+
+These 4 tests only check data structures, never call renderers.
+
+## Root cause
+
+Both `InteractiveRenderer` and `JsonRenderer` write to hardcoded `stdout`/`stderr`
+(`TIO.putStrLn`, `TIO.putStr`, `hFlush stdout`). The integration tests call
+these renderers to verify they don't crash, producing ~528 lines of side-effect
+output per run.
+
+## Fix approach
+
+See `notes/handoffs/2026-02-25-fix-noisy-tests.md`.
