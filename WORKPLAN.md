@@ -3,6 +3,20 @@
 **Target**: Feature-complete, behavior-identical, output-identical Haskell port. No shortcuts, no dropped features.
 **Status**: Phase 16 (Requirements Documentation) IN PROGRESS. Phases 1-15 DONE.
 
+Remember, we are writing requirements as if this Haskell version does
+not exist yet. DO NOT refer to function names or implementation
+details that exist in our code unless they are part of the
+non-functional requirements. Do not describe how we built this,
+describe its detailed spec. Also do not refer to our implementation
+phases / sessions. These are for a human to estimate how long this
+repo would take to produce through a detailed understanding of the
+requirements, it is not a workplan for them.
+
+Do not include refs to haskell code files in the requirements
+docs. Do that in your own working notes/
+
+You forgot this critical detail in the first parts of Phase 16. Cleanup. -- Tavis the human
+
 ## Critical Rules
 
 1. **Gate integrity.** Never check off a gate item until verified. Opus must verify completion.
@@ -117,7 +131,7 @@ Each PRD draws from these sources (agents must read them, not guess):
 - [x] Session 2: `02-yaml-preprocessing.md` + `03-import-system.md` (Session 41)
 - [x] Session 3: `05-cfn-operations.md` + `06-output-system.md` (Session 41)
 - [x] Session 4: `07-error-handling.md` + `08-aws-integration.md` (Session 41)
-- [ ] Session 5: `04-custom-resources.md` + `09-ssm-params.md` + `10-template-approval.md`
+- [x] Session 5: `04-custom-resources.md` + `09-ssm-params.md` + `10-template-approval.md` (Session 41)
 - [ ] Session 6: `11-utilities.md` + `12-cross-cutting.md`
 - [ ] Session 7: Completeness review + coverage matrix
 - [ ] Session 8: Quality gate + final polish + `.ralph-stop`
