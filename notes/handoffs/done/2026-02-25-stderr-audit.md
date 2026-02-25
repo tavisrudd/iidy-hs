@@ -177,9 +177,21 @@ This is a 1-commit fix. Can be combined with other work.
 
 ## Progress
 
-- [ ] Chunk 1: Fix InitStackArgs.hs putStrLn → hPutStrLn stderr
-- [ ] Chunk 2: Final verification grep
+- [x] Chunk 1: Fix InitStackArgs.hs putStrLn → hPutStrLn stderr
+- [x] Chunk 2: Final verification grep
+- [x] Bonus: Fix Render.hs exitWith calls (5x exitWith → pure 1 for testability)
 
 ## Handoff Notes
 
-(none yet)
+### 2026-02-25 Session
+
+**Files modified:**
+- `src/Iidy/InitStackArgs.hs` — 2 putStrLn → hPutStrLn stderr + import
+- `src/Iidy/Render.hs` — removed 5 exitWith calls, restructured to return IO Int cleanly, removed System.Exit import
+
+**Additional finding:** Exit code audit revealed Render.hs was the only module in
+`src/` calling `exitWith` directly (5 error paths). All other handlers return exit
+codes cleanly. Fixed by restructuring control flow so each branch returns `pure 0`
+or `pure 1`. This makes `runRender` testable without catching ExitCode exceptions.
+
+**Exit code summary:** 0=success, 1=error, 130=user-cancelled. Matches Rust exactly.

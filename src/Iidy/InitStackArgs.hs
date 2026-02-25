@@ -4,6 +4,7 @@ module Iidy.InitStackArgs
   ) where
 
 import System.Directory (doesFileExist)
+import System.IO (hPutStrLn, stderr)
 
 import Iidy.Cli (InitStackArgs(..))
 
@@ -95,7 +96,7 @@ writeIfAbsent :: FilePath -> String -> Bool -> IO ()
 writeIfAbsent filename content force = do
   exists <- doesFileExist filename
   if exists && not force
-    then putStrLn $ filename <> " already exists! See help [-h] for overwrite options"
+    then hPutStrLn stderr $ filename <> " already exists! See help [-h] for overwrite options"
     else do
       writeFile filename content
-      putStrLn $ filename <> " has been created!"
+      hPutStrLn stderr $ filename <> " has been created!"

@@ -11,7 +11,6 @@ import qualified Data.Text.IO as TIO
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TLE
 import System.Directory (doesFileExist)
-import System.Exit (exitWith, ExitCode(..))
 import System.IO (stderr)
 
 import Iidy.Cli (RenderArgs(..), GlobalOpts(..))
@@ -34,8 +33,6 @@ import Iidy.Yaml.Parser (parseYaml, ParseError(..))
 ------------------------------------------------------------------------
 
 -- | Run the render command.  Returns 0 on success, 1 on error.
--- The function also calls 'exitWith' on failure so callers do not
--- need to inspect the return value when running as the main action.
 runRender :: RenderArgs -> GlobalOpts -> IO Int
 runRender args gopts = do
   let templatePath = T.unpack (raTemplate args)
@@ -53,7 +50,7 @@ runRender args gopts = do
       let source = TE.decodeUtf8 (BL.toStrict content)
       formatted <- formatParseErrorEnhanced (goColor gopts) baseLocation source pos msg
       TIO.hPutStr stderr formatted
-      exitWith (ExitFailure 1)
+      pure 1
 
     Right ast -> do
       -- Select YAML spec (1.1 vs 1.2)
@@ -69,51 +66,49 @@ runRender args gopts = do
         Left err -> do
           formatted <- formatPreprocessErrorEnhanced (goColor gopts) baseLocation source err
           TIO.hPutStr stderr formatted
-          exitWith (ExitFailure 1)
+          pure 1
 
         Right (PreprocessResult val _manifest) -> do
           -- Apply JMESPath query if provided
-          outputVal <- case raQuery args of
-                Nothing -> pure val
-                Just query ->
-                  case applyJmesPath query (toValue val) of
-                    Left _err -> do
-                      TIO.hPutStrLn stderr ("Invalid JMESPath query: " <> query)
-                      exitWith (ExitFailure 1)
-                    Right filtered -> pure (fromValue filtered)
+          let queryResult = case raQuery args of
+                Nothing    -> Right val
+                Just query -> case applyJmesPath query (toValue val) of
+                  Left _err    -> Left query
+                  Right filtered -> Right (fromValue filtered)
+          case queryResult of
+            Left query -> do
+              TIO.hPutStrLn stderr ("Invalid JMESPath query: " <> query)
+              pure 1
+            Right outputVal -> do
+              -- Validate format
+              let fmt = T.toLower (raFormat args)
+              case fmt of
+                _ | fmt `notElem` ["json", "yaml", "yml", "yaml-cloudformation"] -> do
+                  TIO.hPutStrLn stderr ("Unsupported format: " <> raFormat args <> ". Use 'yaml' or 'json'")
+                  pure 1
+                _ -> do
+                  -- Format output
+                  let rendered = case fmt of
+                                   "json" -> formatJson outputVal
+                                   _      -> emitYaml outputVal
 
-          -- Validate format
-          let fmt = T.toLower (raFormat args)
-          case fmt of
-            "json" -> pure ()
-            "yaml" -> pure ()
-            "yml"  -> pure ()
-            "yaml-cloudformation" -> pure ()
-            _ -> do
-              TIO.hPutStrLn stderr ("Unsupported format: " <> raFormat args <> ". Use 'yaml' or 'json'")
-              exitWith (ExitFailure 1)
-
-          -- Format output
-          let rendered = case fmt of
-                           "json" -> formatJson outputVal
-                           _      -> emitYaml outputVal
-
-          -- Write output: "-" or "stdout" means stdout, otherwise write to file.
-          let outPath = T.unpack (raOutfile args)
-          if outPath == "-" || outPath == "stdout"
-            then TIO.putStrLn rendered
-            else do
-              -- Check overwrite protection
-              exists <- doesFileExist outPath
-              if exists && not (raOverwrite args)
-                then do
-                  TIO.hPutStrLn stderr ("Output file '" <> T.pack outPath <> "' exists. Use --overwrite to overwrite it.")
-                  exitWith (ExitFailure 1)
-                else do
-                  TIO.writeFile outPath rendered
-                  TIO.hPutStrLn stderr ("Template rendered to: " <> T.pack outPath)
-
-          pure 0
+                  -- Write output: "-" or "stdout" means stdout, otherwise write to file.
+                  let outPath = T.unpack (raOutfile args)
+                  if outPath == "-" || outPath == "stdout"
+                    then do
+                      TIO.putStrLn rendered
+                      pure 0
+                    else do
+                      -- Check overwrite protection
+                      exists <- doesFileExist outPath
+                      if exists && not (raOverwrite args)
+                        then do
+                          TIO.hPutStrLn stderr ("Output file '" <> T.pack outPath <> "' exists. Use --overwrite to overwrite it.")
+                          pure 1
+                        else do
+                          TIO.writeFile outPath rendered
+                          TIO.hPutStrLn stderr ("Template rendered to: " <> T.pack outPath)
+                          pure 0
 
 ------------------------------------------------------------------------
 -- Output formatting
