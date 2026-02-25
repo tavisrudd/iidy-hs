@@ -2,12 +2,11 @@
 
 ## Overview
 
-iidy-hs exposes all CloudFormation operations through a single binary with a consistent global
-option set and a flat command hierarchy. The CLI is built on optparse-applicative, using a custom
-help renderer that mimics the Rust original's clap-based layout as closely as the two frameworks
-allow. Every command receives the same global options (environment, region, profile, role, output
-mode, color), dispatches to an AWS-specific implementation, and exits with one of three status
-codes: 0 (success), 1 (error), or 130 (cancelled).
+iidy exposes all CloudFormation operations through a single binary with a consistent global
+option set and a flat command hierarchy. Every command receives the same global options
+(environment, region, profile, role, output mode, color), dispatches to an AWS-specific
+implementation, and exits with one of three status codes: 0 (success), 1 (error), or 130
+(cancelled).
 
 The CLI is the sole entry point into the system. It owns argument parsing, environment variable
 resolution, credential chain setup, and output mode selection before handing control to command
@@ -15,20 +14,14 @@ implementations. Behavioral parity with the Rust iidy binary is the acceptance s
 this document says "matches Rust oracle," it means byte-for-byte output equivalence on the same
 input is the target, with documented divergences as the only permitted exceptions.
 
-## Implementation Context
+## Technical Context
 
-**Haskell Ecosystem**: optparse-applicative for parsing, custom help formatter in
-`Iidy.Cli.Help`, ansi-terminal for ANSI codes, terminal-size for width detection.
-
-**Rust-to-Haskell Friction**: clap auto-generates `--no-X` boolean flag negations; optparse-
-applicative requires explicit `flag True False (long "no-X")`. Help layout column widths and
-section titles differ slightly from clap output. All command names, flag names, metavars, and
-descriptions are identical between implementations.
-
-**Prerequisites**: None. The CLI module is the entry point; all other modules depend on it, not
-the reverse.
-
-**Parallelizable**: Yes, individual command implementations are independent.
+**CLI structure**: The CLI must support a subcommand hierarchy with global options that may
+appear before or after the subcommand name. Boolean flags with default-on behavior (e.g.,
+`--no-diff`, `--no-decrypt`) must be modeled explicitly as negation flags, since the help
+framework may not auto-generate them. Help layout column widths and section titles must match
+the Rust oracle output as closely as the chosen framework allows. All command names, flag names,
+metavars, and descriptions are identical between implementations.
 
 ---
 
@@ -76,10 +69,10 @@ the reverse.
 
 **Logic Flow:**
 
-1. Parse args via `execParserPure`.
+1. Parse args from the command line.
 2. If no args or `--help` with no subcommand: render custom top-level help, exit 0.
 3. On parse failure: render error in Rust-compatible format, exit 1.
-4. On parse success: normalize `AwsOpts` (resolve `no-profile`/`no-role` sentinels, generate
+4. On parse success: normalize AWS options (resolve `no-profile`/`no-role` sentinels, generate
    UUID token), then dispatch to command handler.
 
 **Edge Cases:**
@@ -89,7 +82,7 @@ the reverse.
 - `--assume-role-arn=no-role` same semantics as above.
 - `--output-mode` is `Maybe OutputMode`; the absence of the flag is distinct from `plain`.
 - Terminal width for help wrapping is clamped to [60, 120]; falls back to 100 if undetectable.
-  The `COLUMNS` env var is not read directly; `terminal-size` queries the terminal.
+  The `COLUMNS` env var is not read directly; terminal width is queried from the terminal device.
 
 **Error Scenarios:**
 
@@ -99,8 +92,8 @@ the reverse.
 
 **Complexity Notes:**
 
-- The custom help path (`shouldShowTopLevelHelp`) short-circuits before optparse-applicative to
-  emit the Rust-style top-level help rather than optparse-applicative's default layout.
+- The custom top-level help path short-circuits before standard argument parsing to emit the
+  Rust-style top-level help layout rather than the parser framework's default layout.
 - Help color detection uses `stdout` TTY status (not stderr), matching Rust behavior for help.
   Error color detection uses `stderr` TTY status (intentional divergence from Rust; see
   DIVERGENCES.md).
@@ -169,8 +162,7 @@ before confirming, **so that** I can catch unintended changes before they reach 
   When set, creates a changeset then pauses; user must run `exec-changeset` separately.
 - `--yes` (flag, default: false): skip the interactive confirmation prompt.
 - `--no-diff` (flag, default: diff shown): suppress the template diff display before update.
-  Internally modeled as `flag True False (long "no-diff")` so `--diff` is not a valid flag name;
-  `--no-diff` disables the default-on behavior.
+  `--diff` is not a valid flag name; `--no-diff` disables the default-on behavior.
 - `--stack-policy-during-update <POLICY>`: path or inline JSON of a stack policy to apply during
   this update only (passed to CloudFormation UpdateStack).
 - When `--yes` is absent: shows a colored diff of template and parameter changes, then prompts
@@ -192,7 +184,7 @@ before confirming, **so that** I can catch unintended changes before they reach 
 **Edge Cases:**
 
 - Stack does not exist: exit 1 (use `create-or-update` for idempotent behavior).
-- `--lint-template` flag takes a Haskell `Bool` read via `auto`, not a `--no-lint` negation.
+- `--lint-template` flag takes a boolean value (e.g., `True`/`False`), not a `--no-lint` negation.
 
 ---
 
@@ -204,7 +196,7 @@ before confirming, **so that** I can catch unintended changes before they reach 
 **Acceptance Criteria:**
 
 - Command: `iidy create-or-update <ARGSFILE> [options]`
-- Accepts the same options as `update-stack` (parsed via the same `UpdateStackArgs` type).
+- Accepts the same options as `update-stack`.
 - If stack does not exist: routes to create path (equivalent to `create-stack`).
 - If stack exists and is in a stable state: routes to update path.
 - If `--changeset` is set: five routing paths depending on stack/changeset state (create new
@@ -330,8 +322,8 @@ time, **so that** I can monitor a deployment started by a CI system or another t
 
 - Command: `iidy create-changeset <ARGSFILE> [CHANGESET_NAME] [options]`
 - `<ARGSFILE>` (positional, required): path to stack-args.yaml.
-- `[CHANGESET_NAME]` (positional, optional): name for the changeset. Auto-generated via
-  `generateDashedName` (adjective-noun-hex format) if omitted.
+- `[CHANGESET_NAME]` (positional, optional): name for the changeset. Auto-generated in
+  adjective-noun-hex format if omitted.
 - `--stack-name <NAME>`: override stack name from argsfile.
 - `--watch` (flag, default: false): tail creation events after submitting the changeset.
 - `--watch-inactivity-timeout <SECONDS>` (default: 180): inactivity timeout for `--watch` mode.
@@ -461,7 +453,6 @@ toolchain I use for CloudFormation.
 - Command: `iidy param get <PATH> [options]`
 - `<PATH>` (positional, required).
 - `--no-decrypt` (flag): disable decryption of SecureString. Default: decrypt enabled.
-  Internally modeled as `flag True False (long "no-decrypt")`.
 - `--format <FMT>` (default: `simple`): Values: `simple` (value only), `json` (full parameter
   object), `yaml`.
 - Output goes directly to stdout (not through the output pipeline).
@@ -498,7 +489,7 @@ toolchain I use for CloudFormation.
 **Edge Cases (all param commands):**
 
 - `--format` flag is independent of global `--output-mode`; param commands write directly to
-  stdout, not through the OutputDispatch pipeline.
+  stdout, not through the output pipeline.
 - Hierarchical KMS key lookup for `SecureString` type only.
 
 ---
@@ -514,7 +505,6 @@ toolchain I use for CloudFormation.
 - `<ARGSFILE>` (positional, required): path to stack-args.yaml. Must include
   `ApprovedTemplateLocation` pointing to an S3 prefix.
 - `--no-lint-template` (flag, default: lint enabled): skip pre-submission linting.
-  Modeled as `flag True False (long "no-lint-template")`.
 - Preprocesses the full template, computes SHA256 hash, uploads to `{prefix}/{hash}.pending`.
 - If a matching approved object already exists: reports already-approved, exits 0 without
   uploading.
@@ -561,7 +551,6 @@ shell completion, and error lookup, **so that** I have a self-contained toolchai
   `/{environment}/{project}/{key}` as SecureString; reference via `!$ ssmParams.{key}` in
   generated stack-args.yaml. Requires `--project` or a `project` tag on the stack.
 - `--no-sortkeys` (flag): do not sort YAML keys in generated files. Default: keys sorted.
-  Modeled as `flag True False (long "no-sortkeys")`.
 - `--project <NAME>`: project name for SSM path prefix.
 
 #### init-stack-args
@@ -590,8 +579,8 @@ shell completion, and error lookup, **so that** I have a self-contained toolchai
 - Command: `iidy explain [CODE...]`
 - `[CODE...]` (variadic positional): one or more error codes to explain.
 - Accepted formats: `ERR_2001` (standard), `err_2001` (case-insensitive), `2001`
-  (auto-prefixed). Rust only accepts `ERR_NNNN`; the Haskell implementation is more permissive
-  (documented divergence).
+  (auto-prefixed). Rust only accepts `ERR_NNNN`; iidy-hs is more permissive
+  (documented divergence in DIVERGENCES.md).
 - Prints a human-readable explanation for each code.
 - Unknown code: prints an error for that code but continues with remaining codes.
 
@@ -609,7 +598,7 @@ shell completion, and error lookup, **so that** I have a self-contained toolchai
 - Command: `iidy estimate-cost <ARGSFILE> [--stack-name <NAME>]`
 - Submits to the CloudFormation EstimateTemplateCost API.
 - Returns a URL to the AWS Simple Monthly Calculator.
-- Uses the same `StackFileArgs` type as `create-stack`.
+- Accepts the same argsfile and `--stack-name` options as `create-stack`.
 
 #### lint-template
 
@@ -678,7 +667,7 @@ need to pass multiple flags for each environment.
   - `NO_COLOR`: if set (any value), disables color output; takes precedence over `FORCE_COLOR`.
   - `FORCE_COLOR`: if set and `NO_COLOR` is absent, forces color even without a TTY.
   - `COLORTERM`: used by `auto` theme detection.
-  - `COLUMNS`: not directly read; terminal width is queried via `terminal-size`.
+  - `COLUMNS`: not directly read; terminal width is queried from the terminal device.
   - `IIDY_THEME`: sets the default theme when `--theme auto` is active.
   - `SHELL`: used by `completion` command for auto-detecting the shell.
 - Priority for region: CLI `--region` > stack-args.yaml `Region` for the selected environment >
@@ -700,23 +689,21 @@ need to pass multiple flags for each environment.
 ## Testing Requirements
 
 - All 22 visible commands (plus 1 hidden) must be parseable without error when given valid
-  arguments. Tested via unit tests on `cliParserInfo`.
-- All global option defaults are verified: `goEnvironment = "development"`, `goColor = ColorAuto`,
-  `goTheme = ThemeAuto`, `goOutputMode = Nothing`, `goDebug = False`, `goLogFullError = False`.
-- All command-specific defaults: `daEvents = 50`, `waInactivityTimeout = 180`,
-  `drfDriftCache = 300`, `ccsWatchInactivityTimeout = 180`, `arvContext = 500`,
-  `raOutfile = "stdout"`, `raFormat = "yaml"`, `raYamlSpec = YamlAuto`,
-  `psaType = "SecureString"`.
+  arguments.
+- Global option defaults are verified: environment defaults to `"development"`, color to `auto`,
+  theme to `auto`, output mode to unset (TTY-detected), debug to false, log-full-error to false.
+- Command-specific defaults verified: `--events` defaults to 50, `--inactivity-timeout` to 180,
+  drift cache to 300 seconds, changeset watch inactivity timeout to 180, `--context` to 500,
+  `--outfile` to `"stdout"`, `--format` to `"yaml"`, `--yaml-spec` to `auto`,
+  `param set --type` to `"SecureString"`.
 - Invalid enum values for `--color`, `--theme`, `--output-mode`, `--format`, `--stage`,
   `--yaml-spec` produce exit 1 with the expected error message.
-- Help rendering: `--help` with no subcommand triggers custom top-level renderer (not
-  optparse-applicative default). Verified by inspecting `shouldShowTopLevelHelp` logic.
+- Help rendering: `--help` with no subcommand triggers the custom top-level help layout.
 - Version output: `--version` / `-V` prints `iidy-hs <version>` and exits 0.
 - Exit code 130 on user-cancelled operations (delete-stack decline, param review decline,
   exec-changeset decline, template-approval review decline).
-- `--no-diff`, `--no-decrypt`, `--no-sortkeys`, `--no-lint-template` flags use
-  `flag True False` pattern and are tested to confirm the default is enabled and the flag
-  disables it.
+- `--no-diff`, `--no-decrypt`, `--no-sortkeys`, `--no-lint-template` flags are tested to
+  confirm the default behavior is enabled and the flag disables it.
 - Shell completion for bash, zsh, fish: output is non-empty and syntactically plausible.
 - PowerShell completion: parseable but produces not-supported output.
 - `explain` command: accepts `ERR_NNNN`, `err_NNNN`, and bare `NNNN` formats.
@@ -727,16 +714,13 @@ need to pass multiple flags for each environment.
 
 ## Cross-References
 
-- `src/Iidy/Cli/Parser.hs` — all parsers, readers, and defaults (authoritative source)
-- `src/Iidy/Cli.hs` — `Commands`, `GlobalOpts`, `AwsOpts`, and all Args types
-- `src/Iidy/Cli/Help.hs` — custom help renderer, error formatter, top-level help layout
 - `docs/command-reference.md` — user-facing documentation with examples
 - `DIVERGENCES.md` — documented behavioral differences from Rust iidy:
-  - Help formatting layout (clap vs optparse-applicative)
+  - Help formatting layout
   - YAML snapshot serialization (test artifact only, not CLI output)
   - PowerShell completion not supported
-  - Error color checks stderr TTY (Haskell) vs stdout TTY (Rust)
+  - Error color checks stderr TTY (iidy-hs) vs stdout TTY (Rust)
   - `explain` accepts more input formats than Rust
-- `src/Iidy/Types.hs` — `ColorChoice`, `OutputMode`, `Theme`, `YamlSpec` enum definitions
-- `src/Iidy/Output/Dispatch.hs` — output pipeline wired to all write commands
+- `docs/requirements/02-yaml-preprocessing.md` — preprocessing pipeline spec
+- `docs/requirements/06-output-system.md` — output mode and renderer spec
 - Rust oracle: `~/src/iidy/target/debug/iidy` (read-only reference binary)

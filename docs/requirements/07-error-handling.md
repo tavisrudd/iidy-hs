@@ -16,19 +16,13 @@ All error output goes to stderr. Color detection checks stderr's TTY status (div
 from the Rust implementation, which checks stdout). The `--color` flag and the `NO_COLOR`
 / `FORCE_COLOR` environment variables provide explicit overrides.
 
-## Implementation Context
+## Technical Context
 
-- **Error ID module**: `src/Iidy/Yaml/Errors/Ids.hs` — defines `ErrorId` ADT, `errorIdCode`,
-  `errorIdFromCode`, `showErrorId`
-- **Display module**: `src/Iidy/Yaml/Errors/Display.hs` — defines `ErrorColors`, `formatError`,
-  `formatSourceContext`, `detectErrorColors`
-- **Enhanced error types**: `src/Iidy/Yaml/Errors/Enhanced.hs` — variant types for each
-  displayable error (VariableNotFoundError, TypeMismatchError, CfnValidationError,
-  YamlSyntaxError, TagParsingError, LookupQueryError)
-- **Explain command**: wired in `src/Iidy/Main.hs`, accepts `ERR_XXXX`, `err_xxxx`, or
-  bare numeric codes
-- **Color type**: `Iidy.Types.ColorChoice` — `ColorAlways | ColorNever | ColorAuto`
-- **SIGINT handling**: `_exit(130)` via POSIX call to avoid GHC runtime backtrace
+The error display pipeline is entirely pure (formatting functions accept the error record
+and produce text); color detection is the only IO operation. The explain command accepts
+`ERR_XXXX`, `err_xxxx`, or bare numeric codes. SIGINT is handled via POSIX `_exit(130)`
+to avoid runtime backtrace output. `ColorChoice` has three values: `ColorAlways`,
+`ColorNever`, `ColorAuto`.
 
 ### Complete Error Code Table
 
@@ -153,11 +147,10 @@ fix preprocessing mistakes without opening the source file manually.
 
 **Logic Flow:**
 
-`formatError` dispatches on the `EnhancedPreprocessingError` variant. Each variant calls
-`formatHeader`, then `formatGuidance`, then `formatSourceContext` (or
-`formatSourceContextNoCarets`), then variant-specific help sections, then `formatFooter`.
-`formatSourceContext` calls `getSourceLine` to retrieve lines by 1-based index.
-`padGutter4` right-aligns numbers. Caret span is computed as
+The error formatter dispatches on the error variant. Each variant emits: header, guidance,
+source context (with or without carets depending on variant), variant-specific help
+sections, then footer. Source lines are retrieved by 1-based index. Gutter numbers are
+right-aligned in 4 characters. Caret span is computed as
 `max 1 (min spanLen (lineLen - col + 1))`.
 
 **Edge Cases:**
@@ -195,19 +188,19 @@ offending location.
 2. Line numbers are 1-based in all user-visible output.
 3. Column numbers are 1-based in all user-visible output.
 4. For tag-related errors, the position points to the tag name (e.g. `!${}`, `!Ref`)
-   rather than the value; adjustment logic searches backward from the HsYAML-reported
+   rather than the value; adjustment logic searches backward from the parser-reported
    position to find the tag token on the current or immediately preceding line.
-5. HsYAML's internal 0-based line/column indices are converted to 1-based before being
+5. The parser's internal 0-based line/column indices are converted to 1-based before being
    stored in `SourceLocation`.
 6. When no position is available, the location displays as `<unknown>:0:0` and the caret
    line is suppressed.
 
 **Logic Flow:**
 
-HsYAML fires parse events tagged with `Pos` values (0-based). The conversion layer
+The YAML parser fires parse events with 0-based position values. The conversion layer
 increments both line and column by 1 before constructing `SourceLocation`. Tag-position
-adjustment iterates over the source lines starting at the reported line, scanning for the
-tag string, and updates `srcLocColumn` accordingly.
+adjustment iterates over the source lines starting at the reported line, scanning for
+the tag string, and updates the column accordingly.
 
 **Edge Cases:**
 
@@ -219,14 +212,14 @@ tag string, and updates `srcLocColumn` accordingly.
 
 **Error Scenarios:**
 
-- HsYAML omits position data for certain parse events: `SourceLocation` is constructed
-  with line=0 and column=0, caret rendering is skipped.
+- The YAML parser omits position data for certain parse events: `SourceLocation` is
+  constructed with line=0 and column=0, and caret rendering is skipped.
 
 **Complexity Notes:**
 
 Medium. The 0-to-1-based conversion is trivial, but the tag-position search heuristic
 requires care to avoid false positives when the tag string appears as ordinary text
-earlier in the same line.
+earlier on the same line.
 
 ---
 
@@ -291,8 +284,7 @@ broken or merely uses a YAML feature that iidy does not support.
    ERR_1001 with a short message describing the parse failure.
 2. A `%YAML 1.2` directive in a file processed under YAML 1.1 rules (or vice versa)
    produces ERR_1002.
-3. Use of a YAML tag or feature not supported by iidy's HsYAML-based parser produces
-   ERR_1003.
+3. Use of a YAML tag or feature not supported by iidy's parser produces ERR_1003.
 4. A file whose top-level structure is not a mapping (e.g. a bare scalar or sequence
    where a CloudFormation template is expected) produces ERR_1004.
 5. Use of the YAML merge key (`<<`) produces ERR_1005 with guidance explaining that merge
@@ -303,28 +295,28 @@ broken or merely uses a YAML feature that iidy does not support.
 
 **Logic Flow:**
 
-HsYAML parse failures are caught in the YAML loading layer and mapped to
-`YamlSyntaxError` records. The `ysiShortMessage`, `ysiGuidance`, `ysiFixHint`, and
-`ysiExample` fields are populated from the HsYAML diagnostic. `formatError` renders the
-`YamlSyntaxError` branch, which appends an extra blank line before the footer.
+YAML parse failures are caught in the YAML loading layer and mapped to `YamlSyntaxError`
+records. The short message, guidance, fix hint, and example fields are populated from the
+parser diagnostic. The error formatter renders the YAML syntax error branch, which appends
+an extra blank line before the footer.
 
 **Edge Cases:**
 
 - A file with a BOM character: treated as a syntax error or silently stripped, depending
-  on HsYAML version.
+  on parser behavior.
 - An empty file: produces a malformed-structure error (ERR_1004) because an empty
   document cannot be a template mapping.
 - A file containing only comments: same as empty file.
 
 **Error Scenarios:**
 
-- HsYAML returns multiple parse errors: only the first is surfaced; subsequent errors may
-  be cascades of the first.
+- The YAML parser returns multiple parse errors: only the first is surfaced; subsequent
+  errors may be cascades of the first.
 
 **Complexity Notes:**
 
-Low for the display layer; medium for the mapping layer, which must translate HsYAML's
-internal error constructors to the five iidy codes without losing position information.
+Low for the display layer; medium for the mapping layer, which must translate the YAML
+parser's internal error values to the five iidy codes without losing position information.
 
 ---
 
@@ -358,10 +350,9 @@ actually available at that point.
 
 **Logic Flow:**
 
-Variable resolution runs during template preprocessing. On failure, a
-`VariableNotFoundError` or `LookupQueryError` record is constructed with the current
-scope's variable list attached. `formatError` renders `formatAvailableVars` (or
-`formatAvailableKeys`) only when the list is non-empty.
+Variable resolution runs during template preprocessing. On failure, the error record is
+constructed with the current scope's variable list attached. The formatter renders the
+available-vars or available-keys section only when the list is non-empty.
 
 **Edge Cases:**
 
@@ -417,9 +408,9 @@ the alert to the right team.
 **Logic Flow:**
 
 Import resolution dispatches on the URI scheme (`file://`, `http://`, `https://`,
-`s3://`, `ssm://`, `cfn://`, bare paths). Each resolver returns an `Either` value; the
-`Left` branch is mapped to the appropriate `ErrorId`. The error record is constructed
-with the source location of the originating `!$import` tag.
+`s3://`, `ssm://`, `cfn://`, bare paths). Each resolver's failure branch is mapped to
+the appropriate error code. The error record is constructed with the source location of
+the originating `!$import` tag.
 
 **Edge Cases:**
 
@@ -476,10 +467,10 @@ I have a typo in a tag name or a genuine type error in a value expression.
 
 **Logic Flow:**
 
-Tag parsing failures surface as `TagParsingError` records with a `tpiSpanLen` field set
-by the parser. The `formatError` dispatcher checks `tpiSpanLen > 0` and routes to the
-appropriate context formatter. Type errors surface as `TypeMismatchError` records with
-`tmiExpected`, `tmiFound`, and optional `tmiHelp` fields.
+Tag parsing failures surface with a `spanLen` field set by the parser. The error
+formatter checks `spanLen > 0` and routes to the appropriate context formatter (with or
+without carets). Type errors carry the expected type, found type, and an optional extra
+hint.
 
 **Edge Cases:**
 
@@ -495,9 +486,8 @@ appropriate context formatter. Type errors surface as `TypeMismatchError` record
 
 **Complexity Notes:**
 
-Medium. The caret/no-caret branching in `formatError` for `TagParsingError` is the main
-subtlety. Type errors require the type information to be available at the error-
-construction site.
+Medium. The caret/no-caret branching for tag parsing errors is the main subtlety. Type
+errors require the type information to be available at the error construction site.
 
 ---
 
@@ -528,8 +518,8 @@ delimiter syntax, and runtime evaluation failures.
 **Logic Flow:**
 
 Handlebars evaluation is invoked from the scalar preprocessing path. Failures from the
-custom parser or evaluator are caught and converted to `EnhancedPreprocessingError`
-values before propagating up to the display layer.
+parser or evaluator are caught and converted to structured error values before propagating
+up to the display layer.
 
 **Edge Cases:**
 
@@ -581,19 +571,19 @@ plain-text error messages without escape sequences.
 
 **Logic Flow:**
 
-`detectErrorColors :: ColorChoice -> IO ErrorColors` is called in `Main.hs` after
-argument parsing. `ColorAlways` returns `defaultColors`; `ColorNever` returns
-`noColors`; `ColorAuto` calls `lookupEnv "NO_COLOR"` and `lookupEnv "FORCE_COLOR"`,
-then falls through to `hIsTerminalDevice stderr`.
+Error color detection is called after argument parsing.
+- `ColorAlways` returns full colors.
+- `ColorNever` returns no colors.
+- `ColorAuto` checks `NO_COLOR`, then `FORCE_COLOR`, then falls through to
+  `hIsTerminalDevice stderr`.
 
 **Edge Cases:**
 
 - Both `NO_COLOR` and `FORCE_COLOR` set: `NO_COLOR` wins.
-- `NO_COLOR` set to an empty string: the check is `isJust (lookupEnv "NO_COLOR")`, so an
-  empty value still suppresses color.
+- `NO_COLOR` set to an empty string: an empty value still suppresses color (presence
+  check, not value check).
 - Terminal type is `dumb`: `hIsTerminalDevice` returns false; color is suppressed.
-- Output redirected to a file: `hIsTerminalDevice stderr` returns false; color is
-  suppressed.
+- Output redirected to a file: stderr is not a TTY; color is suppressed.
 
 **Error Scenarios:**
 
@@ -602,8 +592,8 @@ then falls through to `hIsTerminalDevice stderr`.
 **Complexity Notes:**
 
 Low. The logic is a four-case decision tree. The key correctness requirement is that
-`NO_COLOR` precedes `FORCE_COLOR` in the precedence chain, which matches the
-no-color.org specification.
+`NO_COLOR` precedes `FORCE_COLOR` in the precedence chain, matching the no-color.org
+specification.
 
 ---
 
@@ -631,11 +621,10 @@ stderr.
 
 **Logic Flow:**
 
-`optparse-applicative` is invoked via `customExecParser` to retain control over the exit
-path. Argument parse failures raise an exception caught in `Main.hs` and converted to
-exit code 1. SIGINT is caught via `installHandler sigINT` which calls `_exit 130`.
-Confirmation-prompt refusal returns a value that causes the command handler to call
-`exitWith (ExitFailure 130)`.
+The CLI parser is invoked with a custom execution wrapper to retain control over the exit
+path. Argument parse failures are caught and converted to exit code 1. SIGINT is caught
+via a signal handler which calls `_exit(130)`. Confirmation-prompt refusal returns a
+value that causes the command handler to exit with code 130.
 
 **Edge Cases:**
 
@@ -653,29 +642,30 @@ Confirmation-prompt refusal returns a value that causes the command handler to c
 
 **Complexity Notes:**
 
-Low for the exit-code assignments themselves. Medium for the SIGINT-to-`_exit` path,
-which must avoid the GHC backtrace while still terminating cleanly. The `_exit` approach
-bypasses `hFlush` on stdout and stderr, so any buffered output may be lost; iidy uses
+Low for the exit-code assignments themselves. Medium for the SIGINT-to-`_exit(130)` path,
+which must avoid runtime backtrace output while still terminating cleanly. Using `_exit`
+bypasses output buffer flushing, so any buffered output may be lost; iidy uses
 line-buffered output to mitigate this.
 
 ---
 
 ## Testing Requirements
 
-1. **Snapshot tests** for each of the 6 `EnhancedPreprocessingError` variants with colors
+1. **Snapshot tests** for each of the 6 enhanced preprocessing error variants with colors
    enabled and colors disabled; output must match the Rust reference snapshots
    byte-for-byte.
-2. **Unit tests** for `formatHeader`, `formatSourceContext`, `formatSourceContextNoCarets`,
-   `formatAvailableVars`, `formatAvailableKeys`, `padGutter4` covering boundary line
-   numbers (line 1, last line) and boundary column values (col 0, col past end).
-3. **Unit tests** for `detectErrorColors` covering all 7 combinations of `ColorChoice`,
+2. **Unit tests** for header formatting, source context (with carets), source context
+   (without carets), available-vars section, available-keys section, and gutter padding
+   — covering boundary line numbers (line 1, last line) and boundary column values
+   (col 0, col past end).
+3. **Unit tests** for error color detection covering all 7 combinations of `ColorChoice`,
    `NO_COLOR`, `FORCE_COLOR`, and TTY status.
-4. **Unit tests** for `errorIdCode` and `errorIdFromCode` verifying the round-trip
-   property for all 50 codes and that unknown codes return `Nothing`.
-5. **Unit tests** for `showErrorId` verifying the `ERR_XXXX` formatting for each code.
+4. **Unit tests** for error code lookup verifying the round-trip property for all 50
+   codes and that unknown codes return no result.
+5. **Unit tests** for error ID formatting verifying the `ERR_XXXX` format for each code.
 6. **Integration tests** for the `explain` command covering the three accepted input
    formats (`ERR_XXXX`, `err_xxxx`, bare integer), a known code, and an unknown code.
-7. **Property tests** for `padGutter4`: for all `n` in `[1..9999]`, the output is
+7. **Property tests** for gutter padding: for all `n` in `[1..9999]`, the output is
    exactly 4 characters.
 8. **Exit-code tests**: mock-based tests verifying that declined confirmation prompts
    produce exit code 130 and that preprocessing errors produce exit code 1.
@@ -683,16 +673,6 @@ line-buffered output to mitigate this.
 
 ## Cross-References
 
-- `src/Iidy/Yaml/Errors/Ids.hs` — `ErrorId` ADT, `errorIdCode`, `errorIdFromCode`,
-  `showErrorId`
-- `src/Iidy/Yaml/Errors/Display.hs` — `ErrorColors`, `formatError`, `formatSourceContext`,
-  `detectErrorColors`, all formatting helpers
-- `src/Iidy/Yaml/Errors/Enhanced.hs` — `EnhancedPreprocessingError` and its variant
-  record types
-- `src/Iidy/Yaml/Location.hs` — `SourceLocation` type
-- `src/Iidy/Types.hs` — `ColorChoice` type
-- `src/Iidy/Main.hs` — SIGINT handler, `customExecParser` invocation, `explain` command
-  dispatch
 - `DIVERGENCES.md` — documents the stderr-vs-stdout TTY check divergence from Rust
-- `docs/dev/` — architecture and output pipeline documentation
-- PRD 08 (Configuration) — covers ERR_8001–ERR_8005 in the configuration context
+- PRD-08: AWS Integration — covers ERR_8001–ERR_8005 in the configuration context
+- PRD-06: Output System — `OdError` output event type and rendering

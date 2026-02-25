@@ -19,41 +19,39 @@ The workflow is accessed via two subcommands of `template-approval`:
 - `template-approval review <url>` — downloads a `.pending` object, diffs it
   against the previously approved version, and promotes or rejects it.
 
-All output is routed through the standard `OutputDispatch` / `OutputData` pipeline.
+All output is routed through the standard output dispatch pipeline.
 Both subcommands emit structured output compatible with `--output-mode json`.
 
-## Implementation Context
+## Technical Context
 
-- **Primary module**: `src/Iidy/Cfn/Operations/TemplateApproval.hs`
-  - `templateApprovalRequest` — request flow
-  - `templateApprovalReview` — review flow
-- **Hashing + S3 URL utilities**: `src/Iidy/Cfn/TemplateHash.hs`
-  - `calculateTemplateHash` — SHA256 of UTF-8 encoded template content, hex string
-  - `generateVersionedLocation` — derives `(bucket, key)` from base location + hash
-  - `parseS3Url` — parses `s3://bucket/key` into components
-- **Template loading**: `src/Iidy/Cfn/TemplateLoader.hs`
-  - `loadCfnTemplate` — loads template body from file, S3 URL, HTTP URL, or inline
-  - `templateMaxBytes` = 51199 (51 KB inline limit)
-- **Stack args schema**: `src/Iidy/Cfn/Types.hs`
-  - `StackArgs.saApprovedTemplateLocation` — base S3 URL (required for approval)
-  - `StackArgs.saTemplate` — template file path or spec (required for approval)
-- **Output types**: `src/Iidy/Output/Types.hs`
-  - `OdApprovalRequestResult ApprovalRequestResult`
-  - `OdApprovalStatus ApprovalStatus`
-  - `OdTemplateDiff TemplateDiff`
-  - `OdApprovalResult ApprovalResult`
-  - `OdTemplateValidation TemplateValidation` (declared; not yet emitted by request
-    flow — reserved for future lint integration)
-- **Confirmation**: `src/Iidy/Confirm.hs` — `requestConfirmation`
-- **CLI parser**: `src/Iidy/Cli/Parser.hs`
-  - `approvalRequestArgsParser` — ARGSFILE positional + `--no-lint-template` flag
-  - `approvalReviewArgsParser` — URL positional + `--context LINES` (default 500)
-- **S3 operations**: amazonka `HeadObject`, `PutObject`, `GetObject`, `DeleteObject`
-  via helpers in `TemplateApproval.hs` (`s3ObjectExists`, `uploadToS3`,
-  `downloadFromS3`, `deleteFromS3`)
-- **ACL**: `bucket-owner-full-control` is the intended ACL for cross-account safety;
-  the current implementation calls `PutObject` without an explicit ACL field (ACL
-  support is a known gap; see Testing Requirements)
+The approval workflow is divided into two logical operations:
+
+- **Request flow**: loads a template through the full preprocessing pipeline, computes
+  its content hash, checks for an existing approved object, and uploads a `.pending` object
+  if not already approved.
+- **Review flow**: downloads a `.pending` object, diffs against the current `latest`
+  approved version, prompts for confirmation, and promotes or rejects.
+
+Key data requirements:
+- `ApprovedTemplateLocation` in the argsfile must be a valid `s3://bucket/path` URL.
+- `Template` in the argsfile must be a locally-resolvable path (file, `render:` prefix,
+  or inline). S3/HTTP URLs are not supported for the approval request flow.
+- The template max inline size is 51,199 bytes.
+
+**CLI arguments:**
+- `template-approval request <argsfile>`: ARGSFILE positional + `--no-lint-template` flag
+- `template-approval review <url>`: URL positional + `--context LINES` (default 500)
+
+**S3 operations used**: `HeadObject` (existence check), `PutObject` (upload), `GetObject`
+(download), `DeleteObject` (cleanup pending).
+
+**Output events emitted** (in order per flow):
+- Request: `ApprovalRequestResult`
+- Review: `ApprovalStatus`, `TemplateDiff`, `ApprovalResult`
+
+**ACL**: `bucket-owner-full-control` is the intended ACL for cross-account safety.
+The current implementation calls `PutObject` without an explicit ACL field (known gap;
+see Testing Requirements).
 
 **Key S3 key naming convention:**
 
@@ -91,35 +89,29 @@ content hash.
 - The argsfile must contain both `ApprovedTemplateLocation` (an `s3://bucket/path`
   base URL) and `Template` (a file path, `render:` path, or URL). If either field
   is absent, the command exits with a descriptive error before contacting AWS.
-- The template is loaded via `loadCfnTemplate` (full preprocessing pipeline,
-  including `render:` prefix YAML engine pass, import resolution, and Handlebars
-  interpolation).
+- The template is loaded via the full preprocessing pipeline (including `render:` prefix
+  YAML engine pass, import resolution, and Handlebars interpolation).
 - Template loading failure (file not found, YAML parse error, import resolution
-  error) is returned as `Left` immediately; no S3 calls are made.
-- A SHA256 hash of the fully-processed UTF-8 template content is computed via
-  `calculateTemplateHash`.
-- The approved S3 key is derived as `<baseKey>/<hash><ext>` (no `.pending` suffix)
-  via `generateVersionedLocation`. If the base location is invalid (no bucket, no
-  key), an error is returned.
+  error) is returned as an error immediately; no S3 calls are made.
+- A SHA256 hash of the fully-processed UTF-8 template content is computed.
+- The approved S3 key is derived as `<baseKey>/<hash><ext>` (no `.pending` suffix).
+  If the base location is invalid (no bucket, no key), an error is returned.
 - If an object already exists at the approved key (verified by `HeadObject`), the
-  command exits 0 and emits `OdApprovalRequestResult` with `arrAlreadyApproved =
-  True`. No upload is performed. `arrNextSteps` contains `"Template has already
-  been approved"`.
+  command exits 0 and emits `ApprovalRequestResult` with `alreadyApproved = True`.
+  No upload is performed. `nextSteps` contains `"Template has already been approved"`.
 - If no approved object exists, the template is uploaded to the `.pending` key
   (`approvedKey <> ".pending"`) via `PutObject`. On upload failure the command
-  returns `Left ("Failed to upload pending template: " <> awsError)`.
-- On successful upload, `OdApprovalRequestResult` is emitted with:
-  - `arrTemplateLocation` = `"s3://<bucket>/<approvedKey>"` (the content-addressed
-    approved location, without `.pending`)
-  - `arrPendingLocation` = `"s3://<bucket>/<approvedKey>.pending"`
-  - `arrAlreadyApproved` = `False`
-  - `arrNextSteps` = `["Review with: iidy-hs template-approval review " <> pendingLoc]`
+  returns an error `"Failed to upload pending template: <awsError>"`.
+- On successful upload, `ApprovalRequestResult` is emitted with:
+  - `templateLocation` = `"s3://<bucket>/<approvedKey>"` (content-addressed, no `.pending`)
+  - `pendingLocation` = `"s3://<bucket>/<approvedKey>.pending"`
+  - `alreadyApproved` = `False`
+  - `nextSteps` = `["Review with: iidy template-approval review " <> pendingLoc]`
 - The command returns exit code 0 on success (both already-approved and newly
   uploaded paths). Non-zero exit on validation or upload failure.
-- The `--no-lint-template` flag is accepted by the CLI and passed to
-  `templateApprovalRequest` as the `lintTmpl` boolean. Lint is not currently
-  performed inside this function (the flag is received but no `ValidateTemplate`
-  call is made); `OdTemplateValidation` is not emitted. This is a known gap.
+- The `--no-lint-template` flag is accepted by the CLI. Lint validation is not currently
+  performed (the flag is received but no `ValidateTemplate` call is made; `TemplateValidation`
+  output is not emitted). This is a known gap.
 
 **Logic Flow:**
 
@@ -153,12 +145,9 @@ loadCfnTemplate saTemplate argsfilePath env
 - The `Template` field may be a bare filename (e.g. `"cfn-template.yaml"`),
   resolved relative to the argsfile directory. It may also be a `render:` prefixed
   path, an `s3://` URL, or an `https://` URL. The extension used in the hash key
-  is taken from the `Template` field via `System.FilePath.takeExtension`, not from
-  the content type of the loaded body.
-- If `Template` is an S3 or HTTP URL, `loadCfnTemplate` returns a
-  `TemplateResult` with `trTemplateBody = Nothing` and a URL; `templateApprovalRequest`
-  treats `trTemplateBody == Nothing` as a load failure. Templates must be locally
-  resolvable for approval requests.
+  is taken from the `Template` field value, not from the content type of the loaded body.
+- If `Template` is an S3 or HTTP URL, the template loader returns no body; this is
+  treated as a load failure. Templates must be locally resolvable for approval requests.
 - Parameter changes that do not affect the template body (e.g., changing a
   `Parameters` value in the argsfile) do not change the hash; the same approved
   object applies. This is intentional: approval gates template content, not
@@ -166,38 +155,26 @@ loadCfnTemplate saTemplate argsfilePath env
 
 **Error Scenarios:**
 
-- Missing `ApprovedTemplateLocation`: `Left "ApprovedTemplateLocation is required in stack-args.yaml"`, exit 1.
-- Missing `Template` field: `Left "Template is required in stack-args.yaml"`, exit 1.
-- Template file not found or unreadable: load error propagated as `Left`, exit 1.
-- Invalid `ApprovedTemplateLocation` format (no bucket or no key): `Left` from
-  `parseS3Url`, exit 1.
-- S3 `HeadObject` access denied (no s3:GetObject on approved key): treated as
-  object-absent (exception caught and mapped to `False`); upload proceeds. This
-  means a developer without read access to the approved prefix will always attempt
-  to upload, even if the template is already approved.
-- S3 `PutObject` failure (no permission, bucket does not exist, etc.): `Left
-  "Failed to upload pending template: <awsErr>"`, exit 1.
+- Missing `ApprovedTemplateLocation`: error `"ApprovedTemplateLocation is required in stack-args.yaml"`, exit 1.
+- Missing `Template` field: error `"Template is required in stack-args.yaml"`, exit 1.
+- Template file not found or unreadable: load error returned, exit 1.
+- Invalid `ApprovedTemplateLocation` format (no bucket or no key): S3 URL parse error, exit 1.
+- S3 `HeadObject` access denied (no `s3:GetObject` on approved key): treated as
+  object-absent; upload proceeds. This means a developer without read access to the
+  approved prefix will always attempt to upload, even if the template is already approved.
+- S3 `PutObject` failure (no permission, bucket does not exist, etc.): error
+  `"Failed to upload pending template: <awsErr>"`, exit 1.
 
 **Complexity Notes:**
 
-The function signature is:
-```haskell
-templateApprovalRequest
-  :: CfnContext
-  -> StackArgs
-  -> Bool           -- ^ lint template (currently unused)
-  -> Maybe FilePath -- ^ argsfile path (for template resolution)
-  -> Text           -- ^ environment (for preprocessing)
-  -> (OutputData -> IO ())
-  -> IO (Either Text Int)
-```
+The request function accepts: a CFN context, the parsed stack args, the lint flag, the
+argsfile path (for template resolution), the environment (for preprocessing), and an output
+emitter. The `lintTmpl` flag is wired in the CLI but no `ValidateTemplate` call is
+made. A future implementation would call `ValidateTemplate` when lint is enabled and
+emit `TemplateValidation` output with errors and warnings.
 
-The `lintTmpl` parameter is structurally wired but no `ValidateTemplate` call is
-made. A future implementation would call `Amazonka.send ValidateTemplate` when
-`lintTmpl = True` and emit `OdTemplateValidation` with errors and warnings.
-
-**Estimated complexity**: Low. The function is ~45 lines of straight-line IO with
-no loops and a single AWS read + optional write.
+**Estimated complexity**: Low. The function is straight-line IO with no loops and a
+single AWS read + optional write.
 
 ---
 
@@ -211,47 +188,42 @@ modification before it becomes available for stack deployments.
 
 - `template-approval review <url>` is the invocation form. `<url>` must be a valid
   `s3://` URL ending with `.pending`; any other format is rejected before AWS calls.
-- The pending S3 key is derived from the URL by parsing bucket and key via
-  `parseS3Url`.
+- The pending S3 key is derived from the URL by parsing the bucket and key.
 - The approved key is derived by stripping the `.pending` suffix (8 characters)
-  from the pending key: `approvedKey = T.dropEnd 8 pendingKey`.
+  from the pending key.
 - The `latest` key is derived from the approved key's parent directory:
-  `latestKey = parentDir <> "/latest"` where `parentDir` is the path component
-  before the final `/`. If there is no parent directory, `latestKey = "latest"`.
-- `OdApprovalStatus` is emitted before any download, containing:
-  - `apsPendingExists`: whether a `HeadObject` on the pending key succeeds
-  - `apsAlreadyApproved`: whether a `HeadObject` on the approved key succeeds
-  - `apsPendingLocation`: the original `<url>` argument
-  - `apsApprovedLocation`: `Just approvedLoc` if already approved, else `Nothing`
-- If the pending object does not exist: return `Left ("Pending template not found at " <> url)`.
-- If the template is already approved (approved key exists): return `Right 0` after
-  emitting `OdApprovalStatus`. No diff or confirmation.
+  `<parentDir>/latest`. If there is no parent directory, `latestKey = "latest"`.
+- `ApprovalStatus` is emitted before any download, containing:
+  - `pendingExists`: whether `HeadObject` on the pending key succeeds
+  - `alreadyApproved`: whether `HeadObject` on the approved key succeeds
+  - `pendingLocation`: the original `<url>` argument
+  - `approvedLocation`: the approved location if already approved, else absent
+- If the pending object does not exist: return error `"Pending template not found at <url>"`.
+- If the template is already approved (approved key exists): return exit 0 after
+  emitting `ApprovalStatus`. No diff or confirmation.
 - If the pending object exists and is not yet approved:
   - Download the pending template via `GetObject`.
   - Download the latest approved template via `GetObject`. If `latest` does not
-    exist, treat it as empty content (`""`).
-  - Compute `OdTemplateDiff` via `generateDiff latest pending`:
-    - `tdDiffOutput`: diff text (empty string if no changes)
-    - `tdContextLines`: the `--context` argument (default 500)
-    - `tdHasChanges`: `not (T.null diffOutput)`
-  - Emit `OdTemplateDiff`.
-  - If `tdHasChanges = False` (pending content is identical to latest): auto-approve
-    without prompting. Emit `OdApprovalResult` with `arApproved = True`,
-    `arCleanupCompleted = False`. Return `Right 0`.
-  - If `tdHasChanges = True`: call `requestConfirmation "Would you like to approve
-    these changes?"`.
+    exist, treat it as empty content.
+  - Compute `TemplateDiff` via the diff algorithm:
+    - `diffOutput`: diff text (empty string if no changes)
+    - `contextLines`: the `--context` argument (default 500)
+    - `hasChanges`: whether `diffOutput` is non-empty
+  - Emit `TemplateDiff`.
+  - If `hasChanges = False` (pending content is identical to latest): auto-approve
+    without prompting. Emit `ApprovalResult` with `approved = True`,
+    `cleanupCompleted = False`. Return exit 0.
+  - If `hasChanges = True`: prompt `"Would you like to approve these changes?"`.
     - If confirmed:
-      - Upload pending content to approved key via `PutObject`.
-      - Upload pending content to latest key via `PutObject`.
-      - Delete pending key via `DeleteObject`.
-      - Emit `OdApprovalResult` with `arApproved = True`, `arCleanupCompleted = True`,
-        `arApprovedLocation = Just approvedLoc`,
-        `arLatestLocation = Just ("s3://" <> bucket <> "/" <> latestKey)`.
-      - Return `Right 0`.
+      - Upload pending content to approved key.
+      - Upload pending content to latest key.
+      - Delete pending key.
+      - Emit `ApprovalResult` with `approved = True`, `cleanupCompleted = True`,
+        `approvedLocation`, and `latestLocation`.
+      - Return exit 0.
     - If rejected:
-      - Emit `OdApprovalResult` with `arApproved = False`, `arApprovedLocation =
-        Nothing`, `arLatestLocation = Nothing`, `arCleanupCompleted = False`.
-      - Return `Right 1`.
+      - Emit `ApprovalResult` with `approved = False`.
+      - Return exit 1.
 
 **Logic Flow:**
 
@@ -292,14 +264,14 @@ requestConfirmation "Would you like to approve these changes?"
 - The `latest` key download failing (object not found) is silently treated as an
   empty previous template. This is the correct behavior for the first-ever approval
   of a template: there is no prior approved version to diff against.
-- S3 download errors other than not-found (e.g., access denied) are also mapped to
-  `""` via the `either (const "") id` pattern. This means a reviewer without read
-  access to `latest` will see every template as an addition (diff against empty),
-  which is misleading. A more robust implementation would surface the error.
+- S3 download errors other than not-found (e.g., access denied) are also silently
+  treated as empty content. This means a reviewer without read access to `latest`
+  will see every template as an addition (diff against empty), which is misleading.
+  A more robust implementation would surface the error.
 - If upload of the approved key succeeds but upload of the latest key fails (partial
   failure), the pending key is not deleted. The approved object exists but `latest`
   is stale. The current implementation does not handle partial failures; upload
-  results are discarded with `_ <- uploadToS3`.
+  results are discarded silently.
 - `generateDiff` is set-theoretic: it reports lines removed and lines added
   regardless of position. A line that moved from one location to another in the file
   will appear as both removed and added. For CloudFormation YAML templates this is
@@ -310,9 +282,9 @@ requestConfirmation "Would you like to approve these changes?"
 
 **Error Scenarios:**
 
-- URL does not start with `s3://`: `Left "Invalid S3 URL (must start with s3://): <url>"`, exit 1.
-- URL does not end with `.pending`: `Left "URL must end with .pending suffix"`, exit 1.
-- Pending object not found: `Left "Pending template not found at <url>"`, exit 1.
+- URL does not start with `s3://`: error `"Invalid S3 URL (must start with s3://): <url>"`, exit 1.
+- URL does not end with `.pending`: error `"URL must end with .pending suffix"`, exit 1.
+- Pending object not found: error `"Pending template not found at <url>"`, exit 1.
 - `HeadObject` or `GetObject` AWS error: exception propagated to top-level handler,
   exit 1.
 - User rejects the approval: `OdApprovalResult { arApproved = False }` emitted,
@@ -322,23 +294,16 @@ requestConfirmation "Would you like to approve these changes?"
 
 **Complexity Notes:**
 
-The function signature is:
-```haskell
-templateApprovalReview
-  :: CfnContext
-  -> Text       -- ^ S3 URL of pending template
-  -> Int        -- ^ context lines for diff
-  -> (OutputData -> IO ())
-  -> IO (Either Text Int)
-```
+The review function accepts: a CFN context, the S3 URL of the pending template, the
+context lines count, and an output emitter.
 
-The confirmation prompt format matches all other confirmation prompts in the system
-(`Iidy.Confirm.requestConfirmation`): blank line + `"? "` + bold bright red ANSI
-on TTY + message + reset + `" (y/N) "`. Non-TTY: `"? " <> message <> " (y/N) "`.
+The confirmation prompt format matches all other confirmation prompts in the system:
+blank line + `"? "` + bold bright red on TTY + message + `" (y/N) "`. Non-TTY:
+plain text without ANSI codes.
 
 **Estimated complexity**: Medium. The function involves three S3 reads, conditional
 prompting, and up to three S3 writes, with error handling at each step. The
-primary complexity is the `OdApprovalStatus` emit occurring before the pending
+primary complexity is the `ApprovalStatus` emit occurring before the pending
 existence check branches.
 
 ---
@@ -364,9 +329,8 @@ approved content.
   - `arrAlreadyApproved` = `True`
   - `arrNextSteps` = `["Template has already been approved"]`
 - On the review side: if the reviewer runs `template-approval review` on a URL
-  where the approved key already exists (checked via `HeadObject` on `approvedKey`),
-  `OdApprovalStatus` is emitted with `apsAlreadyApproved = True` and the command
-  returns exit code 0 immediately.
+  where the approved key already exists, `ApprovalStatus` is emitted with
+  `alreadyApproved = True` and the command returns exit code 0 immediately.
 
 **Logic Flow:**
 
@@ -374,19 +338,19 @@ approved content.
 -- Request path
 s3ObjectExists awsEnv bucket approvedKey
   → True:
-      emit OdApprovalRequestResult { alreadyApproved=True
-                                   , templateLocation=approvedLoc
-                                   , pendingLocation=approvedLoc  -- same URL
-                                   , nextSteps=["Template has already been approved"]
-                                   }
-      return Right 0
+      emit ApprovalRequestResult { alreadyApproved=True
+                                 , templateLocation=approvedLoc
+                                 , pendingLocation=approvedLoc  -- same URL
+                                 , nextSteps=["Template has already been approved"]
+                                 }
+      return exit 0
   → False:
       [upload path, as in US-10-001]
 
 -- Review path
-s3ObjectExists awsEnv bucket approvedKey → alreadyApproved
-emit OdApprovalStatus { alreadyApproved, ... }
-if alreadyApproved: return Right 0
+s3ObjectExists bucket approvedKey → alreadyApproved
+emit ApprovalStatus { alreadyApproved, ... }
+if alreadyApproved: return exit 0
 ```
 
 **Edge Cases:**
@@ -469,11 +433,10 @@ CloudFormation service role policy:
 
 **Edge Cases:**
 
-- In the `templateApprovalRequest` function, the `HeadObject` existence check on
-  the approved key will fail with access denied for developers who lack `s3:GetObject`.
-  The exception is caught by `s3ObjectExists` (via `try @SomeException`) and mapped
-  to `False`. The developer then proceeds to upload the pending object. This is
-  tolerable but means idempotency checks do not work correctly for developers in
+- In the request flow, the `HeadObject` existence check on the approved key will fail
+  with access denied for developers who lack `s3:GetObject`. The exception is caught
+  and mapped to `False`. The developer then proceeds to upload the pending object. This
+  is tolerable but means idempotency checks do not work correctly for developers in
   cross-account setups.
 - The `latest` key is not under the `*.pending` restriction and must be writable by
   the reviewer. It is read by reviewers (as the "previous approved" baseline for
@@ -510,46 +473,37 @@ and templates that have not changed are automatically recognized as already appr
 **Acceptance Criteria:**
 
 - The SHA256 hash is computed over the fully processed template content as a UTF-8
-  encoded byte string via `Crypto.Hash.hashWith SHA256 (TE.encodeUtf8 content)`.
+  encoded byte string.
 - The hash is formatted as a 64-character lowercase hex string.
 - The approved S3 key is `<normalizedBaseKey>/<sha256hex><ext>` where `ext` is
   taken from the `Template` field value (e.g. `.yaml`, `.json`, or `""` if the
   template field has no extension).
 - A template whose body has not changed between runs (same processed content)
-  produces the same hash and therefore the same S3 key. The `HeadObject` check in
-  `templateApprovalRequest` will find the approved object and return
-  `arrAlreadyApproved = True` without re-uploading.
+  produces the same hash and therefore the same S3 key. The `HeadObject` check
+  will find the approved object and return `alreadyApproved = True` without
+  re-uploading.
 - A template whose body has changed produces a different hash and therefore a
   different S3 key. The old approval is unaffected; a new `.pending` object is
   uploaded; a new review is required.
 - Parameter-only changes in the argsfile (changing `Parameters` map values) do not
   affect the template body hash. The same approval applies regardless of parameter
   values.
-- `calculateTemplateHash` and `generateVersionedLocation` are pure functions with
-  no IO; they can be tested without AWS.
+- The hash computation and key derivation are pure functions with no IO; they can be
+  tested without AWS.
 
 **Logic Flow:**
 
-```
--- Hash computation (pure)
-calculateTemplateHash :: Text -> Text
-calculateTemplateHash content =
-  let digest = hashWith SHA256 (TE.encodeUtf8 content)
-      bytes  = BA.convert digest :: BS.ByteString
-  in T.pack (concatMap toHex (BS.unpack bytes))
+Hash computation (pure):
+1. Encode template content as UTF-8 bytes.
+2. Compute SHA256 digest.
+3. Format as 64-character lowercase hex string.
 
--- Key derivation (pure)
-generateVersionedLocation :: Text -> Text -> Text -> Either Text (Text, Text)
-generateVersionedLocation baseLocation content templatePath = do
-  (bucket, baseKey) <- parseS3Url baseLocation
-  let hash     = calculateTemplateHash content
-      ext      = T.pack (takeExtension (T.unpack templatePath))
-      basePath = if T.isSuffixOf "/" baseKey
-                 then T.dropEnd 1 baseKey
-                 else baseKey
-      key      = basePath <> "/" <> hash <> ext
-  Right (bucket, key)
-```
+Key derivation (pure):
+1. Parse `baseLocation` as an S3 URL to extract bucket and base key.
+2. Compute the content hash.
+3. Extract the file extension from the `Template` field value.
+4. Normalize trailing slash on the base key.
+5. Construct `<normalizedBaseKey>/<hash><ext>` as the approved key.
 
 **State machine for a single template path:**
 
@@ -578,11 +532,10 @@ New Approved
   non-deterministic. Each run produces a different body and therefore a different
   hash. Such templates are incompatible with the approval workflow; operators
   should avoid non-deterministic constructs in templates intended for approval.
-- The `ext` is extracted from the `Template` field string, not from the loaded file
+- The extension is extracted from the `Template` field string, not from the loaded file
   content's MIME type. If `Template: cfn-template.yaml` is used, `ext = ".yaml"`.
-  If `Template: render:cfn-template.yaml` is used, `takeExtension "render:cfn-template.yaml"`
-  returns `".yaml"` because `takeExtension` extracts the last suffix regardless of
-  the `render:` prefix. This is correct behavior.
+  If `Template: render:cfn-template.yaml` is used, `ext = ".yaml"` because only the
+  last dot-suffix is used, regardless of the `render:` prefix. This is correct behavior.
 - Two templates with the same content but different file extensions will hash to
   the same key content but different S3 keys (different extensions). In practice
   CloudFormation templates are always YAML or JSON so this is not a concern.
@@ -590,18 +543,17 @@ New Approved
 **Error Scenarios:**
 
 - Hash computation itself cannot fail (pure function over UTF-8 bytes).
-- `parseS3Url` returns `Left` for malformed base locations; this propagates to
-  the caller as a `Left` error before any hashing occurs.
+- A malformed `ApprovedTemplateLocation` (unparseable S3 URL) is detected before any
+  hashing occurs and returned as an error.
 
 **Complexity Notes:**
 
-`calculateTemplateHash` depends on the `crypton` package (via `Crypto.Hash`),
-which provides the `SHA256` algorithm. The `hashWith` call produces a `Digest
-SHA256` value; `BA.convert` converts it to a raw `ByteString` for hex encoding.
-The manual hex encoding loop (`toHex`) avoids a dependency on `base16-bytestring`.
+The hash computation requires a cryptographic SHA256 implementation over UTF-8-encoded
+bytes, formatted as a lowercase hex string. The key derivation requires only string
+manipulation (trailing slash normalization, concatenation).
 
-**Estimated complexity**: Negligible. Both functions are pure, O(n) in template
-size, and have no branching beyond the trailing-slash normalization.
+**Estimated complexity**: Negligible. Both are pure, O(n) in template size, with no
+branching beyond the trailing-slash normalization.
 
 ---
 
@@ -609,96 +561,77 @@ size, and have no branching beyond the trailing-slash normalization.
 
 ### Unit Tests (pure functions)
 
-- `calculateTemplateHash` with known inputs: verify the 64-character lowercase hex
-  output matches an independently computed SHA256. At minimum: empty string, single
-  character, and a realistic YAML template fragment.
-- `generateVersionedLocation` with:
+- Hash computation with known inputs: verify the 64-character lowercase hex output
+  matches an independently computed SHA256. At minimum: empty string, single character,
+  and a realistic YAML template fragment.
+- Key derivation with:
   - Base location with trailing slash (`"s3://bucket/templates/"`) — verify slash
     is normalized.
   - Base location without trailing slash (`"s3://bucket/templates"`) — verify same
     key is produced.
   - Template path with `.yaml` extension — verify extension appears in key.
   - Template path with no extension — verify key ends with the hash directly.
-  - Invalid base location (no bucket, no key) — verify `Left` is returned.
-- `parseS3Url` with:
-  - Valid URL `"s3://bucket/some/key"` — verify `Right ("bucket", "some/key")`.
-  - URL without `s3://` prefix — verify `Left`.
-  - URL with no bucket (`"s3:///key"`) — verify `Left`.
-  - URL with no key (`"s3://bucket"`) — verify `Left`.
-- `generateDiff` with:
+  - Invalid base location (no bucket, no key) — verify an error is returned.
+- S3 URL parsing with:
+  - Valid URL `"s3://bucket/some/key"` — verify `("bucket", "some/key")`.
+  - URL without `s3://` prefix — verify error.
+  - URL with no bucket (`"s3:///key"`) — verify error.
+  - URL with no key (`"s3://bucket"`) — verify error.
+- Diff computation with:
   - Identical strings — verify empty output.
   - Single line added — verify `"+ line"` in output.
   - Single line removed — verify `"- line"` in output.
   - No changes in content but different ordering — verify non-empty diff
-    (current implementation is set-theoretic, not positional).
+    (the diff algorithm is set-theoretic, not positional).
 
 ### Integration Tests (via mock AWS)
 
-- `templateApprovalRequest` with mock `cfnEnv`:
-  - Both `ApprovedTemplateLocation` and `Template` present; `s3ObjectExists`
-    returns `False`; `uploadToS3` succeeds — verify `OdApprovalRequestResult`
-    emitted with `arrAlreadyApproved = False` and correct pending URL.
-  - Same setup but `s3ObjectExists` returns `True` — verify
-    `arrAlreadyApproved = True` and no upload attempted.
-  - `ApprovedTemplateLocation` absent — verify `Left` returned without AWS calls.
-  - `Template` absent — verify `Left` returned without AWS calls.
-- `templateApprovalReview` with mock:
+- Request flow with mock AWS:
+  - Both `ApprovedTemplateLocation` and `Template` present; `HeadObject` returns
+    absent; upload succeeds — verify `ApprovalRequestResult` emitted with
+    `alreadyApproved = False` and correct pending URL.
+  - Same setup but `HeadObject` returns present — verify `alreadyApproved = True`
+    and no upload attempted.
+  - `ApprovedTemplateLocation` absent — verify error returned without AWS calls.
+  - `Template` absent — verify error returned without AWS calls.
+- Review flow with mock AWS:
   - Pending exists, not yet approved, no latest, user approves — verify three
-    S3 writes and `OdApprovalResult { arApproved = True, arCleanupCompleted = True }`.
-  - Pending exists, already approved — verify `Right 0` with no diff or upload.
-  - Pending does not exist — verify `Left "Pending template not found at ..."`.
-  - Non-`.pending` URL — verify `Left "URL must end with .pending suffix"`.
+    S3 writes and `ApprovalResult { approved = True, cleanupCompleted = True }`.
+  - Pending exists, already approved — verify exit 0 with no diff or upload.
+  - Pending does not exist — verify error `"Pending template not found at ..."`.
+  - Non-`.pending` URL — verify error `"URL must end with .pending suffix"`.
   - No changes between pending and latest — verify auto-approve without confirmation.
-  - User declines confirmation — verify `Right 1` and `OdApprovalResult { arApproved = False }`.
+  - User declines confirmation — verify exit 1 and `ApprovalResult { approved = False }`.
 - Emission sequence for review (changes present, user approves): verify order is
-  `OdApprovalStatus`, `OdTemplateDiff`, `OdApprovalResult`.
-- Emission sequence for request (new upload): verify `OdApprovalRequestResult`
+  `ApprovalStatus`, `TemplateDiff`, `ApprovalResult`.
+- Emission sequence for request (new upload): verify `ApprovalRequestResult`
   is emitted exactly once.
 
 ### Renderer Tests
 
-- `OdApprovalRequestResult` renders without crash in both `InteractiveRenderer`
-  and `JsonRenderer`.
-- `OdApprovalStatus`, `OdTemplateDiff`, `OdApprovalResult` each render without
-  crash in both renderers.
+- `ApprovalRequestResult` renders without crash in both interactive and JSON renderers.
+- `ApprovalStatus`, `TemplateDiff`, `ApprovalResult` each render without crash in
+  both renderers.
 - JSON renderer produces valid JSON for all four approval output types.
 
 ### Known Gaps (not yet tested or implemented)
 
-- The `--no-lint-template` path: no `ValidateTemplate` call is made; `OdTemplateValidation`
-  is never emitted. Tests for this path are deferred until lint integration is added.
+- The `--no-lint-template` path: no `ValidateTemplate` call is made; `TemplateValidation`
+  output is never emitted. Tests for this path are deferred until lint integration is added.
 - `bucket-owner-full-control` ACL on `PutObject`: not set in the current
   implementation. A test that verifies ACL header presence would require mock
   inspection of the raw `PutObject` request.
 - Partial-failure handling during promotion (approved upload succeeds, latest
   upload fails): not tested; the current implementation discards upload errors
   during promotion.
-- Context-line trimming in `generateDiff`: the `tdContextLines` value is stored but
+- Context-line trimming in diff output: the `contextLines` value is stored but
   not used to trim output. Tests for context-line behavior are deferred.
 
 ---
 
 ## Cross-References
 
-- `src/Iidy/Cfn/Operations/TemplateApproval.hs` — `templateApprovalRequest`,
-  `templateApprovalReview`, `s3ObjectExists`, `uploadToS3`, `downloadFromS3`,
-  `deleteFromS3`, `generateDiff`
-- `src/Iidy/Cfn/TemplateHash.hs` — `calculateTemplateHash`, `generateVersionedLocation`,
-  `parseS3Url`
-- `src/Iidy/Cfn/TemplateLoader.hs` — `loadCfnTemplate`, `templateMaxBytes`
-- `src/Iidy/Cfn/Types.hs` — `StackArgs.saApprovedTemplateLocation`,
-  `StackArgs.saTemplate`, `OpTemplateApprovalRequest`, `OpTemplateApprovalReview`
-- `src/Iidy/Output/Types.hs` — `ApprovalRequestResult`, `TemplateValidation`,
-  `ApprovalStatus`, `TemplateDiff`, `ApprovalResult`, `OdApprovalRequestResult`,
-  `OdTemplateValidation`, `OdApprovalStatus`, `OdTemplateDiff`, `OdApprovalResult`
-- `src/Iidy/Confirm.hs` — `requestConfirmation` (used in review confirmation step)
-- `src/Iidy/Cli/Parser.hs` — `approvalCommandsParser`, `approvalRequestArgsParser`,
-  `approvalReviewArgsParser`, `ApprovalRequestArgs`, `ApprovalReviewArgs`
-- `src/Iidy/Cli.hs` — `ApprovalCommands`, `ApprovalRequest`, `ApprovalReview`
-- `src/Iidy/Output/Renderers/Interactive.hs` — renders approval output types
-- `src/Iidy/Output/Renderers/Json.hs` — JSON rendering of approval output types
-- `docs/requirements/05-cfn-operations.md` — CFN operations using approved templates
-  via `StackArgs.saApprovedTemplateLocation`
-- `docs/requirements/08-aws-integration.md` — AWS credential chain (used for S3 access)
+- PRD `05-cfn-operations.md` — CFN operations that use `ApprovedTemplateLocation`
+- PRD `08-aws-integration.md` — AWS credential chain used for S3 access
 - `DIVERGENCES.md` — known behavioral differences from Rust iidy
 - Rust reference: `~/src/iidy/src/cfn/` (read-only oracle)

@@ -16,24 +16,14 @@ the exception of the param subcommands, which predate the pipeline). Behavioral 
 the Rust iidy binary is the acceptance standard for interactive and plain modes; the JSON
 renderer defines its own stable schema.
 
-## Implementation Context
+## Technical Context
 
-**Haskell Ecosystem**: `ansi-terminal` for ANSI escape codes; custom `IidyTheme` /
-`DynColor` / `IidyTheme` types in `Iidy.Output.Color`; custom braille spinner in
-`Iidy.Output.Spinner`; `aeson` for JSON serialization in `Iidy.Output.Renderers.Json`;
-`data-time` for timestamp formatting.
-
-**Key Modules**:
-- `src/Iidy/Output/Types.hs` — all 26 `OutputData` variants and their payload types
-- `src/Iidy/Output/Color.hs` — `DynColor`, `IidyTheme`, four built-in themes, semantic helpers
-- `src/Iidy/Output/Theme.hs` — `ColorTheme` enum, `themeFromEnv`, `resolveTheme`
-- `src/Iidy/Output/Terminal.hs` — `TerminalCapabilities`, `detectCapabilities`
-- `src/Iidy/Output/Spinner.hs` — `Spinner`, frame animation, `spinnerFinishAndClear`
-- `src/Iidy/Output/Manager.hs` — `OutputDispatch`, `mkOutputDispatch`, `renderOutput`
-- `src/Iidy/Output/Renderers/Interactive.hs` — `InteractiveRenderer`, section/entry layout
-- `src/Iidy/Output/Renderers/Json.hs` — `JsonRenderer`, JSONL serialization, type-name map
-
-**Prerequisites**: Phases 10–11 (output pipeline wiring, renderer implementations).
+All ANSI escape codes are emitted directly (no third-party terminal library abstraction
+visible to callers). Themes are pure data records; switching themes does not require
+re-initializing the renderer. JSON serialization uses an envelope format (type,
+timestamp, data) defined in this PRD. The interactive and plain modes share the same
+rendering code path; plain mode is controlled by a boolean flag that turns all
+color/bold calls into no-ops.
 
 ---
 
@@ -78,19 +68,19 @@ names, statuses, and section headers without reading plain text.
 
 **Logic Flow:**
 
-1. `mkOutputDispatch` detects TTY, resolves mode to `OutputInteractive`.
-2. `resolveTheme colorsEnabled colorTheme` selects the active `IidyTheme`.
-3. Each `renderOutputData` call pattern-matches on the `OutputData` variant.
-4. Section helpers emit bold heading + `:`, then iterate entries.
-5. `colorizeResourceStatus` and `colorByEnvironment` apply semantic colors at render time.
+1. The output dispatcher detects TTY and resolves mode to interactive.
+2. The active theme is selected from the color-enabled flag and theme choice.
+3. Each output event is rendered by pattern-matching on the `OutputData` variant.
+4. Section helpers emit a bold heading + `:`, then iterate entries.
+5. Resource status coloring and environment coloring are applied at render time.
 
 **Edge Cases:**
 
 - Wide terminals (COLUMNS > 130): column alignment is preserved; line wrapping is not
   applied to values.
-- Entries with `Nothing` for optional fields (e.g., `sdDescription`) are omitted entirely
-  rather than rendered as `<empty>` or `Nothing`.
-- `OdStackDefinition` takes a `Bool` flag (`show_times`); when `False`, creation/update
+- Entries with absent optional fields (e.g., `sdDescription`) are omitted entirely
+  rather than rendered as empty or null.
+- `OdStackDefinition` carries a `show_times` flag; when `False`, creation/update
   timestamps are suppressed from the definition section.
 
 **Error Scenarios:**
@@ -102,10 +92,9 @@ names, statuses, and section headers without reading plain text.
 
 - The 25-character label padding is computed per-section; some sections use narrower
   effective column widths for sub-tables (e.g., stack event columns).
-- Interactive and plain modes share the same `InteractiveRenderer` code path; plain mode
-  sets `ioEnableAnsi = False` which causes all `colorize`/`colorizeBold` calls to be
-  no-ops (returning plain text). Plain mode also disables spinners via
-  `ioEnableSpinners = False`.
+- Interactive and plain modes share the same rendering code path; plain mode sets ANSI
+  disabled which causes all color/bold calls to be no-ops. Plain mode also disables
+  spinners.
 
 ---
 
@@ -144,12 +133,11 @@ programmatically without screen-scraping ANSI text.
 
 **Logic Flow:**
 
-1. `mkOutputDispatch` receives `Just T.Json` from `goOutputMode`; creates `DispatchJson`.
-2. `renderOutputDataJson` pattern-matches on the `OutputData` variant.
-3. For standard variants: builds `Value` with type/timestamp/data envelope, encodes with
-   `aeson`, appends newline.
+1. The output dispatcher detects the JSON mode flag and routes to the JSON renderer.
+2. The JSON renderer pattern-matches on the `OutputData` variant.
+3. For standard variants: builds the type/timestamp/data envelope and serializes to JSONL.
 4. For special cases (`OdStackList` query mode, `OdStackTemplate`, `OdPollingStarted`,
-   `OdTokenInfo`): applies exception logic described above.
+   `OdTokenInfo`): applies the exception logic described above.
 
 **Edge Cases:**
 
@@ -185,8 +173,8 @@ contain control characters.
 - `--output-mode plain` forces plain output mode regardless of TTY status.
 - When stdout is not a TTY and `--output-mode` is absent, plain mode is selected
   automatically (`OutputInteractive` requires `tcIsTty = True`).
-- Plain mode uses the `InteractiveRenderer` with `ioEnableAnsi = False` and
-  `ioEnableSpinners = False`.
+- Plain mode uses the same renderer as interactive mode with ANSI disabled and spinners
+  disabled.
 - All section headings, labels, and values are emitted as plain ASCII text without any
   `\ESC[...m` sequences.
 - All 26 `OutputData` variants that produce output in interactive mode produce equivalent
@@ -199,11 +187,9 @@ contain control characters.
 
 **Logic Flow:**
 
-1. `mkOutputDispatch`: mode resolves to `OutputPlain` (flag or non-TTY detection).
-2. `newInteractiveRenderer` called with `ioEnableAnsi = False`,
-   `ioEnableSpinners = False`.
-3. `colorize`, `colorizeBold`, `bold` all return their input unchanged when
-   `thColorsEnabled = False` (via `noColorTheme`).
+1. The output dispatcher resolves mode to plain (explicit flag or non-TTY detection).
+2. The renderer is created with ANSI disabled and spinners disabled.
+3. All color and bold formatting calls return their input text unchanged.
 
 **Edge Cases:**
 
@@ -220,9 +206,9 @@ contain control characters.
 
 **Complexity Notes:**
 
-- Plain and interactive mode share a single renderer type (`InteractiveRenderer`) with a
-  boolean flag controlling ANSI emission. This avoids duplicate formatting logic for
-  layout, alignment, and section structure.
+- Plain and interactive mode share a single renderer with a boolean flag controlling ANSI
+  emission. This avoids duplicate formatting logic for layout, alignment, and section
+  structure.
 
 ---
 
@@ -257,18 +243,17 @@ and satisfy `NO_COLOR` compliance requirements.
 - `COLORTERM=truecolor` or `COLORTERM=24bit` sets `tcHasTrueColor = True`; the dark and
   light themes use RGB truecolor values which require this capability. High-contrast and
   no-color themes use only standard ANSI codes.
-- When colors are disabled (`thColorsEnabled = False`), all `IidyTheme` fields use
-  `AnsiDefault`; `colorize`, `colorizeBold`, and `bold` functions return their input
-  text unchanged.
+- When colors are disabled, all theme color fields are set to the default (no-color);
+  all color and bold formatting functions return their input text unchanged.
 
 **Logic Flow:**
 
-1. `detectCapabilities` reads `NO_COLOR`, `FORCE_COLOR`, `COLORTERM`, `COLUMNS` from env
-   and calls `hIsTerminalDevice stdout`.
-2. `mkOutputDispatch` resolves `colorsEnabled` from `goColor` and `mode`.
-3. `resolveTheme colorsEnabled colorTheme` selects the `IidyTheme` record.
-4. The resolved `IidyTheme` is passed into `InteractiveOptions.ioTheme` at renderer
-   construction time.
+1. Terminal capabilities are detected by reading `NO_COLOR`, `FORCE_COLOR`, `COLORTERM`,
+   `COLUMNS` from the environment and checking whether stdout is a TTY.
+2. The output dispatcher resolves whether colors are enabled from the `--color` flag and
+   output mode.
+3. The active theme is selected based on the colors-enabled flag and the theme choice.
+4. The resolved theme is passed into the renderer at construction time.
 
 **Edge Cases:**
 
@@ -283,8 +268,8 @@ and satisfy `NO_COLOR` compliance requirements.
 
 **Complexity Notes:**
 
-- `IidyTheme` records are pure data; theme switching takes effect per-render call and
-  does not require re-initializing the renderer.
+- Theme records are pure data; theme switching takes effect per-render call and does not
+  require re-initializing the renderer.
 
 ---
 
@@ -316,24 +301,23 @@ it has been since the last event.
 
 **Logic Flow:**
 
-1. `OdPollingStarted` received -> `startSpinner` launches background tick thread
-   (100ms interval) and sets initial message.
-2. Tick thread calls `spinnerRender` every 100ms; a separate 1-second timer updates the
-   elapsed-time message via `spinnerSetMessage`.
-3. `OdNewStackEvents` received -> `stopSpinner` (calls `spinnerFinishAndClear`), renders
-   events, calls `startSpinner` again.
-4. `OdOperationComplete` or `OdInactivityTimeout` -> `stopSpinner`, render final section.
+1. `OdPollingStarted` received: start the spinner background tick thread (100ms interval)
+   with the initial message.
+2. Tick thread renders a new frame every 100ms; a separate 1-second timer updates the
+   elapsed-time message.
+3. `OdNewStackEvents` received: stop the spinner, render events, restart the spinner.
+4. `OdOperationComplete` or `OdInactivityTimeout`: stop the spinner, render the final
+   section.
 
 **Edge Cases:**
 
-- Multiple concurrent `OdPollingStarted` without intervening `OdOperationComplete`: the
-  second start call restarts the spinner (stop + start) to reset elapsed time.
-- Spinner in plain mode: `ioEnableSpinners = False`; `OdPollingStarted` produces no
-  output.
-- Spinner in JSON mode: suppressed entirely (no output).
-- If the terminal does not support ANSI (`thColorsEnabled = False`): the cyan bold color
-  codes are suppressed but the braille frame character and message text are still emitted
-  (spinner is functional but monochrome).
+- Multiple consecutive `OdPollingStarted` without intervening `OdOperationComplete`: the
+  second start restarts the spinner (stop + start) to reset elapsed time.
+- Spinner in plain mode: `OdPollingStarted` produces no output.
+- Spinner in JSON mode: suppressed entirely.
+- If the terminal does not support ANSI: color codes are suppressed but the braille
+  frame character and message text are still emitted (spinner is functional but
+  monochrome).
 
 **Error Scenarios:**
 
@@ -342,11 +326,10 @@ it has been since the last event.
 
 **Complexity Notes:**
 
-- The spinner uses an `IORef Bool` (`spActive`) to coordinate between the tick thread and
-  the main thread. `spinnerFinishAndClear` checks `spActive` before emitting `\r\ESC[K`
-  to avoid double-clear.
-- Elapsed time and last-event time are tracked in the `InteractiveRenderer` state, not in
-  the `Spinner` value itself.
+- An active flag coordinates between the tick thread and the main thread. The spinner
+  clear operation checks the active flag before emitting `\r\ESC[K` to avoid double-clear.
+- Elapsed time and last-event time are tracked in the renderer state, not in the spinner
+  object itself.
 
 ---
 
@@ -380,30 +363,28 @@ failing or taking unexpectedly long.
 
 **Logic Flow:**
 
-1. `OdStackEvents` -> render section heading -> iterate `sedEvents` -> render each
-   `StackEventWithTiming` row -> optionally render truncation line.
-2. `OdNewStackEvents` -> stop spinner -> render event rows -> restart spinner.
-3. For each event: format timestamp with `thTimestamp` color, pad logical ID to column
-   width, apply `colorizeResourceStatus` to status field.
+1. `OdStackEvents`: render section heading, iterate event rows, optionally render
+   truncation line.
+2. `OdNewStackEvents`: stop spinner, render event rows, restart spinner.
+3. For each event: format timestamp in timestamp color, pad logical ID to column width,
+   apply semantic status coloring.
 
 **Edge Cases:**
 
-- Events with `seTimestamp = Nothing`: timestamp column is blank.
-- Events with `seResourceStatusReason = Nothing`: reason column is omitted.
-- Very long logical resource IDs (> `Column2Start`): the ID is not truncated; subsequent
-  columns shift right.
-- `sedEvents = []`: section heading is emitted but no event rows; no truncation line.
+- Events with no timestamp: timestamp column is blank.
+- Events with no status reason: reason column is omitted.
+- Very long logical resource IDs: the ID is not truncated; subsequent columns shift right.
+- Empty event list: section heading is emitted but no event rows; no truncation line.
 
 **Error Scenarios:**
 
-- Duration calculation overflow (extremely long-running stack events > `maxBound :: Int`
-  seconds): not expected in practice; `Int` on 64-bit systems holds up to ~292 years.
+- Duration calculation overflow (extremely long-running stack events): not expected in
+  practice on 64-bit systems.
 
 **Complexity Notes:**
 
-- `calculateEventDurations` pairs events by logical resource ID to determine when a
-  resource transitioned from IN_PROGRESS to its terminal state. This requires a two-pass
-  over the event list (or a fold with accumulated state).
+- Historical event duration calculation pairs events by logical resource ID to determine
+  when a resource transitioned from IN_PROGRESS to its terminal state.
 
 ---
 
@@ -442,12 +423,11 @@ a consistent audit trail of who ran what, in which account, and whether it succe
 
 **Logic Flow:**
 
-1. Command entry point calls `emitOutput (OdCommandMetadata meta)` before AWS API calls.
-2. `constructCommandMetadata` (in `Iidy.Cfn.CommandMetadata`) builds the `CommandMetadata`
-   record from `CfnContext`, `GlobalOpts`, and STS response.
-3. After terminal stack status received: `createFinalCommandSummary` builds
-   `FinalCommandSummary` with elapsed time; `emitOutput (OdFinalCommandSummary summary)`
-   is called.
+1. Command entry point emits `OdCommandMetadata` before AWS API calls.
+2. The command metadata record is assembled from the CFN context, global options, and
+   STS response.
+3. After the terminal stack status is received, a final command summary is built with
+   elapsed time and emitted as `OdFinalCommandSummary`.
 
 **Edge Cases:**
 
@@ -460,15 +440,14 @@ a consistent audit trail of who ran what, in which account, and whether it succe
 
 **Error Scenarios:**
 
-- STS `getCallerIdentity` failure: the command continues but `cmCurrentIamPrincipal`
+- STS `GetCallerIdentity` failure: the command continues but `cmCurrentIamPrincipal`
   shows an error placeholder and `cmCredentialSource` shows `unknown`.
 
 **Complexity Notes:**
 
-- `cmPrimaryToken` and `cmDerivedTokens` carry `TokenInfo` values (from
-  `Iidy.Aws.ClientReqToken`) which include the UUID token string and its generation
-  source. These are used to correlate CloudFormation events with iidy invocations via
-  the `ClientRequestToken` field on stack events.
+- `cmPrimaryToken` and `cmDerivedTokens` carry token info records (UUID string + source).
+  These are used to correlate CloudFormation events with iidy invocations via the
+  `ClientRequestToken` field on stack events.
 
 ---
 
@@ -502,15 +481,16 @@ diagnose failures without manual log correlation.
 
 **Logic Flow:**
 
-1. AWS error handler in `Main.hs` catches `SomeException`, constructs `ErrorInfo`, calls
-   `emitOutput (OdError info)`.
-2. Interactive renderer: checks `eiErrorDetails` variant; dispatches to generic or
+1. The top-level error handler catches exceptions, constructs `ErrorInfo`, and emits
+   `OdError`.
+2. The interactive renderer checks the error detail variant; dispatches to generic or
    stack-absent sub-renderer.
-3. Stack-absent sub-renderer: emits "Stack not found" section with STS context entries.
+3. The stack-absent sub-renderer emits a "Stack not found" section with STS context
+   entries.
 
 **Edge Cases:**
 
-- `eiSuggestions = []`: no bullet list is rendered; no blank line placeholder.
+- Empty suggestions list: no bullet list is rendered; no blank line placeholder.
 - Error during output rendering itself (e.g., broken pipe): caught at the top level;
   process exits 1 without further output.
 - `OdError` in JSON mode written to stdout (not stderr): the receiver must filter by
@@ -524,10 +504,9 @@ diagnose failures without manual log correlation.
 
 **Complexity Notes:**
 
-- The `ErrorDetails` sum type distinguishes `ErrorGeneric (Maybe Text)` from
-  `ErrorStackAbsent StackAbsentInfo`. This enables the interactive renderer to apply
-  richer formatting (account/region context) for the common "stack not found" case
-  without ad-hoc string matching.
+- The error detail variant distinguishes a generic error from a stack-absent error. This
+  enables the interactive renderer to apply richer formatting (account/region context) for
+  the common "stack not found" case without ad-hoc string matching.
 
 ---
 
@@ -560,7 +539,7 @@ a region's stack inventory quickly.
 
 **Logic Flow:**
 
-1. `OdStackList` received -> check `sldFiltersApplied` -> emit filter header if needed.
+1. `OdStackList` received: check `sldFiltersApplied`, emit filter header if needed.
 2. Emit column header row with column names.
 3. Iterate `sldStacks`, applying column selection and coloring per entry.
 4. In JSON mode, check `sldQueryMode`; if true, serialize as raw array.
@@ -599,8 +578,8 @@ my environment to unconditionally suppress all ANSI escape codes from iidy outpu
   ANSI sequences stripped.
 - With `tcHasColor = False` and `--color auto` (the default), `colorsEnabled = False`,
   which causes `resolveTheme False _ = noColorTheme`.
-- `noColorTheme` sets all 14 `IidyTheme` color fields to `AnsiDefault` and
-  `thColorsEnabled = False`.
+- The no-color theme sets all 14 color fields to the default terminal color and marks
+  colors as disabled.
 - The `colorize`, `colorizeBold`, `colorizeOnBg`, and `bold` functions all guard on
   `thColorsEnabled`; when `False`, they return the input text unmodified (zero escape
   codes emitted).
@@ -615,97 +594,81 @@ my environment to unconditionally suppress all ANSI escape codes from iidy outpu
 
 **Logic Flow:**
 
-1. `detectCapabilities` -> reads `NO_COLOR` env var -> sets `tcHasColor = False`.
-2. `mkOutputDispatch` -> `ColorAuto` path -> `tcHasColor = False` -> `colorsEnabled = False`.
-3. `resolveTheme False _` -> returns `noColorTheme`.
-4. `InteractiveRenderer` constructed with `ioEnableAnsi = False`.
-5. All `colorize` calls return plain text.
+1. Terminal capabilities are detected; `NO_COLOR` env var sets `hasColor = False`.
+2. The output dispatcher's `ColorAuto` path: `hasColor = False` means `colorsEnabled = False`.
+3. With colors disabled, the no-color theme is selected (all theme fields set to default,
+   no ANSI codes).
+4. The renderer is constructed with ANSI disabled.
+5. All color formatting calls return plain text.
 
 **Edge Cases:**
 
-- `--color always` combined with `NO_COLOR`: `--color always` in `mkOutputDispatch`
-  uses `T.ColorAlways -> True`, bypassing `detectCapabilities`. This is intentional: the
-  explicit CLI flag overrides the environment convention. Users who need strict `NO_COLOR`
-  compliance should not pass `--color always`.
-- `NO_COLOR` with `--output-mode json`: JSON mode already forces `colorsEnabled = False`;
+- `--color always` combined with `NO_COLOR`: the explicit CLI flag overrides the
+  environment convention. Users who need strict `NO_COLOR` compliance should not pass
+  `--color always`.
+- `NO_COLOR` with `--output-mode json`: JSON mode already forces colors disabled;
   `NO_COLOR` is redundant but harmless.
 
 **Error Scenarios:**
 
 - `NO_COLOR` set to a non-empty string (e.g., `NO_COLOR=1`): identical behavior to
-  `NO_COLOR=` (empty). The spec says "any value", and iidy follows the spec via
-  `case (noColor, forceColor) of (Just _, _) -> False`.
+  `NO_COLOR=` (empty). The spec says "any value".
 
 **Complexity Notes:**
 
-- `NO_COLOR` compliance is an ecosystem-level convention (https://no-color.org/). iidy
-  implements it at the terminal detection layer rather than at the CLI flag layer, which
-  is the correct approach: the environment variable is checked once at startup and its
-  result flows through the entire output pipeline without needing per-call checks.
+- `NO_COLOR` compliance is an ecosystem-level convention (https://no-color.org/). It is
+  implemented at the terminal detection layer rather than at the CLI flag layer: the
+  environment variable is checked once at startup and its result flows through the entire
+  output pipeline without needing per-call checks.
 
 ---
 
 ## Testing Requirements
 
-- All 26 `OutputData` constructors are covered by renderer tests in both interactive
-  and JSON modes. Verified by the integration test suite in `test/Iidy/Output/`.
+- All 26 `OutputData` event types are covered by renderer tests in both interactive and
+  JSON modes.
 - `OdTokenInfo` and `OdPollingStarted` produce no stdout output in interactive and plain
   modes. Verified by capturing stdout in tests and asserting empty output.
 - `OdStackList` with `sldQueryMode = True` in JSON mode emits a raw JSON array (no
-  envelope). Verified by parsing the output with `aeson` and checking the top-level
-  JSON type is `Array`.
+  envelope). Verified by parsing the output and checking the top-level JSON type is an
+  array.
 - `OdStackTemplate` in JSON mode writes stderr lines to stderr and body to stdout.
   Verified with separate stdout/stderr capture.
-- All four themes produce distinct color sequences for `thError`, `thSuccess`, and
-  `thWarning` in interactive mode.
-- `noColorTheme` produces zero `\ESC[` sequences for any `OutputData` value. Verified by
-  asserting `T.isInfixOf "\ESC[" output == False` over all 26 types.
-- `NO_COLOR` env var: test that `detectCapabilities` with `NO_COLOR` set returns
-  `tcHasColor = False`.
-- `FORCE_COLOR` env var: test that `detectCapabilities` returns `tcHasColor = True` when
-  `FORCE_COLOR` is set and `NO_COLOR` is absent.
+- All four themes produce distinct color sequences for error, success, and warning in
+  interactive mode.
+- The no-color theme produces zero `\ESC[` sequences for any `OutputData` value. Verified
+  by asserting no ANSI escape codes appear in the output over all 26 event types.
+- `NO_COLOR` env var: test that terminal capability detection with `NO_COLOR` set returns
+  `hasColor = False`.
+- `FORCE_COLOR` env var: test that detection returns `hasColor = True` when `FORCE_COLOR`
+  is set and `NO_COLOR` is absent.
 - `IIDY_THEME` env var: test all four accepted values (`light`, `high-contrast`,
-  `highcontrast`, `dark`) and an unknown value (defaults to `ThemeAuto`).
-- `resolveTheme False _` returns `noColorTheme` for all four `ColorTheme` values.
-- Spinner tests: `spinnerFinishAndClear` emits `\r\ESC[K` only when `spActive = True`;
-  emits nothing when `spActive = False`.
-- `colorizeResourceStatus` tests: verify each status keyword substring maps to the
-  expected color code under `darkTheme`.
-- `colorByEnvironment` tests: verify `production`, `integration`, `development` map to
+  `highcontrast`, `dark`) and an unknown value (defaults to auto/dark).
+- Theme resolution with colors disabled returns the no-color theme for all four theme
+  values.
+- Spinner cleanup emits `\r\ESC[K` only when the spinner is active; emits nothing when
+  inactive.
+- Resource status coloring tests: verify each status keyword substring maps to the
+  expected color code under the dark theme.
+- Environment coloring tests: verify `production`, `integration`, `development` map to
   correct theme colors; verify unknown env name returns plain text.
 - Interactive renderer alignment tests: entry labels are left-padded to exactly 25
   characters; values begin at column 26.
-- Timestamp format test: `UTCTime` values are rendered with `%a %b %d %Y %H:%M:%S`
+- Timestamp format test: timestamps are rendered with `%a %b %d %Y %H:%M:%S`
   (locale-independent, English day/month names).
 - JSON stability test: same `OutputData` value serialized twice produces identical JSON
-  strings (no non-deterministic field ordering).
-- `FinalCommandSummary` interactive test: `SummarySuccess` output contains "Success"
-  in green; `SummaryFailure` output contains "Failure" in red (verified by ANSI code
-  inspection).
+  strings.
+- Final command summary: `SummarySuccess` output contains "Success" in green;
+  `SummaryFailure` output contains "Failure" in red (verified by ANSI code inspection).
 
 ---
 
 ## Cross-References
 
-- `src/Iidy/Output/Types.hs` — authoritative definitions for all 26 `OutputData`
-  variants and their payload types (`CommandMetadata`, `StackEvent`, `StackDefinition`,
-  `ChangeSetInfo`, etc.)
-- `src/Iidy/Output/Color.hs` — `DynColor`, `IidyTheme`, `darkTheme`, `lightTheme`,
-  `highContrastTheme`, `noColorTheme`, `colorize`, `colorizeResourceStatus`,
-  `colorByEnvironment`
-- `src/Iidy/Output/Theme.hs` — `ColorTheme` enum, `themeFromEnv`, `resolveTheme`
-- `src/Iidy/Output/Terminal.hs` — `TerminalCapabilities`, `detectCapabilities`
-- `src/Iidy/Output/Spinner.hs` — `SpinnerDots12`, `spinnerRender`, `spinnerFinishAndClear`
-- `src/Iidy/Output/Manager.hs` — `OutputDispatch`, `mkOutputDispatch`, `renderOutput`,
-  `DynamicOutputManager`
-- `src/Iidy/Output/Renderers/Interactive.hs` — `InteractiveRenderer`,
-  `InteractiveOptions`, `renderOutputData`, section/entry layout constants
-- `src/Iidy/Output/Renderers/Json.hs` — `JsonRenderer`, `renderOutputDataJson`,
-  type-name map, envelope format
-- `src/Iidy/Cfn/CommandMetadata.hs` — `constructCommandMetadata`,
-  `createFinalCommandSummary`
 - `docs/requirements/01-cli-interface.md` — US-01-015 (machine-readable output mode),
   US-01-016 (environment-based configuration, `NO_COLOR`/`FORCE_COLOR`/`IIDY_THEME`)
-- `DIVERGENCES.md` — error color detection uses stderr TTY (Haskell) vs stdout TTY (Rust)
+- PRD-05: CloudFormation Operations — all `OutputData` event types emitted by operations
+- PRD-07: Error Handling — error formatting pipeline (`OdError`, `ErrorInfo`, etc.)
+- `DIVERGENCES.md` — error color detection uses stderr TTY vs stdout TTY (Rust)
 - Rust oracle: `~/src/iidy/target/debug/iidy` — interactive rendering reference for
   section layout, column widths, timestamp format, and status color mapping

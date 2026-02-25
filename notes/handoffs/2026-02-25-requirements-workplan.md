@@ -253,7 +253,8 @@ Each session in the ralph loop should:
 - [x] Session 3: `05-cfn-operations.md` + `06-output-system.md`
 - [x] Session 4: `07-error-handling.md` + `08-aws-integration.md`
 - [x] Session 5: `04-custom-resources.md` + `09-ssm-params.md` + `10-template-approval.md`
-- [ ] Session 6: `11-utilities.md` + `12-cross-cutting.md`
+- [x] Session 6: `11-utilities.md` + `12-cross-cutting.md`
+- [x] Cleanup: Strip implementation details from all 13 PRDs
 - [ ] Session 7: Completeness review + coverage matrix
 - [ ] Session 8: Quality gate + final polish + `.ralph-stop`
 

@@ -22,6 +22,7 @@ You forgot this critical detail in the first parts of Phase 16. Cleanup. -- Tavi
 1. **Gate integrity.** Never check off a gate item until verified. Opus must verify completion.
 2. **Small, frequent green commits.** Each commit includes corresponding doc updates.
 3. **Check .msgs/ constantly.** After every tool call chain or natural pause. Reply to them with {same-name}.reply
+   If you use sub-agents remember to have the main agent check .msgs every minute while the sub-agents work.
 4. **No phase advancement** until current phase is truly complete and verified.
 
 ## Operational Notes
@@ -132,7 +133,8 @@ Each PRD draws from these sources (agents must read them, not guess):
 - [x] Session 3: `05-cfn-operations.md` + `06-output-system.md` (Session 41)
 - [x] Session 4: `07-error-handling.md` + `08-aws-integration.md` (Session 41)
 - [x] Session 5: `04-custom-resources.md` + `09-ssm-params.md` + `10-template-approval.md` (Session 41)
-- [ ] Session 6: `11-utilities.md` + `12-cross-cutting.md`
+- [x] Session 6: `11-utilities.md` + `12-cross-cutting.md` (Session 41)
+- [x] Cleanup: Strip implementation details from all 13 PRDs, save refs to notes/ (Session 41)
 - [ ] Session 7: Completeness review + coverage matrix
 - [ ] Session 8: Quality gate + final polish + `.ralph-stop`
 
@@ -165,5 +167,5 @@ workflow patterns (session structure, handoff format, progress tracking).
 |---------|-------|---------|
 ...
 | 40 | 16 | Phase 16 setup: Requirements documentation workplan. 13 PRDs planned, 8-session plan, 3 research agents. |
-| 41 | 16 | Phase 16.1-16.4: 8 PRDs written (overview, cli, yaml, imports, cfn-ops, output, errors, aws). 5,344 lines. |
+| 41 | 16 | All 13 PRDs written (~9,500 lines). Cleaned to remove implementation details per user feedback. |
 

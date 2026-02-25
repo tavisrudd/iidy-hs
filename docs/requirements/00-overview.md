@@ -127,39 +127,38 @@ missing region, etc. The specific error code (ERR_XXXX) is displayed in the erro
 message.
 
 **Exit 130**: Two sources:
-- **SIGINT**: Ctrl-C triggers a POSIX `_exit(130)` to avoid GHC runtime backtrace
-  noise. This matches the Unix convention (128 + signal number, SIGINT = 2).
+- **SIGINT**: Ctrl-C triggers a clean process exit with code 130. This matches the
+  Unix convention (128 + signal number, SIGINT = 2).
 - **User decline**: When the user responds "No" to a confirmation prompt
   (`delete-stack`, `update-stack` diff preview, changeset execution). Treated as
   a clean exit, not an error.
 
-## Implementation Context
+## Technical Context
 
-**Haskell Ecosystem**: amazonka 2.0 for AWS API calls, optparse-applicative for
-CLI parsing, HsYAML for YAML processing, ansi-terminal for terminal output.
-Custom implementations for JMESPath (~365 LOC), Handlebars (~755 LOC), JSON Schema
-Draft 7 (~170 LOC), SNTP (~100 LOC) where no suitable Haskell library exists.
+**Custom implementations required**: JMESPath evaluation, Handlebars template
+rendering, JSON Schema Draft 7 validation, and SNTP time synchronization must
+be implemented directly, as no standard off-the-shelf libraries provide the exact
+feature subset required by the Rust oracle.
 
-**Monad Stack**: Plain IO with explicit context passing (`CfnContext`). `ExceptT`
-used in preprocessing pipeline. No monad transformer stacks.
-
-**Code Quality**: 81 modules, 400 tests, `-Wall -Wcompat` clean with zero
-warnings. 37/37 render snapshots and 49/49 error snapshots match Rust output.
+**Key insertion order**: Object key insertion order must be preserved throughout
+the entire preprocessing pipeline. Standard JSON/YAML object types that use
+unordered maps are insufficient; the internal value representation must maintain
+declaration order to produce deterministic output.
 
 **Known Divergences**: See `DIVERGENCES.md`. Key differences: CLI help formatting
-(clap vs optparse-applicative layout), error color checks stderr TTY (improvement),
-explain command accepts more input formats, PowerShell completion not supported.
+layout, error color checks stderr TTY (improvement over Rust), `explain` command
+accepts more input formats, PowerShell completion not supported.
 
 ## Testing Requirements
 
 - **Unit tests**: Pure logic for YAML preprocessing, handlebars, JMESPath, error
-  formatting, event duration calculation
-- **Mock requirements**: All AWS API calls mocked via fixtures. No real AWS calls
-  in the test suite.
-- **Snapshot tests**: 37 render snapshots + 49 error snapshots compared against
-  Rust oracle output
+  formatting, event duration calculation.
+- **Mock requirements**: All AWS API calls must be testable via fixtures. No real
+  AWS calls in the test suite.
+- **Snapshot tests**: Render output and error output snapshots compared against
+  Rust oracle output to verify byte-for-byte behavioral equivalence.
 - **Property tests**: YAML 1.1/1.2 boolean detection, handlebars escaping,
-  idempotency token generation
+  idempotency token generation.
 
 ## Cross-References
 

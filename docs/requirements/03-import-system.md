@@ -18,45 +18,22 @@ Behavioral parity with the Rust iidy binary is the acceptance standard. Where th
 "matches Rust oracle," byte-for-byte output equivalence on the same input is the target, with
 documented divergences as the only permitted exceptions.
 
-## Implementation Context
+## Technical Context
 
-**Haskell modules:**
-
-- `Iidy.Yaml.Imports.Types` — `ImportType`, `ImportData`, `ImportRecord`, `ImportLoader`,
-  `ImportError`, security enforcement (`parseImportType`, `isLocalOnly`, `isRemoteBase`,
-  `parseTypePrefix`).
-- `Iidy.Yaml.Imports.Manifest` — `ImportManifest` (audit log), `ImportStack` (cycle detection
-  via `pushImport`/`popImport`).
-- `Iidy.Yaml.Imports.Loaders.File` — local filesystem loader; extension-based parsing.
-- `Iidy.Yaml.Imports.Loaders.Env` — environment variable loader with optional default.
-- `Iidy.Yaml.Imports.Loaders.Git` — subprocess invocation of `git` commands.
-- `Iidy.Yaml.Imports.Loaders.Random` — pure random value generation from word lists.
-- `Iidy.Yaml.Imports.Loaders.S3` — amazonka `GetObject` with bucket/key parsing.
-- `Iidy.Yaml.Imports.Loaders.Http` — `http-conduit` GET with extension-based content parsing.
-- `Iidy.Yaml.Imports.Loaders.Cfn` — amazonka `DescribeStacks` for outputs; current Haskell
-  implementation covers the legacy dot-syntax and slash-separated `cfn:output:` form only.
-- `Iidy.Yaml.Imports.Loaders.Ssm` — amazonka `GetParameter` with `withDecryption = True`.
-- `Iidy.Yaml.Engine` — orchestrates the two-phase pipeline: `$defs` first (sequential,
-  let*-style), then `$imports` (IO-bound, in declaration order). Handlebars interpolation of
-  import location strings occurs before each loader call.
-
-**Known gap — filehash loaders:** `ImportFilehash` and `ImportFilehashBase64` are defined in
-`Types.hs` and the security model classifies them correctly as local-only, but no loader is
+**Known gap — filehash loaders:** The `filehash:` and `filehash-base64:` import types are
+defined in the security model and classified correctly as local-only, but no loader is
 implemented. Attempting to use `filehash:path` or `filehash-base64:path` in `$imports` will
-reach an unhandled branch and fail. The Handlebars helpers `filehash` and `filehashBase64` DO
-work for inline use in template expressions; only the `$imports` loader path is absent.
+fail. The Handlebars helpers `filehash` and `filehashBase64` DO work for inline use in template
+expressions; only the `$imports` loader path is absent.
 
-**Known gap — cfn sub-types:** The Haskell Cfn loader currently supports only stack output
-lookups via the legacy `cfn:stackName.key` and `cfn:stackName/key` forms, and only fetches a
-single named output key. The full set of cfn sub-types documented in the Rust oracle
-(`cfn:output:`, `cfn:export:`, `cfn:parameter:`, `cfn:tag:`, `cfn:resource:`, `cfn:stack:`) is
-not yet implemented. The loader will fail with a parse error for any of these extended forms.
+**Known gap — cfn sub-types:** The cfn loader currently supports only stack output lookups via
+the legacy `cfn:stackName.key` and `cfn:stackName/key` forms, and only fetches a single named
+output key. The full set of cfn sub-types documented in the Rust oracle (`cfn:output:`,
+`cfn:export:`, `cfn:parameter:`, `cfn:tag:`, `cfn:resource:`, `cfn:stack:`) is not yet
+implemented. The loader will fail with a parse error for any of these extended forms.
 
-**Prerequisites:** `Iidy.Yaml.Parser`, `Iidy.Yaml.Resolution.Resolver`, `Iidy.Yaml.Handlebars.Engine`,
-`Iidy.Yaml.OValue`, `Iidy.Yaml.Resolution.Context`, amazonka (for AWS loaders).
-
-**Parallelizable:** Individual loaders are independent. `$imports` entries are currently resolved
-sequentially in declaration order. Parallel resolution is a future optimization.
+**Parallelism:** Individual loaders are independent. `$imports` entries are resolved sequentially
+in declaration order. Parallel resolution is a future optimization.
 
 ---
 
@@ -87,22 +64,21 @@ configuration across multiple stacks without duplicating values.
 - Files with any other extension are injected as a raw UTF-8 string.
 - YAML parse failure falls back to injecting the raw text as a string (not an error).
 - JSON parse failure falls back to injecting the raw text as a string.
-- A file that cannot be read (missing, permission denied) produces an `ImportError` and halts
-  preprocessing with a clear message: `Failed to read file: <IOError>`.
-- Non-UTF-8 file content produces an `ImportError`: `Invalid UTF-8 in file: <error>`.
+- A file that cannot be read (missing, permission denied) halts preprocessing with a clear
+  message: `Failed to read file: <IOError>`.
+- Non-UTF-8 file content halts preprocessing: `Invalid UTF-8 in file: <error>`.
 - This import type is forbidden from remote templates (see US-03-009).
 
 **Logic Flow:**
 
-1. `parseTypePrefix` classifies the location. Paths with `./`, `../`, `/` prefix or an explicit
-   `file:` prefix yield `ImportFile`.
-2. `loadFileImport` strips the `file:` prefix from both location and base location.
-3. `takeDirectory` on the base path gives `baseDir`.
-4. If the raw path is absolute, use it directly; otherwise `baseDir </> rawPath`.
-5. `BS.readFile` wrapped in `try @IOException`.
-6. `TE.decodeUtf8'` to validate UTF-8.
-7. `takeExtension fullPath` selects the parser: YAML, JSON, or raw string.
-8. Returns `ImportData` with `idType = ImportFile`.
+1. Classify the location: paths with `./`, `../`, `/` prefix or an explicit `file:` prefix
+   are treated as file imports.
+2. Strip the `file:` prefix from both location and base location.
+3. Derive the base directory from the base path.
+4. If the raw path is absolute, use it directly; otherwise join with the base directory.
+5. Read the file, catching I/O errors.
+6. Validate UTF-8 encoding.
+7. Select the parser based on file extension: YAML, JSON, or raw string.
 
 **Edge Cases:**
 
@@ -147,10 +123,10 @@ calling environment without hardcoding them.
 
 **Logic Flow:**
 
-1. `parseTypePrefix` yields `ImportEnv` for the `env:` prefix.
-2. `loadEnvImport` strips `env:` and calls `parseEnvSpec` to split on the first `:`.
-3. `lookupEnv` (case-sensitive on all platforms) checks the environment.
-4. Returns `ImportData` with `idDoc = String val` and `idType = ImportEnv`.
+1. Classify the location as an env import for the `env:` prefix.
+2. Strip `env:` and split on the first `:` to separate variable name from default.
+3. Look up the environment variable (case-sensitive on all platforms).
+4. Return the string value.
 
 **Edge Cases:**
 
@@ -181,7 +157,7 @@ they were created from.
 - `git:branch` invokes `git rev-parse --abbrev-ref HEAD` and returns trimmed stdout as a string.
 - `git:sha` invokes `git rev-parse HEAD` and returns the full 40-character SHA as a string.
 - `git:describe` invokes `git describe --always --dirty --tags` and returns trimmed stdout.
-- Any git subcommand other than `branch`, `sha`, `describe` produces an `ImportError`:
+- Any git subcommand other than `branch`, `sha`, `describe` fails with:
   `Invalid git command: <cmd>. Expected: branch|describe|sha`.
 - If the `git` binary is not found or throws an exception, fails with:
   `Failed to run git for <location>: <exception>`.
@@ -193,12 +169,12 @@ they were created from.
 
 **Logic Flow:**
 
-1. `parseTypePrefix` yields `ImportGit` for the `git:` prefix.
-2. `loadGitImport` strips `git:` to get the subcommand name.
-3. `gitCommand` maps the name to `(program, args)` or returns `Left ImportError`.
-4. `readProcessWithExitCode` wrapped in `try @SomeException`.
-5. `T.strip` applied to stdout text.
-6. Returns `ImportData` with `idType = ImportGit`.
+1. Classify the location as a git import for the `git:` prefix.
+2. Strip `git:` to get the subcommand name.
+3. Map the subcommand name to the appropriate git invocation, or return an error
+   for unknown names.
+4. Run the git subprocess, catching exceptions.
+5. Strip trailing whitespace from stdout before returning.
 
 **Edge Cases:**
 
@@ -231,18 +207,17 @@ unused; git always queries the local repo.
   are drawn independently and uniformly from the built-in word lists (31 adjectives, 30 nouns).
 - `random:name` generates `<adjective><noun>` with no separator (e.g., `clevereagle`).
 - `random:int` generates a decimal integer string in the range [1, 999] inclusive.
-- Any subtype other than the three above produces an `ImportError`:
-  `Unknown random type: <subtype>`.
+- Any subtype other than the three above fails with: `Unknown random type: <subtype>`.
 - A new value is generated on every preprocessing run. Values are not stable across runs.
 - This import type is allowed from remote templates.
 
 **Logic Flow:**
 
-1. `parseTypePrefix` yields `ImportRandom` for the `random:` prefix.
-2. `loadRandomImport` strips `random:` to get the subtype.
-3. `randomElement` uses `randomRIO (0, length - 1)` for word list selection.
-4. `randomRIO (1, 999)` for integer generation.
-5. Returns `ImportData` with `idDoc = String val` and `idType = ImportRandom`.
+1. Classify the location as a random import for the `random:` prefix.
+2. Strip `random:` to get the subtype.
+3. For `dashed-name` and `name`: select independently from the adjective and noun word lists.
+4. For `int`: generate a random integer in [1, 999].
+5. Return the string value.
 
 **Edge Cases:**
 
@@ -278,10 +253,10 @@ trigger updates.
 
 **Implementation Status — KNOWN GAP:**
 
-`ImportFilehash` and `ImportFilehashBase64` are defined in `Types.hs` and classified correctly
-by `isLocalOnly`. However, **no loaders exist** for these types in the Haskell port. A template
-using `filehash:path` or `filehash-base64:path` in `$imports` will fail with an unhandled
-dispatch. This is a gap relative to the Rust oracle.
+The `filehash:` and `filehash-base64:` import types are defined and classified correctly as
+local-only by the security model. However, **no loaders exist** for these types. A template
+using `filehash:path` or `filehash-base64:path` in `$imports` will fail. This is a gap relative
+to the Rust oracle.
 
 The Handlebars template helpers `filehash` and `filehashBase64` DO work for inline use in
 template expressions (e.g., `{{ filehash "dist/handler.zip" }}`). Only the `$imports` loader
@@ -308,12 +283,12 @@ from a central configuration store.
 - Syntax: `s3://bucket-name/path/to/object.yaml` or `s3://bucket-name/path/to/object.json`.
 - The URI is parsed into bucket name and object key. A missing `/` after the bucket name, an
   empty bucket name, or an empty key all produce a parse error.
-- Content is fetched via amazonka `GetObject` using the current AWS environment.
-- The response body is decoded as UTF-8. Non-UTF-8 bytes produce an `ImportError`.
+- Content is fetched from S3 using the current AWS environment.
+- The response body is decoded as UTF-8. Non-UTF-8 bytes produce an import error.
 - Extension-based content parsing applies: `.yaml`/`.yml` → YAML parse; `.json` → JSON parse;
   other → raw string. YAML and JSON parse failures fall back to raw string (not an error).
 - S3 fetch exceptions (network, credentials, access denied, object not found) are wrapped in a
-  descriptive `ImportError`.
+  descriptive import error.
 - Templates loaded from S3 are considered remote (base location starts with `s3://`) and are
   subject to security restrictions on further imports (see US-03-009).
 - Relative imports within an S3-based template inherit the S3 base path. A relative path
@@ -323,13 +298,12 @@ from a central configuration store.
 
 **Logic Flow:**
 
-1. `parseTypePrefix` yields `ImportS3` for the `s3:` prefix.
-2. `loadS3Import` strips `s3:` and any leading `//`.
-3. `parseBucketKey` splits on the first `/` to obtain bucket and key.
-4. `fetchS3Object` calls `Amazonka.send` with `GO.newGetObject`, consuming the response body
-   via `sinkBody`/`CL.consume`.
-5. Content is decoded, extension detected, and parsed.
-6. Returns `ImportData` with `idType = ImportS3`.
+1. Classify the location as an S3 import for the `s3:` prefix.
+2. Strip `s3:` and any leading `//`.
+3. Split on the first `/` to obtain bucket name and object key.
+4. Fetch the object from S3 using the current AWS environment, consuming the
+   response body fully.
+5. Decode content as UTF-8, detect extension, and parse accordingly.
 
 **Edge Cases:**
 
@@ -346,7 +320,7 @@ from a central configuration store.
 - Network error: `S3 fetch error for //bucket/key: <exception>`
 - Invalid URI (no key): `S3 URI missing key (no '/' after bucket): bucket-name`
 
-**Complexity Notes:** Medium. Requires AWS credentials in scope. The amazonka streaming body
+**Complexity Notes:** Medium. Requires AWS credentials in scope. The S3 response body
 must be fully consumed before the resource context closes.
 
 ---
@@ -360,15 +334,14 @@ public registries without placing files on S3.
 **Acceptance Criteria:**
 
 - Syntax: `http://host/path` or `https://host/path` with a full URL.
-- A GET request is made to the URL using `http-conduit`. No authentication headers are added
-  automatically.
-- HTTP 2xx responses are accepted; any other status code produces an `ImportError`:
+- A GET request is made to the URL. No authentication headers are added automatically.
+- HTTP 2xx responses are accepted; any other status code fails with:
   `HTTP error <status> for <url>`.
-- The response body is decoded as UTF-8. Non-UTF-8 bytes produce an `ImportError`.
+- The response body is decoded as UTF-8. Non-UTF-8 bytes produce an import error.
 - Content parsing is based on the URL path's file extension (extracted from everything after
   the scheme and host). `.yaml`/`.yml` and `.json` trigger structured parsing; other extensions
   yield raw string. YAML and JSON parse failures fall back to raw string.
-- HTTP and HTTPS URLs use the same `ImportHttp` type; both are routed to the same loader.
+- HTTP and HTTPS URLs are treated as the same import type; both are routed to the same loader.
 - Templates loaded from HTTP or HTTPS are considered remote and are subject to security
   restrictions on further imports (see US-03-009).
 - Relative imports within an HTTP/HTTPS template resolve relative to the parent URL's directory
@@ -378,22 +351,21 @@ public registries without placing files on S3.
 
 **Logic Flow:**
 
-1. `parseTypePrefix` yields `ImportHttp` for both `http:` and `https:` prefixes.
-2. `loadHttpImport` calls `parseRequest` on the full URL, then `httpBS`.
-3. Status code is checked: 2xx passes, others fail.
-4. `TE.decodeUtf8'` validates the body bytes.
-5. `urlPath` strips scheme and host to get the path for extension detection.
-6. `parseByExtension` with JSON-first fallback selects the parser.
-7. Returns `ImportData` with `idType = ImportHttp`.
+1. Classify the location as an HTTP import for both `http:` and `https:` prefixes.
+2. Parse the URL and issue a GET request.
+3. Check the status code: 2xx passes, others fail.
+4. Validate the body as UTF-8.
+5. Extract the URL path component (strip scheme and host) for extension detection.
+6. Select the parser based on extension, with JSON-first fallback.
 
 **Edge Cases:**
 
 - A URL with no path extension (e.g., `https://api.example.com/config`) returns the body as a
   raw string regardless of Content-Type header. iidy-hs does not inspect Content-Type.
-- HTTP redirects: `http-conduit` follows redirects automatically; the final URL determines the
+- HTTP redirects: the HTTP client follows redirects automatically; the final URL determines the
   effective content.
-- HTTPS with an untrusted certificate: `http-conduit` uses the system trust store; untrusted
-  certificates cause an exception wrapped in an `ImportError`.
+- HTTPS with an untrusted certificate: the HTTP client uses the system trust store; untrusted
+  certificates cause an import error.
 - Extremely large responses: no size limit is enforced; the entire body is buffered in memory.
 
 **Error Scenarios:**
@@ -446,30 +418,30 @@ The following cfn sub-types are defined in the Rust oracle:
 
 **Implementation Status — KNOWN GAP:**
 
-The current Haskell Cfn loader (`Loaders/Cfn.hs`) supports only the legacy dot form and basic
-slash-separated output lookup (`cfn:stackName.key` or `cfn:stackName/key`). It calls
-`DescribeStacks` and searches the `Outputs` field for a matching key. All other cfn sub-types
-(`cfn:output:`, `cfn:export:`, `cfn:parameter:`, `cfn:tag:`, `cfn:resource:`, `cfn:stack:`)
-produce parse errors in the current implementation.
+The current cfn loader supports only the legacy dot form and basic slash-separated output lookup
+(`cfn:stackName.key` or `cfn:stackName/key`). It calls DescribeStacks and searches the Outputs
+field for a matching key. All other cfn sub-types (`cfn:output:`, `cfn:export:`,
+`cfn:parameter:`, `cfn:tag:`, `cfn:resource:`, `cfn:stack:`) produce parse errors in the
+current implementation.
 
 **Logic Flow (current implementation):**
 
-1. `parseTypePrefix` yields `ImportCfn` for the `cfn:` prefix.
-2. `loadCfnImport` strips `cfn:` to get the reference string.
-3. `parseCfnRef` tries splitting on `/` first, then `.`.
-4. `fetchCfnOutput` calls `DS.newDescribeStacks` with the stack name, searches `Outputs` for the key.
-5. Returns the output value as a plain string.
+1. Classify the location as a cfn import for the `cfn:` prefix.
+2. Strip `cfn:` to get the reference string.
+3. Parse the reference: try splitting on `/` first, then `.`.
+4. Call DescribeStacks with the stack name, search the Outputs for the matching key.
+5. Return the output value as a plain string.
 
 **Logic Flow (full target — all sub-types):**
 
 1. Strip `cfn:` prefix, detect sub-type by leading segment before `:`.
 2. Dispatch to sub-type handler:
-   - `output:` → `DescribeStacks`, extract named output or all outputs mapping.
-   - `export:` → `ListExports` (paginated), find matching export name.
-   - `parameter:` → `DescribeStacks`, extract named parameter or all parameters mapping.
-   - `tag:` → `DescribeStacks`, extract named tag or all tags mapping.
-   - `resource:` → `ListStackResources` (paginated), extract named resource or all resources mapping.
-   - `stack:` → `DescribeStacks`, assemble combined mapping with `Outputs`, `Parameters`, `Tags`.
+   - `output:` → DescribeStacks, extract named output or all outputs mapping.
+   - `export:` → ListExports (paginated), find matching export name.
+   - `parameter:` → DescribeStacks, extract named parameter or all parameters mapping.
+   - `tag:` → DescribeStacks, extract named tag or all tags mapping.
+   - `resource:` → ListStackResources (paginated), extract named resource or all resources mapping.
+   - `stack:` → DescribeStacks, assemble combined mapping with `Outputs`, `Parameters`, `Tags`.
    - Legacy form → same as `output:` with slash or dot separator.
 
 **Edge Cases:**
@@ -509,7 +481,7 @@ templates without storing them in source control.
 - Without a format suffix, the raw string value is returned.
 - With `:json` suffix, the value is parsed as JSON and injected as a structured value.
 - With `:yaml` suffix, the value is parsed as YAML and injected as a structured value.
-- If the parameter does not exist, an exception from amazonka propagates as an `ImportError`.
+- If the parameter does not exist, the AWS exception propagates as an import error.
 - Requires `ssm:GetParameter` permission; SecureString also requires KMS decrypt permission.
 
 **Path prefix (`ssm-path:`):**
@@ -527,25 +499,24 @@ templates without storing them in source control.
 
 - Allowed from remote templates.
 - AWS credentials must be available.
-- The current Haskell implementation (`Loaders/Ssm.hs`) covers only the single-parameter form
-  without format suffix parsing. The `:json`/`:yaml` format suffixes and the `ssm-path:`
-  sub-type are not yet implemented.
+- The current implementation covers only the single-parameter form without format suffix parsing.
+  The `:json`/`:yaml` format suffixes and the `ssm-path:` sub-type are not yet implemented.
 
 **Logic Flow (single parameter, current implementation):**
 
-1. `parseTypePrefix` yields `ImportSsm` for `ssm:` prefix, `ImportSsmPath` for `ssm-path:`.
-2. `loadSsmImport` strips `ssm:` prefix (retains the leading `/` of the parameter path).
-3. `GP.newGetParameter paramName` with `GP.withDecryption = Just True`.
-4. `resp.parameter ^. SSMP.parameter_value` extracts the value, unwrapping the `Sensitive` wrapper.
-5. Returns value as a plain string.
+1. Classify the location: `ssm:` prefix yields a single-parameter import, `ssm-path:` yields a
+   path-prefix import.
+2. Strip the `ssm:` prefix (retaining the leading `/` of the parameter path).
+3. Call GetParameter with decryption enabled unconditionally.
+4. Extract and return the parameter value as a plain string.
 
 **Edge Cases:**
 
 - A parameter path with `:json` suffix (e.g., `ssm:/app/config:json`) — the current
-  implementation passes `:json` as part of the parameter name, which will cause a "Parameter
-  not found" error from SSM. Format-suffix stripping is not yet implemented.
-- An `ssm-path:` request — the `ImportSsmPath` type is parsed correctly but no loader handles
-  it; the call will fail.
+  implementation passes `:json` as part of the parameter name, causing a "Parameter not found"
+  error from SSM. Format-suffix stripping is not yet implemented.
+- An `ssm-path:` request — the type is parsed correctly but no loader handles it; the call
+  will fail.
 - Empty parameter value: returns empty string (not an error).
 - Parameters that contain YAML-like content but are requested without `:yaml` suffix: returned
   as raw string.
@@ -557,8 +528,8 @@ templates without storing them in source control.
 - Network error: `SSM fetch error for /my/param: <exception>`
 
 **Complexity Notes:** Medium. The single-parameter path is implemented. `ssm-path:` requires
-paginated `GetParametersByPath` calls and relative key trimming. Format suffix handling (`:json`,
-`:yaml`) is a parsing concern that touches both the SSM and future Cfn loaders.
+paginated GetParametersByPath calls and relative key trimming. Format suffix handling (`:json`,
+`:yaml`) requires stripping the suffix before the API call and parsing the result afterward.
 
 ---
 
@@ -571,31 +542,30 @@ templates cannot read my credentials, files, or repository metadata.
 **Acceptance Criteria:**
 
 - A base location is classified as remote if it begins with `s3://`, `http://`, or `https://`.
-  This check is performed in `isRemoteBase`.
-- Five import types are classified as local-only by `isLocalOnly`: `ImportFile`, `ImportEnv`,
-  `ImportGit`, `ImportFilehash`, `ImportFilehashBase64`.
-- When a remote template attempts a local-only import, `parseImportType` returns:
+- Five import types are classified as local-only: file, env, git, filehash, filehash-base64.
+- When a remote template attempts a local-only import, the error is:
   `Import type <typeStr> is not allowed from remote templates`.
-- Paths starting with `./`, `../`, or `/` are unconditionally treated as `file:` imports by
-  `parseTypePrefix`, even without an explicit `file:` prefix. This means a remote template
-  cannot escape the restriction using a bare relative path.
+- Paths starting with `./`, `../`, or `/` are unconditionally treated as file imports, even
+  without an explicit `file:` prefix. This means a remote template cannot escape the restriction
+  using a bare relative path.
 - Relative imports from remote templates (bare path, no explicit type prefix, not starting with
   `./`, `../`, or `/`) inherit the parent's base location. The import location is resolved
   relative to the parent's directory in the same scheme (S3 or HTTPS).
-- All six remote-safe types are permitted from any context: `ImportS3`, `ImportHttp`
-  (covers both http and https), `ImportCfn`, `ImportSsm`, `ImportSsmPath`, `ImportRandom`.
-- Security validation is performed in `parseImportType` before any loader is called.
+- Six remote-safe types are permitted from any context: S3, HTTP/HTTPS, cfn, ssm, ssm-path,
+  random.
+- Security validation is performed before any loader is called.
 - The security model is applied per-import, not per-document. A local template that imports
   a remote template does not transfer its local privileges to the remote template.
 
 **Logic Flow:**
 
-1. `parseImportType location baseLocation` is called for every import resolution.
-2. `parseTypePrefix location` derives the `typeStr` and the import type.
-3. `isRemoteBase baseLocation` checks whether the current document is remote.
-4. `isLocalOnly importType` checks whether the requested type is restricted.
-5. If both are true, return `Left (ImportError "Import type ... is not allowed from remote templates")`.
-6. Otherwise return `Right importType`.
+1. For every import resolution, determine both the import type and whether the current document
+   is remote.
+2. Derive the import type from the location prefix.
+3. Check whether the current document's base location is remote.
+4. Check whether the requested import type is local-only.
+5. If the document is remote and the type is local-only, return an error.
+6. Otherwise proceed to the loader.
 
 **Base Path Resolution:**
 
@@ -640,27 +610,28 @@ before they cause infinite loops.
 
 **Acceptance Criteria:**
 
-- Every import resolution call pushes the resolved import location onto an `ImportStack`.
-- If the resolved location is already in the active set (`isActive`), a cycle is detected.
+- Every import resolution call pushes the resolved import location onto an import stack.
+- If the resolved location is already in the active set, a cycle is detected.
 - The error message includes the full import chain in resolution order:
   `Circular import detected: a.yaml → b.yaml → a.yaml`
   (where `→` is U+2192 RIGHTWARDS ARROW).
 - The chain is shown with the cycle-closing location repeated at the end for clarity.
 - After successful resolution of a nested document, the location is popped from the stack
-  (`popImport`) to allow the same file to be imported from multiple non-cyclic parents.
-- The `ImportManifest` (separate from `ImportStack`) accumulates `ImportRecord` entries for all
-  successfully resolved imports, for audit/tracing purposes.
+  to allow the same file to be imported from multiple non-cyclic parents.
+- An import manifest (separate from the import stack) accumulates records for all successfully
+  resolved imports, for audit/tracing purposes.
 - Cycle detection is applied only to document-level recursive imports (i.e., when one template
   loads another template that is itself preprocessed). Scalar imports (env, git, random, SSM,
   CFN single values) do not recurse and are not pushed onto the import stack.
 
 **Logic Flow:**
 
-1. Before processing a document, `pushImport location stack` is called.
-2. If `location` is in `isActive stack`: return `Left (cycleMessage)`.
-3. If not: add location to `isActive`, prepend to `isChain`, return `Right newStack`.
-4. After processing completes (success or failure), `popImport` removes the location.
-5. `cycleMessage` is constructed via `T.intercalate " → " (reverse (loc : isChain stack))`.
+1. Before processing a document, push the location onto the import stack.
+2. If the location is already in the active set: return a cycle error with the full chain message.
+3. If not: add the location to the active set and prepend to the chain list.
+4. After processing completes (success or failure), pop the location to restore the stack.
+5. The cycle message is built by joining the chain (plus the repeated cycle-closing location)
+   with ` → `.
 
 **Edge Cases:**
 
@@ -668,7 +639,7 @@ before they cause infinite loops.
 - A long chain: `a.yaml → b.yaml → c.yaml → d.yaml → a.yaml`.
 - The same document imported from two different parents (diamond pattern): this is NOT a cycle.
   `a.yaml` importing both `b.yaml` and `c.yaml`, both of which import `d.yaml`, is valid.
-  The `ImportStack` is a call-stack structure (push on enter, pop on exit), not a global seen set.
+  The import stack is a call-stack structure (push on enter, pop on exit), not a global seen set.
 - An import that fails before pushing onto the stack does not affect the cycle-detection state.
 
 **Error Scenarios:**
@@ -676,9 +647,9 @@ before they cause infinite loops.
 - Direct self-import: `Circular import detected: a.yaml → a.yaml`
 - Indirect cycle: `Circular import detected: a.yaml → b.yaml → c.yaml → a.yaml`
 
-**Complexity Notes:** Low. The `ImportStack` uses a `Set Text` for O(log n) membership testing
-and a `[Text]` for chain display. The diamond pattern works correctly because `popImport`
-restores the stack to the state before the child was processed.
+**Complexity Notes:** Low. The import stack uses a set for O(log n) membership testing and a
+list for chain display. The diamond pattern works correctly because the stack is restored after
+each child document is processed.
 
 ---
 
@@ -701,14 +672,15 @@ resolved variables without duplicating logic.
   entries are available (processed first); `$imports` entries are available in declaration order
   (each resolved import is added to the environment before the next import's location is
   interpolated).
-- The resolved location (after interpolation) is what is passed to `parseImportType` and the
-  loader. Security model checks apply to the resolved location.
+- The resolved location (after interpolation) is what is used for import type detection and
+  loading. Security model checks apply to the resolved location.
 
 **Logic Flow:**
 
-1. `interpolateLocation env locationText` checks for `{{`.
-2. If present: constructs an Aeson `Object` from the environment, calls `interpolate defaultHelpers ctx loc`.
-3. If absent: returns `Right loc` immediately.
+1. Check the location text for `{{`.
+2. If present: build the Handlebars context from the environment, run the interpolation engine
+   with all standard helpers available.
+3. If absent: use the location verbatim (fast path, no parse overhead).
 4. The resolved location string is then used for type detection and loading.
 
 **Edge Cases:**
@@ -750,29 +722,29 @@ literal import paths.
   exception wrapping; test stdout trimming.
 - **Random loader:** test `dashed-name` format (adjective-hyphen-noun); test `name` format
   (concatenation); test `int` range [1, 999] inclusive; test unknown subtype error.
-- **Filehash loader:** blocked pending implementation. Document expected behavior: hex SHA256
-  for `filehash:`, base64 SHA256 for `filehash-base64:`, optional-file `?` prefix.
-- **S3 loader:** test `parseS3Uri` with valid URI, empty bucket, empty key, missing key
+- **Filehash loader:** blocked pending implementation. Expected behavior: hex SHA256 for
+  `filehash:`, base64 SHA256 for `filehash-base64:`, optional-file `?` prefix.
+- **S3 loader:** test S3 URI parsing with valid URI, empty bucket, empty key, missing key
   separator; test content routing by extension; test UTF-8 error path.
-- **HTTP loader:** test `urlPath` extraction; test extension detection for YAML/JSON/other;
+- **HTTP loader:** test URL path extraction; test extension detection for YAML/JSON/other;
   test 2xx acceptance; test non-2xx error; test JSON fallback for YAML extension; test
   UTF-8 error path.
-- **CFN loader:** test `parseCfnRef` with slash separator; test dot separator; test empty
+- **CFN loader:** test reference parsing with slash separator; test dot separator; test empty
   stack name; test empty output key; test missing separator error. Integration tests against
   mock CFN stubs for found/not-found stack and found/not-found output key.
-- **SSM loader:** test `stripSsmPrefix`; test mock `GetParameter` success; test mock parameter
-  not found; test that `withDecryption = True` is set.
+- **SSM loader:** test SSM prefix stripping; test mock GetParameter success; test mock
+  parameter not found; test that decryption is enabled unconditionally.
 - **Security model:** test each local-only type rejected from each remote base (s3, http,
   https); test each remote-safe type accepted from remote base; test all types accepted from
-  local base; test `./path` classified as `file:` from remote; test `../path` classified as
-  `file:` from remote; test `/abs` classified as `file:` from remote.
+  local base; test `./path` classified as file import from remote; test `../path` classified
+  as file import from remote; test `/abs` classified as file import from remote.
 - **Cycle detection:** test direct self-import cycle; test two-node cycle; test three-node
-  cycle with correct chain display; test diamond pattern (not a cycle); test `popImport`
-  restores state.
+  cycle with correct chain display; test diamond pattern (not a cycle); test that stack is
+  restored after child document processing.
 - **Handlebars interpolation:** test literal path skips interpolation; test `{{ var }}`
   resolved from `$defs`; test `$imports` forward reference fails; test Handlebars error
-  produces `PeHandlebarsError`.
-- **`ImportManifest`:** test `addRecord`/`getRecords` ordering; test empty manifest.
+  propagates correctly.
+- **Import manifest:** test record ordering; test empty manifest.
 - **Engine integration:** test `$defs` fully available to `$imports`; test `$imports` entries
   resolved in declaration order; test environment accumulation across multiple imports; test
   error propagation from loader through engine.
@@ -782,24 +754,11 @@ literal import paths.
 ## Cross-References
 
 - `docs/import-types.md` — user-facing reference for all import type syntax and examples.
-- `docs/SECURITY.md` — full security model with threat analysis and implementation notes.
+- `docs/SECURITY.md` — full security model with threat analysis.
 - `docs/requirements/00-overview.md` — project-level requirements context.
 - `docs/requirements/01-cli-interface.md` — CLI options that affect import behavior
   (`--environment`, `--profile`, `--assume-role-arn`, `--region`).
-- `src/Iidy/Yaml/Imports/Types.hs` — `ImportType`, `parseImportType`, `isLocalOnly`,
-  `isRemoteBase`, `parseTypePrefix`.
-- `src/Iidy/Yaml/Imports/Manifest.hs` — `ImportManifest`, `ImportStack`, `pushImport`,
-  `popImport`.
-- `src/Iidy/Yaml/Imports/Loaders/File.hs` — file loader implementation.
-- `src/Iidy/Yaml/Imports/Loaders/Env.hs` — env loader implementation.
-- `src/Iidy/Yaml/Imports/Loaders/Git.hs` — git loader implementation.
-- `src/Iidy/Yaml/Imports/Loaders/Random.hs` — random loader implementation.
-- `src/Iidy/Yaml/Imports/Loaders/S3.hs` — S3 loader implementation.
-- `src/Iidy/Yaml/Imports/Loaders/Http.hs` — HTTP/HTTPS loader implementation.
-- `src/Iidy/Yaml/Imports/Loaders/Cfn.hs` — CFN loader (partial implementation).
-- `src/Iidy/Yaml/Imports/Loaders/Ssm.hs` — SSM loader (partial implementation).
-- `src/Iidy/Yaml/Engine.hs` — preprocessing pipeline, `$defs`/`$imports` ordering,
-  Handlebars location interpolation, YAML 1.1 compatibility conversion.
-- `src/Iidy/Yaml/Handlebars/Engine.hs` — `interpolate`, `defaultHelpers` (includes `filehash`
-  and `filehashBase64` Handlebars helpers, which DO work despite the `$imports` loader gap).
-- DIVERGENCES.md — documented deviations from Rust oracle, including partial CFN/SSM support.
+- `docs/requirements/02-yaml-preprocessing.md` — two-phase pipeline, variable scope, and
+  Handlebars integration that the import system feeds into.
+- `DIVERGENCES.md` — documented deviations from Rust oracle, including partial CFN/SSM support.
+- Rust oracle: `~/src/iidy/target/debug/iidy` (read-only reference binary)

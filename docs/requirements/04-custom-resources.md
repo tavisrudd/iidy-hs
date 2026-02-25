@@ -32,41 +32,7 @@ intrinsic function evaluation, and live AWS resource resolution.
 
 ---
 
-## Implementation Context
-
-### Module Inventory
-
-| Module                                       | LOC | Responsibility                                      |
-|----------------------------------------------|-----|-----------------------------------------------------|
-| `src/Iidy/Yaml/CustomResources/Params.hs`    | 188 | ParamDef type, parsing, validation, merging         |
-| `src/Iidy/Yaml/CustomResources/Expansion.hs` | 168 | Expansion orchestration, section promotion, deep merge |
-| `src/Iidy/Yaml/CustomResources/RefRewriting.hs` | 155 | Ref rewriting for !Ref, !GetAtt, !Sub, Condition, DependsOn |
-| `src/Iidy/Yaml/CustomResources/JsonSchema.hs` | 192 | JSON Schema Draft 7 subset validator                |
-
-### Key Types
-
-```haskell
-data ParamDef = ParamDef
-  { pdName           :: !Text
-  , pdDefault        :: !(Maybe OValue)
-  , pdType           :: !(Maybe Text)
-  , pdAllowedValues  :: !(Maybe [OValue])
-  , pdAllowedPattern :: !(Maybe Text)
-  , pdSchema         :: !(Maybe Value)
-  , pdIsGlobal       :: !Bool
-  }
-
-data TemplateInfo = TemplateInfo
-  { tiParams   :: ![ParamDef]
-  , tiRawBody  :: !Text
-  , tiLocation :: !Text
-  }
-
-data ExpansionResult = ExpansionResult
-  { erResources      :: ![(Text, OValue)]
-  , erGlobalSections :: !(Map Text OValue)
-  }
-```
+## Technical Context
 
 ### Expansion Pipeline (Five Phases)
 
@@ -84,21 +50,21 @@ data ExpansionResult = ExpansionResult
    CFN intrinsic values (those containing `!Ref`, `!Sub`, etc.) are exempted from
    structural constraints because they cannot be evaluated at preprocessing time.
 5. **Template re-parse and expansion**: The template's raw body is re-parsed with
-   the merged parameters as Handlebars bindings. The resolved OValue tree then has
+   the merged parameters as Handlebars bindings. The resolved value tree then has
    `Overrides` deep-merged in, references rewritten with the name prefix, and
    non-Resources sections promoted to the parent document via `extractGlobalSections`.
 
-### OValue Threading
+### Key-Order Preservation
 
-All expansion operations preserve YAML key insertion order by working with `OValue`
-(the order-preserving value type) throughout. Reference rewriting, section promotion,
-deep merge, and extraction all operate on `OValue` rather than converting to `Map` or
-`Data.Aeson.Value` until the JSON Schema validator requires it.
+All expansion operations preserve YAML key insertion order by using an ordered-map value
+type throughout. Reference rewriting, section promotion, deep merge, and extraction all
+operate on this ordered type rather than converting to an unordered map until JSON Schema
+validation requires it.
 
 ### Reference Rewriting Rules
 
-`rewriteRefs` applies the name prefix to every logical reference inside the expanded
-template body. The complete set of rewrite sites:
+The reference rewriter applies the name prefix to every logical reference inside the
+expanded template body. The complete set of rewrite sites:
 
 | Site                     | Behavior                                                   |
 |--------------------------|------------------------------------------------------------|
@@ -112,8 +78,8 @@ template body. The complete set of rewrite sites:
 Names that are never rewritten:
 
 - Any name in the `AWS::` namespace (`AWS::AccountId`, `AWS::Region`, etc.)
-- Names collected by `collectGlobalRefs` (entries marked `$global: true`)
-- The consuming resource's own logical name (passed as `additionalGlobals`)
+- Names in the globals set (entries marked `$global: true`)
+- The consuming resource's own logical name (passed as additional globals)
 - Variable map keys in two-argument `Fn::Sub`
 - `${!LiteralText}` inside Sub templates
 
@@ -138,8 +104,8 @@ precedence and the promoted entry is silently dropped.
 
 ### JSON Schema Validator
 
-`validateSchema` implements a Draft 7 subset sufficient for custom resource parameter
-validation. Supported keywords:
+The validator implements a JSON Schema Draft 7 subset sufficient for custom resource
+parameter validation. Supported keywords:
 
 | Keyword                 | Applies to         |
 |-------------------------|--------------------|
@@ -189,10 +155,10 @@ values while I enforce guardrails through type, pattern, and schema constraints.
 
 **Logic Flow**:
 
-1. `$imports` resolver loads the YAML file and inspects the parsed value.
-2. If the top-level object contains a `$params` key, the file is wrapped in a
-   `TemplateInfo` record with `tiParams` from `parseParams` and `tiRawBody` as
-   the raw text of the file.
+1. The `$imports` resolver loads the YAML file and inspects the parsed value.
+2. If the top-level object contains a `$params` key, the file is classified as a
+   custom resource template with its parsed param definitions and raw source text
+   stored.
 3. The import key is registered as a synthetic type name in the import table.
 4. No expansion occurs at import time; expansion is deferred to resource instance
    processing.
@@ -250,22 +216,23 @@ CloudFormation resources without manually duplicating the template's internals.
 
 1. During `Resources` processing, each entry's `Type` is checked against the
    import table.
-2. Matching entries are passed to `expandCustomResource` with the instance name,
-   resource definition, `TemplateInfo`, a re-parser function, and the set of
+2. Matching entries are passed to the expansion function with the instance name,
+   resource definition, template info, a re-parser function, and the set of
    parent resource names (as additional globals to prevent rewriting references
    to sibling resources).
-3. `extractPrefix` reads `NamePrefix` from the resource definition; falls back
-   to the instance logical name.
-4. `extractProperties` extracts the `Properties` sub-map as a `Map Text OValue`.
-5. `mergeParams` fills defaults into the provided map.
-6. `validateParams` checks the merged map against all `ParamDef` constraints.
+3. `NamePrefix` is read from the resource definition; falls back to the instance
+   logical name.
+4. `Properties` are extracted from the resource definition as the provided
+   parameter map.
+5. Defaults from param definitions fill in any missing keys.
+6. The merged parameter map is validated against all param definition constraints.
 7. The re-parser is called with the merged params as Handlebars bindings and the
    template's raw body as input.
-8. `extractResources` collects the `Resources` section from the resolved output.
-9. Each resource key is prefixed; `rewriteRefs` is applied to each resource value.
-10. `extractGlobalSections` collects promoted sections.
-11. `ExpansionResult` is returned; the caller merges `erResources` into the parent
-    `Resources` map and merges `erGlobalSections` into the parent document sections.
+8. The `Resources` section is collected from the resolved output.
+9. Each resource key is prefixed; reference rewriting is applied to each resource value.
+10. Promoted global sections are collected.
+11. The expansion result is returned; the caller merges expanded resources into the
+    parent `Resources` map and merges global sections into the parent document.
 
 **Edge Cases**:
 
@@ -326,18 +293,18 @@ references remain correct.
 
 **Logic Flow**:
 
-1. `collectGlobalRefs` scans the resolved template for entries with
-   `$global: true` in `Resources` and `Parameters` sections; returns their
-   names as the globals set.
-2. `awsPseudoRefs` is unioned with collected globals and `additionalGlobals`.
-3. `rewriteRefs` walks the OValue tree recursively.
-4. At each OObject node, the single-key detection checks for `Ref`, `Fn::GetAtt`,
+1. The resolved template is scanned for entries with `$global: true` in
+   `Resources` and `Parameters` sections; their names form the globals set.
+2. AWS pseudo-references are unioned with collected globals and any additional
+   globals passed by the caller.
+3. The value tree is walked recursively.
+4. At each object node, single-key detection checks for `Ref`, `Fn::GetAtt`,
    `Fn::Sub`, `!Ref`, `!GetAtt`, `!Sub` and dispatches to the appropriate
    rewriter.
-5. For all other objects, `rewriteField` handles `Condition` and `DependsOn`
+5. For all other objects, `Condition` and `DependsOn` fields are handled
    specially; all other fields are recursed into.
-6. `shouldRewrite` is the central gate: returns `False` for any name starting
-   with `AWS::` or present in the globals set; `True` otherwise.
+6. The central gate: any name starting with `AWS::` or present in the globals
+   set is left unchanged; all others are prefixed.
 
 **Edge Cases**:
 
@@ -395,16 +362,14 @@ instances of the template.
 
 **Logic Flow**:
 
-1. After parameter resolution and override application, `extractGlobalSections`
-   iterates over the six promotable section names.
-2. For each present section, `prefixAndRewriteSection` processes each entry:
-   a. If `isMarkedGlobal` returns `True` for the entry value (the entry's value
-      object contains `$global: true`), the key is preserved as-is.
+1. After parameter resolution and override application, the six promotable section
+   names are iterated.
+2. For each present section, each entry is processed:
+   a. If the entry value contains `$global: true`, the key is preserved as-is.
    b. Otherwise, the prefix is prepended to the key.
-   c. `stripGlobal` removes `$global` from the promoted value.
-   d. `rewriteRefs` is applied to the value.
-3. The resulting `Map Text OValue` (section name -> OValue) is returned as
-   `erGlobalSections`.
+   c. `$global` is stripped from the promoted value.
+   d. Reference rewriting is applied to the value.
+3. The resulting section map is returned as part of the expansion result.
 4. The caller merges each section into the parent document, with parent
    definitions taking precedence.
 
@@ -445,7 +410,7 @@ without forking the template.
 **Acceptance Criteria**:
 
 - An `Overrides` key on the resource instance definition is extracted and
-  deep-merged into the resolved template OValue after parameter substitution.
+  deep-merged into the resolved template value after parameter substitution.
 - Deep merge semantics: for nested objects, keys from `Overrides` are merged into
   the base object. For scalar values or arrays, the override value replaces the
   base value entirely.
@@ -461,15 +426,13 @@ without forking the template.
 
 **Logic Flow**:
 
-1. `extractOverrides` reads the `Overrides` key from the resource instance OValue;
-   returns `Nothing` if absent.
-2. After `reparse` produces the resolved template OValue, `deepMerge resolved ov`
-   is called if `overrides` is `Just ov`.
-3. `deepMerge` recurses: `OObject` base and overlay merge their key lists with
-   overlay keys taking precedence for shared keys. Non-object overlays replace
-   the base entirely.
-4. The merged value is then passed to `collectGlobalRefs`, ref rewriting, and
-   section promotion.
+1. The `Overrides` key is read from the resource instance; absent if not present.
+2. After the template is re-parsed and resolved, the overrides value is deep-merged
+   into the resolved output if present.
+3. Deep merge: for nested objects, overlay keys take precedence over base keys.
+   Non-object overlays replace the base value entirely.
+4. The merged value is then passed to global ref collection, reference rewriting,
+   and section promotion.
 
 **Example**:
 
@@ -527,8 +490,8 @@ misconfigured stacks are caught before any AWS API call is made.
   (`number`), `Object` (`object`). AWS-prefixed types (`AWS::EC2::Image::Id`,
   `List<...>`, `CommaDelimitedList`) pass through without structural validation.
   Unknown types produce: `"Unknown parameter type: <type>"`.
-- `AllowedValues` validation checks the provided OValue against the list using
-  OValue equality. Values not in the list produce:
+- `AllowedValues` validation checks the provided value against the list using value
+  equality. Values not in the list produce:
   `"<name>: value not in AllowedValues"`.
 - `AllowedPattern` validation applies a POSIX regex to string values. Non-matching
   strings produce: `"<name>: value does not match AllowedPattern: <pattern>"`.
@@ -545,20 +508,18 @@ misconfigured stacks are caught before any AWS API call is made.
 
 **Logic Flow**:
 
-1. `validateParams` iterates over `[ParamDef]` in definition order.
+1. Param definitions are iterated in definition order.
 2. For each param, the merged map is checked for the param's name.
-3. If absent and no default: `Left "Required parameter missing: <name>"`.
-4. If absent and default present: `Right ()` (default will be used).
-5. If present: four validators are chained via `>>`:
-   a. `validateAllowedValues`: OValue list membership check; bypassed for
-      `isCfnRef val`.
-   b. `validateAllowedPattern`: POSIX regex on `OString` values; bypassed for
-      non-strings and `isCfnRef`.
-   c. `validateType`: structural type check; bypassed for `isCfnRef`.
-   d. `validateParamSchema`: JSON Schema validation via `Aeson.toJSON (toValue val)`;
-      bypassed for `isCfnRef val`.
-6. `isCfnRef` checks whether an `OObject` has any key from the CFN intrinsic
-   set (both `Fn::` prefix and `!` short-tag forms).
+3. If absent and no default: error `"Required parameter missing: <name>"`.
+4. If absent and default present: pass (default will be used).
+5. If present: four validators are applied in sequence:
+   a. AllowedValues: list membership check; bypassed for CFN intrinsic values.
+   b. AllowedPattern: POSIX regex on string values; bypassed for non-strings and
+      CFN intrinsic values.
+   c. Type: structural type check; bypassed for CFN intrinsic values.
+   d. Schema: JSON Schema validation; bypassed for CFN intrinsic values.
+6. A value is considered a CFN intrinsic if it is an object whose key is from the
+   CFN intrinsic set (both `Fn::` prefix and `!` short-tag forms).
 
 **JSON Schema Keywords Validated**:
 
@@ -580,9 +541,8 @@ misconfigured stacks are caught before any AWS API call is made.
 
 **Edge Cases**:
 
-- An `AllowedValues` list containing OValue items of mixed types (e.g., string
-  and number) is valid; the provided value must match one element using OValue
-  equality.
+- An `AllowedValues` list containing items of mixed types (e.g., string and number) is
+  valid; the provided value must match one element using value equality.
 - A `Schema` with `boolean: false` at the top level rejects all values.
 - A `Schema` with `boolean: true` at the top level accepts all values.
 - `AllowedPattern` is applied only to `OString` values. If the param type is
@@ -637,12 +597,11 @@ conflicts.
 
 **Logic Flow**:
 
-Each instance resource entry is processed independently by `expandCustomResource`.
-The caller accumulates `erResources` lists and `erGlobalSections` maps from all
-instances, merging them into the parent document after all expansions complete.
-The `additionalGlobals` set for each instance contains the other instances'
-logical names (all parent resource names), preventing any cross-instance reference
-rewriting.
+Each instance resource entry is processed independently. The caller accumulates
+expanded resource lists and global section maps from all instances, merging them
+into the parent document after all expansions complete. The additional globals set
+for each instance contains all parent resource names, preventing any cross-instance
+reference rewriting.
 
 **Example**:
 
@@ -695,24 +654,24 @@ accumulating results. The complexity is in the caller's merge logic.
 ### Unit Tests
 
 - `parseParams` with valid sequence of param defs: verifies all fields parsed
-  correctly including optional fields as `Nothing`.
-- `parseParams` with non-sequence input: returns `Left "$params must be a sequence"`.
-- `parseParams` with non-mapping entry: returns `Left "$params entries must be mappings"`.
+  correctly including optional fields absent.
+- `parseParams` with non-sequence input: returns error `"$params must be a sequence"`.
+- `parseParams` with non-mapping entry: returns error `"$params entries must be mappings"`.
 - `parseParams` with missing `Name`: returns appropriate error.
-- `validateParams` with all params provided and valid: returns `Right ()`.
-- `validateParams` with missing required param: returns `Left "Required parameter missing: ..."`.
-- `validateParams` with param having a default and not provided: returns `Right ()`.
-- `validateAllowedValues`: provided value in list → `Right ()`; not in list → `Left`.
-- `validateAllowedValues` with CFN intrinsic value: returns `Right ()` (bypass).
-- `validateAllowedPattern`: matching string → `Right ()`; non-matching → `Left`.
-- `validateAllowedPattern` with non-string value: returns `Right ()`.
-- `validateType` for each recognized type (`String`, `Number`, `Object`): correct
-  value → `Right ()`; wrong value → `Left`.
-- `validateType` for `AWS::` prefix types: always `Right ()`.
-- `validateType` for unknown type: returns `Left "Unknown parameter type: ..."`.
-- `mergeParams` with all params provided: no defaults inserted.
-- `mergeParams` with missing params: defaults filled in.
-- `mergeParams` with provided params taking precedence over defaults.
+- Param validation with all params provided and valid: passes.
+- Param validation with missing required param: returns error `"Required parameter missing: ..."`.
+- Param validation with param having a default and not provided: passes.
+- AllowedValues validation: provided value in list passes; not in list fails.
+- AllowedValues validation with CFN intrinsic value: bypassed (passes).
+- AllowedPattern validation: matching string passes; non-matching fails.
+- AllowedPattern validation with non-string value: bypassed (passes).
+- Type validation for each recognized type (`String`, `Number`, `Object`): correct
+  value passes; wrong value fails.
+- Type validation for `AWS::` prefix types: always passes.
+- Type validation for unknown type: returns error `"Unknown parameter type: ..."`.
+- Param merging with all params provided: no defaults inserted.
+- Param merging with missing params: defaults filled in.
+- Param merging with provided params taking precedence over defaults.
 
 ### Expansion Tests
 
@@ -729,23 +688,21 @@ accumulating results. The complexity is in the caller's merge logic.
 
 ### Reference Rewriting Tests
 
-- `rewriteRefs` on `OObject {"!Ref": OString "Queue"}` with prefix `OrderEvents`:
-  produces `OObject {"!Ref": OString "OrderEventsQueue"}`.
-- `rewriteRefs` on `OObject {"!Ref": OString "AWS::Region"}`: unchanged.
-- `rewriteRefs` on `OObject {"!GetAtt": OString "Queue.QueueName"}`: produces
-  `OString "OrderEventsQueue.QueueName"`.
-- `rewriteRefs` on `OObject {"!GetAtt": OArray [...]}` form: first element prefixed.
-- `rewriteRefs` on `!Sub` string with `${Queue}`: interpolation prefixed.
-- `rewriteRefs` on `!Sub` string with `${!Literal}`: left unchanged.
-- `rewriteRefs` on two-argument `!Sub` with variable map: keys added to globals,
+- `!Ref Queue` with prefix `OrderEvents`: produces `!Ref OrderEventsQueue`.
+- `!Ref AWS::Region`: unchanged.
+- `!GetAtt Queue.QueueName` (string form): first component prefixed.
+- `!GetAtt` array form: first element prefixed.
+- `!Sub` string with `${Queue}`: interpolation prefixed.
+- `!Sub` string with `${!Literal}`: left unchanged.
+- Two-argument `!Sub` with variable map: variable map keys added to globals,
   template rewritten excluding those keys.
-- `rewriteRefs` on `Condition` field: string value prefixed.
-- `rewriteRefs` on `DependsOn` as string: prefixed.
-- `rewriteRefs` on `DependsOn` as array: each element prefixed.
-- `rewriteRefs` on name in globals set: left unchanged.
-- `shouldRewrite` for `AWS::AccountId`: `False`.
-- `shouldRewrite` for name in globals: `False`.
-- `shouldRewrite` for arbitrary name: `True`.
+- `Condition` field: string value prefixed.
+- `DependsOn` as string: prefixed.
+- `DependsOn` as array: each element prefixed.
+- Name in the globals set: left unchanged.
+- `AWS::AccountId`: not rewritten.
+- Name in globals: not rewritten.
+- Arbitrary non-global name: rewritten.
 
 ### JSON Schema Validation Tests
 
@@ -791,9 +748,4 @@ accumulating results. The complexity is in the caller's merge logic.
 | `PRD-03: Import System`                           | `$imports` loads templates; import key becomes synthetic type  |
 | `PRD-02: YAML Preprocessing`                      | Handlebars template re-parse with param bindings              |
 | `docs/custom-resource-templates.md`               | User-facing documentation, examples, team workflow guidance   |
-| `src/Iidy/Yaml/CustomResources/Params.hs`         | ParamDef, TemplateInfo, parseParams, validateParams, mergeParams |
-| `src/Iidy/Yaml/CustomResources/Expansion.hs`      | expandCustomResource, ExpansionResult, deepMerge              |
-| `src/Iidy/Yaml/CustomResources/RefRewriting.hs`   | rewriteRefs, collectGlobalRefs, shouldRewrite                 |
-| `src/Iidy/Yaml/CustomResources/JsonSchema.hs`     | validateSchema, JSON Schema Draft 7 keyword implementations   |
-| `src/Iidy/Yaml/OValue.hs`                         | OValue type threaded throughout for key-order preservation    |
-| Rust source: `src/cfn/custom_resources/`         | Original implementation; behavioral oracle for edge cases     |
+| Rust source: `~/src/iidy/src/cfn/custom_resources/` | Original implementation; behavioral oracle for edge cases  |

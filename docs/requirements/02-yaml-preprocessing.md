@@ -17,51 +17,30 @@ The system is also used outside CloudFormation. Teams run `iidy render` to
 generate Kubernetes manifests, CI configuration, and other YAML-based
 artifacts.
 
-**Primary entry points:**
-
-- `Iidy.Yaml.Engine.preprocessYaml` — YAML 1.2 (default)
-- `Iidy.Yaml.Engine.preprocessYaml11` — YAML 1.1 compat mode
-
-**Key modules:**
-
-| Module                             | Responsibility                                 |
-|------------------------------------|------------------------------------------------|
-| `Iidy.Yaml.Engine`                 | Two-phase pipeline orchestration               |
-| `Iidy.Yaml.Ast`                    | AST type definitions for all node kinds        |
-| `Iidy.Yaml.Resolution.Resolver`    | Phase 2 tag resolution                         |
-| `Iidy.Yaml.Resolution.Context`     | Variable scope (TagContext)                    |
-| `Iidy.Yaml.Handlebars.Engine`      | Handlebars parser and renderer                 |
-| `Iidy.Yaml.Handlebars.Helpers`     | All 28 built-in helper functions               |
-| `Iidy.Yaml.Detection`              | YAML 1.1 vs 1.2 auto-detection                 |
-| `Iidy.Yaml.Errors.Ids`             | Error code definitions (ERR_1001 through 9005) |
-
----
-
-## Implementation Context
+## Technical Context
 
 ### Two-Phase Pipeline
 
-Phase 1 (IO): Load `$imports` and resolve `$defs` into an environment map.
+Phase 1 (I/O-bound): Load `$imports` and resolve `$defs` into an environment map.
 
 1. Parse `$defs` key-value pairs; resolve each value in sequence using the
    environment accumulated so far (let* semantics). Each definition may
    reference earlier definitions in the same `$defs` block.
 2. Parse `$imports` key-value pairs; for each, interpolate Handlebars
-   expressions in the location string, call `LoadImportFn`, and insert the
+   expressions in the location string, load the import, and insert the
    imported value into the environment under the given key. If the imported
-   document has a `$params` section, register it as a `TemplateInfo` for
-   custom resource expansion.
+   document has a `$params` section, register it as a custom resource template.
 3. `$defs` is processed before `$imports`. An import location string may
    reference variables defined in `$defs`.
 
-Phase 2 (pure): Build a `TagContext` from the environment and call `resolveAst`
-recursively.
+Phase 2 (pure): Build a variable scope from the environment and recursively
+resolve all nodes in the document AST.
 
 1. Plain scalars, sequences, and mappings pass through (with special-key
    filtering for `$imports`, `$defs`, `$envValues`, `$params`).
-2. `AstTemplatedString` nodes are processed through the Handlebars engine.
-3. `AstPreprocessingTag` nodes dispatch to per-tag resolvers.
-4. `AstCloudFormationTag` nodes have their inner content resolved, then pass
+2. Templated string nodes are processed through the Handlebars engine.
+3. Preprocessing tag nodes (`!$`) dispatch to per-tag resolvers.
+4. CloudFormation tag nodes have their inner content resolved, then pass
    through as tagged YAML.
 5. If YAML 1.1 compat mode is requested, a post-pass converts boolean-like
    strings (`yes`, `no`, `on`, `off`, `true`, `false`, all case variants) to
@@ -69,28 +48,27 @@ recursively.
 
 ### Variable Scope
 
-The `TagContext` carries a `Map Text OValue` of all variables in scope. Binding
-is purely substitutive: `withVariable` inserts a new key, and `withBindings`
-merges a set. There are no closures and no mutable state. Shadowing is
-first-wins within the same scope level: outer variables are visible inside
-`!$let` unless the same name appears in the `!$let` bindings.
+The variable scope carries a map of all variables in scope. Binding is purely
+substitutive: inserting a new key does not affect other bindings. There are no
+closures and no mutable state. Shadowing is first-wins within the same scope
+level: outer variables are visible inside `!$let` unless the same name appears
+in the `!$let` bindings.
 
-### OValue
+### Key Order Preservation
 
-The internal value type is `OValue`, which differs from `Data.Aeson.Value` in
-one key way: `OObject` uses an ordered association list (`[(Text, OValue)]`)
-rather than a hash map. This preserves key insertion order through the entire
-pipeline, which is required for deterministic YAML output and for maintaining
-CloudFormation resource ordering.
+The internal value type must preserve key insertion order. Standard unordered
+map types are insufficient: the implementation must use an ordered association
+list or equivalent structure so that key order is maintained throughout the
+pipeline, producing deterministic YAML output and preserving CloudFormation
+resource ordering.
 
 ### Custom Resource Expansion
 
 When a `$imports` entry has a `$params` section, iidy registers it as a
 template. During Phase 2, if the document contains a `Resources` section and
 custom templates are registered, any resource whose `Type` matches a registered
-template name is expanded via `expandCustomResource`. Expanded resources replace
-the original entry; global sections emitted by the expansion are merged into the
-top-level mapping.
+template name is expanded. Expanded resources replace the original entry; global
+sections emitted by the expansion are merged into the top-level mapping.
 
 ---
 
@@ -111,20 +89,19 @@ CloudFormation deployments from a single parameterized file without duplication.
   `$defs` entries and `$imports` location strings.
 - Import locations support Handlebars interpolation: `./config-{{ env }}.yaml`
   is expanded using the current environment before the file is loaded.
-- A `PreprocessResult` carries both the resolved `OValue` and an
-  `ImportManifest` recording what was imported.
+- The preprocessing result carries both the resolved value and an import
+  manifest recording what was imported.
 
 **Logic Flow:**
 
 1. Parse root mapping; locate `$defs` and `$imports` sub-mappings.
-2. Fold over `$defs` pairs with `foldM`, resolving each value against the
+2. Fold over `$defs` pairs in order, resolving each value against the
    accumulated environment.
-3. For each `$imports` entry: interpolate the location string, call
-   `LoadImportFn`, add result to environment. If the imported document contains
-   `$params`, register a `TemplateInfo`.
-4. Build `TagContext` from the final environment; call `resolveAst` on the full
-   AST (which includes the `$defs`/`$imports` keys, which are then filtered out
-   by `isSpecialKey`).
+3. For each `$imports` entry: interpolate the location string, load the import,
+   add result to environment. If the imported document contains `$params`,
+   register it as a custom resource template.
+4. Build the variable scope from the final environment; resolve the full
+   document AST (filtering out `$defs`/`$imports` special keys from output).
 5. Apply YAML 1.1 compat post-pass if requested.
 
 **Edge Cases:**
@@ -147,11 +124,9 @@ CloudFormation deployments from a single parameterized file without duplication.
 
 **Complexity Notes:**
 
-The `processDefs` function uses `foldM` over the pairs list with the
-accumulating environment. This is O(n) in definitions but each step calls
-`resolveAst`, which may itself be non-trivial. Import processing is sequential
-to preserve deterministic ordering and to allow each import to be available to
-subsequent import location strings.
+`$defs` processing folds sequentially over the pairs list with an accumulating
+environment. Import processing is sequential to preserve deterministic ordering
+and to allow each import to be available to subsequent import location strings.
 
 ---
 
@@ -181,12 +156,11 @@ can access deeply nested data without manual extraction.
    suffix). Mapping: extract `path`, `query`, and `jmespath` fields.
 2. Expand bracket notation: replace `[varname]` segments by resolving `varname`
    in the current context and substituting its string representation.
-3. Split path on `.` and traverse the environment using `resolveDotPathO`.
-4. If a query is present, apply `applyDotQueryValidated`: comma-separated keys
-   produce a filtered mapping; all keys must exist.
-5. If a JMESPath expression is present, apply `applyJmesPath` to the
-   `Data.Aeson.Value` form of the resolved value; convert result back to
-   `OValue`.
+3. Split path on `.` and traverse the environment.
+4. If a query is present, apply comma-separated key selection: produce a
+   filtered mapping; all keys must exist.
+5. If a JMESPath expression is present, apply the JMESPath evaluator to the
+   resolved value.
 
 **Edge Cases:**
 
@@ -195,9 +169,9 @@ can access deeply nested data without manual extraction.
 - Bracket expansion is recursive: `a[b][c]` expands both brackets in sequence.
 - A numeric string segment in a dot path accesses a sequence by index:
   `!$ list.0` returns the first element.
-- A query applied to a non-mapping value produces `ONull`, not an error, for
+- A query applied to a non-mapping value produces null, not an error, for
   single-key traversal forms. Comma-separated key selection against a
-  non-mapping value returns `ONull`.
+  non-mapping value returns null.
 - An empty query string after `?` is treated as a no-op.
 
 **Error Scenarios:**
@@ -211,10 +185,10 @@ can access deeply nested data without manual extraction.
 
 **Complexity Notes:**
 
-Bracket expansion is implemented via `expandBrackets`, which recursively
-processes the path until no more brackets are found. The JMESPath evaluator
-is a custom implementation in `Iidy.Yaml.JMESPath` covering the full spec
-(projections, filters, multi-select hash/list, functions).
+Bracket expansion is performed recursively, processing the path until no more
+brackets are found. The JMESPath evaluator must be implemented as a custom
+component covering the full spec (projections, filters, multi-select hash/list,
+functions), as no standard library provides the required subset.
 
 ---
 
@@ -227,30 +201,30 @@ deployment targets without duplication.
 **Acceptance Criteria:**
 
 - `!$if` requires a `test` field and a `then` field. The `else` field is
-  optional; if omitted and the test is falsy, the result is `ONull`.
+  optional; if omitted and the test is falsy, the result is null.
 - `!$if` evaluates `test`, resolves `then` if truthy, `else` if falsy.
-- `!$eq` takes a two-element sequence and returns `OBool True` if both
-  resolved values are structurally equal, `OBool False` otherwise.
+- `!$eq` takes a two-element sequence and returns true if both resolved values
+  are structurally equal, false otherwise.
 - `!$not` takes a one-element sequence and returns the logical negation of the
   resolved value's truthiness.
-- Truthiness: `ONull` and `OBool False` are falsy. All other values (non-empty
-  strings, non-zero numbers, non-empty arrays, non-empty objects, `OBool True`)
+- Truthiness: null and boolean false are falsy. All other values (non-empty
+  strings, non-zero numbers, non-empty arrays, non-empty objects, boolean true)
   are truthy.
 - `!$if` can be nested arbitrarily inside `then` and `else` branches.
 - There are no `!$and` or `!$or` tags. Compound conditions use nested `!$if`.
 
 **Logic Flow:**
 
-1. `resolveIf`: resolve `test` AST; if `oIsTruthy`, resolve and return `then`
-   AST; else resolve and return `else` AST (or `ONull`).
-2. `resolveEq`: resolve both arms; compare with `oValuesEqual` (structural
-   deep equality across `OValue` constructors).
-3. `resolveNot`: resolve the single child; return `OBool (not (oIsTruthy val))`.
+1. `!$if`: resolve the `test` expression; if truthy, resolve and return `then`;
+   else resolve and return `else` (or null if absent).
+2. `!$eq`: resolve both arms; compare with structural deep equality.
+3. `!$not`: resolve the single child; return the logical negation of its
+   truthiness.
 
 **Edge Cases:**
 
 - `!$if` with `else: null` explicitly and `!$if` with no `else` key both yield
-  `ONull` on a falsy test.
+  null on a falsy test.
 - `!$eq` on values of different types is always `False` (e.g. string `"1"` vs
   number `1`).
 - `!$not` on a non-boolean value negates the truthiness coercion, not a type
@@ -355,10 +329,9 @@ non-deterministic (HashMap internally).
 
 **Complexity Notes:**
 
-`!$mergeMap` uses `mergeOObjects` which preserves key order: keys from the base
-that are also in the overlay retain their position but take the overlay value;
-new overlay keys are appended. This makes merge order significant and
-predictable.
+`!$mergeMap` merges preserving key order: keys from the base that are also in
+the overlay retain their position but take the overlay value; new overlay keys
+are appended. This makes merge order significant and predictable.
 
 ---
 
@@ -381,25 +354,24 @@ string on the delimiter. Returns a sequence of strings. Splitting on an empty
 string produces single-character elements.
 
 **!$toYamlString:** Resolves its content value and serializes it to a YAML
-string using the custom emitter (preserving key order). The deprecated alias
-`!$string` is accepted.
+string (preserving key order). The deprecated alias `!$string` is accepted.
 
 **!$parseYaml:** Resolves its content to a string and parses it as YAML.
 Returns the parsed structure. Uses the same YAML parser as the main pipeline.
 
 **!$toJsonString:** Resolves its content value and serializes it to a compact
-JSON string (no whitespace). Uses `Data.Aeson.encode`.
+JSON string (no whitespace).
 
-**!$parseJson:** Resolves its content to a string and parses it as JSON using
-`Data.Aeson`. Returns the parsed structure.
+**!$parseJson:** Resolves its content to a string and parses it as JSON.
+Returns the parsed structure.
 
 **Logic Flow:**
 
 - All six tags resolve their input first, then perform their string/parse
   operation.
 - `!$join` validates each item type before joining.
-- `!$parseYaml` and `!$parseJson` parse into the AST / Aeson Value and
-  convert back to `OValue`.
+- `!$parseYaml` and `!$parseJson` parse the string and return the structured
+  value.
 
 **Edge Cases:**
 
@@ -410,8 +382,8 @@ JSON string (no whitespace). Uses `Data.Aeson.encode`.
 - `!$toYamlString` on a scalar string produces a YAML scalar (possibly quoted).
 - `!$parseYaml` on a string containing multiple YAML documents parses only the
   first.
-- `!$toJsonString` on a mapping preserves Aeson's key ordering (which may not
-  match OValue insertion order).
+- `!$toJsonString` on a mapping serializes via the JSON encoder; key order in
+  the JSON output may not match the original insertion order.
 
 **Error Scenarios:**
 
@@ -425,11 +397,10 @@ JSON string (no whitespace). Uses `Data.Aeson.encode`.
 
 **Complexity Notes:**
 
-`!$toYamlString` uses `Iidy.Yaml.Emitter.emitYaml`, the same custom emitter
-used for final output. This guarantees consistent formatting and key-order
-preservation. `!$parseYaml` goes through the full `Iidy.Yaml.Parser.parseYaml`
-and `astToValueRaw` (no tag resolution), so tags inside the string are
-serialized literally.
+`!$toYamlString` uses the same YAML emitter as the final output pipeline,
+guaranteeing consistent formatting and key-order preservation. `!$parseYaml`
+parses the string without tag resolution, so preprocessing tags inside the
+string are treated as literal data rather than being expanded.
 
 ---
 
@@ -456,8 +427,8 @@ scope, and emit literal data structures that should not be transformed.
 
 **!$escape:**
 
-- The `!$escape` tag wraps a YAML value. Its content is converted to an
-  `OValue` by `astToValueRaw`, which skips all tag resolution.
+- The `!$escape` tag wraps a YAML value. Its content is converted to a plain
+  value by skipping all tag resolution.
 - Tags inside `!$escape` are represented as literal strings (`"!$escaped"` for
   preprocessing tags; as single-key objects for CloudFormation tags).
 - Handlebars expressions inside strings within `!$escape` are NOT interpolated.
@@ -473,9 +444,8 @@ scope, and emit literal data structures that should not be transformed.
 
 **Logic Flow for !$escape:**
 
-1. Call `astToValueRaw` on the inner AST. This function pattern-matches on all
-   AST constructors without calling `resolveAst`.
-2. Return the resulting `OValue` directly.
+1. Convert the inner AST to a plain value without invoking tag resolution.
+2. Return the resulting value directly.
 
 **Edge Cases:**
 
@@ -498,11 +468,10 @@ scope, and emit literal data structures that should not be transformed.
 
 **Complexity Notes:**
 
-`!$let` bindings use the same `foldM`/`withVariable` pattern as `$defs`
-processing. The key implementation detail is that `foldBindings` threads the
-updated context through each step, giving let* semantics without any special
-logic. `!$escape` is intentionally simple: `astToValueRaw` is a structural
-conversion with no IO and no error path.
+`!$let` bindings use the same sequential folding pattern as `$defs` processing:
+the context is threaded through each step, giving let* semantics without any
+special logic. `!$escape` is intentionally simple: it performs a structural
+conversion with no I/O and no error path.
 
 ---
 
@@ -591,12 +560,12 @@ Equality (1):
 **Logic Flow:**
 
 1. If the string does not contain `{{`, return it unchanged (fast path).
-2. Parse the template into a list of `TemplatePart` values: `Literal`, `Output`,
-   `Block`, or `Comment`.
-3. Before interpolation, `findMissingTemplateVar` checks all simple `{{var}}`
-   references (non-helper, non-block) against the variable map. If any root
-   variable is missing, fail early with ERR_2001.
-4. Render each part against the Aeson `Value` context built from `tcVariables`.
+2. Parse the template into a sequence of parts: literals, variable outputs,
+   block constructs, and comments.
+3. Before interpolation, check all simple `{{var}}` references (non-helper,
+   non-block) against the variable map. If any root variable is missing, fail
+   early with ERR_2001.
+4. Render each part against the variable context.
 5. Return the concatenated text.
 
 **Edge Cases:**
@@ -611,7 +580,6 @@ Equality (1):
   element count as a string; on an object returns key count as a string.
 - `lookup` on an array with a non-integer string key returns empty string.
 - `filehash` on a directory: files are sorted lexicographically before hashing.
-  Uses `unsafePerformIO`.
 - camelCase word splitter recognizes runs of uppercase letters as an acronym
   boundary: `"XMLParser"` splits to `["XML", "Parser"]`.
 
@@ -629,11 +597,10 @@ Equality (1):
 
 **Complexity Notes:**
 
-The Handlebars engine is a custom recursive-descent parser in
-`Iidy.Yaml.Handlebars.Engine`. It does not use any external Handlebars library.
-Sub-expressions `(helperName args)` allow helpers to be nested as arguments to
-other helpers or block conditions. The `each` block exposes `@index`, `@first`,
-`@last` for arrays and `@key` for objects.
+The Handlebars engine must be implemented as a custom recursive-descent parser;
+no external Handlebars library is used. Sub-expressions `(helperName args)` allow
+helpers to be nested as arguments to other helpers or block conditions. The `each`
+block exposes `@index`, `@first`, `@last` for arrays and `@key` for objects.
 
 ---
 
@@ -656,25 +623,25 @@ work correctly, while new documents use strict YAML 1.2 semantics.
   - `auto`: auto-detect by document content.
   - `1.1`: force YAML 1.1 compat.
   - `1.2`: force strict YAML 1.2.
-- Auto-detection logic (in `Iidy.Yaml.Detection`):
-  - A `%YAML 1.1` directive in the first 5 lines: `ExplicitV11` (compat on).
-  - A `%YAML 1.2` directive in the first 5 lines: `ExplicitV12` (compat off).
+- Auto-detection logic:
+  - A `%YAML 1.1` directive in the first 5 lines: compat on.
+  - A `%YAML 1.2` directive in the first 5 lines: compat off.
   - Document contains 2+ CloudFormation keys in first 50 lines
     (`AWSTemplateFormatVersion`, `Resources:`, `Parameters:`, `Outputs:`,
-    `Conditions:`, `Mappings:`, `Metadata:`, `Transform:`): `DetectedCloudFormation`
-    (compat on).
+    `Conditions:`, `Mappings:`, `Metadata:`, `Transform:`): compat on.
   - Document contains both `apiVersion:` and `kind:` plus a recognized Kubernetes
-    API version string in first 20 lines: `DetectedKubernetes` (compat off).
-  - Otherwise: `UnknownSpec` (compat off).
+    API version string in first 20 lines: compat off.
+  - Otherwise: compat off.
 
 **Logic Flow:**
 
-1. Caller invokes `detectYamlSpec` on raw input text before parsing if
-   `--yaml-spec auto` or the default.
-2. `shouldUseYaml11Compatibility` maps `YamlSpecDetection` to a boolean.
-3. Choose `preprocessYaml` or `preprocessYaml11` accordingly.
-4. After Phase 2, if YAML 1.1 compat: walk the resolved `OValue` recursively;
-   for every `OString` that `isBooleanLike` returns, replace with `OBool`.
+1. Detect YAML spec from raw input text before parsing when `--yaml-spec auto`
+   or the default is active.
+2. Determine whether YAML 1.1 compatibility mode should be enabled.
+3. Run the appropriate preprocessing pipeline variant accordingly.
+4. After Phase 2, if YAML 1.1 compat: walk the resolved value recursively;
+   for every string that matches a boolean-like pattern, replace it with an
+   actual boolean.
 
 **Edge Cases:**
 
@@ -693,9 +660,10 @@ work correctly, while new documents use strict YAML 1.2 semantics.
 
 **Complexity Notes:**
 
-`convertYaml11CompatO` is a recursive structural fold. It is O(n) in the size
-of the output value. The conversion happens after full resolution, so it
-interacts with all other features uniformly.
+YAML 1.1 boolean conversion is a recursive structural fold over the output
+value. The conversion happens after full resolution, so it interacts with all
+other features uniformly — including strings produced by `!$join` or Handlebars
+interpolation.
 
 ---
 
@@ -708,14 +676,13 @@ fix the issue without guessing.
 
 **Acceptance Criteria:**
 
-- Every `ResolveError` carries a `Position` (line, column) from the AST node's
-  `SrcMeta`.
+- Every preprocessing error carries a position (line, column) from the AST
+  node where the error occurred.
 - Position is reported in 1-based line and column numbers.
-- The error display (in `Iidy.Yaml.Errors.Display`) renders a 3-line context
-  window around the error position, with a caret (`^^^`) under the relevant
-  span.
+- The error display renders a 3-line context window around the error position,
+  with a caret (`^^^`) under the relevant span.
 - Every error includes an `errno` in the format `ERR_NNNN` referencing the
-  `ErrorId` catalogue.
+  error code catalogue.
 - The `iidy explain ERR_NNNN` command explains the error code in detail with
   examples.
 - All error categories carry their numeric code:
@@ -764,42 +731,38 @@ fix the issue without guessing.
 
 **Logic Flow:**
 
-1. `resolveAst` returns `Either ResolveError OValue`. `ResolveError` holds a
-   `Position` and a `Text` message.
-2. `resolveError meta msg` constructs a `ResolveError` using `smStart meta`.
-3. `PreprocessError` wraps the four possible error variants: `PeResolveError`,
-   `PeImportError`, `PeHandlebarsError`, `PeCycleError`.
-4. The enhanced error display (`Iidy.Yaml.Errors.Enhanced`) maps the raw error
-   to a user-facing message with context window, caret annotation, and example.
+1. Tag resolution returns either an error (with position) or the resolved value.
+2. Each error variant carries the four possible error categories: resolve errors,
+   import errors, Handlebars errors, and cycle errors.
+3. The enhanced error display maps the raw error to a user-facing message with
+   context window, caret annotation, and example.
 
 **Edge Cases:**
 
 - Errors in the non-taken branch of `!$if` do not surface (lazy evaluation).
-- Position `zeroPosition` (line 0, column 0) is used for errors that arise from
-  custom resource expansion where the precise position cannot be attributed.
+- Errors from custom resource expansion that cannot be attributed to a precise
+  position use line 0, column 0 as a sentinel position.
 - Import errors carry the import key name and resolved location, not a position
   in the source document.
-- Handlebars errors from `interpolate` are lifted to `PeHandlebarsError` and
-  report at the position of the containing `AstTemplatedString` node.
-- `PeCycleError` carries the path string of the detected cycle, not a position.
+- Handlebars errors are reported at the position of the containing templated
+  string node.
+- Cycle errors carry the path string of the detected cycle, not a position.
 
 **Complexity Notes:**
 
-`SrcMeta` is attached to every AST node by the parser (`Iidy.Yaml.Parser`),
-which tracks line and column offsets through the HsYAML event stream. This
-ensures that even deeply nested tag errors can report their precise source
-location. The enhanced error display reads the original source text to extract
-the context window, so the source must be retained through the pipeline.
+Source position metadata must be attached to every AST node during parsing,
+tracking line and column offsets through the YAML event stream. This ensures
+that even deeply nested tag errors can report their precise source location.
+The enhanced error display reads the original source text to extract the context
+window, so the source must be retained through the pipeline.
 
 ---
 
 ## Testing Requirements
 
-- All 21+ custom tags must have fixture tests in
-  `test-fixtures/example-templates/yaml-iidy-syntax/` with corresponding
-  expected outputs in `test-fixtures/expected-outputs/yaml-iidy-syntax/`.
-- All error conditions must have fixture tests in
-  `test-fixtures/example-templates/errors/` with corresponding expected error
+- All 21+ custom tags must have fixture tests with corresponding expected
+  outputs.
+- All error conditions must have fixture tests with corresponding expected error
   output snapshots.
 - Error snapshot tests verify: error code (ERR_NNNN), file/line/column, caret
   annotation, and one-line explanation. They do not pin the example text or
@@ -807,9 +770,9 @@ the context window, so the source must be retained through the pipeline.
 - YAML 1.1 compat behavior must be tested with `%YAML 1.1` directive, CFN
   auto-detected, and explicit `--yaml-spec 1.1` flag inputs.
 - Handlebars helper tests must cover all 28 helpers including deprecated aliases.
-- Property-based tests (tasty-quickcheck) cover: `splitWords` round-trip for
-  case conversion helpers, `encodeBase64` output character set, `urlEncode`
-  never encoding unreserved characters.
+- Property-based tests cover: word-splitting round-trip for case conversion
+  helpers, base64 output character set, URL encoding never encoding unreserved
+  characters.
 - All tests run against mock/local fixtures. No real AWS calls.
 - Test structure: one test group per tag or feature area; no monolithic test
   modules.
@@ -823,14 +786,9 @@ the context window, so the source must be retained through the pipeline.
 - `docs/SECURITY.md` — import security restrictions and path sandboxing
 - `docs/requirements/01-cli-interface.md` — `--yaml-spec`, `--format`, and
   `render` command spec
-- `Iidy.Yaml.Parser` — HsYAML event API parser that produces `YamlAst` with
-  `SrcMeta` attached to every node
-- `Iidy.Yaml.Emitter` — custom YAML emitter used by `!$toYamlString` and
-  `toYaml` helper
-- `Iidy.Yaml.JMESPath` — custom JMESPath evaluator (~600 LOC, full spec)
-- `Iidy.Yaml.CustomResources.*` — custom resource expansion pipeline
-  (`!$expand` and automatic expansion via `$params`)
-- `Iidy.Yaml.OValue` — ordered-key value type used throughout the pipeline
-- `Iidy.Yaml.Errors.Display` — context-window error rendering
-- `Iidy.Yaml.Errors.Enhanced` — error message construction and example
-  generation
+- `docs/requirements/03-import-system.md` — import resolution, security model,
+  cycle detection
+- `docs/requirements/04-custom-resources.md` — custom resource expansion
+  pipeline (`!$expand` and automatic expansion via `$params`)
+- Rust oracle: `~/src/iidy/target/debug/iidy` (read-only reference binary)
+- `DIVERGENCES.md` — documented behavioral differences from Rust iidy

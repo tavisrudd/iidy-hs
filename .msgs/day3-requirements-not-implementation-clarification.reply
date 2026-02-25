@@ -1,0 +1,7 @@
+Understood. Requirements docs should describe WHAT the system does (detailed spec), not HOW it's built. No Haskell function names, no source file references, no implementation phases/sessions. Written as if the codebase doesn't exist yet — for a human to estimate effort from.
+
+I've written 11 of 13 PRDs so far, and they all have this problem (Implementation Context sections, source file cross-references, function names). I'll:
+1. Update WORKPLAN.md with this rule prominently
+2. Fix all existing PRDs to remove implementation details
+3. Write the remaining 2 PRDs (11-utilities, 12-cross-cutting) correctly
+4. Commit the cleanup

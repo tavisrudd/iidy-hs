@@ -2,32 +2,22 @@
 
 ## Overview
 
-iidy-hs integrates with AWS via the amazonka library to authenticate, authorize, and execute
-CloudFormation operations. The integration covers credential discovery, region resolution,
+iidy-hs integrates with AWS to authenticate, authorize, and execute CloudFormation operations. The integration covers credential discovery, region resolution,
 IAM role assumption, NTP time synchronization for write operations, STS identity retrieval
 for metadata, and graceful error handling across all credential failure modes.
 
-This document captures retroactive requirements derived from the implemented behavior in
-`src/Iidy/Aws/Config.hs`, `src/Iidy/Aws/CredentialSource.hs`, `src/Iidy/Aws/Sts.hs`,
-`src/Iidy/Aws/Time.hs`, and `src/Iidy/Types/AwsSettings.hs`.
+This document captures requirements derived from the implemented behavior verified during
+live AWS testing. The implementation achieves byte-for-byte behavioral equivalence with the
+Rust iidy binary on all credential chain, region resolution, assume-role, and error display
+behaviors.
 
-The implementation achieves byte-for-byte behavioral equivalence with the Rust iidy binary
-on all credential chain, region resolution, assume-role, and error display behaviors tested
-during live AWS verification in Phase 14.
+## Technical Context
 
-## Implementation Context
-
-The AWS configuration subsystem consists of:
-
-- `Iidy.Aws.Config` — credential discovery, region resolution, env setup (`createAwsEnv`)
-- `Iidy.Aws.CredentialSource` — `CredentialSource` ADT, `CredentialSourceStack`, display
-- `Iidy.Types.AwsSettings` — `AwsSettings`, `AwsOpts`, `mergeAwsSettings`, env-map parsing
-- `Iidy.Aws.Sts` — `getCallerIdentity` with graceful fallback
-- `Iidy.Aws.Time` — `ReliableTimeProvider` (NTP) and `SystemTimeProvider`
-
-The monad stack is plain IO with an `Amazonka.Env` passed explicitly via `CfnContext`. No
-transformer stack wraps credential state. Settings flow from CLI parsing → `AwsOpts` →
-`mergeAwsSettings` with stack-args `AwsSettings` → final `AwsSettings` → `createAwsEnv`.
+The AWS configuration subsystem covers: credential discovery, region resolution, env setup,
+credential source tracking and display, `getCallerIdentity` with graceful fallback, and NTP
+time synchronization. Settings flow from CLI parsing to options merging with stack-args
+settings, then to AWS environment creation. No transformer stack wraps credential state;
+the AWS environment is passed explicitly via the command context.
 
 ---
 
@@ -53,28 +43,27 @@ on ephemeral build agents.
   - Temporary: `environment variables (AWS_ACCESS_KEY_ID + AWS_SESSION_TOKEN)`
 
 **Logic Flow:**
-1. `detectCredentialSources` checks `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` via
-   `hasEnv` (non-empty value required).
-2. If both are present and `AWS_SESSION_TOKEN` is also set → `EnvironmentVariablesTemporary`.
-3. If both are present but no session token → `EnvironmentVariablesStatic`.
-4. The detected source is placed first in the `CredentialSourceStack`.
-5. `createAwsEnv` calls `Amazonka.newEnv Amazonka.discover`; amazonka's own discovery chain
-   picks up the same env vars and uses them for actual API calls.
+1. Credential source detection checks `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+   (non-empty value required for both).
+2. If both are present and `AWS_SESSION_TOKEN` is also set: source is `EnvironmentVariablesTemporary`.
+3. If both are present but no session token: source is `EnvironmentVariablesStatic`.
+4. The detected source is placed first in the credential source stack.
+5. The AWS environment is created via the SDK's standard discovery chain, which picks up
+   the same env vars for actual API calls.
 
 **Edge Cases:**
 - `AWS_ACCESS_KEY_ID` set but `AWS_SECRET_ACCESS_KEY` absent: treated as no env var
   credentials; falls through to next source in chain.
-- Empty string values for credential variables are treated as absent (`hasEnv` checks
-  `not . null`).
+- Empty string values for credential variables are treated as absent.
 - `AWS_SESSION_TOKEN` present without the key pair: no effect on credential source type.
 
 **Error Scenarios:**
 - Expired session tokens are detected by AWS service responses after the request is made;
-  iidy surfaces the amazonka `ServiceError` with a formatted message.
+  iidy surfaces the service error with a formatted message.
 - Malformed key values are rejected by AWS at request time, not at configuration time.
 
 **Complexity Notes:** Low. Detection is a pure environment check; actual credential loading
-is delegated entirely to `Amazonka.discover`.
+is delegated to the SDK discovery chain.
 
 ---
 
@@ -99,31 +88,31 @@ I can switch between accounts and roles defined in my `~/.aws/credentials` and
   - Default: `profile 'default' (default)`
 
 **Logic Flow:**
-1. `mergeAwsSettings` applies CLI `AwsOpts` over stack-args `AwsSettings`; CLI profile
-   wins via `(<|>)`.
-2. If `--profile=no-profile`, `awsProfile` is set to `Nothing`, suppressing stack-args.
-3. `createAwsEnv` calls `setEnv "AWS_PROFILE" profile` before `Amazonka.discover`, ensuring
-   the profile is active for amazonka's full discovery chain (credentials + config).
-4. `detectCredentialSources` separately reads `AWS_PROFILE` and the detection context to
-   record `ProfileInfo { piName, piSource }` for display.
-5. `determineProfile` applies priority: CLI flag > stack-args > `AWS_PROFILE` > default.
+1. CLI options are merged over stack-args settings; CLI profile wins.
+2. If `--profile=no-profile`, the profile setting is cleared, suppressing stack-args.
+3. Before the SDK discovery chain is invoked, `AWS_PROFILE` is set in the environment
+   to the resolved profile name, ensuring it is active for credentials and config.
+4. Credential source detection reads `AWS_PROFILE` and records the profile name and source
+   for display.
+5. Profile priority: CLI flag > stack-args > `AWS_PROFILE` env var > default.
 
 **Edge Cases:**
-- Profile names with spaces or special characters are passed verbatim to `setEnv`.
-- If the named profile does not exist in `~/.aws/credentials`, amazonka's discovery fails
-  at the point of the first AWS API call with a credential error.
-- Setting `AWS_PROFILE` externally before running iidy is equivalent to providing no `--profile`
-  flag — the env var is used as the third-priority fallback.
+- Profile names with spaces or special characters are passed verbatim via the environment.
+- If the named profile does not exist in `~/.aws/credentials`, SDK discovery fails at
+  the point of the first AWS API call with a credential error.
+- Setting `AWS_PROFILE` externally before running iidy is equivalent to providing no
+  `--profile` flag — the env var is used as the third-priority fallback.
 - `--profile=no-profile` is the only way to explicitly disable a profile set in stack-args;
   there is no `--no-profile` boolean flag.
 
 **Error Scenarios:**
-- Unknown profile name: no error at startup; fails at first AWS call with amazonka credential
-  error surfaced as a formatted message.
-- Profile file permission errors: propagated by amazonka at discovery time.
+- Unknown profile name: no error at startup; fails at first AWS call, error surfaced as
+  a formatted message.
+- Profile file permission errors: propagated by the SDK at discovery time.
 
-**Complexity Notes:** Medium. The `setEnv` side-effect must occur before `Amazonka.discover`
-is called. The `no-profile` sentinel value requires convention-based handling in `mergeAwsSettings`.
+**Complexity Notes:** Medium. The `AWS_PROFILE` environment mutation must occur before the
+SDK discovery chain is invoked. The `no-profile` sentinel value requires convention-based
+handling in the settings merge logic.
 
 ---
 
@@ -139,22 +128,20 @@ use cross-account role chains without managing separate credential sets.
 - `--assume-role-arn=no-role` suppresses any `AssumeRoleARN` field in the stack-args file.
 - A `AssumeRoleARN` field in stack-args is used when no `--assume-role-arn` flag is given.
 - The STS session name is always `"iidy"`.
-- Assumed-role credentials are automatically refreshed in the background via amazonka's
-  `STS.fromAssumedRole` mechanism; no manual refresh is required.
+- Assumed-role credentials are automatically refreshed in the background via the SDK's
+  role refresh mechanism; no manual refresh is required.
 - The credential display shows the role ARN and the base source:
   `assume-role arn:aws:iam::123456789:role/MyRole via profile 'default' (default)`
 - The CLI `--assume-role-arn` flag wins over the stack-args `AssumeRoleARN` field.
 
 **Logic Flow:**
-1. `mergeAwsSettings` merges CLI `AwsOpts.optAssumeRoleArn` over stack-args `awsAssumeRoleArn`
-   via `(<|>)`.
-2. If `--assume-role-arn=no-role`, the merged value is `Nothing`.
-3. `createAwsEnv` builds the base env with `Amazonka.discover` and region applied first.
-4. If `awsAssumeRoleArn` is `Just arn`, calls `STS.fromAssumedRole roleArn "iidy" env'`
-   which returns a new `Amazonka.Env` backed by auto-refreshing STS credentials.
-5. `detectCredentialSources` wraps the highest-priority base source in
-   `AssumeRoleCredential (AssumeRoleInfo baseSource arn AssumeRoleCliFlag)`.
-6. `sourceDisplayName` formats the wrapped source recursively.
+1. CLI assume-role ARN is merged over stack-args value; CLI wins.
+2. If `--assume-role-arn=no-role`, the ARN setting is cleared.
+3. The base AWS environment is fully configured (region, profile) first.
+4. If an assume-role ARN is set, STS `AssumeRole` is called with session name `"iidy"`,
+   returning a new AWS environment backed by auto-refreshing temporary credentials.
+5. The credential source stack wraps the base source with the assume-role info for display.
+6. The display formatter renders the wrapped source recursively.
 
 **Edge Cases:**
 - Role ARN with a condition requiring MFA: STS call fails; the error is surfaced at
@@ -169,11 +156,11 @@ use cross-account role chains without managing separate credential sets.
 - Invalid ARN format: STS returns an error at call time; formatted and displayed to user.
 - Insufficient permissions for AssumeRole: STS returns AccessDenied; displayed as a
   formatted error with the ARN included.
-- STS service unavailable: propagated as an amazonka service error.
+- STS service unavailable: propagated as a service error.
 
-**Complexity Notes:** Medium-high. The base env must be fully configured (region, profile)
-before assume-role is applied. The `STS.fromAssumedRole` call makes a real network request
-at startup for write operations.
+**Complexity Notes:** Medium-high. The base environment must be fully configured (region,
+profile) before assume-role is applied. The STS `AssumeRole` call makes a real network
+request at startup for write operations.
 
 ---
 
@@ -192,13 +179,13 @@ providing a `--region` flag while still having explicit control when needed.
 - The resolved region is applied to the `Amazonka.Env` before any API call.
 
 **Logic Flow:**
-1. `mergeAwsSettings` merges CLI region over stack-args region via `(<|>)`.
-2. `resolveRegion (awsRegion settings)` is called with the merged `Maybe Text`.
-3. If `Just r`: converts directly via `textToRegion` (wraps `Amazonka.Region'`).
-4. If `Nothing`: checks `AWS_REGION` env var.
-5. If still `Nothing`: checks `AWS_DEFAULT_REGION` env var.
-6. If still `Nothing`: calls `fail` with a multi-line error message listing all sources.
-7. The resolved region replaces `Amazonka.Env.region` via record update.
+1. CLI region is merged over stack-args region; CLI wins.
+2. Region resolution is called with the merged value.
+3. If region is set: use it directly.
+4. If not set: check `AWS_REGION` env var.
+5. If still not set: check `AWS_DEFAULT_REGION` env var.
+6. If still not set: fail with a multi-line error message listing all sources.
+7. The resolved region is applied to the AWS environment.
 
 **Edge Cases:**
 - Malformed region strings (e.g., `"us-east-"`) are passed to `Amazonka.Region'` without
@@ -217,10 +204,10 @@ providing a `--region` flag while still having explicit control when needed.
     - Environment variable: AWS_REGION or AWS_DEFAULT_REGION
     - AWS config file: ~/.aws/config
   ```
-- The error message is emitted by `fail` in IO, resulting in a runtime exception caught
-  and displayed by the top-level AWS error handler in `Main.hs`.
+- The error is raised as an IO exception caught and displayed by the top-level AWS error
+  handler.
 
-**Complexity Notes:** Low. Pure priority chain in `resolveRegion`; no network calls.
+**Complexity Notes:** Low. Pure priority chain with no network calls.
 
 ---
 
@@ -244,12 +231,13 @@ succeed even when the system clock is skewed relative to AWS service time.
 - No NTP call is made for read-only commands.
 
 **Logic Flow:**
-1. Command dispatch in `Main.hs` selects `ReliableTimeProvider` or `SystemTimeProvider`
-   based on whether the command is a write operation.
-2. `ReliableTimeProvider.getTime` attempts SNTP query via UDP socket.
-3. On success: converts NTP timestamp to `UTCTime` and returns it.
-4. On failure: catches all IO exceptions, logs a warning, returns `getCurrentTime`.
-5. The time provider is threaded through `CfnContext` and used when timestamps are needed.
+1. Command dispatch selects the reliable (NTP) or system time provider based on whether
+   the command is a write operation.
+2. The reliable time provider attempts an SNTP query via UDP socket.
+3. On success: converts the NTP timestamp to a UTC time and returns it.
+4. On failure: catches all exceptions, logs a warning, falls back to system time.
+5. The time provider is threaded through the command context and used when timestamps are
+   needed.
 
 **Edge Cases:**
 - NTP server unreachable (firewall, air-gapped environment): silent fallback to system
@@ -264,9 +252,9 @@ succeed even when the system clock is skewed relative to AWS service time.
   output), system time used as fallback.
 - UDP socket creation failure (restricted environments): caught, system time used.
 
-**Complexity Notes:** Medium. Requires custom SNTP client (~100 LOC) due to no suitable
-Haskell library. The NTP-to-Unix epoch conversion must handle the 1900/1970 difference
-correctly to avoid timestamp errors.
+**Complexity Notes:** Medium. Requires a custom SNTP client implementation because no
+suitable library is available. The NTP-to-Unix epoch conversion must handle the 1900/1970
+difference correctly to avoid timestamp errors.
 
 ---
 
@@ -290,23 +278,23 @@ account and role before changes are applied.
   used via assume-role), the active source and overridden sources are both listed.
 
 **Logic Flow:**
-1. `createAwsEnv` returns `(Amazonka.Env, CredentialSourceStack)`.
-2. `CredentialSourceStack` is a list where index 0 is the active source.
-3. `credentialDisplayName` formats the stack:
+1. AWS environment creation returns both the configured AWS environment and the credential
+   source stack.
+2. The credential source stack is a list where index 0 is the active source.
+3. Display formatting:
    - Single source: just the source name.
    - Multiple sources: `"<active> (overriding <s1> and <s2>)"`.
-4. `getCallerIdentity` calls STS and returns `(accountId, arnText)` or
+4. `getCallerIdentity` calls STS `GetCallerIdentity` and returns `(accountId, arnText)` or
    `("unknown", "unknown")` on any failure.
-5. `constructCommandMetadata` assembles `CommandMetadata` with both pieces.
+5. Command metadata is assembled from the context, options, and STS response.
 6. The renderer emits the metadata block before the main operation output.
 
 **Edge Cases:**
 - Assume-role wrapping an env var source: display reads
   `"assume-role arn:...:role/X via environment variables (AWS_ACCESS_KEY_ID)"`.
 - Profile source with source `ProfileDefault` displays `"profile 'default' (default)"`.
-- `getCallerIdentity` called before assume-role is applied: would reflect base identity.
-  The implementation calls it after `createAwsEnv` returns the final env, so it reflects
-  the assumed role identity.
+- `getCallerIdentity` is called after the full AWS environment (including assume-role) is
+  configured, so it reflects the assumed role identity rather than the base identity.
 
 **Error Scenarios:**
 - `sts:GetCallerIdentity` denied by IAM policy: caught, `("unknown", "unknown")` returned,
@@ -327,8 +315,8 @@ configuration problems without reading raw SDK exception output.
 **Acceptance Criteria:**
 - Missing region error includes a formatted list of all configuration sources the user
   can use to provide a region.
-- AWS `ServiceError` responses are extracted from the amazonka exception type and
-  displayed with the HTTP status code and error message, not as a raw Haskell exception.
+- AWS service error responses are extracted from the SDK exception type and displayed
+  with the HTTP status code and error message, not as raw exception text.
 - Credential errors (missing, expired, insufficient permissions) are displayed with
   context about which operation failed.
 - Errors during assume-role (STS `AccessDenied`, invalid ARN) are shown before any
@@ -339,30 +327,31 @@ configuration problems without reading raw SDK exception output.
   configured output destination).
 
 **Logic Flow:**
-1. Top-level error handler in `Main.hs` catches `SomeException`.
-2. `Amazonka.serviceError` pattern matches amazonka service errors.
-3. For service errors: extracts HTTP status and error message text, formats them.
-4. For IO exceptions (including the region `fail`): formats the message string directly.
-5. Output goes to stderr via `hPutStrLn stderr`.
+1. Top-level error handler catches all exceptions.
+2. SDK service errors are pattern-matched to extract HTTP status and error message text.
+3. For service errors: HTTP status and message text are formatted.
+4. For IO exceptions (including the missing-region error): the message string is
+   formatted directly.
+5. Output goes to stderr.
 6. Process exits with a non-zero exit code.
 
 **Edge Cases:**
 - Expired temporary credentials detected mid-operation (after the first successful call):
   the next AWS call fails; the error is surfaced like any other service error.
-- Credential error during STS assume-role: the `STS.fromAssumedRole` call in
-  `createAwsEnv` throws before any CloudFormation operation starts.
+- Credential error during STS assume-role: the error is thrown before any CloudFormation
+  operation starts.
 - Multiple overlapping errors (e.g., region missing AND no credentials): only the first
   error encountered in the setup sequence is reported.
 
 **Error Scenarios:**
-- `NoCredentialSources`: amazonka discovery found no credentials anywhere.
+- `NoCredentialSources`: SDK discovery found no credentials anywhere.
 - `ExpiredTokenException`: session token has expired; user must refresh.
 - `AccessDeniedException`: IAM policy denies the requested operation.
 - Network timeout connecting to AWS endpoint: propagated as an IO exception.
 
-**Complexity Notes:** Medium. Requires pattern-matching on amazonka's exception hierarchy
-to extract service error details. The region error uses `fail` in IO which becomes a
-`SomeException`; the message format must be preserved through exception propagation.
+**Complexity Notes:** Medium. Requires pattern-matching on the SDK's exception hierarchy
+to extract service error details. The region error is an IO exception; the message format
+must be preserved through exception propagation.
 
 ---
 
@@ -383,12 +372,12 @@ and production environments without modification.
 - An environment map for `Region` follows the same priority rules as a plain string Region.
 
 **Logic Flow:**
-1. Stack-args YAML is parsed with `parseAwsSettings`.
+1. Stack-args YAML is parsed.
 2. For each of `Profile`, `Region`, `AssumeRoleARN`: the field value is parsed as either
-   a `Text` (plain string) or an `Object` (environment map via `HashMap Text Text`).
+   a plain string or an environment map (object with string values).
 3. If an environment map, the active environment name is looked up in the map.
-4. The resolved `Maybe Text` is stored in `AwsSettings`.
-5. `mergeAwsSettings` applies `(<|>)` so CLI opts win over resolved stack-args values.
+4. The resolved optional value is stored in the settings.
+5. CLI options are merged over resolved stack-args values; CLI wins.
 
 **Edge Cases:**
 - Environment map with uppercase keys vs. lowercase active environment name: key
@@ -413,42 +402,33 @@ of indirection that must be exercised in tests with multiple environments.
 
 ## Testing Requirements
 
-- Unit tests for `resolveRegion` cover all five cases: explicit setting, `AWS_REGION`,
+- Unit tests for region resolution cover all five cases: explicit setting, `AWS_REGION`,
   `AWS_DEFAULT_REGION`, fallthrough to error, and priority ordering.
-- Unit tests for `detectCredentialSources` cover all credential source types and
+- Unit tests for credential source detection cover all credential source types and
   combinations: static env, temporary env, web identity, container (ECS), container
   (generic), profile (all four sources), and assume-role wrapping each base source.
-- Unit tests for `credentialDisplayName` and `sourceDisplayName` cover single sources,
-  assume-role-wrapped sources, and multi-source override display strings.
-- Unit tests for `determineProfile` cover all four priority levels.
-- Unit tests for `mergeAwsSettings` verify that CLI opts override stack-args for all
+- Unit tests for credential display name formatting cover single sources, assume-role-
+  wrapped sources, and multi-source override display strings.
+- Unit tests for profile determination cover all four priority levels.
+- Unit tests for settings merging verify that CLI options override stack-args for all
   three fields and that `no-profile`/`no-role` sentinels suppress stack-args values.
 - Unit tests for environment map parsing verify string/object union type, key lookup,
   missing key fallthrough, and YAML parse errors.
-- Integration tests (mock AWS) for `createAwsEnv` verify that:
-  - `setEnv "AWS_PROFILE"` is called before `Amazonka.discover` when profile is set.
-  - `STS.fromAssumedRole` is called with the correct ARN and session name `"iidy"`.
-  - Region is applied to the returned env.
+- Integration tests (mock AWS) verify that:
+  - `AWS_PROFILE` is set in the environment before SDK discovery when a profile is configured.
+  - STS `AssumeRole` is called with the correct ARN and session name `"iidy"`.
+  - The resolved region is applied to the returned AWS environment.
 - Tests for `getCallerIdentity` verify the `("unknown", "unknown")` fallback on any
   exception type.
-- Tests for NTP time provider verify fallback to system time on connection failure and
+- Tests for the NTP time provider verify fallback to system time on connection failure and
   correct NTP-to-Unix epoch conversion.
 - All AWS tests use mock fixtures; no real AWS calls are permitted in the test suite.
 - The error message for missing region is tested for exact string content.
 
 ## Cross-References
 
-- `src/Iidy/Aws/Config.hs` — primary implementation: `createAwsEnv`, `resolveRegion`,
-  `detectCredentialSources`, `credentialDisplayName`
-- `src/Iidy/Aws/CredentialSource.hs` — `CredentialSource` ADT, `CredentialSourceStack`,
-  `AwsSettings`, `AwsOpts`, `mergeAwsSettings`
-- `src/Iidy/Aws/Sts.hs` — `getCallerIdentity` with graceful fallback
-- `src/Iidy/Aws/Time.hs` — `ReliableTimeProvider` (NTP), `SystemTimeProvider`
-- `src/Iidy/Cfn/CommandMetadata.hs` — `constructCommandMetadata`, `createFinalCommandSummary`
-- `src/Iidy/Types/AwsSettings.hs` — `AwsSettings`, `AwsOpts`, env-map parsing
 - `docs/dev/aws-configuration.md` — developer guide covering the same subsystem
 - `notes/phases/phase-13-research/` — live AWS verification research notes
-- `DIVERGENCES.md` — known CLI behavioral differences from Rust iidy (help formatting,
-  error color detection)
-- PRD 07: Error Display (error formatting pipeline that surfaces AWS errors)
-- PRD 13: CloudFormation Write Operations (commands that use `ReliableTimeProvider`)
+- `DIVERGENCES.md` — known CLI behavioral differences from Rust iidy
+- PRD-07: Error Handling — error formatting pipeline that surfaces AWS errors
+- PRD-05: CloudFormation Operations — commands that use the NTP time provider
