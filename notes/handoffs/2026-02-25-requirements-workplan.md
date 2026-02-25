@@ -248,7 +248,7 @@ Each session in the ralph loop should:
 ## Progress
 
 - [x] Session 0: Create workplan + handoff doc
-- [ ] Session 1: `00-overview.md` + `01-cli-interface.md`
+- [x] Session 1: `00-overview.md` + `01-cli-interface.md`
 - [ ] Session 2: `02-yaml-preprocessing.md` + `03-import-system.md`
 - [ ] Session 3: `05-cfn-operations.md` + `06-output-system.md`
 - [ ] Session 4: `07-error-handling.md` + `08-aws-integration.md`
@@ -274,3 +274,18 @@ Each session in the ralph loop should:
 - For `01-cli-interface.md`, use `docs/command-reference.md` as primary source, cross-check with `src/Iidy/Cli/Parser.hs` for completeness
 - Each PRD should be self-contained but cross-reference others by filename
 - Sub-agents writing PRDs MUST read source code, not just docs
+
+### Session 1 — Overview + CLI PRDs (2026-02-25)
+
+**Completed**: Wrote `docs/requirements/00-overview.md` (177 lines) and `docs/requirements/01-cli-interface.md` (742 lines).
+**Files created**: `docs/requirements/00-overview.md`, `docs/requirements/01-cli-interface.md`
+**Method**: 2 Explore agents gathered source material, Sonnet sub-agent wrote CLI PRD.
+**Quality notes**:
+- CLI PRD covers all 22 commands with all flags, defaults, and acceptance criteria
+- Found discrepancy: `command-reference.md` says template-approval review `--context` default is 100, but `Parser.hs` has 500. PRD documents the actual (500).
+- 16 user stories with testable acceptance criteria referencing Rust oracle
+**Notes for next session**:
+- Write `02-yaml-preprocessing.md` + `03-import-system.md`
+- Primary sources: `docs/yaml-preprocessing.md`, `docs/import-types.md`
+- Cross-check with `src/Iidy/Yaml/` modules and `src/Iidy/Yaml/Imports/` for edge cases
+- Use sub-agents: one for preprocessing tags, one for import types

@@ -146,7 +146,7 @@ Each PRD draws from these sources (agents must read them, not guess):
 ### Progress
 
 - [x] Session 0: Create workplan + research (Session 40)
-- [ ] Session 1: `00-overview.md` + `01-cli-interface.md`
+- [x] Session 1: `00-overview.md` + `01-cli-interface.md` (Session 41)
 - [ ] Session 2: `02-yaml-preprocessing.md` + `03-import-system.md`
 - [ ] Session 3: `05-cfn-operations.md` + `06-output-system.md`
 - [ ] Session 4: `07-error-handling.md` + `08-aws-integration.md`
@@ -163,6 +163,13 @@ Each PRD draws from these sources (agents must read them, not guess):
 **Research done**: 3 Explore agents inventoried all features from Haskell source (81 modules,
 400 tests, 26 OutputData types), Rust source (16,615 LOC, 98 snapshots), and ralph loop
 workflow patterns (session structure, handoff format, progress tracking).
+
+#### Session 1 — Overview + CLI PRDs (2026-02-25, Session 41)
+
+**Completed**: Wrote `docs/requirements/00-overview.md` (177 lines) and `docs/requirements/01-cli-interface.md` (742 lines).
+**Method**: 2 Explore agents for research (overview + CLI), Sonnet sub-agent wrote CLI PRD from detailed spec.
+**Quality**: CLI PRD covers all 22 commands, all flags with defaults, 16 user stories with acceptance criteria. Noted discrepancy between command-reference.md (100 context lines) and Parser.hs (500) for template-approval review.
+**Notes for Session 2**: Write `02-yaml-preprocessing.md` + `03-import-system.md`. Use `docs/yaml-preprocessing.md` and `docs/import-types.md` as primary sources, cross-check with `src/Iidy/Yaml/` modules.
 **Notes for Session 1**:
 - Start with `00-overview.md` — sets the tone and persona definitions used by all other PRDs
 - For `01-cli-interface.md`, use `docs/command-reference.md` as primary source, cross-check
@@ -215,6 +222,7 @@ workflow patterns (session structure, handoff format, progress tracking).
 | 38 | 14 | Fix 5 live-testing bugs: changeset timestamps, event duration min, FAILED changeset check, tag type validation, confirmation prompt consistency. |
 | 39 | 14-15 | Add 21 tests for Phase 14 fixes (400 tests). Phase 15 COMPLETE: --profile wired, STS AssumeRole, region error on missing. |
 | 40 | 16 | Phase 16 setup: Requirements documentation workplan. 13 PRDs planned, 8-session plan, 3 research agents. |
+| 41 | 16 | Phase 16.1: 00-overview.md (177 lines) + 01-cli-interface.md (742 lines). |
 
 **Offline audit: 81 modules, 400 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
