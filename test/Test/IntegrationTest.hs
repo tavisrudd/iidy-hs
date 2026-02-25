@@ -3,21 +3,36 @@ module Test.IntegrationTest (integrationTests) where
 import Control.Exception (try, SomeException)
 import Control.Monad (forM, when)
 import Data.List (nub)
+import System.IO (IOMode(..), withFile)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
 import Iidy.Output.Renderers.Interactive
-  ( plainInteractiveOptions, defaultInteractiveOptions
-  , newInteractiveRenderer
+  ( InteractiveRenderer, InteractiveOptions
+  , plainInteractiveOptions, defaultInteractiveOptions
+  , newInteractiveRendererWithHandles
   , renderOutputData
   )
 import Iidy.Output.Renderers.Json
-  ( defaultJsonOptions
-  , newJsonRenderer
+  ( JsonRenderer, JsonOptions
+  , defaultJsonOptions
+  , newJsonRendererWithHandles
   , renderOutputDataJson
   )
 import Iidy.Output.Types (OutputData(..))
 import Test.Shared
+
+-- | Create an InteractiveRenderer that writes to /dev/null
+withSilentInteractiveRenderer :: InteractiveOptions -> (InteractiveRenderer -> IO a) -> IO a
+withSilentInteractiveRenderer opts action =
+  withFile "/dev/null" WriteMode $ \devNull ->
+    newInteractiveRendererWithHandles devNull devNull opts >>= action
+
+-- | Create a JsonRenderer that writes to /dev/null
+withSilentJsonRenderer :: JsonOptions -> (JsonRenderer -> IO a) -> IO a
+withSilentJsonRenderer opts action =
+  withFile "/dev/null" WriteMode $ \devNull ->
+    action (newJsonRendererWithHandles devNull devNull opts)
 
 integrationTests :: [TestTree]
 integrationTests =
@@ -28,146 +43,138 @@ integrationTests =
 
 interactiveRendererIntegrationTests :: [TestTree]
 interactiveRendererIntegrationTests =
-  [ testCase "renderOutputData handles all OutputData variants without crashing" $ do
-      r <- newInteractiveRenderer plainInteractiveOptions
-      results <- forM allTestOutputData $ \od -> do
-        result <- try (renderOutputData r od) :: IO (Either SomeException ())
-        case result of
-          Left ex -> pure (Just (show od, ex))
-          Right () -> pure Nothing
-      let failures = [f | Just f <- results]
-      when (not (null failures)) $
-        assertFailure $ "Renderer crashed on variants: " <>
-          unlines [tag <> ": " <> show ex | (tag, ex) <- failures]
+  [ testCase "renderOutputData handles all OutputData variants without crashing" $
+      withSilentInteractiveRenderer plainInteractiveOptions $ \r -> do
+        results <- forM allTestOutputData $ \od -> do
+          result <- try (renderOutputData r od) :: IO (Either SomeException ())
+          case result of
+            Left ex -> pure (Just (show od, ex))
+            Right () -> pure Nothing
+        let failures = [f | Just f <- results]
+        when (not (null failures)) $
+          assertFailure $ "Renderer crashed on variants: " <>
+            unlines [tag <> ": " <> show ex | (tag, ex) <- failures]
 
-  , testCase "renderOutputData colored handles all OutputData variants" $ do
-      r <- newInteractiveRenderer defaultInteractiveOptions
-      results <- forM allTestOutputData $ \od -> do
-        result <- try (renderOutputData r od) :: IO (Either SomeException ())
-        case result of
-          Left ex -> pure (Just (show od, ex))
-          Right () -> pure Nothing
-      let failures = [f | Just f <- results]
-      when (not (null failures)) $
-        assertFailure $ "Colored renderer crashed on: " <>
-          unlines [tag <> ": " <> show ex | (tag, ex) <- failures]
+  , testCase "renderOutputData colored handles all OutputData variants" $
+      withSilentInteractiveRenderer defaultInteractiveOptions $ \r -> do
+        results <- forM allTestOutputData $ \od -> do
+          result <- try (renderOutputData r od) :: IO (Either SomeException ())
+          case result of
+            Left ex -> pure (Just (show od, ex))
+            Right () -> pure Nothing
+        let failures = [f | Just f <- results]
+        when (not (null failures)) $
+          assertFailure $ "Colored renderer crashed on: " <>
+            unlines [tag <> ": " <> show ex | (tag, ex) <- failures]
 
-  , testCase "renderOutputData processes create-stack sequence in order" $ do
-      r <- newInteractiveRenderer plainInteractiveOptions
-      let createSeq =
-            [ OdCommandMetadata testCommandMetadata
-            , OdStackChangeDetails testStackChangeDetails
-            , OdStackDefinition testStackDef True
-            , OdPollingStarted "Loading live events..."
-            , OdNewStackEvents [testEventWithTiming]
-            , OdOperationComplete testOperationComplete
-            , OdStackContents testStackContents
-            , OdFinalCommandSummary testFinalCommandSummary
-            ]
-      mapM_ (renderOutputData r) createSeq
+  , testCase "renderOutputData processes create-stack sequence in order" $
+      withSilentInteractiveRenderer plainInteractiveOptions $ \r ->
+        mapM_ (renderOutputData r)
+          [ OdCommandMetadata testCommandMetadata
+          , OdStackChangeDetails testStackChangeDetails
+          , OdStackDefinition testStackDef True
+          , OdPollingStarted "Loading live events..."
+          , OdNewStackEvents [testEventWithTiming]
+          , OdOperationComplete testOperationComplete
+          , OdStackContents testStackContents
+          , OdFinalCommandSummary testFinalCommandSummary
+          ]
 
-  , testCase "renderOutputData processes describe-stack sequence in order" $ do
-      r <- newInteractiveRenderer plainInteractiveOptions
-      let describeSeq =
-            [ OdCommandMetadata testCommandMetadata
-            , OdStackDefinition testStackDef True
-            , OdStackEvents testStackEventsDisplay
-            , OdStackContents testStackContents
-            , OdFinalCommandSummary testFinalCommandSummary
-            ]
-      mapM_ (renderOutputData r) describeSeq
+  , testCase "renderOutputData processes describe-stack sequence in order" $
+      withSilentInteractiveRenderer plainInteractiveOptions $ \r ->
+        mapM_ (renderOutputData r)
+          [ OdCommandMetadata testCommandMetadata
+          , OdStackDefinition testStackDef True
+          , OdStackEvents testStackEventsDisplay
+          , OdStackContents testStackContents
+          , OdFinalCommandSummary testFinalCommandSummary
+          ]
 
-  , testCase "renderOutputData processes delete-stack sequence in order" $ do
-      r <- newInteractiveRenderer plainInteractiveOptions
-      let deleteSeq =
-            [ OdCommandMetadata testCommandMetadata
-            , OdStackDefinition testStackDef True
-            , OdStackEvents testStackEventsDisplay
-            , OdStackContents testStackContents
-            , OdConfirmationPrompt testConfirmationRequest
-            , OdPollingStarted "Waiting for stack deletion..."
-            , OdNewStackEvents [testEventWithTiming]
-            , OdOperationComplete testOperationComplete
-            , OdFinalCommandSummary testFinalCommandSummary
-            ]
-      mapM_ (renderOutputData r) deleteSeq
+  , testCase "renderOutputData processes delete-stack sequence in order" $
+      withSilentInteractiveRenderer plainInteractiveOptions $ \r ->
+        mapM_ (renderOutputData r)
+          [ OdCommandMetadata testCommandMetadata
+          , OdStackDefinition testStackDef True
+          , OdStackEvents testStackEventsDisplay
+          , OdStackContents testStackContents
+          , OdConfirmationPrompt testConfirmationRequest
+          , OdPollingStarted "Waiting for stack deletion..."
+          , OdNewStackEvents [testEventWithTiming]
+          , OdOperationComplete testOperationComplete
+          , OdFinalCommandSummary testFinalCommandSummary
+          ]
 
-  , testCase "renderOutputData processes changeset sequence in order" $ do
-      r <- newInteractiveRenderer plainInteractiveOptions
-      let changeSetSeq =
-            [ OdCommandMetadata testCommandMetadata
-            , OdStackDefinition testStackDef True
-            , OdChangeSetResult testChangeSetResult
-            , OdFinalCommandSummary testFinalCommandSummary
-            ]
-      mapM_ (renderOutputData r) changeSetSeq
+  , testCase "renderOutputData processes changeset sequence in order" $
+      withSilentInteractiveRenderer plainInteractiveOptions $ \r ->
+        mapM_ (renderOutputData r)
+          [ OdCommandMetadata testCommandMetadata
+          , OdStackDefinition testStackDef True
+          , OdChangeSetResult testChangeSetResult
+          , OdFinalCommandSummary testFinalCommandSummary
+          ]
 
-  , testCase "renderOutputData processes drift sequence in order" $ do
-      r <- newInteractiveRenderer plainInteractiveOptions
-      let driftSeq =
-            [ OdCommandMetadata testCommandMetadata
-            , OdStackDefinition testStackDef False
-            , OdPollingStarted "Detecting drift..."
-            , OdStackDrift testStackDrift
-            , OdFinalCommandSummary testFinalCommandSummary
-            ]
-      mapM_ (renderOutputData r) driftSeq
+  , testCase "renderOutputData processes drift sequence in order" $
+      withSilentInteractiveRenderer plainInteractiveOptions $ \r ->
+        mapM_ (renderOutputData r)
+          [ OdCommandMetadata testCommandMetadata
+          , OdStackDefinition testStackDef False
+          , OdPollingStarted "Detecting drift..."
+          , OdStackDrift testStackDrift
+          , OdFinalCommandSummary testFinalCommandSummary
+          ]
 
-  , testCase "renderOutputData processes stack-absent error" $ do
-      r <- newInteractiveRenderer plainInteractiveOptions
-      let absentSeq =
-            [ OdCommandMetadata testCommandMetadata
-            , OdStackAbsentInfo testAbsentInfo
-            ]
-      mapM_ (renderOutputData r) absentSeq
+  , testCase "renderOutputData processes stack-absent error" $
+      withSilentInteractiveRenderer plainInteractiveOptions $ \r ->
+        mapM_ (renderOutputData r)
+          [ OdCommandMetadata testCommandMetadata
+          , OdStackAbsentInfo testAbsentInfo
+          ]
 
-  , testCase "renderOutputData processes lint+approval sequence" $ do
-      r <- newInteractiveRenderer plainInteractiveOptions
-      let approvalSeq =
-            [ OdTemplateValidation testTemplateValidation
-            , OdApprovalRequestResult testApprovalRequestResult
-            , OdApprovalStatus testApprovalStatus
-            , OdTemplateDiff testTemplateDiff
-            , OdApprovalResult testApprovalResult
-            ]
-      mapM_ (renderOutputData r) approvalSeq
+  , testCase "renderOutputData processes lint+approval sequence" $
+      withSilentInteractiveRenderer plainInteractiveOptions $ \r ->
+        mapM_ (renderOutputData r)
+          [ OdTemplateValidation testTemplateValidation
+          , OdApprovalRequestResult testApprovalRequestResult
+          , OdApprovalStatus testApprovalStatus
+          , OdTemplateDiff testTemplateDiff
+          , OdApprovalResult testApprovalResult
+          ]
 
-  , testCase "renderOutputData handles empty events list" $ do
-      r <- newInteractiveRenderer plainInteractiveOptions
-      renderOutputData r (OdNewStackEvents [])
+  , testCase "renderOutputData handles empty events list" $
+      withSilentInteractiveRenderer plainInteractiveOptions $ \r ->
+        renderOutputData r (OdNewStackEvents [])
 
-  , testCase "renderOutputData handles stack list" $ do
-      r <- newInteractiveRenderer plainInteractiveOptions
-      renderOutputData r (OdStackList testStackListDisplay)
+  , testCase "renderOutputData handles stack list" $
+      withSilentInteractiveRenderer plainInteractiveOptions $ \r ->
+        renderOutputData r (OdStackList testStackListDisplay)
   ]
 
 jsonRendererIntegrationTests :: [TestTree]
 jsonRendererIntegrationTests =
-  [ testCase "renderOutputDataJson handles all OutputData variants without crashing" $ do
-      let jr = newJsonRenderer defaultJsonOptions
-      results <- forM allTestOutputData $ \od -> do
-        result <- try (renderOutputDataJson jr od) :: IO (Either SomeException ())
-        case result of
-          Left ex -> pure (Just (show od, ex))
-          Right () -> pure Nothing
-      let failures = [f | Just f <- results]
-      when (not (null failures)) $
-        assertFailure $ "JSON renderer crashed on variants: " <>
-          unlines [tag <> ": " <> show ex | (tag, ex) <- failures]
+  [ testCase "renderOutputDataJson handles all OutputData variants without crashing" $
+      withSilentJsonRenderer defaultJsonOptions $ \jr -> do
+        results <- forM allTestOutputData $ \od -> do
+          result <- try (renderOutputDataJson jr od) :: IO (Either SomeException ())
+          case result of
+            Left ex -> pure (Just (show od, ex))
+            Right () -> pure Nothing
+        let failures = [f | Just f <- results]
+        when (not (null failures)) $
+          assertFailure $ "JSON renderer crashed on variants: " <>
+            unlines [tag <> ": " <> show ex | (tag, ex) <- failures]
 
-  , testCase "renderOutputDataJson handles create-stack sequence" $ do
-      let jr = newJsonRenderer defaultJsonOptions
-      let jsonCreateSeq =
-            [ OdCommandMetadata testCommandMetadata
-            , OdStackChangeDetails testStackChangeDetails
-            , OdStackDefinition testStackDef True
-            , OdPollingStarted "Loading..."
-            , OdNewStackEvents [testEventWithTiming]
-            , OdOperationComplete testOperationComplete
-            , OdStackContents testStackContents
-            , OdFinalCommandSummary testFinalCommandSummary
-            ]
-      mapM_ (renderOutputDataJson jr) jsonCreateSeq
+  , testCase "renderOutputDataJson handles create-stack sequence" $
+      withSilentJsonRenderer defaultJsonOptions $ \jr ->
+        mapM_ (renderOutputDataJson jr)
+          [ OdCommandMetadata testCommandMetadata
+          , OdStackChangeDetails testStackChangeDetails
+          , OdStackDefinition testStackDef True
+          , OdPollingStarted "Loading..."
+          , OdNewStackEvents [testEventWithTiming]
+          , OdOperationComplete testOperationComplete
+          , OdStackContents testStackContents
+          , OdFinalCommandSummary testFinalCommandSummary
+          ]
   ]
 
 outputSequenceTests :: [TestTree]

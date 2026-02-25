@@ -7,6 +7,7 @@ module Iidy.Output.Renderers.Json
   , JsonOptions(..)
   , defaultJsonOptions
   , newJsonRenderer
+  , newJsonRendererWithHandles
   , renderOutputDataJson
     -- * Value conversions (exported for testing)
   , metadataToValue
@@ -46,7 +47,7 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TLE
 import Data.Time (getCurrentTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
-import System.IO (stdout, hFlush, stderr)
+import System.IO (Handle, stdout, stderr, hFlush)
 
 import Iidy.Aws.ClientReqToken (TokenInfo(..), TokenSource(..), DerivedTokenInfo(..))
 import Iidy.Cfn.Types (StackChangeType(..))
@@ -75,10 +76,15 @@ defaultJsonOptions = JsonOptions
 
 data JsonRenderer = JsonRenderer
   { jrOptions :: !JsonOptions
+  , jrStdout  :: !Handle
+  , jrStderr  :: !Handle
   }
 
 newJsonRenderer :: JsonOptions -> JsonRenderer
-newJsonRenderer = JsonRenderer
+newJsonRenderer opts = JsonRenderer opts stdout stderr
+
+newJsonRendererWithHandles :: Handle -> Handle -> JsonOptions -> JsonRenderer
+newJsonRendererWithHandles hOut hErr opts = JsonRenderer opts hOut hErr
 
 ------------------------------------------------------------------------
 -- Main dispatch
@@ -117,8 +123,8 @@ renderOutputDataJson r = \case
   OdStackAbsentInfo info         -> outputJson r "stack_absent_info" (absentInfoToValue info)
   OdCostEstimate est             -> outputJson r "cost_estimate" (costEstimateToValue est)
   OdStackTemplate tmpl           -> do
-    mapM_ (TIO.hPutStrLn stderr) (stStderrLines tmpl)
-    TIO.putStrLn (stTemplateBody tmpl)
+    mapM_ (TIO.hPutStrLn (jrStderr r)) (stStderrLines tmpl)
+    TIO.hPutStrLn (jrStdout r) (stTemplateBody tmpl)
   OdApprovalRequestResult res    -> outputJson r "approval_request_result" (approvalRequestToValue res)
   OdTemplateValidation val       -> outputJson r "template_validation" (templateValidationToValue val)
   OdApprovalStatus st            -> outputJson r "approval_status" (approvalStatusToValue st)
@@ -146,13 +152,13 @@ outputRawJson r val = do
   let encoded = if joPrettyPrint (jrOptions r)
                 then TL.toStrict (TLE.decodeUtf8 (Pretty.encodePretty val))
                 else TL.toStrict (TLE.decodeUtf8 (Aeson.encode val))
-  TIO.putStrLn encoded
-  hFlush stdout
+  TIO.hPutStrLn (jrStdout r) encoded
+  hFlush (jrStdout r)
 
 outputLine :: JsonRenderer -> Text -> IO ()
-outputLine _r text = do
-  TIO.putStrLn text
-  hFlush stdout
+outputLine r text = do
+  TIO.hPutStrLn (jrStdout r) text
+  hFlush (jrStdout r)
 
 encodeValue :: JsonOptions -> Value -> Text
 encodeValue opts val =

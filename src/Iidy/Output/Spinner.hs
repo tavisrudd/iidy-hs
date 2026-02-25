@@ -15,7 +15,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Data.IORef
-import System.IO (hFlush, stdout)
+import System.IO (Handle, hFlush)
 
 -- | Spinner animation style
 data SpinnerStyle
@@ -32,11 +32,12 @@ data Spinner = Spinner
   , spFrameRef  :: !(IORef Int)
   , spMessage   :: !(IORef Text)
   , spActive    :: !(IORef Bool)
+  , spHandle    :: !Handle
   }
 
--- | Create a new spinner with an initial message
-newSpinner :: SpinnerStyle -> IO Spinner
-newSpinner style = do
+-- | Create a new spinner with an initial message, writing to the given handle
+newSpinner :: Handle -> SpinnerStyle -> IO Spinner
+newSpinner h style = do
   frameRef <- newIORef 0
   msgRef <- newIORef ""
   activeRef <- newIORef False
@@ -45,6 +46,7 @@ newSpinner style = do
     , spFrameRef = frameRef
     , spMessage  = msgRef
     , spActive   = activeRef
+    , spHandle   = h
     }
 
 -- | Advance the spinner to the next frame, returning the current frame character
@@ -74,14 +76,14 @@ spinnerFrame sp = do
 spinnerSetMessage :: Spinner -> Text -> IO ()
 spinnerSetMessage sp msg = writeIORef (spMessage sp) msg
 
--- | Render the spinner to stdout (overwriting current line with \r)
+-- | Render the spinner to the configured handle (overwriting current line with \r)
 spinnerRender :: Spinner -> Text -> IO ()
 spinnerRender sp colorCode = do
   frame <- spinnerTick sp
   msg <- readIORef (spMessage sp)
   let line = "\r" <> colorCode <> frame <> "\ESC[0m " <> msg
-  TIO.putStr line
-  hFlush stdout
+  TIO.hPutStr (spHandle sp) line
+  hFlush (spHandle sp)
 
 -- | Clear the spinner line and reset state
 spinnerFinishAndClear :: Spinner -> IO ()
@@ -90,8 +92,8 @@ spinnerFinishAndClear sp = do
   if active
     then do
       -- Clear the current line
-      TIO.putStr "\r\ESC[K"
-      hFlush stdout
+      TIO.hPutStr (spHandle sp) "\r\ESC[K"
+      hFlush (spHandle sp)
       spinnerClear sp
     else pure ()
 

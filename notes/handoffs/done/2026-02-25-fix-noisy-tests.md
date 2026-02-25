@@ -170,12 +170,19 @@ Chunks 1-3 can be done in one commit. Chunk 4 in a second. Chunk 5 is verificati
 
 ## Progress
 
-- [ ] Chunk 1: Add Handle fields to InteractiveRenderer + Spinner
-- [ ] Chunk 2: Add Handle fields to JsonRenderer
-- [ ] Chunk 3: Update OutputDispatch / Manager to thread handles
-- [ ] Chunk 4: Update integration tests to use /dev/null handles
-- [ ] Chunk 5: Verify clean output, clean up notes
+- [x] Chunk 1: Add Handle fields to InteractiveRenderer + Spinner
+- [x] Chunk 2: Add Handle fields to JsonRenderer
+- [x] Chunk 3: Update OutputDispatch / Manager to thread handles (no changes needed — defaults handle it)
+- [x] Chunk 4: Update integration tests to use /dev/null handles
+- [x] Chunk 5: Verify clean output — 405 tests pass, zero noise
 
 ## Handoff Notes
 
-(none yet)
+### 2026-02-25 — All chunks complete
+- Spinner: Added `spHandle :: !Handle` field, `newSpinner` now takes Handle param
+- InteractiveRenderer: Added `irStdout`/`irStderr` fields, `newInteractiveRendererWithHandles` constructor, internal helpers `rPutStrLn`/`rPutStr`/`rFlush`/`rPutStrLnErr`, all ~88 bare stdout/stderr writes replaced
+- JsonRenderer: Added `jrStdout`/`jrStderr` fields, `newJsonRendererWithHandles` constructor, all 5 bare writes replaced
+- Manager: No changes needed — `newInteractiveRenderer`/`newJsonRenderer` default to stdout/stderr
+- Tests: `withSilentInteractiveRenderer`/`withSilentJsonRenderer` helpers using `/dev/null`, all 12 integration tests silent
+- Test.Shared: `mkColoredRenderer`/`mkPlainRenderer` updated with handle fields (use real stdout/stderr for unit test formatters)
+- 405 tests pass, zero warnings, zero render noise in test output

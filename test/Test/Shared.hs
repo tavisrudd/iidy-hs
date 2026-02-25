@@ -45,6 +45,7 @@ import Data.Aeson (Value(..))
 import qualified Data.Aeson.Key as AesonKey
 import qualified Data.Aeson.KeyMap as KM
 import Data.IORef (newIORef)
+import System.IO (stdout, stderr)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Data.Time.Calendar (fromGregorian)
@@ -88,7 +89,9 @@ mkColoredRenderer = do
   timingStateRef <- newIORef Nothing
   timingThreadRef <- newIORef Nothing
   pure InteractiveRenderer
-    { irTheme              = darkTheme
+    { irStdout             = stdout
+    , irStderr             = stderr
+    , irTheme              = darkTheme
     , irOptions            = defaultInteractiveOptions
     , irTerminalWidth      = 130
     , irHasRenderedContent = hasRendered
@@ -107,7 +110,9 @@ mkPlainRenderer = do
   timingStateRef <- newIORef Nothing
   timingThreadRef <- newIORef Nothing
   pure InteractiveRenderer
-    { irTheme              = noColorTheme
+    { irStdout             = stdout
+    , irStderr             = stderr
+    , irTheme              = noColorTheme
     , irOptions            = plainInteractiveOptions
     , irTerminalWidth      = 130
     , irHasRenderedContent = hasRendered

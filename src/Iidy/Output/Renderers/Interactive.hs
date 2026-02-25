@@ -8,6 +8,7 @@ module Iidy.Output.Renderers.Interactive
   , defaultInteractiveOptions
   , plainInteractiveOptions
   , newInteractiveRenderer
+  , newInteractiveRendererWithHandles
   , renderOutputData
     -- * Constants
   , column2Start
@@ -45,7 +46,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Data.Time (UTCTime, defaultTimeLocale, formatTime, getCurrentTime, diffUTCTime)
-import System.IO (stdout, hFlush, hIsTerminalDevice, stderr)
+import System.IO (Handle, stdout, stderr, hFlush, hIsTerminalDevice)
 
 import Iidy.Aws.ClientReqToken (TokenInfo(..), TokenSource(..), DerivedTokenInfo(..))
 import Iidy.Cfn.Types (StackChangeType(..))
@@ -113,7 +114,9 @@ plainInteractiveOptions = InteractiveOptions
 ------------------------------------------------------------------------
 
 data InteractiveRenderer = InteractiveRenderer
-  { irTheme              :: !IidyTheme
+  { irStdout             :: !Handle
+  , irStderr             :: !Handle
+  , irTheme              :: !IidyTheme
   , irOptions            :: !InteractiveOptions
   , irTerminalWidth      :: !Int
   , irHasRenderedContent :: !(IORef Bool)
@@ -126,7 +129,10 @@ data InteractiveRenderer = InteractiveRenderer
   }
 
 newInteractiveRenderer :: InteractiveOptions -> IO InteractiveRenderer
-newInteractiveRenderer opts = do
+newInteractiveRenderer = newInteractiveRendererWithHandles stdout stderr
+
+newInteractiveRendererWithHandles :: Handle -> Handle -> InteractiveOptions -> IO InteractiveRenderer
+newInteractiveRendererWithHandles hOut hErr opts = do
   caps <- detectCapabilities
   let colorsEnabled = ioEnableAnsi opts && tcHasColor caps
       theme = resolveTheme colorsEnabled (ioTheme opts)
@@ -137,7 +143,9 @@ newInteractiveRenderer opts = do
   timingStateRef <- newIORef Nothing
   timingThreadRef <- newIORef Nothing
   pure InteractiveRenderer
-    { irTheme              = theme
+    { irStdout             = hOut
+    , irStderr             = hErr
+    , irTheme              = theme
     , irOptions            = opts
     , irTerminalWidth      = width
     , irHasRenderedContent = hasRendered
@@ -148,6 +156,22 @@ newInteractiveRenderer opts = do
     }
 
 ------------------------------------------------------------------------
+-- Internal output helpers (write to renderer's configured handles)
+------------------------------------------------------------------------
+
+rPutStrLn :: InteractiveRenderer -> Text -> IO ()
+rPutStrLn r = TIO.hPutStrLn (irStdout r)
+
+rPutStr :: InteractiveRenderer -> Text -> IO ()
+rPutStr r = TIO.hPutStr (irStdout r)
+
+rFlush :: InteractiveRenderer -> IO ()
+rFlush r = hFlush (irStdout r)
+
+rPutStrLnErr :: InteractiveRenderer -> Text -> IO ()
+rPutStrLnErr r = TIO.hPutStrLn (irStderr r)
+
+------------------------------------------------------------------------
 -- Spinner management
 ------------------------------------------------------------------------
 
@@ -156,13 +180,13 @@ newInteractiveRenderer opts = do
 startSpinner :: InteractiveRenderer -> Text -> IO ()
 startSpinner r _msg = do
   -- Only start if spinners are enabled and ANSI is available
-  isTty <- hIsTerminalDevice stdout
+  isTty <- hIsTerminalDevice (irStdout r)
   if not (ioEnableSpinners (irOptions r)) || not isTty
     then pure ()
     else do
       -- Stop any existing spinner first
       stopSpinner r
-      sp <- newSpinner SpinnerDots12
+      sp <- newSpinner (irStdout r) SpinnerDots12
       spinnerSetMessage sp ""
       writeIORef (irSpinner r) (Just sp)
       -- Start background tick thread
@@ -321,16 +345,16 @@ formatSectionHeading r text =
 printSectionHeading :: InteractiveRenderer -> Text -> IO ()
 printSectionHeading r text = do
   hasContent <- readIORef (irHasRenderedContent r)
-  if hasContent then TIO.putStrLn "" else pure ()
-  TIO.putStr (formatSectionHeading r text)
+  if hasContent then rPutStrLn r "" else pure ()
+  rPutStr r (formatSectionHeading r text)
   writeIORef (irHasRenderedContent r) True
-  hFlush stdout
+  rFlush r
 
 -- | Print section heading with newline
 printSectionHeadingLn :: InteractiveRenderer -> Text -> IO ()
 printSectionHeadingLn r text = do
   printSectionHeading r text
-  TIO.putStrLn ""
+  rPutStrLn r ""
 
 -- | Format a section label (muted color)
 formatSectionLabel :: InteractiveRenderer -> Text -> Text
@@ -344,14 +368,14 @@ formatSectionEntry r label value =
 -- | Print section entry
 printSectionEntry :: InteractiveRenderer -> Text -> Text -> IO ()
 printSectionEntry r label value = do
-  TIO.putStr (formatSectionEntry r label value)
-  hFlush stdout
+  rPutStr r (formatSectionEntry r label value)
+  rFlush r
 
 -- | Add content spacing (blank line before new content)
 addContentSpacing :: InteractiveRenderer -> IO ()
 addContentSpacing r = do
   hasContent <- readIORef (irHasRenderedContent r)
-  if hasContent then TIO.putStrLn "" else pure ()
+  if hasContent then rPutStrLn r "" else pure ()
   writeIORef (irHasRenderedContent r) True
 
 -- | Pad text right to given width
@@ -540,7 +564,7 @@ renderStackEvents r evts = do
     then printSectionHeadingLn r (sedTitle evts)
     else printSectionHeading r (sedTitle evts)
   if null (sedEvents evts) && not isLive
-    then TIO.putStrLn (" " <> styleMuted r "No events found")
+    then rPutStrLn r (" " <> styleMuted r "No events found")
     else do
       let sorted = sortBy (comparing (seTimestamp . sewEvent)) (sedEvents evts)
           limited = case sedMaxEvents evts of
@@ -550,7 +574,7 @@ renderStackEvents r evts = do
           rtypePad = calcPadding limited (seResourceType . sewEvent)
       mapM_ (renderSingleStackEvent r statusPad rtypePad) limited
       case sedTruncated evts of
-        Just ti -> TIO.putStrLn ("  " <> styleMuted r
+        Just ti -> rPutStrLn r ("  " <> styleMuted r
           ("showing " <> T.pack (show (truncShown ti)) <> " of " <> T.pack (show (truncTotal ti)) <> " events"))
         Nothing -> pure ()
 
@@ -569,7 +593,7 @@ renderSingleStackEvent r statusPad rtypePad ewt = do
       dur = case sewDurationSeconds ewt of
         Just d  -> " " <> styleMuted r ("(" <> T.pack (show d) <> "s)")
         Nothing -> ""
-  TIO.putStrLn (" " <> ts <> " " <> status <> " " <> rtype <> " " <> logId <> dur)
+  rPutStrLn r (" " <> ts <> " " <> status <> " " <> rtype <> " " <> logId <> dur)
   -- Show failure reason on new line
   case seResourceStatusReason event of
     Just reason | not (T.null reason) && T.isInfixOf "FAILED" (seResourceStatus event) ->
@@ -579,7 +603,7 @@ renderSingleStackEvent r statusPad rtypePad ewt = do
           maxW = irTerminalWidth r - 2
           -- Simple word wrap
           wrapped = wrapText maxW cleaned
-      in mapM_ (\line -> TIO.putStrLn ("  " <> colorize (th r) (thError (th r)) line)) wrapped
+      in mapM_ (\line -> rPutStrLn r ("  " <> colorize (th r) (thError (th r)) line)) wrapped
     _ -> pure ()
 
 renderStackContents :: InteractiveRenderer -> StackContents -> IO ()
@@ -591,7 +615,7 @@ renderStackContents r contents = do
       let idPad = calcPadding (scResources contents) sriLogicalResourceId
           rtypePad = calcPadding (scResources contents) sriResourceType
       mapM_ (\res ->
-        TIO.putStrLn (
+        rPutStrLn r (
           formatLogicalId r (padRight (idPad + 1) (" " <> sriLogicalResourceId res))
           <> " " <> styleMuted r (padRight rtypePad (sriResourceType res))
           <> " " <> styleMuted r (fromMaybe "" (sriPhysicalResourceId res))
@@ -601,12 +625,12 @@ renderStackContents r contents = do
   if null (scOutputs contents)
     then do
       printSectionHeading r "Stack Outputs"
-      TIO.putStrLn (" " <> styleMuted r "None")
+      rPutStrLn r (" " <> styleMuted r "None")
     else do
       printSectionHeadingLn r "Stack Outputs"
       let keyPad = calcPadding (scOutputs contents) soiOutputKey
       mapM_ (\out ->
-        TIO.putStrLn (
+        rPutStrLn r (
           formatLogicalId r (padRight (keyPad + 1) (" " <> soiOutputKey out))
           <> " " <> styleMuted r (soiOutputValue out)
         )) (scOutputs contents)
@@ -620,15 +644,15 @@ renderStackContents r contents = do
         else printSectionHeading r "Stack Exports"
       let namePad = calcPadding (scExports contents) seiName
       mapM_ (\ex -> do
-        TIO.putStrLn (
+        rPutStrLn r (
           formatLogicalId r (padRight (namePad + 1) (" " <> seiName ex))
           <> " " <> styleMuted r (seiValue ex))
-        mapM_ (\imp -> TIO.putStrLn ("  " <> styleMuted r ("imported by " <> imp))) (seiImportingStacks ex)
+        mapM_ (\imp -> rPutStrLn r ("  " <> styleMuted r ("imported by " <> imp))) (seiImportingStacks ex)
         ) (scExports contents)
     else pure ()
   -- Current Status
   printSectionHeading r "Current Stack Status"
-  TIO.putStrLn (" " <> colorizeResourceStatus (th r) (ssiStatus (scCurrentStatus contents))
+  rPutStrLn r (" " <> colorizeResourceStatus (th r) (ssiStatus (scCurrentStatus contents))
     <> " " <> styleMuted r (fromMaybe "" (ssiStatusReason (scCurrentStatus contents))))
   -- Pending changesets
   if not (null (scPendingChangesets contents))
@@ -644,11 +668,11 @@ renderStackContents r contents = do
            <> " " <> styleMuted r (fromMaybe "" (csiStatusReason cs)))
         case csiDescription cs of
           Just desc | not (T.null desc) -> do
-            TIO.putStrLn ("  Description: " <> styleMuted r desc)
-            TIO.putStrLn ""
+            rPutStrLn r ("  Description: " <> styleMuted r desc)
+            rPutStrLn r ""
           _ -> pure ()
         mapM_ (renderChangesetChange r) (csiChanges cs)
-        TIO.putStrLn ""
+        rPutStrLn r ""
         ) (scPendingChangesets contents)
     else pure ()
 
@@ -662,7 +686,7 @@ renderStatusUpdate r upd = do
         LevelWarning -> colorize (th r) (thWarning (th r)) (suMessage upd)
         LevelSuccess -> colorize (th r) (thSuccess (th r)) (suMessage upd)
         LevelInfo    -> suMessage upd
-  TIO.putStrLn (tsText <> msg)
+  rPutStrLn r (tsText <> msg)
 
 renderCommandResult :: InteractiveRenderer -> CommandResult -> IO ()
 renderCommandResult r res = do
@@ -670,9 +694,9 @@ renderCommandResult r res = do
   let statusText = if crSuccess res
                    then formatSectionHeading r "SUCCESS"
                    else colorize (th r) (thError (th r)) "FAILURE" <> ":"
-  TIO.putStrLn (statusText <> " (" <> T.pack (show (crElapsedSeconds res)) <> "s)")
+  rPutStrLn r (statusText <> " (" <> T.pack (show (crElapsedSeconds res)) <> "s)")
   case crMessage res of
-    Just msg -> TIO.putStrLn msg
+    Just msg -> rPutStrLn r msg
     Nothing  -> pure ()
 
 renderFinalCommandSummary :: InteractiveRenderer -> FinalCommandSummary -> IO ()
@@ -689,20 +713,20 @@ renderFinalCommandSummary r summ = do
           else "Failure (\9583\176\9633\176\65289\9583\65077 \9531\9473\9531"
   printSectionEntry r "Command Summary:" summaryText
   case fcsResult summ of
-    SummaryFailure -> TIO.putStrLn "Fix and try again."
+    SummaryFailure -> rPutStrLn r "Fix and try again."
     _ -> pure ()
 
 renderStackList :: InteractiveRenderer -> StackListDisplay -> IO ()
 renderStackList r lst = do
   if null (sldStacks lst)
-    then TIO.putStrLn "No stacks found"
+    then rPutStrLn r "No stacks found"
     else do
       let timePad = 24 :: Int
           statusPad = calcPadding (sldStacks lst) sleStackStatus
           header = padRight timePad "Creation/Update Time,"
                 <> " " <> padRight statusPad "Status,"
                 <> " " <> if sldShowTags lst then "Name, Tags" else "Name"
-      TIO.putStrLn (styleMuted r header)
+      rPutStrLn r (styleMuted r header)
       mapM_ (\stack -> do
         let lifecycleIcon
               | sleTerminationProtection stack
@@ -726,7 +750,7 @@ renderStackList r lst = do
               else ""
             statusPadded = padRight statusPad (sleStackStatus stack)
             statusColored = colorizeResourceStatus (th r) statusPadded
-        TIO.putStrLn (formatTimestampText r tsText <> " " <> statusColored <> " "
+        rPutStrLn r (formatTimestampText r tsText <> " " <> statusColored <> " "
                       <> styleMuted r lifecycleIcon <> stackName <> tagsDisplay)
         -- Show failure reason
         case sleStatusReason stack of
@@ -734,15 +758,15 @@ renderStackList r lst = do
                       , T.isInfixOf "FAILED" (sleStackStatus stack)
                         || sleStackStatus stack == "ROLLBACK_COMPLETE"
                         || sleStackStatus stack == "UPDATE_ROLLBACK_COMPLETE"
-            -> TIO.putStrLn ("  " <> styleMuted r reason)
+            -> rPutStrLn r ("  " <> styleMuted r reason)
           _ -> pure ()
         ) (sldStacks lst)
 
 renderChangesetResult :: InteractiveRenderer -> ChangeSetCreationResult -> IO ()
 renderChangesetResult r cs = do
-  TIO.putStrLn ""
-  TIO.putStrLn ("AWS Console URL for full changeset review: " <> styleMuted r (csrConsoleUrl cs))
-  TIO.putStrLn ""
+  rPutStrLn r ""
+  rPutStrLn r ("AWS Console URL for full changeset review: " <> styleMuted r (csrConsoleUrl cs))
+  rPutStrLn r ""
   printSectionHeadingLn r "Pending Changesets"
   mapM_ (\changeset -> do
     let ctText = case csiCreationTime changeset of
@@ -752,8 +776,8 @@ renderChangesetResult r cs = do
       (colorize (th r) (thPrimary (th r)) (csiChangeSetName changeset) <> " " <> csiStatus changeset)
     mapM_ (renderChangesetChange r) (csiChanges changeset)
     ) (csrPendingChangesets cs)
-  TIO.putStrLn ""
-  mapM_ TIO.putStrLn (csrNextSteps cs)
+  rPutStrLn r ""
+  mapM_ (rPutStrLn r) (csrNextSteps cs)
 
 renderChangesetChange :: InteractiveRenderer -> ChangeInfo -> IO ()
 renderChangesetChange r change = do
@@ -762,13 +786,13 @@ renderChangesetChange r change = do
   case ciAction change of
     "Add" -> do
       let actionPadded = padRight actionW (ciAction change)
-      TIO.putStrLn ("  " <> colorize (th r) (thSuccess (th r)) actionPadded
+      rPutStrLn r ("  " <> colorize (th r) (thSuccess (th r)) actionPadded
         <> " " <> padRight logIdW (ciLogicalResourceId change)
         <> " " <> styleMuted r (ciResourceType change))
     "Remove" -> do
       let resInfo = ciResourceType change <> maybe "" (" " <>) (ciPhysicalResourceId change)
           actionPadded = padRight actionW (ciAction change)
-      TIO.putStrLn ("  " <> colorize (th r) (thError (th r)) actionPadded
+      rPutStrLn r ("  " <> colorize (th r) (thError (th r)) actionPadded
         <> " " <> padRight logIdW (ciLogicalResourceId change)
         <> " " <> styleMuted r resInfo)
     "Modify" -> do
@@ -780,73 +804,73 @@ renderChangesetChange r change = do
       case ciReplacement change of
         Nothing -> do
           let scopeText = maybe "" (T.intercalate ", ") (ciScope change)
-          TIO.putStrLn ("  " <> colorize (th r) actionColor (padRight actionW actionText)
+          rPutStrLn r ("  " <> colorize (th r) actionColor (padRight actionW actionText)
             <> " " <> padRight logIdW (ciLogicalResourceId change)
             <> " " <> colorize (th r) (thWarning (th r)) scopeText
             <> " " <> styleMuted r resInfo)
         Just "False" -> do
           let scopeText = maybe "" (T.intercalate ", ") (ciScope change)
-          TIO.putStrLn ("  " <> colorize (th r) actionColor (padRight actionW actionText)
+          rPutStrLn r ("  " <> colorize (th r) actionColor (padRight actionW actionText)
             <> " " <> padRight logIdW (ciLogicalResourceId change)
             <> " " <> colorize (th r) (thWarning (th r)) scopeText
             <> " " <> styleMuted r resInfo)
         _ ->
-          TIO.putStrLn ("  " <> colorize (th r) actionColor (padRight actionW actionText)
+          rPutStrLn r ("  " <> colorize (th r) actionColor (padRight actionW actionText)
             <> " " <> padRight logIdW (ciLogicalResourceId change)
             <> " " <> styleMuted r resInfo)
       -- Details
       mapM_ (\detail ->
-        TIO.putStrLn ("    " <> styleMuted r (cdTarget detail) <> ": "
+        rPutStrLn r ("    " <> styleMuted r (cdTarget detail) <> ": "
           <> styleMuted r (fromMaybe "Unknown" (cdChangeSource detail)))
         ) (ciDetails change)
     _ -> do
       let actionPadded = padRight actionW (ciAction change)
-      TIO.putStrLn ("  " <> actionPadded
+      rPutStrLn r ("  " <> actionPadded
         <> " " <> padRight logIdW (ciLogicalResourceId change)
         <> " " <> styleMuted r (ciResourceType change))
 
 renderStackDrift :: InteractiveRenderer -> StackDrift -> IO ()
 renderStackDrift r drift = do
   if null (sdrDriftedResources drift)
-    then TIO.putStrLn "No drift detected. Stack resources are in sync with template."
+    then rPutStrLn r "No drift detected. Stack resources are in sync with template."
     else do
       printSectionHeadingLn r "Drifted Resources"
       let idPad = maximum (0 : map (T.length . drLogicalResourceId) (sdrDriftedResources drift))
           typePad = maximum (0 : map (T.length . drResourceType) (sdrDriftedResources drift))
       mapM_ (\d -> do
-        TIO.putStrLn (" " <> colorize (th r) (thResourceId (th r)) (padRight idPad (drLogicalResourceId d))
+        rPutStrLn r (" " <> colorize (th r) (thResourceId (th r)) (padRight idPad (drLogicalResourceId d))
           <> " " <> styleMuted r (padRight typePad (drResourceType d))
           <> " " <> styleMuted r (drPhysicalResourceId d))
-        TIO.putStrLn ("  " <> colorize (th r) (thError (th r)) (drDriftStatus d))
+        rPutStrLn r ("  " <> colorize (th r) (thError (th r)) (drDriftStatus d))
         mapM_ (\pd -> do
-          TIO.putStrLn ("   - property_path: " <> pdPropertyPath pd)
+          rPutStrLn r ("   - property_path: " <> pdPropertyPath pd)
           case pdExpectedValue pd of
-            Just v -> TIO.putStrLn ("     expected_value: " <> v)
+            Just v -> rPutStrLn r ("     expected_value: " <> v)
             Nothing -> pure ()
           case pdActualValue pd of
-            Just v -> TIO.putStrLn ("     actual_value: " <> v)
+            Just v -> rPutStrLn r ("     actual_value: " <> v)
             Nothing -> pure ()
           case pdDifferenceType pd of
-            Just v -> TIO.putStrLn ("     difference_type: " <> v)
+            Just v -> rPutStrLn r ("     difference_type: " <> v)
             Nothing -> pure ()
           ) (drPropertyDifferences d)
         ) (sdrDriftedResources drift)
-  TIO.putStrLn ""
+  rPutStrLn r ""
 
 renderError :: InteractiveRenderer -> ErrorInfo -> IO ()
 renderError r err = do
-  TIO.putStrLn ""
+  rPutStrLn r ""
   case eiErrorDetails err of
     ErrorStackAbsent ctx -> renderStackAbsentError r ctx
     ErrorGeneric details -> do
-      TIO.putStrLn (colorizeBold (th r) (thError (th r)) "ERROR"
+      rPutStrLn r (colorizeBold (th r) (thError (th r)) "ERROR"
         <> ": " <> colorizeBold (th r) (thError (th r)) (eiMessage err))
       case details of
         Just detailsText -> do
-          TIO.putStrLn ""
-          TIO.putStrLn detailsText
+          rPutStrLn r ""
+          rPutStrLn r detailsText
         Nothing -> pure ()
-      mapM_ (\sug -> TIO.putStrLn ("  \8226 " <> styleMuted r sug)) (eiSuggestions err)
+      mapM_ (\sug -> rPutStrLn r ("  \8226 " <> styleMuted r sug)) (eiSuggestions err)
 
 renderNewStackEvents :: InteractiveRenderer -> [StackEventWithTiming] -> IO ()
 renderNewStackEvents r events = do
@@ -872,74 +896,74 @@ renderNewStackEvents r events = do
 renderOperationComplete :: InteractiveRenderer -> OperationCompleteInfo -> IO ()
 renderOperationComplete r info = do
   let msg = " " <> T.pack (show (ociElapsedSeconds info)) <> " seconds elapsed total."
-  TIO.putStrLn (styleMuted r msg)
+  rPutStrLn r (styleMuted r msg)
 
 renderInactivityTimeout :: InteractiveRenderer -> InactivityTimeoutInfo -> IO ()
 renderInactivityTimeout r info = do
   let msg = " Inactivity timeout of " <> T.pack (show (itiTimeoutSeconds info)) <> " seconds reached. Stopping watch."
-  TIO.putStrLn (styleMuted r msg)
+  rPutStrLn r (styleMuted r msg)
 
 renderConfirmationPrompt :: InteractiveRenderer -> ConfirmationRequest -> IO ()
 renderConfirmationPrompt r req = do
-  isTty <- hIsTerminalDevice stdout
+  isTty <- hIsTerminalDevice (irStdout r)
   if not isTty || not (ioEnableAnsi (irOptions r))
     then do
-      TIO.putStrLn ("CONFIRMATION REQUIRED: " <> cfrMessage req)
-      TIO.putStrLn "Use --yes flag to proceed automatically in non-interactive mode"
+      rPutStrLn r ("CONFIRMATION REQUIRED: " <> cfrMessage req)
+      rPutStrLn r "Use --yes flag to proceed automatically in non-interactive mode"
     else do
-      TIO.putStr ("? " <> colorizeBold (th r) (thError (th r)) (cfrMessage req) <> " (y/N) ")
-      hFlush stdout
+      rPutStr r ("? " <> colorizeBold (th r) (thError (th r)) (cfrMessage req) <> " (y/N) ")
+      rFlush r
       -- Note: actual stdin reading is handled by the caller
 
 renderStackChangeDetails :: InteractiveRenderer -> StackChangeDetails -> IO ()
 renderStackChangeDetails r details = do
   case scdChangeType details of
     ChangeCreate ->
-      TIO.putStrLn (" " <> colorize (th r) (thInfo (th r)) "Creating new stack")
+      rPutStrLn r (" " <> colorize (th r) (thInfo (th r)) "Creating new stack")
     ChangeUpdateWithChanges _ ->
-      TIO.putStrLn (" " <> colorize (th r) (thInfo (th r)) "Updating existing stack")
+      rPutStrLn r (" " <> colorize (th r) (thInfo (th r)) "Updating existing stack")
     ChangeUpdateNoChanges ->
-      TIO.putStrLn (" " <> colorize (th r) (thSuccess (th r)) "No changes detected so no stack update needed.")
+      rPutStrLn r (" " <> colorize (th r) (thSuccess (th r)) "No changes detected so no stack update needed.")
 
 renderStackAbsentInfo :: InteractiveRenderer -> StackAbsentInfo -> IO ()
 renderStackAbsentInfo r info = do
   let prefix = colorizeBold (th r) (thSuccess (th r)) "info"
       sn = colorizeBold (th r) (thInfo (th r)) (saiStackName info)
-  TIO.putStrLn (prefix <> " The stack " <> sn <> " is absent")
-  TIO.putStrLn ("      env = " <> colorize (th r) (thPrimary (th r)) (saiEnvironment info))
-  TIO.putStrLn ("      region = " <> colorize (th r) (thPrimary (th r)) (saiRegion info))
-  TIO.putStrLn ("      account = " <> colorize (th r) (thPrimary (th r)) (saiAccount info))
-  TIO.putStrLn ("      auth_arn = " <> colorize (th r) (thPrimary (th r)) (saiAuthArn info) <> ".")
+  rPutStrLn r (prefix <> " The stack " <> sn <> " is absent")
+  rPutStrLn r ("      env = " <> colorize (th r) (thPrimary (th r)) (saiEnvironment info))
+  rPutStrLn r ("      region = " <> colorize (th r) (thPrimary (th r)) (saiRegion info))
+  rPutStrLn r ("      account = " <> colorize (th r) (thPrimary (th r)) (saiAccount info))
+  rPutStrLn r ("      auth_arn = " <> colorize (th r) (thPrimary (th r)) (saiAuthArn info) <> ".")
 
 renderStackAbsentError :: InteractiveRenderer -> StackAbsentInfo -> IO ()
 renderStackAbsentError r ctx = do
   let prefix = colorizeBold (th r) (thError (th r)) "ERROR"
       sn = colorizeBold (th r) (thInfo (th r)) (saiStackName ctx)
-  TIO.putStrLn (prefix <> " The stack " <> sn <> " is absent")
-  TIO.putStrLn ("      env = " <> colorize (th r) (thPrimary (th r)) (saiEnvironment ctx))
-  TIO.putStrLn ("      region = " <> colorize (th r) (thPrimary (th r)) (saiRegion ctx))
-  TIO.putStrLn ("      account = " <> colorize (th r) (thPrimary (th r)) (saiAccount ctx))
-  TIO.putStrLn ("      auth_arn = " <> colorize (th r) (thPrimary (th r)) (saiAuthArn ctx) <> ".")
+  rPutStrLn r (prefix <> " The stack " <> sn <> " is absent")
+  rPutStrLn r ("      env = " <> colorize (th r) (thPrimary (th r)) (saiEnvironment ctx))
+  rPutStrLn r ("      region = " <> colorize (th r) (thPrimary (th r)) (saiRegion ctx))
+  rPutStrLn r ("      account = " <> colorize (th r) (thPrimary (th r)) (saiAccount ctx))
+  rPutStrLn r ("      auth_arn = " <> colorize (th r) (thPrimary (th r)) (saiAuthArn ctx) <> ".")
 
 renderCostEstimate :: InteractiveRenderer -> CostEstimate -> IO ()
 renderCostEstimate r est = do
   printSectionEntry r "Stack cost estimator:" (colorize (th r) (thPrimary (th r)) (ceiUrl (ceInfo est)))
 
 renderStackTemplate :: InteractiveRenderer -> StackTemplate -> IO ()
-renderStackTemplate _r tmpl = do
-  mapM_ (TIO.hPutStrLn stderr) (stStderrLines tmpl)
-  TIO.putStrLn (stTemplateBody tmpl)
+renderStackTemplate r tmpl = do
+  mapM_ (rPutStrLnErr r) (stStderrLines tmpl)
+  rPutStrLn r (stTemplateBody tmpl)
 
 renderApprovalRequestResult :: InteractiveRenderer -> ApprovalRequestResult -> IO ()
 renderApprovalRequestResult r res = do
   if arrAlreadyApproved res
-    then TIO.putStrLn (colorize (th r) (thSuccess (th r)) "\128077 Your template has already been approved")
+    then rPutStrLn r (colorize (th r) (thSuccess (th r)) "\128077 Your template has already been approved")
     else do
       printSectionHeadingLn r "Template Approval Request"
-      TIO.putStrLn ("Successfully uploaded template to: " <> styleMuted r (arrPendingLocation res))
-      TIO.putStrLn ""
-      TIO.putStrLn "Approve template with:"
-      mapM_ (\step -> TIO.putStrLn ("  " <> colorize (th r) (thPrimary (th r)) step)) (arrNextSteps res)
+      rPutStrLn r ("Successfully uploaded template to: " <> styleMuted r (arrPendingLocation res))
+      rPutStrLn r ""
+      rPutStrLn r "Approve template with:"
+      mapM_ (\step -> rPutStrLn r ("  " <> colorize (th r) (thPrimary (th r)) step)) (arrNextSteps res)
 
 renderTemplateValidation :: InteractiveRenderer -> TemplateValidation -> IO ()
 renderTemplateValidation r val = do
@@ -949,48 +973,48 @@ renderTemplateValidation r val = do
       if not (null (tvErrors val))
         then do
           printSectionHeadingLn r "Template Validation Errors"
-          mapM_ (\e -> TIO.putStrLn (colorize (th r) (thError (th r)) "\10007"
+          mapM_ (\e -> rPutStrLn r (colorize (th r) (thError (th r)) "\10007"
             <> " " <> colorize (th r) (thError (th r)) e)) (tvErrors val)
         else pure ()
       if not (null (tvWarnings val))
         then do
           printSectionHeadingLn r "Template Validation Warnings"
-          mapM_ (\w -> TIO.putStrLn (colorize (th r) (thWarning (th r)) "\9888"
+          mapM_ (\w -> rPutStrLn r (colorize (th r) (thWarning (th r)) "\9888"
             <> " " <> colorize (th r) (thWarning (th r)) w)) (tvWarnings val)
         else pure ()
       if null (tvErrors val) && null (tvWarnings val)
-        then TIO.putStrLn (colorize (th r) (thSuccess (th r)) "\10003 Template validation passed")
+        then rPutStrLn r (colorize (th r) (thSuccess (th r)) "\10003 Template validation passed")
         else pure ()
 
 renderApprovalStatus :: InteractiveRenderer -> ApprovalStatus -> IO ()
 renderApprovalStatus r st = do
   if apsAlreadyApproved st
-    then TIO.putStrLn (colorize (th r) (thSuccess (th r)) "\128077 The template has already been approved")
+    then rPutStrLn r (colorize (th r) (thSuccess (th r)) "\128077 The template has already been approved")
     else do
       printSectionHeadingLn r "Approval Status"
-      TIO.putStrLn ("Pending template: " <> styleMuted r (apsPendingLocation st))
+      rPutStrLn r ("Pending template: " <> styleMuted r (apsPendingLocation st))
       case apsApprovedLocation st of
-        Just loc -> TIO.putStrLn ("Current approved: " <> styleMuted r loc)
-        Nothing  -> TIO.putStrLn "No previously approved template found"
+        Just loc -> rPutStrLn r ("Current approved: " <> styleMuted r loc)
+        Nothing  -> rPutStrLn r "No previously approved template found"
 
 renderTemplateDiff :: InteractiveRenderer -> TemplateDiff -> IO ()
 renderTemplateDiff r diff = do
   if not (tdHasChanges diff)
-    then TIO.putStrLn (colorize (th r) (thSuccess (th r)) "Templates are identical")
+    then rPutStrLn r (colorize (th r) (thSuccess (th r)) "Templates are identical")
     else do
       printSectionHeadingLn r "Template Changes"
-      TIO.putStr (tdDiffOutput diff)
+      rPutStr r (tdDiffOutput diff)
 
 renderApprovalResult :: InteractiveRenderer -> ApprovalResult -> IO ()
 renderApprovalResult r res = do
   if arApproved res
     then do
-      TIO.putStrLn ""
-      TIO.putStrLn (colorize (th r) (thSuccess (th r)) "Template has been successfully approved!")
+      rPutStrLn r ""
+      rPutStrLn r (colorize (th r) (thSuccess (th r)) "Template has been successfully approved!")
       case arApprovedLocation res of
-        Just loc -> TIO.putStrLn ("Approved template: " <> styleMuted r loc)
+        Just loc -> rPutStrLn r ("Approved template: " <> styleMuted r loc)
         Nothing  -> pure ()
-    else TIO.putStrLn (colorize (th r) (thWarning (th r)) "Approval cancelled")
+    else rPutStrLn r (colorize (th r) (thWarning (th r)) "Approval cancelled")
 
 ------------------------------------------------------------------------
 -- Utility helpers
