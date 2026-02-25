@@ -10,12 +10,34 @@ Generate a **complete** set of PRD / user story documents in `docs/requirements/
 covering the entire iidy-hs feature surface. These are retroactive requirements
 docs derived from the implemented Haskell port and its Rust original.
 
+### Behavioral Equivalence Requirement
+
+The Haskell port must be **byte-for-byte identical** to the Rust original in all
+observable behavior:
+
+- **Happy-path output**: stdout/stderr content must match exactly
+- **Help & usage text**: `--help` for every command and subcommand must produce
+  identical output (same wording, same formatting, same line breaks)
+- **Error reporting**: error messages, error codes, ANSI formatting, and exit codes
+  must match exactly for every error condition
+- **Edge cases**: every boundary condition, empty input, missing file, malformed YAML,
+  invalid parameter, etc. must be handled identically to the Rust version
+- **Exit codes**: must match for all success and failure paths
+
+The Rust binary (`~/src/iidy/target/debug/iidy`) serves as the **oracle** — any
+divergence from its behavior is a bug unless explicitly documented in `DIVERGENCES.md`
+with justification. The Rust snapshot files (`~/src/iidy/tests/snapshots/`) are the
+canonical reference for expected output.
+
+PRD authors must write acceptance criteria against this standard: the criterion is met
+when the Haskell output is identical to the Rust output for the same input.
+
 Each document must include:
 - **User stories** (As a [persona], I want [action], so that [benefit])
-- **Acceptance criteria** (testable, specific)
+- **Acceptance criteria** (testable, specific — verified against Rust oracle output)
 - **Logic flows** (step-by-step behavior for each operation)
-- **Edge cases** (boundary conditions, empty inputs, missing data)
-- **Error scenarios** (what fails, how, what the user sees)
+- **Edge cases** (boundary conditions, empty inputs, missing data — all handled identically to Rust)
+- **Error scenarios** (what fails, how, what the user sees — byte-for-byte match with Rust)
 - **Cross-references** to other PRDs where behaviors interact
 
 Personas:
@@ -213,10 +235,15 @@ Each session in the ralph loop should:
 **Critical rules for sub-agents writing PRDs:**
 - Read the ACTUAL SOURCE CODE, not just docs. Docs may be incomplete.
 - Every user story needs acceptance criteria. No vague stories.
-- Every edge case from test fixtures must be captured.
-- Error scenarios must include the actual error code (ERR_XXXX) and message format.
+- Acceptance criteria must be verifiable against the Rust oracle binary — the criterion
+  is met when Haskell output is byte-for-byte identical to Rust output for the same input.
+- Every edge case from test fixtures must be captured, with the exact Rust behavior specified.
+- Error scenarios must include the actual error code (ERR_XXXX), message format, ANSI
+  formatting, and exit code — all must match the Rust version exactly.
 - Cross-references between PRDs must use the actual file name and section header.
 - Don't invent features. Only document what's implemented.
+- Reference the Rust snapshot files (`~/src/iidy/tests/snapshots/`) as canonical expected
+  output wherever applicable.
 
 ## Progress
 
