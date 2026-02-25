@@ -84,3 +84,6 @@ Before wrapping up, verify ALL of these:
 - Use sub-agents (Task tool) for research, exploration, and parallel work to keep main context clean.
 - Delegate to Sonnet sub-agents for straightforward implementation after Opus designs the interface.
 - Use Explore agents for codebase searches rather than flooding main context with grep results.
+
+## Ralph?
+If you are running in headless -p mode read @RALPH.md and check ./.msgs/ frequently.

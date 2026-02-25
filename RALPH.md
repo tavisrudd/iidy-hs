@@ -12,3 +12,5 @@ to change priorities or stop, follow those instructions. Read the
 first prompt from the user (what was provided with -p) and then read
 and reply to all unread messages before you start working.
 
+If you use sub-agents remember to have the main agent check .msgs
+every minute while the sub-agents work.
