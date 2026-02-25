@@ -249,7 +249,7 @@ Each session in the ralph loop should:
 
 - [x] Session 0: Create workplan + handoff doc
 - [x] Session 1: `00-overview.md` + `01-cli-interface.md`
-- [ ] Session 2: `02-yaml-preprocessing.md` + `03-import-system.md`
+- [x] Session 2: `02-yaml-preprocessing.md` + `03-import-system.md`
 - [ ] Session 3: `05-cfn-operations.md` + `06-output-system.md`
 - [ ] Session 4: `07-error-handling.md` + `08-aws-integration.md`
 - [ ] Session 5: `04-custom-resources.md` + `09-ssm-params.md` + `10-template-approval.md`
