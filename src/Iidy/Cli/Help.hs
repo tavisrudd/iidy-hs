@@ -7,6 +7,8 @@ module Iidy.Cli.Help
   , headingLine
   , colorCommand
   , formatUsageLine
+  , formatRowsForTest -- test-only helper
+  , helpDescriptionForTest -- test-only helper
   ) where
 
 import Control.Monad (when)
@@ -18,6 +20,7 @@ import Data.Maybe (listToMaybe)
 import qualified System.Console.ANSI as ANSI
 import qualified System.Environment
 import System.IO (stdout, stderr, hIsTerminalDevice, hPutStrLn)
+import System.Console.Terminal.Size (Window(..), size)
 import Options.Applicative.Help.Types (ParserHelp(..))
 import Options.Applicative.Help.Chunk (Chunk(..))
 import Prettyprinter (Doc, defaultLayoutOptions, layoutPretty)
@@ -34,6 +37,7 @@ shouldShowTopLevelHelp args =
 renderTopLevelHelp :: IO ()
 renderTopLevelHelp = do
   useColor <- helpColorEnabled
+  wrapWidth <- detectHelpWidth
   putStrLn . unlines . concat $
     [ [ colorTitle useColor "CloudFormation with Confidence"
       , colorSubtitle useColor "An acronym for \"Is it done yet?\""
@@ -42,23 +46,23 @@ renderTopLevelHelp = do
       , ""
       , headingLine useColor "Commands:"
       ]
-    , formatRows (colorCommand useColor) visibleCommandHelpRows
+    , formatRows wrapWidth (colorCommand useColor) visibleCommandHelpRows
     , [ ""
       , headingLine useColor "Options:"
       ]
-    , formatRows (colorItem useColor) optionHelpRows
+    , formatRows wrapWidth (colorItem useColor) optionHelpRows
     , [ ""
       , headingLine useColor "Global Options:"
       ]
-    , formatRows (colorItem useColor) globalOptionHelpRows
+    , formatRows wrapWidth (colorItem useColor) globalOptionHelpRows
     , [ ""
       , headingLine useColor "AWS Options:"
       ]
-    , formatRows (colorItem useColor) awsOptionHelpRows
+    , formatRows wrapWidth (colorItem useColor) awsOptionHelpRows
     , [ ""
       , headingLine useColor "Status Codes:"
       ]
-    , formatRows (colorItem useColor) statusCodeRows
+    , formatRows wrapWidth (colorItem useColor) statusCodeRows
     ]
 
 renderHelpForArgs :: [String] -> String -> IO ()
@@ -68,6 +72,7 @@ renderHelpForArgs args defaultMsg = do
     then renderTopLevelHelp
     else do
       useColor <- helpColorEnabled
+      wrapWidth <- detectHelpWidth
       case parseHelpMessage defaultMsg of
         Nothing -> putStrLn defaultMsg
         Just parsed -> do
@@ -81,7 +86,7 @@ renderHelpForArgs args defaultMsg = do
                 ]
               parsed' = parsed { phSections = normalized ++ extras }
               parsed'' = maybe parsed' (\desc -> parsed' { phDescription = [desc] }) (commandDescription cmdPath)
-          renderParsedHelp useColor parsed''
+          renderParsedHelp useColor wrapWidth parsed''
 
 ------------------------------------------------------------------------
 -- Internal helpers
@@ -112,30 +117,29 @@ headingColorCode, titleColorCode, subtitleColorCode, commandColorCode, itemColor
 headingColorCode = ANSI.setSGRCode [ANSI.SetConsoleIntensity ANSI.BoldIntensity, ANSI.SetColor ANSI.Foreground ANSI.Vivid ANSI.Yellow]
 titleColorCode = ANSI.setSGRCode [ANSI.SetConsoleIntensity ANSI.BoldIntensity, ANSI.SetColor ANSI.Foreground ANSI.Vivid ANSI.Cyan]
 subtitleColorCode = ANSI.setSGRCode [ANSI.SetColor ANSI.Foreground ANSI.Dull ANSI.White]
-commandColorCode = ANSI.setSGRCode [ANSI.SetColor ANSI.Foreground ANSI.Vivid ANSI.Green]
+commandColorCode = ANSI.setSGRCode [ANSI.SetColor ANSI.Foreground ANSI.Vivid ANSI.Cyan]
 itemColorCode = ANSI.setSGRCode [ANSI.SetColor ANSI.Foreground ANSI.Vivid ANSI.Cyan]
 resetCode = ANSI.setSGRCode [ANSI.Reset]
 
-formatRows :: (String -> String) -> [(String, String)] -> [String]
-formatRows stylize rows
+formatRows :: Int -> (String -> String) -> [(String, String)] -> [String]
+formatRows wrapWidth stylize rows
   | null rows = []
   | otherwise = concatMap renderRow formatted
   where
     formatted = map (\(name, desc) -> (formatEntryName name, desc)) rows
-    width = maximum (0 : [length name | (name, _) <- formatted, not (null name)])
+    nameWidth = maximum (0 : [length name | (name, _) <- formatted, not (null name)])
+    availableWidth = max 20 (wrapWidth - nameWidth - 4)
     renderRow ("", "") = [""]
     renderRow (name, desc) =
-      let descLines = case lines desc of
-            [] -> [""]
-            xs -> xs
+      let descLines = wrapDescription availableWidth desc
           paddedName =
             if null name
-              then replicate width ' '
-              else padRight width name
+              then replicate nameWidth ' '
+              else padRight nameWidth name
           firstLine =
             "  " <> stylize paddedName <> "  " <> head descLines
           rest =
-            [ "  " <> replicate width ' ' <> "  " <> line
+            [ "  " <> replicate nameWidth ' ' <> "  " <> line
             | line <- tail descLines
             ]
       in firstLine : rest
@@ -156,6 +160,49 @@ formatEntryName =
     isPlaceholderToken token =
       not (null token) && all isAllowed token
     isAllowed c = Char.isUpper c || Char.isDigit c || c == '_'
+
+wrapDescription :: Int -> String -> [String]
+wrapDescription limit desc
+  | limit <= 10 = lines desc
+  | otherwise =
+      concatMap (wrapParagraph limit) (splitParagraphs desc)
+
+splitParagraphs :: String -> [String]
+splitParagraphs "" = [""]
+splitParagraphs txt = lines txt
+
+wrapParagraph :: Int -> String -> [String]
+wrapParagraph _ "" = [""]
+wrapParagraph limit paragraph = wrapWords [] (words paragraph)
+  where
+    wrapWords current [] =
+      case current of
+        [] -> []
+        _  -> [unwords (reverse current)]
+    wrapWords [] (w:ws)
+      | length w >= limit = w : wrapWords [] ws
+      | otherwise = wrapWords [w] ws
+    wrapWords acc (w:ws)
+      | length (unwords (reverse (w:acc))) <= limit =
+          wrapWords (w:acc) ws
+      | otherwise =
+          unwords (reverse acc) : wrapWords [w] ws
+
+detectHelpWidth :: IO Int
+detectHelpWidth = do
+  mWin <- size
+  let fallback = 100
+  pure $ maybe fallback (clampWidth . width) mWin
+  where
+    clampWidth w = max 60 (min 120 w)
+
+-- Test helpers --------------------------------------------------------
+
+formatRowsForTest :: Int -> [(String, String)] -> [String]
+formatRowsForTest wrapWidth = formatRows wrapWidth id
+
+helpDescriptionForTest :: [String] -> Maybe String
+helpDescriptionForTest = commandDescription
 
 visibleCommandHelpRows :: [(String, String)]
 visibleCommandHelpRows =
@@ -223,10 +270,10 @@ globalOptionHelpRows =
 
 awsOptionHelpRows :: [(String, String)]
 awsOptionHelpRows =
-  [ ("    --region <REGION>", "AWS region. Can also be set via --environment & stack-args.yaml:Region.")
-  , ("    --profile <PROFILE>", "AWS profile. Can also be set via --environment & stack-args.yaml:Profile. Use --profile=no-profile to override stack-args.yaml and use AWS_* env vars.")
-  , ("    --assume-role-arn <ARN>", "AWS role ARN to assume. Can also be set via --environment & stack-args.yaml:AssumeRoleArn. Use --assume-role-arn=no-role to override stack-args.yaml and use AWS_* env vars.")
-  , ("    --client-request-token <TOKEN>", "A unique, case-sensitive string of up to 64 ASCII characters used to ensure idempotent retries.")
+  [ ("--region <REGION>", "AWS region. Can also be set via --environment & stack-args.yaml:Region.")
+  , ("--profile <PROFILE>", "AWS profile. Can also be set via --environment & stack-args.yaml:Profile. Use --profile=no-profile to override stack-args.yaml and use AWS_* env vars.")
+  , ("--assume-role-arn <ARN>", "AWS role ARN to assume. Can also be set via --environment & stack-args.yaml:AssumeRoleArn. Use --assume-role-arn=no-role to override stack-args.yaml and use AWS_* env vars.")
+  , ("--client-request-token <TOKEN>", "A unique, case-sensitive string of up to 64 ASCII characters used to ensure idempotent retries.")
   ]
 
 statusCodeRows :: [(String, String)]
@@ -270,8 +317,8 @@ commandDescription _ = Nothing
 -- Subcommand help parsing / formatting
 ------------------------------------------------------------------------
 
-renderParsedHelp :: Bool -> ParsedHelp -> IO ()
-renderParsedHelp useColor (ParsedHelp usage desc sections) = do
+renderParsedHelp :: Bool -> Int -> ParsedHelp -> IO ()
+renderParsedHelp useColor wrapWidth (ParsedHelp usage desc sections) = do
   printParagraph desc
   putStrLn $ headingLine useColor "Usage:" <> " " <> formatUsageLine usage
   putStrLn ""
@@ -286,16 +333,16 @@ renderParsedHelp useColor (ParsedHelp usage desc sections) = do
           then optionRows
           else optRowsRaw
   when (not (null argRows)) $
-    renderSection useColor ("Arguments", argRows)
+    renderSection useColor wrapWidth ("Arguments", argRows)
   when (not (null optRows)) $
-    renderSection useColor ("Options", optRows)
-  mapM_ (renderSection useColor) otherSections
+    renderSection useColor wrapWidth ("Options", optRows)
+  mapM_ (renderSection useColor wrapWidth) otherSections
 
-renderSection :: Bool -> (String, [(String, String)]) -> IO ()
-renderSection _ (_, []) = pure ()
-renderSection useColor (title, rows) = do
+renderSection :: Bool -> Int -> (String, [(String, String)]) -> IO ()
+renderSection _ _ (_, []) = pure ()
+renderSection useColor wrapWidth (title, rows) = do
   putStrLn $ headingLine useColor (title <> ":")
-  mapM_ putStrLn (formatRows (colorItem useColor) rows)
+  mapM_ putStrLn (formatRows wrapWidth (colorItem useColor) rows)
   putStrLn ""
 
 normalizeSection :: (String, [(String, String)]) -> (String, [(String, String)])

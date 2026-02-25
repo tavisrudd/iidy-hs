@@ -64,6 +64,7 @@ import Iidy.Cli.Parser (cliParserInfo)
 import Iidy.Cfn.Operations.DescribeStack (calculateEventDurations, convertEventWithDuration)
 import Iidy.Cfn.Operations.UpdateStack (isNoUpdatesError)
 import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..), getStrMapValidated)
+import qualified Iidy.Cli.HelpTest as HelpTest
 import Iidy.Output.Color (darkTheme, lightTheme, highContrastTheme, noColorTheme, IidyTheme(..), colorize, colorizeResourceStatus)
 import Iidy.Output.Renderers.Interactive
   ( InteractiveRenderer(..)
@@ -153,7 +154,8 @@ main = do
   fixtureTests <- buildFixtureTests
   errorTests <- buildErrorTests
   defaultMain $ testGroup "iidy-hs"
-    [ testGroup "Parser" parserTests
+    [ HelpTest.tests
+    , testGroup "Parser" parserTests
     , testGroup "JMESPath" jmespathTests
     , testGroup "Handlebars" handlebarsTests
     , testGroup "Emitter" emitterTests
@@ -1414,7 +1416,7 @@ genSimpleYamlDoc = do
 watchStackTests :: [TestTree]
 watchStackTests =
   [ testCase "formatEvent - all fields present" $ do
-      let e = mkEvent
+      let e = mkBaseEvent
                 { SE.logicalResourceId = Just "MyBucket"
                 , SE.resourceType = Just "AWS::S3::Bucket"
                 , SE.resourceStatus = Just CF.ResourceStatus_CREATE_COMPLETE
@@ -1422,16 +1424,16 @@ watchStackTests =
                 }
       formatEvent e @?= "MyBucket | AWS::S3::Bucket | CREATE_COMPLETE | Resource creation complete"
   , testCase "formatEvent - missing optional fields" $ do
-      let e = mkEvent
+      let e = mkBaseEvent
       formatEvent e @?= " |  |  | "
   , testCase "formatEvent - partial fields" $ do
-      let e = mkEvent
+      let e = mkBaseEvent
                 { SE.logicalResourceId = Just "MyFunc"
                 , SE.resourceStatus = Just CF.ResourceStatus_CREATE_IN_PROGRESS
                 }
       formatEvent e @?= "MyFunc |  | CREATE_IN_PROGRESS | "
   , testCase "formatEvent - with reason but no type" $ do
-      let e = mkEvent
+      let e = mkBaseEvent
                 { SE.logicalResourceId = Just "Stack"
                 , SE.resourceStatusReason = Just "User Initiated"
                 }
@@ -1569,8 +1571,8 @@ watchStackTests =
   where
     epoch :: UTCTime
     epoch = UTCTime (fromGregorian 2024 1 1) 0
-    mkEvent :: SE.StackEvent
-    mkEvent = SE.newStackEvent "stack-id" "event-1" "test-stack" epoch
+    mkBaseEvent :: SE.StackEvent
+    mkBaseEvent = SE.newStackEvent "stack-id" "event-1" "test-stack" epoch
 
     -- | PollConfig with 0-second delay for fast tests
     testPollConfig :: PollConfig

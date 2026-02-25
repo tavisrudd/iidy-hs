@@ -106,6 +106,7 @@ library
       base >= 4.17 && < 5
     , aeson
     , ansi-terminal
+    , terminal-size
     , amazonka
     , amazonka-cloudformation
     , amazonka-s3
@@ -164,6 +165,8 @@ test-suite iidy-hs-test
   type:             exitcode-stdio-1.0
   main-is:          Main.hs
   hs-source-dirs:   test
+  other-modules:
+    Iidy.Cli.HelpTest
   default-language: GHC2021
   default-extensions:
     LambdaCase
