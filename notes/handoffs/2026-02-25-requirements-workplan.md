@@ -127,6 +127,14 @@ Each document follows this structure:
 ## Overview
 [1-2 paragraph summary of this feature area]
 
+## Implementation Context
+**Haskell Ecosystem**: [libraries available vs custom code required — e.g. "amazonka-cloudformation
+covers API calls; no existing library for event-stream YAML preprocessing, requires custom parser"]
+**Rust-to-Haskell Friction**: [specific patterns/idioms that don't translate directly — e.g. "Rust's
+serde_yaml tree API vs HsYAML event API", "ownership-based resource cleanup vs bracket patterns"]
+**Prerequisites**: [which other PRDs must be implemented first, and why]
+**Parallelizable**: [can this be developed independently, or is it on the critical path?]
+
 ## User Stories
 
 ### US-XX-001: [Short title]
@@ -149,9 +157,19 @@ Each document follows this structure:
 - [error condition] → [error code, message, display]
 - ...
 
+**Complexity Notes:**
+- [hidden complexity, custom implementations required, non-obvious technical challenges]
+- [e.g. "key-order preservation requires a custom OValue type threaded through the entire pipeline"]
+
 ---
 
 ### US-XX-002: ...
+
+## Testing Requirements
+- **Unit tests**: [pure logic that can be tested in isolation]
+- **Mock requirements**: [AWS calls, I/O, or system interactions needing DI or mocking]
+- **Snapshot tests**: [reference snapshots from Rust oracle for output comparison]
+- **Property tests**: [invariants suitable for QuickCheck, if any]
 
 ## Cross-References
 - [Link to related PRD sections]
