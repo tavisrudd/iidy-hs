@@ -11,15 +11,15 @@ module Iidy.Cli.Help
   , helpDescriptionForTest -- test-only helper
   ) where
 
-import Control.Monad (when)
+import Control.Monad (unless)
 import qualified Data.Char as Char
 import Data.List (dropWhileEnd, isInfixOf, isPrefixOf, stripPrefix)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (listToMaybe)
+import Data.Maybe (isJust, listToMaybe)
 import qualified System.Console.ANSI as ANSI
 import qualified System.Environment
-import System.IO (stdout, stderr, hIsTerminalDevice, hPutStrLn)
+import System.IO (Handle, stdout, stderr, hIsTerminalDevice, hPutStrLn)
 import System.Console.Terminal.Size (Window(..), size)
 import Options.Applicative.Help.Types (ParserHelp(..))
 import Options.Applicative.Help.Chunk (Chunk(..))
@@ -93,12 +93,14 @@ renderHelpForArgs args defaultMsg = do
 ------------------------------------------------------------------------
 
 helpColorEnabled :: IO Bool
-helpColorEnabled = do
-  isTty <- hIsTerminalDevice stdout
-  supportsAnsi <- ANSI.hSupportsANSIColor stdout
+helpColorEnabled = colorEnabledFor stdout
+
+colorEnabledFor :: Handle -> IO Bool
+colorEnabledFor h = do
+  isTty <- hIsTerminalDevice h
+  supportsAnsi <- ANSI.hSupportsANSIColor h
   noColor <- System.Environment.lookupEnv "NO_COLOR"
-  let disabledByEnv = maybe False (const True) noColor
-  pure (isTty && supportsAnsi && not disabledByEnv)
+  pure (isTty && supportsAnsi && not (isJust noColor))
 
 headingLine :: Bool -> String -> String
 headingLine useColor label = applyColor useColor headingColorCode label
@@ -136,13 +138,11 @@ formatRows wrapWidth stylize rows
             if null name
               then replicate nameWidth ' '
               else padRight nameWidth name
-          firstLine =
-            "  " <> stylize paddedName <> "  " <> head descLines
-          rest =
-            [ "  " <> replicate nameWidth ' ' <> "  " <> line
-            | line <- tail descLines
-            ]
-      in firstLine : rest
+      in case descLines of
+           [] -> ["  " <> stylize paddedName]
+           (d:ds) ->
+             ("  " <> stylize paddedName <> "  " <> d)
+             : [ "  " <> replicate nameWidth ' ' <> "  " <> line | line <- ds ]
     padRight w txt =
       let padding = replicate (max 0 (w - length txt)) ' '
       in txt <> padding
@@ -152,8 +152,7 @@ formatEntryName =
   unwords . map formatToken . words
   where
     formatToken tok
-      | null tok = tok
-      | head tok == '<' = tok
+      | '<':_ <- tok = tok
       | "--" `isPrefixOf` tok = tok
       | isPlaceholderToken tok = "<" <> tok <> ">"
       | otherwise = tok
@@ -164,12 +163,8 @@ formatEntryName =
 wrapDescription :: Int -> String -> [String]
 wrapDescription limit desc
   | limit <= 10 = lines desc
-  | otherwise =
-      concatMap (wrapParagraph limit) (splitParagraphs desc)
-
-splitParagraphs :: String -> [String]
-splitParagraphs "" = [""]
-splitParagraphs txt = lines txt
+  | null desc   = [""]
+  | otherwise   = concatMap (wrapParagraph limit) (lines desc)
 
 wrapParagraph :: Int -> String -> [String]
 wrapParagraph _ "" = [""]
@@ -287,7 +282,7 @@ hiddenCommandNames :: [String]
 hiddenCommandNames = ["get-stack-instances"]
 
 allCommandNames :: [String]
-allCommandNames = map fst visibleCommandHelpRows <> hiddenCommandNames
+allCommandNames = filter (not . null) (map fst visibleCommandHelpRows) <> hiddenCommandNames
 
 topLevelDescriptionMap :: Map String String
 topLevelDescriptionMap = Map.fromList
@@ -332,9 +327,9 @@ renderParsedHelp useColor wrapWidth (ParsedHelp usage desc sections) = do
         if null argRowsRaw
           then optionRows
           else optRowsRaw
-  when (not (null argRows)) $
+  unless (null argRows) $
     renderSection useColor wrapWidth ("Arguments", argRows)
-  when (not (null optRows)) $
+  unless (null optRows) $
     renderSection useColor wrapWidth ("Options", optRows)
   mapM_ (renderSection useColor wrapWidth) otherSections
 
@@ -370,8 +365,10 @@ partitionRows = foldr go ([], [])
       | isPositional name = (row : posArgs, opts)
       | otherwise = (posArgs, row : opts)
     isPositional txt =
-      let trimmed = dropWhile (== ' ') txt
-      in not (null trimmed) && head trimmed /= '-'
+      case dropWhile (== ' ') txt of
+        '-':_ -> False
+        []    -> False
+        _     -> True
 
 ------------------------------------------------------------------------
 -- Parser failure rendering
@@ -438,22 +435,14 @@ renderDoc doc =
   renderString (layoutPretty defaultLayoutOptions doc)
 
 colorErrorLabel :: Bool -> String -> String
-colorErrorLabel True txt = errorColorCode <> txt <> ansiResetCode
+colorErrorLabel True txt = errorColorCode <> txt <> resetCode
 colorErrorLabel False txt = txt
 
 errorColorCode :: String
 errorColorCode = ANSI.setSGRCode [ANSI.SetConsoleIntensity ANSI.BoldIntensity, ANSI.SetColor ANSI.Foreground ANSI.Vivid ANSI.Red]
 
-ansiResetCode :: String
-ansiResetCode = ANSI.setSGRCode [ANSI.Reset]
-
 errorColorEnabled :: IO Bool
-errorColorEnabled = do
-  isTty <- hIsTerminalDevice stderr
-  supportsAnsi <- ANSI.hSupportsANSIColor stderr
-  noColor <- System.Environment.lookupEnv "NO_COLOR"
-  let disableColor = maybe False (const True) noColor
-  pure (isTty && supportsAnsi && not disableColor)
+errorColorEnabled = colorEnabledFor stderr
 
 putStrLnErr :: String -> IO ()
 putStrLnErr = hPutStrLn stderr
@@ -489,9 +478,7 @@ removeOptionalSegments = go False
       in (x : tailStr, opt)
 
 splitCommandArgs :: [String] -> ([String], [String])
-splitCommandArgs tokens =
-  let (cmd, rest) = break isArgToken tokens
-  in (cmd, rest)
+splitCommandArgs = break isArgToken
 
 isArgToken :: String -> Bool
 isArgToken tok =
@@ -502,9 +489,6 @@ isArgToken tok =
       let letters = filter Char.isAlpha tok
       in not (null letters) && all Char.isUpper letters
 
-unlessNull :: [a] -> IO () -> IO ()
-unlessNull xs ioAction =
-  if null xs then pure () else ioAction
 
 commandPathFromArgs :: [String] -> [String]
 commandPathFromArgs args =
@@ -585,7 +569,9 @@ parseSections = reverse . finalize [] Nothing . dropWhile null
 isSectionHeader :: String -> Bool
 isSectionHeader line =
   let trimmed = dropWhile Char.isSpace line
-  in not (null trimmed) && last trimmed == ':' && not (isRowLine line)
+  in case reverse trimmed of
+       ':':_ -> not (isRowLine line)
+       _     -> False
 
 isRowLine :: String -> Bool
 isRowLine line =
@@ -614,7 +600,7 @@ printParagraph :: [String] -> IO ()
 printParagraph lines' =
   let cleaned = dropWhile null (dropWhileEnd null lines')
       filtered = filter (not . looksLikeWrappedUsage) cleaned
-  in unlessNull filtered $ do
+  in unless (null filtered) $ do
        mapM_ putStrLn filtered
        putStrLn ""
 

@@ -126,7 +126,6 @@ library
     , network
     , optparse-applicative
     , prettyprinter
-    , prettyprinter-ansi-terminal
     , random
     , regex-posix
     , resourcet

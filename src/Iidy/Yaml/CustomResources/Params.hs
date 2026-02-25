@@ -10,7 +10,7 @@ import Data.Aeson (Value(..))
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
-import Data.List (foldl')
+import qualified Data.List as List
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -175,7 +175,7 @@ isCfnRef _ = False
 
 mergeParams :: [ParamDef] -> Map Text OValue -> Map Text OValue
 mergeParams defs provided =
-  foldl' addDefault provided defs
+  List.foldl' addDefault provided defs
   where
     addDefault acc pd = case Map.lookup (pdName pd) acc of
       Just _ -> acc

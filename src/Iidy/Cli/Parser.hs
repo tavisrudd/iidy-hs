@@ -68,8 +68,6 @@ statusCodesDoc =
   <> pretty ("  Error (1)         An error was encountered while executing command" :: String) <> hardline
   <> pretty ("  Cancelled (130)   User responded 'No' to iidy prompt or interrupt (CTRL-C) was received" :: String)
 
-
-
 cliParser :: Parser Cli
 cliParser = Cli
   <$> globalOptsParser

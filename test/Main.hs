@@ -1318,8 +1318,11 @@ changesetTests =
       name <- generateDashedName
       let parts = T.splitOn "-" name
       assertEqual "should have exactly 2 parts" 2 (length parts)
-      assertBool "adjective should not be empty" (T.length (head parts) > 0)
-      assertBool "noun should not be empty" (T.length (parts !! 1) > 0)
+      case parts of
+        [adj, noun] -> do
+          assertBool "adjective should not be empty" (T.length adj > 0)
+          assertBool "noun should not be empty" (T.length noun > 0)
+        _ -> assertFailure "expected exactly 2 parts"
 
   , testCase "generateDashedName: produces non-empty name" $ do
       name <- generateDashedName
@@ -1634,13 +1637,17 @@ errorColorTests =
 
   , testCase "footer uses light blue (not grey)" $ do
       let output = formatError defaultColors testSource sampleVarError
-          footer = last (T.lines output)
+          footer = case reverse (T.lines output) of
+                     (x:_) -> x
+                     []    -> error "expected non-empty output"
       assertBool "footer has light blue" ("\ESC[38;5;75m" `T.isInfixOf` footer)
       assertBool "footer has no grey" (not $ "\ESC[38;5;245m" `T.isInfixOf` footer)
 
   , testCase "available variables line is fully colored" $ do
       let output = formatError defaultColors testSource sampleVarError
-          avLine = head $ filter ("available variables" `T.isInfixOf`) (T.lines output)
+          avLine = case filter ("available variables" `T.isInfixOf`) (T.lines output) of
+                     (x:_) -> x
+                     []    -> error "expected 'available variables' line"
       -- light blue wraps entire line including variable names
       assertBool "light blue before label" ("\ESC[38;5;75m" `T.isInfixOf` avLine)
       assertBool "reset after vars" ("\ESC[0m" `T.isInfixOf` avLine)
@@ -1660,8 +1667,9 @@ errorColorTests =
             }
           output = formatError defaultColors testSource err
           helpLines = filter ("try using" `T.isInfixOf`) (T.lines output)
-      assertBool "has help line" (not $ null helpLines)
-      assertBool "help is colored" ("\ESC[38;5;75m" `T.isInfixOf` head helpLines)
+      case helpLines of
+        (hl:_) -> assertBool "help is colored" ("\ESC[38;5;75m" `T.isInfixOf` hl)
+        []     -> assertFailure "expected help line"
 
   , testCase "syntax error fix hint is colored" $ do
       let err = YamlSyntaxError YamlSyntaxInfo
@@ -1675,18 +1683,20 @@ errorColorTests =
           output = formatError defaultColors testSource err
           fixLines = filter ("fix:" `T.isInfixOf`) (T.lines output)
           exLines = filter ("example:" `T.isInfixOf`) (T.lines output)
-      assertBool "has fix line" (not $ null fixLines)
-      assertBool "fix is colored" ("\ESC[38;5;75m" `T.isInfixOf` head fixLines)
-      assertBool "has example line" (not $ null exLines)
-      assertBool "example is colored" ("\ESC[38;5;75m" `T.isInfixOf` head exLines)
+      case (fixLines, exLines) of
+        (fl:_, el:_) -> do
+          assertBool "fix is colored" ("\ESC[38;5;75m" `T.isInfixOf` fl)
+          assertBool "example is colored" ("\ESC[38;5;75m" `T.isInfixOf` el)
+        _ -> assertFailure "expected fix and example lines"
 
   , testCase "inline description on caret line is colored grey" $ do
       let output = formatError defaultColors testSource sampleVarError
           caretLines = filter ("^" `T.isInfixOf`) (T.lines output)
-      assertBool "has caret line" (not $ null caretLines)
-      let caretLine = head caretLines
-      -- inline desc "variable not defined" should be in grey (245)
-      assertBool "inline desc has grey" ("\ESC[38;5;245m" `T.isInfixOf` caretLine)
+      case caretLines of
+        (caretLine:_) ->
+          -- inline desc "variable not defined" should be in grey (245)
+          assertBool "inline desc has grey" ("\ESC[38;5;245m" `T.isInfixOf` caretLine)
+        [] -> assertFailure "expected caret line"
   ]
 
 ------------------------------------------------------------------------
@@ -1890,7 +1900,9 @@ rendererTests =
             [ mkEvent "e1" "MyResource" "AWS::S3::Bucket" "CREATE_COMPLETE" (Just t0)
             ]
           result = calculateEventDurations events
-      assertEqual "no start = no duration" Nothing (sewDurationSeconds (head result))
+      case result of
+        (r:_) -> assertEqual "no start = no duration" Nothing (sewDurationSeconds r)
+        []    -> assertFailure "expected at least one result"
 
   , testCase "calculateEventDurations - FAILED event gets duration" $ do
       let t0 = UTCTime (fromGregorian 2026 1 1) 0

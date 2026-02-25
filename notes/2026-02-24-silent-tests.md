@@ -1,5 +1,7 @@
 # Experiment: silencing noisy tests
 
+> **Note:** This file was written by Codex.
+
 - **Date:** February 24, 2026
 - **Context:** Wanted to keep `cabal test` output quiet by wrapping noisy tests with `System.IO.Silently.capture`.
 

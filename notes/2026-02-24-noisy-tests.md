@@ -1,5 +1,7 @@
 # Noisy test cases (captured February 24, 2026)
 
+> **Note:** This file was written by Codex.
+
 Command used:
 
 ```
