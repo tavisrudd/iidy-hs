@@ -16,7 +16,7 @@ WEEKLY_MAX_UTIL=99    # leave headroom
 mkdir -p "$LOGDIR"
 mkdir -p "$WORKDIR/.msgs"
 
-prompt='Read @WORKPLAN.md and your memory files in .claude/projects/-home-tavis-src-iidy-hs/memory/. Continue from where you left off. Work autonomously through the workplan phases but update your status there as you go. Before context gets low (~15% remaining), update your memory file and WORKPLAN.md session tracking, then exit cleanly.
+prompt='Read @WORKPLAN.md. Continue from where you left off. Work autonomously through the workplan phases, updating status there as you go. Before context gets low (~15% remaining), update WORKPLAN.md session tracking and handoff notes, commit everything, then exit cleanly. All state must live in committed files (WORKPLAN.md, progress.log, notes/) — do NOT use .claude/ memory files.
 
 Pay attention to the claude.md note about reading and replying to the .msgs folder. Do that NOW.
 '
@@ -158,7 +158,7 @@ while true; do
         if (( five_int >= 80 )); then
             session_prompt="$prompt
 
-LOW QUOTA WARNING: 5-hour quota is at ${five_hr_util}% utilization (~$(( 100 - five_int ))% remaining). Estimate what you can realistically accomplish in this budget and focus on that. Save state frequently (memory files, WORKPLAN.md session tracking, progress.log) — after every chunk or significant milestone, not just at the end. Do not exit early — use the remaining budget productively, just be disciplined about incremental saves."
+LOW QUOTA WARNING: 5-hour quota is at ${five_hr_util}% utilization (~$(( 100 - five_int ))% remaining). Estimate what you can realistically accomplish in this budget and focus on that. Save state frequently (WORKPLAN.md session tracking, progress.log) — after every chunk or significant milestone, not just at the end. Do not exit early — use the remaining budget productively, just be disciplined about incremental saves."
         fi
     fi
 

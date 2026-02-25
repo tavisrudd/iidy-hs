@@ -1,7 +1,7 @@
 # iidy-hs Workplan
 
 **Target**: Feature-complete, behavior-identical, output-identical Haskell port. No shortcuts, no dropped features.
-**Status**: Phase 13 COMPLETE. Phase 14 (live verification) next.
+**Status**: Phase 16 (Requirements Documentation) IN PROGRESS. Phases 1-15 DONE.
 
 ## Critical Rules
 
@@ -37,8 +37,9 @@
 | 11 | Renderer output tests | **DONE** | [done/phase-11](notes/phases/done/phase-11-renderer-tests.md) |
 | 12 | Completion audit vs Rust (iterative) | **DONE** (Sessions 25-27) | [done/phase-12](notes/phases/done/phase-12-completion-audit.md) |
 | 13 | Output sequencing + feature gaps (full audit) | **DONE** (Sessions 28-34) | [phase-13-cli-output-fixes.md](notes/phases/phase-13-cli-output-fixes.md) |
-| 14 | Live AWS verification — ALL commands | **IN PROGRESS** (Sessions 36-39) | — |
+| 14 | Live AWS verification — ALL commands | **DONE** (Sessions 36-39) | — |
 | 15 | AWS auth chain: profile, assume-role, region | **DONE** (Session 39) | [aws-auth-chain-analysis.md](notes/aws-auth-chain-analysis.md) |
+| 16 | Requirements documentation (PRDs + user stories) | **IN PROGRESS** | [below](#phase-16-requirements-documentation) |
 
 Phase 12 offline audit found zero gaps, but live AWS testing (Session 28) on just 3 commands
 revealed 8 divergences. A full sequencing audit of all 22 commands then uncovered:
@@ -56,6 +57,119 @@ Phase 13 had 9 sub-phases (13.1-13.9), all COMPLETE. See per-command research fi
 `notes/phases/phase-13-research/` for detailed Rust-vs-Haskell analysis.
 
 Phase 14 is systematic live verification of ALL 22 commands now that Phase 13 is done.
+
+## Phase 16: Requirements Documentation
+
+Generate a **complete** set of PRD / user story documents in `docs/requirements/`
+covering the entire iidy-hs feature surface. Retroactive requirements derived from
+the implemented Haskell port and its Rust original. No feature or behavior missed.
+
+### PRD Document Set
+
+| #  | File                        | Scope                                                        | Est. Lines |
+|----|-----------------------------|--------------------------------------------------------------|------------|
+| 00 | `00-overview.md`            | Product overview, personas, design principles, exit codes    | 200        |
+| 01 | `01-cli-interface.md`       | 22 commands, global options, help, completions, env vars     | 600        |
+| 02 | `02-yaml-preprocessing.md`  | $imports, $defs, 15 tags, handlebars, YAML 1.1/1.2          | 700        |
+| 03 | `03-import-system.md`       | 10 import types, security model, resolution, base paths      | 500        |
+| 04 | `04-custom-resources.md`    | $params, expansion, ref rewriting, $global, overrides, schema| 500        |
+| 05 | `05-cfn-operations.md`      | Stack lifecycle, changesets, polling, diffs, confirmations    | 700        |
+| 06 | `06-output-system.md`       | Interactive/JSON/plain, themes, spinners, 26 OutputData types| 500        |
+| 07 | `07-error-handling.md`      | 50+ error codes, enhanced display, position tracking, colors | 600        |
+| 08 | `08-aws-integration.md`     | Auth chain, credentials, STS, region, profile, assume-role   | 400        |
+| 09 | `09-ssm-params.md`          | param set/get/get-by-path/get-history/review, approval       | 400        |
+| 10 | `10-template-approval.md`   | S3-based approval, request/review, security model, IAM       | 400        |
+| 11 | `11-utilities.md`           | render, explain, completion, demo, init, convert, get-import | 500        |
+| 12 | `12-cross-cutting.md`       | YAML 1.1/1.2, NO_COLOR/FORCE_COLOR, TTY, NTP, idempotency   | 400        |
+
+**Total**: ~6,000 lines across 13 documents.
+
+### PRD Template
+
+Each document uses this structure:
+
+```
+# PRD: [Title]
+## Overview
+## User Stories
+### US-XX-001: [Short title]
+**As a** [persona], **I want to** [action], **so that** [benefit].
+**Acceptance Criteria:** (testable, specific)
+**Logic Flow:** (step-by-step)
+**Edge Cases:** (boundary conditions)
+**Error Scenarios:** (error code, message, display)
+## Cross-References
+```
+
+Personas: **Developer** (deploys stacks, writes templates), **Platform Engineer**
+(authors custom resources, manages approvals), **CI Pipeline** (automated, JSON output,
+--yes flags), **Reviewer** (reviews template approvals and param changes).
+
+### Source Material
+
+Each PRD draws from these sources (agents must read them, not guess):
+
+| Source              | Location                             |
+|---------------------|--------------------------------------|
+| User docs           | `docs/*.md`                          |
+| Haskell source      | `src/Iidy/` (81 modules)            |
+| Rust source         | `~/src/iidy/src/` (read-only)       |
+| Test fixtures       | `test/fixtures/`, `test/Test/`       |
+| Error fixtures      | `test/fixtures/errors/` (49 files)   |
+| Render snapshots    | `test/fixtures/render/`              |
+| Rust snapshots      | `~/src/iidy/tests/snapshots/` (98)   |
+| Divergences         | `DIVERGENCES.md`                     |
+| Dev docs            | `docs/dev/`                          |
+
+### Session Plan
+
+| Session | Deliverables                                         | Delegation                          |
+|---------|------------------------------------------------------|-------------------------------------|
+| 1       | `00-overview.md` + `01-cli-interface.md`             | Opus main + Sonnet sub for CLI      |
+| 2       | `02-yaml-preprocessing.md` + `03-import-system.md`   | 2 Sonnet subs (tags + imports)      |
+| 3       | `05-cfn-operations.md` + `06-output-system.md`       | Opus sub (CFN) + Sonnet sub (output)|
+| 4       | `07-error-handling.md` + `08-aws-integration.md`     | Opus sub (errors) + Sonnet sub (AWS)|
+| 5       | `04-custom-resources.md` + `09-ssm-params.md` + `10-template-approval.md` | Opus + 2 Sonnet subs |
+| 6       | `11-utilities.md` + `12-cross-cutting.md`            | Sonnet sub + Opus main              |
+| 7       | Completeness review + `COVERAGE.md` traceability     | Explore agents for audit            |
+| 8       | Quality gate + final polish + `.ralph-stop`           | Opus main                           |
+
+### Critical Rules for PRD Authors
+
+- Read the **actual source code**, not just docs. Docs may be incomplete.
+- Every user story needs **acceptance criteria**. No vague stories.
+- Every edge case from **test fixtures** must be captured.
+- Error scenarios must include the actual **error code** (ERR_XXXX) and message format.
+- Cross-references between PRDs must use the actual **file name and section header**.
+- Don't invent features. Only document what's implemented.
+
+### Progress
+
+- [x] Session 0: Create workplan + research (Session 40)
+- [ ] Session 1: `00-overview.md` + `01-cli-interface.md`
+- [ ] Session 2: `02-yaml-preprocessing.md` + `03-import-system.md`
+- [ ] Session 3: `05-cfn-operations.md` + `06-output-system.md`
+- [ ] Session 4: `07-error-handling.md` + `08-aws-integration.md`
+- [ ] Session 5: `04-custom-resources.md` + `09-ssm-params.md` + `10-template-approval.md`
+- [ ] Session 6: `11-utilities.md` + `12-cross-cutting.md`
+- [ ] Session 7: Completeness review + coverage matrix
+- [ ] Session 8: Quality gate + final polish + `.ralph-stop`
+
+### Handoff Notes
+
+#### Session 0 — Workplan Creation (2026-02-25, Session 40)
+
+**Completed**: Created workplan, directory structure, researched full feature surface.
+**Research done**: 3 Explore agents inventoried all features from Haskell source (81 modules,
+400 tests, 26 OutputData types), Rust source (16,615 LOC, 98 snapshots), and ralph loop
+workflow patterns (session structure, handoff format, progress tracking).
+**Notes for Session 1**:
+- Start with `00-overview.md` — sets the tone and persona definitions used by all other PRDs
+- For `01-cli-interface.md`, use `docs/command-reference.md` as primary source, cross-check
+  with `src/Iidy/Cli/Parser.hs` for completeness
+- Each PRD should be self-contained but cross-reference others by filename
+- Sub-agents writing PRDs MUST read source code, not just docs
+- Detailed handoff doc with additional context: `notes/handoffs/2026-02-25-requirements-workplan.md`
 
 ## Session Log
 
@@ -100,6 +214,7 @@ Phase 14 is systematic live verification of ALL 22 commands now that Phase 13 is
 | 37 | 14 | Fix 3 delete-stack confirmation bugs: prompt format, decline=success, credential display. |
 | 38 | 14 | Fix 5 live-testing bugs: changeset timestamps, event duration min, FAILED changeset check, tag type validation, confirmation prompt consistency. |
 | 39 | 14-15 | Add 21 tests for Phase 14 fixes (400 tests). Phase 15 COMPLETE: --profile wired, STS AssumeRole, region error on missing. |
+| 40 | 16 | Phase 16 setup: Requirements documentation workplan. 13 PRDs planned, 8-session plan, 3 research agents. |
 
 **Offline audit: 81 modules, 400 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
