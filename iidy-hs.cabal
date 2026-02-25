@@ -166,6 +166,31 @@ test-suite iidy-hs-test
   hs-source-dirs:   test
   other-modules:
     Iidy.Cli.HelpTest
+    Test.Shared
+    Test.ParserTest
+    Test.JMESPathTest
+    Test.HandlebarsTest
+    Test.EmitterTest
+    Test.FixtureTest
+    Test.ErrorFixtureTest
+    Test.StackArgsLoaderTest
+    Test.ConvertStackTest
+    Test.TemplateHashTest
+    Test.CliParserTest
+    Test.OValueTest
+    Test.RequestBuilderTest
+    Test.JsonSchemaTest
+    Test.DeleteStackTest
+    Test.ChangesetTest
+    Test.PropertyTest
+    Test.WatchStackTest
+    Test.ErrorColorTest
+    Test.RendererTest
+    Test.JsonRendererTest
+    Test.ThemeVariantTest
+    Test.RendererOutputTest
+    Test.IntegrationTest
+    Test.Phase14FixTest
   default-language: GHC2021
   default-extensions:
     LambdaCase

@@ -14,7 +14,9 @@ Autonomous claude driven, Haskell port of iidy (a CloudFormation preprocessor/de
 
 ## Testing
 - 100% tests pass on every commit. No exceptions.
-- DO NOT reward hack by commenting out tests or fudging expected values
+- DO NOT reward hack by commenting out tests or fudging expected values. 
+- Structure the test modules, groups and fixtures for maintainabililty
+  and readability. No monolothic & massive test/Main.hs, etc.
 - Use `~/.claude/bin/run-quiet` for noisy test/build output
 - All AWS testing uses mock fixtures. No real AWS calls.
 
@@ -82,18 +84,3 @@ Before wrapping up, verify ALL of these:
 - Use sub-agents (Task tool) for research, exploration, and parallel work to keep main context clean.
 - Delegate to Sonnet sub-agents for straightforward implementation after Opus designs the interface.
 - Use Explore agents for codebase searches rather than flooding main context with grep results.
-
-## Workflow
-You are running inside a 'ralph loop' headlessly with the -p argument.
-
-!! MESSAGE INBOX !! 
-
-Frequently check the folder .msgs/ for files matching *.msg that do
-NOT have a corresponding .reply file (use ls or Glob). Do this roughly
-once per minute — after each tool call chain or at any natural
-pause. For each unread message, read it, then write your reply to
-.msgs/{same-name}.reply. Keep replies concise. If the message asks you
-to change priorities or stop, follow those instructions. Read the
-first prompt from the user (what was provided with -p) and then read
-and reply to all unread messages before you start working.
-
