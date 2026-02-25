@@ -148,7 +148,7 @@ Each PRD draws from these sources (agents must read them, not guess):
 - [x] Session 0: Create workplan + research (Session 40)
 - [x] Session 1: `00-overview.md` + `01-cli-interface.md` (Session 41)
 - [x] Session 2: `02-yaml-preprocessing.md` + `03-import-system.md` (Session 41)
-- [ ] Session 3: `05-cfn-operations.md` + `06-output-system.md`
+- [x] Session 3: `05-cfn-operations.md` + `06-output-system.md` (Session 41)
 - [ ] Session 4: `07-error-handling.md` + `08-aws-integration.md`
 - [ ] Session 5: `04-custom-resources.md` + `09-ssm-params.md` + `10-template-approval.md`
 - [ ] Session 6: `11-utilities.md` + `12-cross-cutting.md`
@@ -222,7 +222,7 @@ workflow patterns (session structure, handoff format, progress tracking).
 | 38 | 14 | Fix 5 live-testing bugs: changeset timestamps, event duration min, FAILED changeset check, tag type validation, confirmation prompt consistency. |
 | 39 | 14-15 | Add 21 tests for Phase 14 fixes (400 tests). Phase 15 COMPLETE: --profile wired, STS AssumeRole, region error on missing. |
 | 40 | 16 | Phase 16 setup: Requirements documentation workplan. 13 PRDs planned, 8-session plan, 3 research agents. |
-| 41 | 16 | Phase 16.1-16.2: 00-overview (177), 01-cli (742), 02-yaml-preprocessing (836), 03-import-system (805). |
+| 41 | 16 | Phase 16.1-16.3: overview (177), cli (742), yaml (836), imports (805), cfn-ops (921), output (711). 4,192 lines total. |
 
 **Offline audit: 81 modules, 400 tests, 37/37 render snapshots, 49/49 error snapshots match**
 
