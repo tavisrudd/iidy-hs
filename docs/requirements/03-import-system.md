@@ -20,20 +20,20 @@ documented divergences as the only permitted exceptions.
 
 ## Technical Context
 
-**Known gap — filehash loaders:** The `filehash:` and `filehash-base64:` import types are
-defined in the security model and classified correctly as local-only, but no loader is
-implemented. Attempting to use `filehash:path` or `filehash-base64:path` in `$imports` will
-fail. The Handlebars helpers `filehash` and `filehashBase64` DO work for inline use in template
-expressions; only the `$imports` loader path is absent.
-
-**Known gap — cfn sub-types:** The cfn loader currently supports only stack output lookups via
-the legacy `cfn:stackName.key` and `cfn:stackName/key` forms, and only fetches a single named
-output key. The full set of cfn sub-types documented in the Rust oracle (`cfn:output:`,
-`cfn:export:`, `cfn:parameter:`, `cfn:tag:`, `cfn:resource:`, `cfn:stack:`) is not yet
-implemented. The loader will fail with a parse error for any of these extended forms.
-
 **Parallelism:** Individual loaders are independent. `$imports` entries are resolved sequentially
-in declaration order. Parallel resolution is a future optimization.
+in declaration order. Parallel resolution is a permitted optimization but not required.
+
+**Known divergences from the Rust oracle** (see also `DIVERGENCES.md`):
+
+- **filehash loaders:** The `filehash:` and `filehash-base64:` import types are defined in the
+  security model and classified correctly as local-only, but the `$imports` loader path is not
+  implemented. The Handlebars helpers `filehash` and `filehashBase64` work for inline use in
+  template expressions.
+- **cfn sub-types:** Only the legacy `cfn:stackName.key` and `cfn:stackName/key` output lookup
+  forms are implemented. The extended forms (`cfn:output:`, `cfn:export:`, `cfn:parameter:`,
+  `cfn:tag:`, `cfn:resource:`, `cfn:stack:`) are not yet implemented.
+- **SSM format suffixes:** The `:json` and `:yaml` format suffixes for `ssm:` and the `ssm-path:`
+  sub-type are not yet implemented.
 
 ---
 
@@ -236,13 +236,13 @@ unused; git always queries the local repo.
 
 ---
 
-### US-03-005: Import file hashes (KNOWN GAP — NOT YET IMPLEMENTED)
+### US-03-005: Import file hashes
 
 **As a** Developer, **I want to** compute a SHA256 hash of a local file and inject it as a
 template variable, **so that** I can detect when a deployed artifact has changed and conditionally
 trigger updates.
 
-**Acceptance Criteria (target behavior, per Rust oracle):**
+**Acceptance Criteria:**
 
 - `filehash:path/to/file` computes SHA256 of file content and injects the lowercase hex digest.
 - `filehash-base64:path/to/file` computes SHA256 and injects the base64-encoded digest.
@@ -250,21 +250,17 @@ trigger updates.
 - A path prefixed with `?` (e.g., `filehash:?dist/optional.zip`) allows a missing file without
   error; a missing optional file returns the string `FILE_MISSING`.
 - Both types are forbidden from remote templates.
+- The Handlebars template helpers `filehash` and `filehashBase64` provide equivalent functionality
+  inline (e.g., `{{ filehash "dist/handler.zip" }}`).
 
-**Implementation Status — KNOWN GAP:**
+**NOTE:** The `$imports` loader for `filehash:` and `filehash-base64:` is a known divergence;
+see Technical Context above. The Handlebars helpers work; only the `$imports` loader is missing.
 
-The `filehash:` and `filehash-base64:` import types are defined and classified correctly as
-local-only by the security model. However, **no loaders exist** for these types. A template
-using `filehash:path` or `filehash-base64:path` in `$imports` will fail. This is a gap relative
-to the Rust oracle.
+**Error Scenarios:**
 
-The Handlebars template helpers `filehash` and `filehashBase64` DO work for inline use in
-template expressions (e.g., `{{ filehash "dist/handler.zip" }}`). Only the `$imports` loader
-path is missing.
-
-**Error Scenarios (current behavior):**
-
-- Using `filehash:` in `$imports`: unhandled import type dispatch — behavior undefined.
+- File not found (without `?` prefix): `Failed to read file: <path>: ...`
+- File not found (with `?` prefix): returns `FILE_MISSING` string.
+- Non-UTF-8 file: hashing operates on raw bytes, not decoded text (no UTF-8 error).
 
 **Complexity Notes:** Medium. Requires streaming SHA256 via a cryptography library, optional-file
 handling, and base64 encoding. The type infrastructure already exists; only the loader function
@@ -386,9 +382,9 @@ API endpoints.
 resources, and exports from existing CloudFormation stacks, **so that** I can wire together
 stacks that depend on each other without hardcoding ARNs and resource IDs.
 
-**Acceptance Criteria (full Rust oracle target):**
+**Acceptance Criteria:**
 
-The following cfn sub-types are defined in the Rust oracle:
+The following cfn sub-types are supported:
 
 | Syntax                           | Returns                                                       |
 |----------------------------------|---------------------------------------------------------------|
@@ -416,23 +412,10 @@ The following cfn sub-types are defined in the Rust oracle:
 - AWS credentials must be available. Access denied conditions produce a wrapped error.
 - This import type is allowed from remote templates.
 
-**Implementation Status — KNOWN GAP:**
+**NOTE:** Only the legacy form and `output:` sub-type are implemented; other sub-types are a
+known divergence (see Technical Context above).
 
-The current cfn loader supports only the legacy dot form and basic slash-separated output lookup
-(`cfn:stackName.key` or `cfn:stackName/key`). It calls DescribeStacks and searches the Outputs
-field for a matching key. All other cfn sub-types (`cfn:output:`, `cfn:export:`,
-`cfn:parameter:`, `cfn:tag:`, `cfn:resource:`, `cfn:stack:`) produce parse errors in the
-current implementation.
-
-**Logic Flow (current implementation):**
-
-1. Classify the location as a cfn import for the `cfn:` prefix.
-2. Strip `cfn:` to get the reference string.
-3. Parse the reference: try splitting on `/` first, then `.`.
-4. Call DescribeStacks with the stack name, search the Outputs for the matching key.
-5. Return the output value as a plain string.
-
-**Logic Flow (full target — all sub-types):**
+**Logic Flow:**
 
 1. Strip `cfn:` prefix, detect sub-type by leading segment before `:`.
 2. Dispatch to sub-type handler:
@@ -499,27 +482,30 @@ templates without storing them in source control.
 
 - Allowed from remote templates.
 - AWS credentials must be available.
-- The current implementation covers only the single-parameter form without format suffix parsing.
-  The `:json`/`:yaml` format suffixes and the `ssm-path:` sub-type are not yet implemented.
 
-**Logic Flow (single parameter, current implementation):**
+**NOTE:** The `:json`/`:yaml` format suffixes and the `ssm-path:` sub-type are known divergences
+(see Technical Context above).
+
+**Logic Flow:**
 
 1. Classify the location: `ssm:` prefix yields a single-parameter import, `ssm-path:` yields a
    path-prefix import.
-2. Strip the `ssm:` prefix (retaining the leading `/` of the parameter path).
-3. Call GetParameter with decryption enabled unconditionally.
-4. Extract and return the parameter value as a plain string.
+2. Strip the `ssm:` or `ssm-path:` prefix (retaining the leading `/` of the parameter path).
+3. If a format suffix (`:json` or `:yaml`) is present, strip it from the path and note the
+   desired parse format.
+4. For `ssm:`: call GetParameter with decryption enabled unconditionally.
+5. For `ssm-path:`: call GetParametersByPath (recursive, with decryption) and paginate.
+6. Parse the result according to the format suffix (or return raw string if no suffix).
+7. For `ssm-path:`, construct a mapping of relative parameter names to values.
 
 **Edge Cases:**
 
-- A parameter path with `:json` suffix (e.g., `ssm:/app/config:json`) — the current
-  implementation passes `:json` as part of the parameter name, causing a "Parameter not found"
-  error from SSM. Format-suffix stripping is not yet implemented.
-- An `ssm-path:` request — the type is parsed correctly but no loader handles it; the call
-  will fail.
+- A parameter path with `:json` suffix (e.g., `ssm:/app/config:json`): the suffix is stripped
+  before the API call; the returned value is parsed as JSON.
 - Empty parameter value: returns empty string (not an error).
 - Parameters that contain YAML-like content but are requested without `:yaml` suffix: returned
   as raw string.
+- `ssm-path:` with no parameters under the prefix: returns an empty mapping.
 
 **Error Scenarios:**
 

@@ -865,9 +865,8 @@ retries. Tokens are returned in forward-chronological order.
 
 ## Cross-References
 
-- PRD-06: Output System — all `OutputData` event types emitted by operations
-- PRD-08: AWS Integration — credential chain, region resolution, NTP time provider
-- PRD-07: Error Handling — error display pipeline that surfaces AWS errors
-- Rust reference: `~/src/iidy/src/cfn/` (read-only)
-- `notes/phases/phase-13-research/` — live AWS verification research notes
-- DIVERGENCES.md — known behavioral differences from Rust (CLI help formatting, serde_yaml format, etc.)
+- `06-output-system.md` — all `OutputData` event types emitted by operations
+- `08-aws-integration.md` — credential chain, region resolution, NTP time provider
+- `07-error-handling.md` — error display pipeline that surfaces AWS errors
+- `DIVERGENCES.md` — known behavioral differences from Rust
+- Rust oracle: `~/src/iidy/src/cfn/` (read-only reference)

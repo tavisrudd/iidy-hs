@@ -170,7 +170,11 @@ values while I enforce guardrails through type, pattern, and schema constraints.
   parameter extraction or validation is performed.
 - A template may contain Handlebars expressions that reference param names.
   Expressions referencing names not present in `$params` resolve to empty string
-  during template re-parse (standard Handlebars behavior).
+  during template re-parse (standard Handlebars behavior). The preprocessing
+  variable pre-check (ERR_2001) does not fire during custom resource template
+  re-parse because the template body is re-parsed in a fresh context where the
+  merged parameter map is the entire variable environment, bypassing the
+  pre-check that applies to top-level document preprocessing.
 - A template may omit `Resources` entirely if it is used only for its `Parameters`
   or `Outputs` promotion behavior.
 

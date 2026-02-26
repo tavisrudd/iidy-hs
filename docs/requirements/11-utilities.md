@@ -518,8 +518,12 @@ text.
 - Completion script generation uses the CLI parser's built-in bash-completion protocol.
   The program name used is `"iidy-hs"`.
 - Bash: generates a `_iidy_hs` completion function using `complete -F`.
-- Zsh: generates a `#compdef iidy-hs` script using `_arguments`.
-- Fish: generates `complete -c iidy-hs` directives.
+- Zsh and Fish: the CLI parser library generates bash-compatible completion output for
+  all shells. Zsh and fish shells can source the bash completion output directly (zsh via
+  `bashcompinit`, fish via `bass` or similar shim). Distinct native zsh (`#compdef`) and
+  fish (`complete -c`) generators are not provided by the underlying parser library; the
+  shell argument is accepted but the output format does not vary between bash, zsh, and
+  fish targets.
 - PowerShell: **not supported**. This is a documented divergence from the Rust
   implementation (`DIVERGENCES.md`). Behavior when requested: no error is raised by the
   CLI parser (the `SHELL` argument is accepted), but the completion infrastructure does
@@ -543,8 +547,10 @@ CLI parser's completion infrastructure intercepts --bash-completion-* flags
 **Edge Cases:**
 
 - `$SHELL` is unset or empty: the completion infrastructure defaults to bash completion output.
-- `SHELL` argument value `"powershell"`: accepted by the parser but not functionally
-  distinct from bash in the current implementation.
+- `SHELL` argument value `"powershell"`: accepted by the parser but produces bash-format
+  output (not a PowerShell-native script).
+- All shell arguments (`bash`, `zsh`, `fish`) produce the same bash-format completion
+  output; the shell name is accepted but does not change the output format.
 - Piping completion script to `source` directly: works as long as stdout is not
   buffered mid-line.
 

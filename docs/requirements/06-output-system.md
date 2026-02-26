@@ -111,14 +111,19 @@ programmatically without screen-scraping ANSI text.
   No trailing comma, no surrounding array.
 - Every emitted JSON object has the envelope structure:
   `{"type": "<type_name>", "timestamp": "<ISO8601>", "data": {<payload>}}`.
-- Type names use `snake_case` and map one-to-one from `OutputData` constructors:
+- Type names use `snake_case` and map from `OutputData` constructors. Of the 26
+  constructors, 23 emit a JSON envelope with the following type names:
   `command_metadata`, `stack_definition`, `stack_events`, `stack_contents`,
   `status_update`, `command_result`, `final_command_summary`, `stack_list`,
-  `change_set_result`, `stack_drift`, `error`, `new_stack_events`,
-  `operation_complete`, `inactivity_timeout`, `confirmation_prompt`,
-  `stack_change_details`, `stack_absent_info`, `cost_estimate`, `stack_template`,
+  `changeset_result`, `stack_drift`, `error`, `token_info`, `new_stack_events`,
+  `operation_complete`, `inactivity_timeout`, `confirmation_required`,
+  `stack_change_details`, `stack_absent_info`, `cost_estimate`,
   `approval_request_result`, `template_validation`, `approval_status`,
   `template_diff`, `approval_result`.
+  Three constructors have special JSON behavior:
+  - `OdTokenInfo`: has type name `token_info` but is suppressed (no output emitted).
+  - `OdPollingStarted`: suppressed (no output emitted in JSON mode).
+  - `OdStackTemplate`: outputs raw template body to stdout (not JSON-wrapped).
 - All field names within `data` are `snake_case`.
 - `OdStackList` with `sldQueryMode = True`: emits a raw JSON array of stack objects
   without the envelope wrapper (for pipeline composition with `jq`).

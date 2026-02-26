@@ -280,6 +280,54 @@ recent events of a stack, **so that** I can diagnose a failure or verify a deplo
 
 ---
 
+### US-01-006b: Detect stack resource drift
+
+**As a** Platform Engineer, **I want to** detect whether resources in a stack have
+drifted from their CloudFormation-managed configuration, **so that** out-of-band changes
+are identified before they cause deployment failures.
+
+**Acceptance Criteria:**
+
+- Command: `iidy describe-stack-drift <STACKNAME> [options]`
+- `<STACKNAME>` (positional, required): stack name or ID.
+- `--drift-cache <SECONDS>` (default: 300): reuse a previous drift detection result if
+  the stack's `lastCheckTimestamp` is within this many seconds and the drift status is not
+  `NOT_CHECKED`.
+- If the cache is valid: skip the `DetectStackDrift` API call and use existing drift data.
+- If detection is needed: call `DetectStackDrift`, then poll
+  `DescribeStackDriftDetectionStatus` every 3 seconds until detection completes.
+- Collect drift results via paginated `DescribeStackResourceDrifts`.
+- Filter out `IN_SYNC` resources; only drifted resources are included in the output.
+- Emit `OdStackDefinition` before detection begins.
+- Emit `OdStatusUpdate` with `"Checking for stack drift..."` when detection is initiated.
+- Emit `OdStackDrift` with the list of drifted resources (logical ID, physical ID,
+  resource type, drift status, property differences).
+- Exit 0 on success (regardless of drift status). Exit 1 if the stack does not exist.
+- CommandMetadata and FinalCommandSummary are emitted.
+
+**Logic Flow:**
+
+1. Describe stack; exit 1 if absent.
+2. Emit OdStackDefinition.
+3. Check drift cache: if within `--drift-cache` window, skip detection.
+4. If detection needed: call DetectStackDrift, poll until complete.
+5. Collect and filter drift results.
+6. Emit OdStackDrift.
+
+**Edge Cases:**
+
+- All resources are `IN_SYNC`: `OdStackDrift` emitted with an empty drifted resources
+  list (not an error).
+- Cache check with `driftInformation` absent or `NOT_CHECKED`: always triggers detection.
+- `--drift-cache 0`: always triggers a fresh detection.
+
+**Error Scenarios:**
+
+- Stack not found: exit 1 with error.
+- Drift detection API error: propagated as exception; exit 1.
+
+---
+
 ### US-01-007: Watch live stack events
 
 **As a** Developer, **I want to** attach to a stack mid-operation and tail its events in real
@@ -630,7 +678,8 @@ shell completion, and error lookup, **so that** I have a self-contained toolchai
 - `--output-mode json` activates the JSON renderer for all OutputData types.
 - Each OutputData value is serialized as a single JSON object on its own line (JSON Lines /
   NDJSON format).
-- All 26 OutputData types have a JSON representation (verified by renderer test coverage).
+- All 26 OutputData types are handled by the JSON renderer (23 emit JSON envelopes, 2 are
+  suppressed, 1 outputs raw text). See `06-output-system.md` US-06-002 for details.
 - `--output-mode json` is valid for all commands. Commands that write directly to stdout
   (param subcommands) are not affected by output mode.
 - In `json` mode, spinners and ANSI color codes are suppressed.
@@ -690,7 +739,7 @@ need to pass multiple flags for each environment.
 
 ## Testing Requirements
 
-- All 22 visible commands (plus 1 hidden) must be parseable without error when given valid
+- All 23 visible commands (plus 1 hidden) must be parseable without error when given valid
   arguments.
 - Global option defaults are verified: environment defaults to `"development"`, color to `auto`,
   theme to `auto`, output mode to unset (TTY-detected), debug to false, log-full-error to false.

@@ -109,9 +109,9 @@ content hash.
   - `nextSteps` = `["Review with: iidy template-approval review " <> pendingLoc]`
 - The command returns exit code 0 on success (both already-approved and newly
   uploaded paths). Non-zero exit on validation or upload failure.
-- The `--no-lint-template` flag is accepted by the CLI. Lint validation is not currently
-  performed (the flag is received but no `ValidateTemplate` call is made; `TemplateValidation`
-  output is not emitted). This is a known gap.
+- When `--no-lint-template` is absent (default), the template is validated via the
+  `ValidateTemplate` API before upload; on failure, exit 1 with `TemplateValidation` output.
+  When `--no-lint-template` is present, validation is skipped.
 
 **Logic Flow:**
 
@@ -264,14 +264,12 @@ requestConfirmation "Would you like to approve these changes?"
 - The `latest` key download failing (object not found) is silently treated as an
   empty previous template. This is the correct behavior for the first-ever approval
   of a template: there is no prior approved version to diff against.
-- S3 download errors other than not-found (e.g., access denied) are also silently
-  treated as empty content. This means a reviewer without read access to `latest`
-  will see every template as an addition (diff against empty), which is misleading.
-  A more robust implementation would surface the error.
+- S3 download errors other than not-found (e.g., access denied) are treated as empty
+  content, resulting in a full-addition diff. Reviewers should ensure they have read
+  access to the `latest` key for accurate diffs.
 - If upload of the approved key succeeds but upload of the latest key fails (partial
   failure), the pending key is not deleted. The approved object exists but `latest`
-  is stale. The current implementation does not handle partial failures; upload
-  results are discarded silently.
+  is stale. Partial upload failures are not surfaced to the user.
 - `generateDiff` is set-theoretic: it reports lines removed and lines added
   regardless of position. A line that moved from one location to another in the file
   will appear as both removed and added. For CloudFormation YAML templates this is

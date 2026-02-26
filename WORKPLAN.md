@@ -1,7 +1,7 @@
 # iidy-hs Workplan
 
 **Target**: Feature-complete, behavior-identical, output-identical Haskell port. No shortcuts, no dropped features.
-**Status**: Phase 16 (Requirements Documentation) IN PROGRESS. Phases 1-15 DONE.
+**Status**: Phase 16 (Requirements Documentation) COMPLETE. Phases 1-16 DONE.
 
 Remember, we are writing requirements as if this Haskell version does
 not exist yet. DO NOT refer to function names or implementation
@@ -38,7 +38,7 @@ You forgot this critical detail in the first parts of Phase 16. Cleanup. -- Tavi
 
 | Phase | Description | Status | Doc |
 |-------|-------------|--------|-----|
-| 16 | Requirements documentation (PRDs + user stories) | **IN PROGRESS** | [below](#phase-16-requirements-documentation) |
+| 16 | Requirements documentation (PRDs + user stories) | **COMPLETE** | [below](#phase-16-requirements-documentation) |
 
 ## Phase 16: Requirements Documentation
 
@@ -151,7 +151,18 @@ Each PRD draws from these sources (agents must read them, not guess):
     with repo links, origin story, AI Agent persona, graduated adoption story, non-CFN use mention.
   - [x] Validate the logic flows for all pseudo code in the documents. Fixed: derived token format
     (both docs 05 and 12), truthiness definition (doc 02), exit codes, NTP packet version.
-- [ ] Session 8: Quality gate review + final polish + `.ralph-stop`
+- [x] Session 8: Quality gate review + final polish + `.ralph-stop` (Session 43).
+  - [x] Fixed 6 MODERATE issues from Session 7 handoff notes:
+    - describe-stack-drift added to CLI spec (01-cli-interface.md US-01-006b)
+    - $params vs ERR_2001 pre-check interaction clarified (04-custom-resources.md)
+    - Shell completion zsh/fish distinction clarified (11-utilities.md)
+    - Known gap language reframed in 03-import-system.md (requirements vs divergence notes)
+    - OutputData type count discrepancy fixed in 06-output-system.md (24 enveloped + 3 special)
+    - Target vs current behavior separated in 09-ssm-params.md (divergences in Technical Context)
+  - [x] Quality gate pass on remaining PRDs: fixed 3 additional issues
+    - 05-cfn-operations.md cross-references updated to filename format
+    - 10-template-approval.md lint flag acceptance criterion rewritten
+    - 10-template-approval.md S3 error handling language neutralized
 
 ### Handoff Notes
 
@@ -184,13 +195,21 @@ workflow patterns (session structure, handoff format, progress tracking).
 - 00-overview.md enhanced: Project Lineage (repo links), origin story, AI Agent persona, Key Concepts section, Ubiquitous Language glossary.
 - Fixed 8 CRITICAL issues: exit code contradictions, truthiness definition, routing path counts, SNTP version, derived token format, broken cross-references.
 - Fixed 12+ MODERATE issues: $envValues undefined, explain multi-code, NTP plausibility, AssumeRoleARN, template URL, typos.
-**Notes for Session 8**: Quality gate review. Remaining MODERATE issues that could be addressed:
-- describe-stack-drift missing from CLI spec (01-cli-interface.md)
-- Custom resource $params vs ERR_2001 pre-check interaction (04-custom-resources.md line 172)
-- Shell completion targets (zsh/fish) may not be distinct (11-utilities.md)
-- Known gap language in 03 mixes requirements with implementation status
-- 06-output-system.md claims 26 types one-to-one but lists 24 JSON type names
-- Doc 09 mixes target vs current behavior in several acceptance criteria
+**Notes for Session 8**: All 6 MODERATE issues addressed. See Session 8 notes below.
+
+#### Session 8 — Quality Gate + Final Polish (2026-02-25, Session 43)
+
+**Completed**: Quality gate review of all 13 PRDs. Fixed 9 issues total (6 from handoff + 3 from gate pass).
+**Key changes**:
+- 01-cli-interface.md: Added describe-stack-drift command (US-01-006b), updated command count to 23, fixed OutputData type count language.
+- 03-import-system.md: Reframed all "KNOWN GAP" and "Implementation Status" sections as divergence notes. Acceptance criteria now state requirements (what SHOULD happen), not implementation status.
+- 04-custom-resources.md: Clarified ERR_2001 pre-check does not fire during custom resource template re-parse.
+- 05-cfn-operations.md: Updated cross-references to filename format (not PRD-NN prefix).
+- 06-output-system.md: Fixed JSON type name list (24 enveloped names + 3 special-case constructors = 26 total).
+- 09-ssm-params.md: Moved all implementation divergences from acceptance criteria to a centralized "Known divergences" section in Technical Context. Acceptance criteria now describe target behavior.
+- 10-template-approval.md: Rewrote lint flag acceptance criterion as a requirement, neutralized S3 error language.
+- 11-utilities.md: Clarified that bash, zsh, and fish all receive bash-format completion output (optparse-applicative limitation).
+**Phase 16 COMPLETE.** All 13 PRDs are final.
 
 ## Session Log
 
@@ -200,4 +219,5 @@ workflow patterns (session structure, handoff format, progress tracking).
 | 40 | 16 | Phase 16 setup: Requirements documentation workplan. 13 PRDs planned, 8-session plan, 3 research agents. |
 | 41 | 16 | All 13 PRDs written (~9,500 lines). Cleaned to remove implementation details per user feedback. |
 | 42 | 16 | Session 7: Completeness review. Validated 3 gaps (all legitimate). Enhanced 00-overview. Fixed 8 CRITICAL + 12 MODERATE issues. |
+| 43 | 16 | Session 8: Quality gate + final polish. Fixed 9 issues across 8 PRDs. Phase 16 COMPLETE. |
 
