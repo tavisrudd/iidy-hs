@@ -242,8 +242,9 @@ succeed even when the system clock is skewed relative to AWS service time.
 **Edge Cases:**
 - NTP server unreachable (firewall, air-gapped environment): silent fallback to system
   time; no user-visible error.
-- NTP response with implausible timestamp (more than 1 year from system time): treated
-  as a parse failure, falls back to system time.
+- NTP response with an unparseable packet (wrong size, zero transmit timestamp): treated
+  as a parse failure, falls back to system time. No plausibility check is performed on
+  the returned timestamp.
 - Multiple write operations in the same command invocation: NTP is queried once at
   startup and the result is reused.
 

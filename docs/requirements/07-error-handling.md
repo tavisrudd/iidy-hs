@@ -231,37 +231,42 @@ I can learn about error conditions without consulting external documentation.
 
 **Acceptance Criteria:**
 
-1. `iidy explain ERR_XXXX` (upper-case prefix) resolves to the matching error code and
+1. Accepts one or more error codes as arguments: `iidy explain ERR_2001 ERR_3002`.
+2. `iidy explain ERR_XXXX` (upper-case prefix) resolves to the matching error code and
    prints the explanation to stdout.
-2. `iidy explain err_xxxx` (lower-case prefix) resolves identically to the upper-case
+3. `iidy explain err_xxxx` (lower-case prefix) resolves identically to the upper-case
    form.
-3. `iidy explain XXXX` (bare integer, no prefix) also resolves correctly.
-4. A known code produces output containing: the error code string (`ERR_XXXX`), the
+4. `iidy explain XXXX` (bare integer, no prefix) also resolves correctly.
+5. A known code produces output containing: the error code string (`ERR_XXXX`), the
    category name, a short description, and a detailed explanation paragraph; the exit
    code is 0.
-5. An unknown code produces a message on stderr indicating the code was not recognised;
-   the exit code is 1.
-6. The explain command is more permissive than the Rust implementation regarding input
+6. An unknown code produces a message on stderr indicating the code was not recognised;
+   processing continues with remaining codes. The overall exit code is still 0.
+7. The explain command is more permissive than the Rust implementation regarding input
    formats (lower-case prefix and bare integers are accepted in addition to the canonical
    `ERR_XXXX` form).
 
+See also `11-utilities.md` US-11-002 for the full multi-code behavior specification.
+
 **Logic Flow:**
 
-Input is normalised to upper-case, the `ERR_` prefix is stripped if present, the
-remaining string is parsed as an `Int`, and `errorIdFromCode` is called. A `Just` result
-triggers the explanation lookup; a `Nothing` result triggers the unknown-code error path
-to stderr with exit code 1.
+For each code argument: normalise to upper-case, strip the `ERR_` prefix if present,
+parse the remaining string as an `Int`, and call `errorIdFromCode`. A `Just` result
+triggers the explanation lookup (stdout); a `Nothing` result triggers the unknown-code
+message (stderr). Processing continues with the next code regardless.
 
 **Edge Cases:**
 
 - Input contains leading/trailing whitespace: behaviour unspecified; recommend stripping.
 - Input is `ERR_0` or a negative number: resolves to `Nothing`, treated as unknown.
 - Input is a valid integer but out of the defined range (e.g. `1999`): treated as unknown.
+- Multiple codes with some unknown: known codes print to stdout, unknown codes print to
+  stderr; overall exit code is still 0.
 
 **Error Scenarios:**
 
-- `iidy explain` with no argument: CLI argument parser reports a missing argument error
-  (ERR_8001) and exits with code 1.
+- `iidy explain` with no argument: prints `"Usage: iidy explain <CODE>..."` to stderr
+  and returns (exit code 0). Does not report ERR_8001.
 
 **Complexity Notes:**
 

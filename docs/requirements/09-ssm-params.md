@@ -197,7 +197,7 @@ values in one operation rather than fetching each individually.
   `"No parameters found"` and exits with code `1`; the current implementation returns an
   empty list and prints nothing (divergence).
 - Results are sorted alphabetically by parameter name.
-- Pagination: the Rust implementation follows `next_token` to retrieve all results; the
+- Pagination: the Rust implementation follows `next_token` to retrieve all results.
   The current implementation issues a single API call and may miss results for paths with
   more than the API page limit (default 10 parameters per page).
 

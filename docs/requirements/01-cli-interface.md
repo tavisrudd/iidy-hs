@@ -46,9 +46,10 @@ metavars, and descriptions are identical between implementations.
   `Profile`. Passing `--profile=no-profile` explicitly suppresses any profile from stack-args.yaml
   and forces credential resolution from environment variables only.
 - `--assume-role-arn <ARN>` causes the CLI to call STS AssumeRole before executing the command.
-  Passing `--assume-role-arn=no-role` suppresses any `AssumeRoleArn` from stack-args.yaml.
-- `--client-request-token <TOKEN>` provides an explicit idempotency token (max 64 ASCII chars).
-  If omitted, a UUID v4 is auto-generated.
+  Passing `--assume-role-arn=no-role` suppresses any `AssumeRoleARN` from stack-args.yaml.
+- `--client-request-token <TOKEN>` provides an explicit idempotency token. CLI help text says
+  "up to 64 ASCII characters" (inherited from Rust); the CloudFormation API actually allows
+  up to 128 characters. If omitted, a UUID v4 is auto-generated.
 - `--output-mode <MODE>` selects the output renderer. Values: `plain`, `interactive`, `json`.
   If omitted, defaults to `interactive` when stdout is a TTY, `plain` otherwise.
 - `--color <WHEN>` controls ANSI escape codes. Values: `auto`, `always`, `never`. Default:
@@ -167,7 +168,8 @@ before confirming, **so that** I can catch unintended changes before they reach 
   this update only (passed to CloudFormation UpdateStack).
 - When `--yes` is absent: shows a colored diff of template and parameter changes, then prompts
   for confirmation. Declining exits 130.
-- On no-changes detected by CloudFormation: exit 0 with informational message (not exit 1).
+- On no-changes detected by CloudFormation: CloudFormation returns a `ValidationError` with
+  "No updates are to be performed"; this is re-thrown and exits 1 with an informational message.
 - On UPDATE_COMPLETE: exit 0. On UPDATE_FAILED or ROLLBACK_COMPLETE: exit 1.
 - CommandMetadata and FinalCommandSummary emitted on success.
 
@@ -199,8 +201,8 @@ before confirming, **so that** I can catch unintended changes before they reach 
 - Accepts the same options as `update-stack`.
 - If stack does not exist: routes to create path (equivalent to `create-stack`).
 - If stack exists and is in a stable state: routes to update path.
-- If `--changeset` is set: five routing paths depending on stack/changeset state (create new
-  stack via changeset; update existing stack via changeset; create changeset only; etc.).
+- Routing based on `(exists, useChangeset)` — four paths: direct create, direct update,
+  CREATE changeset, UPDATE changeset. `ROLLBACK_COMPLETE` stacks are treated as absent.
 - Exit codes and output data identical to the underlying create or update path taken.
 
 **Logic Flow:**
@@ -675,7 +677,7 @@ need to pass multiple flags for each environment.
 - Priority for profile: CLI `--profile` (or `no-profile` sentinel) > stack-args.yaml `Profile`
   > `AWS_PROFILE`.
 - Priority for role: CLI `--assume-role-arn` (or `no-role` sentinel) > stack-args.yaml
-  `AssumeRoleArn`.
+  `AssumeRoleARN`.
 
 **Edge Cases:**
 

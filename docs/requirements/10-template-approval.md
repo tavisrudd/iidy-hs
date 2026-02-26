@@ -87,7 +87,7 @@ content hash.
 
 - `template-approval request <argsfile>` is the invocation form.
 - The argsfile must contain both `ApprovedTemplateLocation` (an `s3://bucket/path`
-  base URL) and `Template` (a file path, `render:` path, or URL). If either field
+  base URL) and `Template` (a locally-resolvable file path or `render:` path). If either field
   is absent, the command exits with a descriptive error before contacting AWS.
 - The template is loaded via the full preprocessing pipeline (including `render:` prefix
   YAML engine pass, import resolution, and Handlebars interpolation).

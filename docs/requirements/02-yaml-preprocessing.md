@@ -29,7 +29,8 @@ Phase 1 (I/O-bound): Load `$imports` and resolve `$defs` into an environment map
 2. Parse `$imports` key-value pairs; for each, interpolate Handlebars
    expressions in the location string, load the import, and insert the
    imported value into the environment under the given key. If the imported
-   document has a `$params` section, register it as a custom resource template.
+   document has a `$params` section, register it as a custom resource template
+   (see `04-custom-resources.md` for the `$params` parameter definition system).
 3. `$defs` is processed before `$imports`. An import location string may
    reference variables defined in `$defs`.
 
@@ -37,7 +38,10 @@ Phase 2 (pure): Build a variable scope from the environment and recursively
 resolve all nodes in the document AST.
 
 1. Plain scalars, sequences, and mappings pass through (with special-key
-   filtering for `$imports`, `$defs`, `$envValues`, `$params`).
+   filtering for `$imports`, `$defs`, `$envValues`, `$params`). The `$envValues`
+   key is an internally-injected mapping containing environment metadata
+   (region, profile, operation name, environment name) made available during
+   stack-args preprocessing; it is not user-authored.
 2. Templated string nodes are processed through the Handlebars engine.
 3. Preprocessing tag nodes (`!$`) dispatch to per-tag resolvers.
 4. CloudFormation tag nodes have their inner content resolved, then pass
@@ -207,9 +211,10 @@ deployment targets without duplication.
   are structurally equal, false otherwise.
 - `!$not` takes a one-element sequence and returns the logical negation of the
   resolved value's truthiness.
-- Truthiness: null and boolean false are falsy. All other values (non-empty
-  strings, non-zero numbers, non-empty arrays, non-empty objects, boolean true)
-  are truthy.
+- Truthiness: the following values are **falsy**: null, boolean false, empty
+  string `""`, empty array `[]`, empty object `{}`. All other values are
+  **truthy** (non-empty strings, numbers including zero, non-empty arrays,
+  non-empty objects, boolean true). Note: zero is truthy (not falsy).
 - `!$if` can be nested arbitrarily inside `then` and `else` branches.
 - There are no `!$and` or `!$or` tags. Compound conditions use nested `!$if`.
 
@@ -789,6 +794,6 @@ window, so the source must be retained through the pipeline.
 - `docs/requirements/03-import-system.md` — import resolution, security model,
   cycle detection
 - `docs/requirements/04-custom-resources.md` — custom resource expansion
-  pipeline (`!$expand` and automatic expansion via `$params`)
+  pipeline (automatic expansion via `$params` registration)
 - Rust oracle: `~/src/iidy/target/debug/iidy` (read-only reference binary)
 - `DIVERGENCES.md` — documented behavioral differences from Rust iidy

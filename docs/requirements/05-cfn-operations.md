@@ -14,6 +14,10 @@ renderer (interactive or JSON) based on the user's CLI flags.
 
 ## Technical Context
 
+All output events (`Od*` types such as `OdStackDefinition`, `OdNewStackEvents`,
+`OdFinalCommandSummary`) are defined in `06-output-system.md`. This document
+specifies which events each operation emits and in what order.
+
 All write operations accept a `--client-request-token` for idempotency. All operations
 that display progress use a shared spinner infrastructure (braille frames, 100ms ticks,
 timing text every 1 second). The output emitter is uniform across all operations.
@@ -282,7 +286,7 @@ works for both initial deployments and subsequent updates without branching in s
 
 - Check stack existence before taking any action (via `stackExists`, which treats
   `DELETE_COMPLETE` as absent).
-- Route to one of five paths based on `(exists, useChangeset)`:
+- Route to one of four paths based on `(exists, useChangeset)`:
 
   | exists | useChangeset | Path                                          |
   | ------ | ------------ | --------------------------------------------- |
@@ -510,8 +514,8 @@ deployments initiated by other tools (console, other scripts) without polling ma
   - If final status is `DELETE_COMPLETE`: return `Right 0` without emitting
     `OdStackContents`.
   - Otherwise: emit `OdStackContents`, return `Right 0`.
-  - Always exit 0 (watch merely observes; it does not judge success/failure of the
-    underlying operation).
+  - Once polling begins, always exit 0 (watch merely observes; it does not judge
+    success/failure of the underlying operation). Stack-not-found exits non-zero.
 
 **Logic Flow:**
 
@@ -785,8 +789,8 @@ duplicate resources.
 - If not provided, a UUID is generated at startup and used as the primary token.
 - The primary token is used directly for single-step operations (CreateStack, UpdateStack).
 - Multi-step operations derive per-step tokens deterministically:
-  - A step token is produced by hashing `(primaryToken + ":" + stepName)` with SHA256,
-    then taking the first 36 characters.
+  - A step token is produced by hashing `(primaryToken + stepName)` with SHA256 (no
+    separator), then formatting as `take(8, primaryToken) + "-" + take(8, hexHash)`.
   - `exec-changeset` derives a token with step name `"execute-changeset"`.
 - Derived tokens are tracked for the command metadata summary.
 - Changeset names are deterministic from the token prefix:

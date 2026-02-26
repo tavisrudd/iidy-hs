@@ -119,6 +119,7 @@ Each PRD draws from these sources (agents must read them, not guess):
 ### Critical Rules for PRD Authors
 
 - Read the **actual source code**, not just docs. Docs may be incomplete.
+- However, do not reference the Haskell implementation.
 - Every user story needs **acceptance criteria**. No vague stories.
 - Every edge case from **test fixtures** must be captured.
 - Error scenarios must include the actual **error code** (ERR_XXXX) and message format.
@@ -135,8 +136,22 @@ Each PRD draws from these sources (agents must read them, not guess):
 - [x] Session 5: `04-custom-resources.md` + `09-ssm-params.md` + `10-template-approval.md` (Session 41)
 - [x] Session 6: `11-utilities.md` + `12-cross-cutting.md` (Session 41)
 - [x] Cleanup: Strip implementation details from all 13 PRDs, save refs to notes/ (Session 41)
-- [ ] Session 7: Completeness review + coverage matrix
-- [ ] Session 8: Quality gate + final polish + `.ralph-stop`
+- [x] Session 7: Completeness review + coverage matrix (Session 42).
+  - [x] Validate the 'known gap' entries in 03-import-system.md. Result: all 3 gaps legitimate
+    (filehash loaders, CFN sub-types, SSM format suffixes). Report: notes/2026-02-25-requirements-gaps-found.md.
+  - [x] Add a Ubiquitous Language glossary / reference and ensure we are
+    consistent in the terminology we use. Added glossary to 00-overview.md.
+  - [x] Ensure all concepts / terms are referenced in each doc have
+    already been introduced in the current or preceding documents. Fixed: stack-args.yaml,
+    $imports, $defs, $params, render: prefix, environment map, $envValues all introduced in 00.
+  - [x] Read each document to ensure someone with only access to the Rust codebase and its documentation plus
+    these documents could fully understand the context and requirements. Fixed 8 CRITICAL issues
+    and 12+ MODERATE issues across all 13 documents.
+  - [x] See README and ensure 00-overview.md captures the essence. Added: Project Lineage section
+    with repo links, origin story, AI Agent persona, graduated adoption story, non-CFN use mention.
+  - [x] Validate the logic flows for all pseudo code in the documents. Fixed: derived token format
+    (both docs 05 and 12), truthiness definition (doc 02), exit codes, NTP packet version.
+- [ ] Session 8: Quality gate review + final polish + `.ralph-stop`
 
 ### Handoff Notes
 

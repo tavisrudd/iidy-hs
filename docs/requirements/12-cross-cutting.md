@@ -205,10 +205,11 @@ systems with clock skew.
    exec-changeset, create-or-update) use the reliable time provider, which queries NTP
    before falling back to the system clock.
 3. NTP queries use the SNTP protocol (RFC 4330) against `pool.ntp.org:123`.
-4. The SNTP request is a 48-byte UDP packet with LI=0, VN=3, Mode=3 (client).
+4. The SNTP request is a 48-byte UDP packet with LI=0, VN=4, Mode=3 (client).
 5. NTP epoch offset is exactly 2,208,988,800 seconds (difference between 1900-01-01 and
    1970-01-01 UTC).
-6. NTP query has a 2-second timeout and up to 2 retries before falling back to system time.
+6. NTP query has a 2-second timeout with 2 total attempts (1 initial + 1 retry) before
+   falling back to system time.
 7. NTP failure is silent: the system clock is used without surfacing an error to the user.
 8. Tests use a mock time provider with a fixed timestamp. No live NTP calls occur in the test suite.
 9. The time provider is injected into command handlers via the command context; command
@@ -229,8 +230,9 @@ test env  → mock time provider → returns fixed timestamp
 #### Edge Cases
 
 - Network unreachable: all NTP retries fail silently; system time used.
-- NTP response arrives but timestamp is implausible (more than 10 years from system time):
-  treated as failure; system time used.
+- NTP response arrives but packet is unparseable (wrong size, zero transmit timestamp):
+  treated as failure; system time used. No plausibility check is performed on the
+  returned timestamp.
 - System clock is correct but NTP takes 1.9 seconds per attempt: up to ~4 seconds added to
   write-op startup time in the worst case.
 - Monotonic clock drift mid-operation: not addressed. Time is sampled once per command
@@ -262,8 +264,9 @@ or changesets.
 
 1. Every write operation that accepts an idempotency token generates a UUID v4 automatically
    if the user does not supply one via `--client-request-token`.
-2. Derived tokens are computed as `SHA256(primary_token + ":" + step_name)`, formatted as
-   `<first-8-hex-chars>-<next-8-hex-chars>`.
+2. Derived tokens are computed as `SHA256(primary_token + step_name)` (no separator), formatted
+   as `<primary_first_8_chars>-<hash_first_8_hex_chars>` (first 8 characters of the primary
+   token, a dash, then the first 8 hex characters of the SHA256 hash).
 3. Derived tokens are deterministic: given the same primary token and step name, the same
    derived token is always produced.
 4. The primary token is logged in command metadata output so that users can reproduce it on
@@ -282,9 +285,9 @@ user does not supply flag
   → primary = UUID v4 (random)
 
 derived token for step S:
-  hash  = SHA256(primary + ":" + S)
+  hash  = SHA256(primary + S)          -- no separator between primary and step
   hex   = lowercase hex encoding of hash
-  token = first 8 hex chars + "-" + next 8 hex chars
+  token = take(8, primary) + "-" + take(8, hex)
 ```
 
 #### Edge Cases
@@ -448,8 +451,11 @@ and behavior,
 4. Input `y` or `yes` (case-insensitive) confirms the affirmative.
 5. In non-TTY contexts (e.g., CI Pipeline), ANSI codes are suppressed; the prompt text is
    printed as plain text with no color markup.
-6. A user declining a confirmation is not an error: the command exits with exit code 0
-   (success). This applies to delete-stack and other confirmation-gated commands.
+6. A user declining a confirmation exits with exit code 130 (cancelled). This is the
+   same exit code used for SIGINT (Ctrl-C) and signals a clean cancellation, not an
+   error. This applies to delete-stack and other confirmation-gated commands.
+   Exception: template-approval review rejection exits 1 (a deliberate review
+   decision, not a cancellation — see `10-template-approval.md`).
 7. The prompt is written to stdout, not stderr.
 8. There is no timeout on the confirmation prompt. The process waits indefinitely for input.
 
@@ -470,7 +476,7 @@ command handler:
   confirmed ← confirmAction "Are you sure you want to delete stack X?"
   if confirmed
     then proceed with destructive operation
-    else emit "Cancelled." and return ExitSuccess
+    else emit "Cancelled." and return exit code 130
 ```
 
 #### Edge Cases
@@ -525,7 +531,7 @@ command handler:
 | US-12-006  | Unit             | Non-TTY, no COLUMNS → `tcWidth = Nothing`                               |
 | US-12-007  | Unit             | `"y"` → True; `"yes"` → True; `"YES"` → True                            |
 | US-12-007  | Unit             | `""` → False; `"no"` → False; `"n"` → False                             |
-| US-12-007  | Unit             | Decline returns `ExitSuccess` (not failure)                              |
+| US-12-007  | Unit             | Decline returns exit code 130 (cancelled, not error)                     |
 | US-12-007  | Snapshot         | Prompt output matches expected ANSI format in TTY context                |
 
 All tests use `MockTimeProvider` for time-dependent assertions. No live NTP queries occur in the
@@ -537,6 +543,6 @@ test suite. No real AWS calls are made.
 
 - `DIVERGENCES.md` — Error color check uses stderr TTY (not stdout); `--color` flag values
   differ from Rust; PowerShell completion not implemented.
-- PRD `11-output-pipeline.md` — Output dispatch and renderer architecture.
-- PRD `10-command-metadata.md` — CommandMetadata and FinalCommandSummary timestamp usage.
-- PRD `08-ntp-schema-demo.md` — NTP SNTP protocol details.
+- `06-output-system.md` — Output dispatch and renderer architecture.
+- `05-cfn-operations.md` — CommandMetadata and FinalCommandSummary timestamp usage.
+- `08-aws-integration.md` — NTP time provider, SNTP protocol details.

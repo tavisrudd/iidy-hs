@@ -567,13 +567,13 @@ flags directly.
 ### Commands documented elsewhere
 
 - **lint-template**: Validates a CloudFormation template via the `ValidateTemplate` API.
-  Full requirements in `05-cfn-operations.md` (US-05-010, error scenarios section).
+  Full requirements in `05-cfn-operations.md` (US-05-011, error scenarios section).
   Key behaviors: templates exceeding 51200 bytes emit a warning and skip validation;
   output routed via the `OutputData` emitter pipeline.
 
 - **estimate-cost**: Estimates monthly cost for a stack template via the
   `EstimateTemplateCost` API. Full requirements in `05-cfn-operations.md`
-  (US-05-010, error scenarios section). Key behaviors: template load failure returns
+  (US-05-011, error scenarios section). Key behaviors: template load failure returns
   `Left` error; cost URL emitted via `OutputData`.
 
 ### Related documents
