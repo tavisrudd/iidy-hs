@@ -244,6 +244,7 @@ Per CLAUDE.md — use `~/.claude/bin/run-quiet` wrapper.
 - [x] Chunk 1: Wire Env/Git/Random into dispatcher + tests (`6baaa0c`)
 - [x] Chunk 2: Wire Http loader + tests (`6baaa0c`)
 - [x] Chunk 3: Fix AWS loader return types (S3, Ssm, Cfn) (`32f2f51`)
+- [x] CFN restructure: cfn:field:location format, remove shorthand (`85a2f0e`)
 - [ ] Chunk 4: Add SsmPath loader
 - [ ] Chunk 5: Create full dispatcher with AWS config
 - [ ] Chunk 6: Cfn subtypes (output, export, parameter, tag, resource, stack)
