@@ -243,7 +243,7 @@ Per CLAUDE.md — use `~/.claude/bin/run-quiet` wrapper.
 
 - [x] Chunk 1: Wire Env/Git/Random into dispatcher + tests (`6baaa0c`)
 - [x] Chunk 2: Wire Http loader + tests (`6baaa0c`)
-- [ ] Chunk 3: Fix AWS loader return types (S3, Ssm, Cfn)
+- [x] Chunk 3: Fix AWS loader return types (S3, Ssm, Cfn) (`32f2f51`)
 - [ ] Chunk 4: Add SsmPath loader
 - [ ] Chunk 5: Create full dispatcher with AWS config
 - [ ] Chunk 6: Cfn subtypes (output, export, parameter, tag, resource, stack)
@@ -284,3 +284,23 @@ natural place to add Env/Git/Random routing. Env loader takes only `location`
 **Review findings deferred**:
 - Extract dispatcher to own module → Chunk 5
 - `loadHttpImport` direct tests → requires network, per handoff plan only `urlPath` tested
+
+### Chunk 3 (2026-02-26)
+
+**Session**: current
+**Completed**: All 3 AWS loaders now return `Either ImportError ImportData`
+**Files modified**:
+- `src/Iidy/Yaml/Imports/Loaders/S3.hs` — full rewrite: return ImportData, extension-based parsing with strict errors (matching JS), export parseS3Uri
+- `src/Iidy/Yaml/Imports/Loaders/Ssm.hs` — full rewrite: return ImportData, `:json`/`:yaml` format suffix parsing, export parseSsmLocation
+- `src/Iidy/Yaml/Imports/Loaders/Cfn.hs` — return ImportData, removed dot separator (JS doesn't have it), export parseCfnRef
+- `test/Test/AwsLoaderTest.hs` — 17 new tests for pure parsing helpers
+- `docs/requirements/03-import-system.md` — PRD fixes: removed dot syntax refs, fixed S3 parse failure behavior
+- Committed as `32f2f51`
+**Deviations from plan**:
+- Removed legacy dot syntax (`cfn:Stack.Key`) — JS source of truth does not support it
+- S3 parse failure is now an error (matching JS), not fallback-to-string as PRD originally said
+**JS source of truth discrepancies found**:
+- JS throws on S3/file YAML/JSON parse failure; old PRD said "fall back to string" → fixed
+- JS has no `cfn:Stack.Key` dot syntax; was a Rust-only addition → removed
+- SSM format suffix parsing matches both JS and Rust: split on `:` after prefix
+**Notes for next chunk**: Chunk 4 (SsmPath) depends on the SSM pattern established here. Chunk 5 (full dispatcher) needs AWS env parameter threading.
