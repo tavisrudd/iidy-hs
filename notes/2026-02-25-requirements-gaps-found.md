@@ -20,7 +20,7 @@ This may have come from a stale document. Check the code."
 ### Gap 2: CFN sub-types (`cfn:output:`, `cfn:export:`, etc.)
 
 - **Status**: LEGITIMATE GAP
-- Haskell CFN loader (`Loaders/Cfn.hs`, 104 lines) only handles legacy `cfn:stack/key` and `cfn:stack.key`
+- Haskell CFN loader (`Loaders/Cfn.hs`) only handles `cfn:output:stack/key` (single and all outputs)
 - No sub-type prefix parsing (`output:`, `export:`, `parameter:`, `tag:`, `resource:`, `stack:`)
 - No AWS APIs for ListExports, ListStackResources, etc.
 - Rust: Full implementation in `loaders/cfn.rs` (1113 lines, all 6 sub-types)

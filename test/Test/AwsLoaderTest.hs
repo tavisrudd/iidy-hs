@@ -7,14 +7,14 @@ import Test.Tasty.HUnit (testCase, (@?=), assertBool)
 import qualified Amazonka.S3 as S3
 import Iidy.Yaml.Imports.Loaders.S3 (parseS3Uri)
 import Iidy.Yaml.Imports.Loaders.Ssm (parseSsmLocation)
-import Iidy.Yaml.Imports.Loaders.Cfn (parseCfnRef)
+import Iidy.Yaml.Imports.Loaders.Cfn (parseCfnLocation)
 import Iidy.Yaml.Imports.Types (ImportError(..))
 
 awsLoaderTests :: [TestTree]
 awsLoaderTests =
   [ testGroup "S3 URI parsing" s3Tests
   , testGroup "SSM location parsing" ssmTests
-  , testGroup "CFN reference parsing" cfnTests
+  , testGroup "CFN location parsing" cfnTests
   ]
 
 ------------------------------------------------------------------------
@@ -89,32 +89,60 @@ ssmTests =
   ]
 
 ------------------------------------------------------------------------
--- CFN reference parsing
+-- CFN location parsing
 ------------------------------------------------------------------------
 
 cfnTests :: [TestTree]
 cfnTests =
-  [ testCase "slash separator" $
-      parseCfnRef "my-stack/VpcId" @?= Right ("my-stack", "VpcId")
+  [ testCase "cfn:output:Stack/Key parses correctly" $ do
+      let Right (field, loc) = parseCfnLocation "cfn:output:my-stack/VpcId"
+      show field @?= "CfnOutput"
+      loc @?= "my-stack/VpcId"
 
-  , testCase "dot separator not supported" $
-      case parseCfnRef "my-stack.VpcId" of
+  , testCase "cfn:output:Stack (all outputs)" $ do
+      let Right (field, loc) = parseCfnLocation "cfn:output:my-stack"
+      show field @?= "CfnOutput"
+      loc @?= "my-stack"
+
+  , testCase "cfn:export:Name parses correctly" $ do
+      let Right (field, loc) = parseCfnLocation "cfn:export:my-export"
+      show field @?= "CfnExport"
+      loc @?= "my-export"
+
+  , testCase "cfn:parameter:Stack/Key parses correctly" $ do
+      let Right (field, loc) = parseCfnLocation "cfn:parameter:my-stack/DbHost"
+      show field @?= "CfnParameter"
+      loc @?= "my-stack/DbHost"
+
+  , testCase "cfn:tag:Stack/Key parses correctly" $ do
+      let Right (field, loc) = parseCfnLocation "cfn:tag:my-stack/Environment"
+      show field @?= "CfnTag"
+      loc @?= "my-stack/Environment"
+
+  , testCase "cfn:resource:Stack/LogicalId parses correctly" $ do
+      let Right (field, loc) = parseCfnLocation "cfn:resource:my-stack/MyBucket"
+      show field @?= "CfnResource"
+      loc @?= "my-stack/MyBucket"
+
+  , testCase "cfn:stack:Stack parses correctly" $ do
+      let Right (field, loc) = parseCfnLocation "cfn:stack:my-stack"
+      show field @?= "CfnStack"
+      loc @?= "my-stack"
+
+  , testCase "invalid sub-type errors" $
+      case parseCfnLocation "cfn:bogus:my-stack" of
+        Left (ImportError e) -> assertBool "mentions invalid" ("Invalid cfn sub-type" `T.isInfixOf` e)
+        Right _ -> fail "Expected error for invalid sub-type"
+
+  , testCase "missing field errors" $
+      case parseCfnLocation "cfn:my-stack" of
         Left _ -> pure ()
-        Right _ -> fail "Dot separator should not be supported"
+        Right _ -> fail "Expected error for missing field"
 
-  , testCase "empty stack name errors" $
-      case parseCfnRef "/VpcId" of
-        Left (ImportError e) -> assertBool "mentions empty stack" ("empty stack name" `T.isInfixOf` e)
-        Right _ -> fail "Expected error for empty stack name"
-
-  , testCase "empty output key errors" $
-      case parseCfnRef "my-stack/" of
-        Left (ImportError e) -> assertBool "mentions empty output" ("empty output key" `T.isInfixOf` e)
-        Right _ -> fail "Expected error for empty output key"
-
-  , testCase "no separator errors" $
-      case parseCfnRef "no-separator" of
-        Left (ImportError e) -> assertBool "mentions format" ("stackName/outputKey" `T.isInfixOf` e
-                                  || "CFN reference" `T.isInfixOf` e)
-        Right _ -> fail "Expected error for no separator"
+  , testCase "bare cfn:Stack/Key shorthand rejected" $
+      -- JS does not support cfn:Stack/Key without a subtype field
+      -- "Stack/Key" is not a valid field name
+      case parseCfnLocation "cfn:Stack/Key" of
+        Left _ -> pure ()
+        Right _ -> fail "Expected error for bare cfn:Stack/Key (no subtype)"
   ]

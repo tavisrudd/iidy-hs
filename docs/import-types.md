@@ -166,7 +166,6 @@ Read data from a CloudFormation stack. Requires AWS credentials.
 
 | Format | Returns |
 |---|---|
-| `cfn:stack-name.OutputKey` | Value of a stack output (legacy shorthand) |
 | `cfn:output:stack-name/OutputKey` | Value of a stack output |
 | `cfn:output:stack-name` | All stack outputs as a YAML mapping |
 | `cfn:export:ExportName` | Value of a named CloudFormation export |
@@ -178,8 +177,6 @@ Read data from a CloudFormation stack. Requires AWS credentials.
 | `cfn:resource:stack-name` | All stack resources as a YAML mapping keyed by logical ID |
 | `cfn:stack:stack-name` | Entire stack as a mapping with `Outputs`, `Parameters`, and `Tags` keys |
 
-The `cfn:stack-name.OutputKey` dot syntax is a backward-compatible shorthand for `cfn:output:stack-name/OutputKey`.
-
 When looking up a specific field (output, parameter, tag, or resource), the result is either a string value or a resource object. When no field key is given, the result is a YAML mapping of all values.
 
 Resource objects returned by `cfn:resource:` contain `LogicalResourceId`, `PhysicalResourceId`, `ResourceType`, and `ResourceStatus` fields.
@@ -189,8 +186,7 @@ Resource objects returned by `cfn:resource:` contain `LogicalResourceId`, `Physi
 ```yaml
 $imports:
   # Stack outputs
-  vpc_id: cfn:networking-stack.VpcId
-  vpc_id_canonical: cfn:output:networking-stack/VpcId
+  vpc_id: cfn:output:networking-stack/VpcId
   all_outputs: cfn:output:networking-stack
 
   # Named exports
