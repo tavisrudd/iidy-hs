@@ -241,8 +241,8 @@ Per CLAUDE.md — use `~/.claude/bin/run-quiet` wrapper.
 
 ## Progress
 
-- [ ] Chunk 1: Wire Env/Git/Random into dispatcher + tests
-- [ ] Chunk 2: Wire Http loader + tests
+- [x] Chunk 1: Wire Env/Git/Random into dispatcher + tests (`6baaa0c`)
+- [x] Chunk 2: Wire Http loader + tests (`6baaa0c`)
 - [ ] Chunk 3: Fix AWS loader return types (S3, Ssm, Cfn)
 - [ ] Chunk 4: Add SsmPath loader
 - [ ] Chunk 5: Create full dispatcher with AWS config
@@ -265,3 +265,22 @@ Per CLAUDE.md — use `~/.claude/bin/run-quiet` wrapper.
 **Notes for next chunk**: The `dispatchLocalImport` function in `File.hs` is the
 natural place to add Env/Git/Random routing. Env loader takes only `location`
 (no baseLocation), Git takes both, Random takes only `location`.
+
+### Chunks 1+2 (2026-02-26)
+
+**Session**: current
+**Completed**: Wired all local loaders (Env, Git, Random, Http) into both dispatchers
+**Files modified**:
+- `src/Iidy/Yaml/Imports/Loaders/File.hs` — expanded `dispatchLocalImport` with 6 new routes (env/git/random/http/https + AWS error guard)
+- `src/Iidy/GetImport.hs` — added Git/Random/Http cases to `loadImportByType`
+- `src/Iidy/Yaml/Imports/Loaders/Http.hs` — exported `urlPath`, fixed query string/fragment stripping
+- `test/Test/ImportLoaderTest.hs` — 20 new tests (env, git, random, http helpers, dispatcher routing)
+- Committed as `6baaa0c`
+**Deviations from plan**: Combined Chunks 1+2 into single commit since both modify same files.
+**Review findings addressed**:
+- AWS prefixes (cfn/ssm/ssm-path/s3) now return explicit error instead of falling through to file loader
+- `urlPath` strips query strings and fragments for correct extension detection
+- Added AWS-prefix-error test and fragment-stripping test
+**Review findings deferred**:
+- Extract dispatcher to own module → Chunk 5
+- `loadHttpImport` direct tests → requires network, per handoff plan only `urlPath` tested
