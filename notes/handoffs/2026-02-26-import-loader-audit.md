@@ -245,8 +245,8 @@ Per CLAUDE.md — use `~/.claude/bin/run-quiet` wrapper.
 - [x] Chunk 2: Wire Http loader + tests (`6baaa0c`)
 - [x] Chunk 3: Fix AWS loader return types (S3, Ssm, Cfn) (`32f2f51`)
 - [x] CFN restructure: cfn:field:location format, remove shorthand (`85a2f0e`)
-- [ ] Chunk 4: Add SsmPath loader
-- [ ] Chunk 5: Create full dispatcher with AWS config
+- [x] Chunk 4: Add SsmPath loader (`ccaf7ee`)
+- [x] Chunk 5: Create full dispatcher with AWS config (`ccaf7ee`)
 - [ ] Chunk 6: Cfn subtypes (output, export, parameter, tag, resource, stack)
 - [ ] Final: `cabal build` zero warnings + `cabal test` all pass
 
@@ -328,3 +328,29 @@ natural place to add Env/Git/Random routing. Env loader takes only `location`
 - Chunk 5 (full dispatcher): `mkFullDispatcher :: Maybe Amazonka.Env -> LoadImportFn`. Extract from File.hs to Dispatch.hs.
 - Chunk 6 (CFN subtypes): `loadCfnImport` already has dispatch skeleton. Need: export (ListExports paginated), parameter, tag (DescribeStacks fields), resource (DescribeStackResources paginated), stack (combined mapping). JS also supports `?region=` query param on CFN locations.
 - File.hs parse-failure-fallback-to-string behavior diverges from JS (which throws). 37 snapshot tests pass with current behavior — investigate whether this is intentional or should be changed.
+
+### Chunks 4+5 (2026-02-26)
+
+**Session**: current
+**Completed**: SsmPath loader + full dispatcher with AWS config
+**Files created**:
+- `src/Iidy/Yaml/Imports/Loaders/SsmPath.hs` — new module: `loadSsmPathImport`, `parseSsmPathLocation`, `buildResultObject` with relative key stripping, per-value format parsing
+- `src/Iidy/Yaml/Imports/Loaders/Dispatch.hs` — new module: `mkFullDispatcher :: Maybe Amazonka.Env -> LoadImportFn`, routes all 11 import types
+**Files modified**:
+- `src/Iidy/Yaml/Imports/Loaders/File.hs` — removed `dispatchLocalImport` (dead code), removed Env/Git/Http/Random imports
+- `src/Iidy/GetImport.hs` — simplified to use `mkFullDispatcher Nothing`, removed per-type dispatch
+- `src/Iidy/Render.hs` — uses `mkFullDispatcher Nothing`
+- `src/Iidy/Demo.hs` — uses `mkFullDispatcher Nothing`
+- `src/Iidy/Cfn/StackArgsLoader.hs` — uses `mkFullDispatcher Nothing`
+- `test/Test/AwsLoaderTest.hs` — 6 new SsmPath parsing tests
+- `test/Test/ImportLoaderTest.hs` — updated to use `mkFullDispatcher Nothing`
+- `test/Test/FilehashTest.hs` — updated to use `mkFullDispatcher Nothing`
+- Committed as `ccaf7ee`
+**Deviations from plan**:
+- Combined Chunks 4+5 into single commit since both are needed together
+- StackArgsLoader uses `Nothing` (no AWS env at argsfile preprocess time), not `Just env` as handoff suggested
+- SsmPath does not paginate GetParametersByPath (matches Rust behavior)
+**Notes for next session**:
+- Chunk 6 (CFN subtypes): `loadCfnImport` already has CfnOutput implemented. Remaining: export (ListExports), parameter, tag (DescribeStacks fields), resource (DescribeStackResources), stack (combined). JS supports `?region=` query param.
+- StackArgsLoader could pass `Just awsEnv` if the caller provides it, but currently argsfile loading happens before AWS env is established (chicken-and-egg).
+- 464 tests passing, zero warnings.

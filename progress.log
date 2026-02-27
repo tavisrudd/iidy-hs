@@ -67,3 +67,4 @@
 2026-02-26 22:18 — Import Loader Chunks 1+2: Wire Env/Git/Random/Http into dispatchLocalImport + loadImportByType, fix urlPath query stripping, 20 new tests (436 total)
 2026-02-26 22:30 — Import Loader Chunk 3: Fix AWS loader return types (S3/Ssm/Cfn → Either ImportError ImportData), SSM format suffixes, remove CFN dot syntax, fix PRD. 17 new tests (453 total)
 2026-02-26 22:36 — CFN restructure: cfn:field:location format matching JS, remove dot/shorthand, output single+all, stub other subtypes. Rust divergence tracker. 458 tests
+2026-02-26 22:50 — Import Loader Chunks 4+5: SsmPath loader (GetParametersByPath, relative keys, format suffixes) + full dispatcher (mkFullDispatcher :: Maybe Amazonka.Env -> LoadImportFn). Replaced dispatchLocalImport everywhere. 464 tests
