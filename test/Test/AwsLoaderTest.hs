@@ -7,6 +7,7 @@ import Test.Tasty.HUnit (testCase, (@?=), assertBool)
 import qualified Amazonka.S3 as S3
 import Iidy.Yaml.Imports.Loaders.S3 (parseS3Uri)
 import Iidy.Yaml.Imports.Loaders.Ssm (parseSsmLocation)
+import Iidy.Yaml.Imports.Loaders.SsmPath (parseSsmPathLocation)
 import Iidy.Yaml.Imports.Loaders.Cfn (parseCfnLocation)
 import Iidy.Yaml.Imports.Types (ImportError(..))
 
@@ -14,6 +15,7 @@ awsLoaderTests :: [TestTree]
 awsLoaderTests =
   [ testGroup "S3 URI parsing" s3Tests
   , testGroup "SSM location parsing" ssmTests
+  , testGroup "SSM path location parsing" ssmPathTests
   , testGroup "CFN location parsing" cfnTests
   ]
 
@@ -85,6 +87,43 @@ ssmTests =
   , testCase "without ssm: prefix works" $ do
       let Right (name, fmt) = parseSsmLocation "/app/config"
       name @?= "/app/config"
+      fmt @?= Nothing
+  ]
+
+------------------------------------------------------------------------
+-- SSM path location parsing
+------------------------------------------------------------------------
+
+ssmPathTests :: [TestTree]
+ssmPathTests =
+  [ testCase "plain path" $ do
+      let Right (path, fmt) = parseSsmPathLocation "ssm-path:/app/config"
+      path @?= "/app/config"
+      fmt @?= Nothing
+
+  , testCase "path with :json suffix" $ do
+      let Right (path, fmt) = parseSsmPathLocation "ssm-path:/app/config:json"
+      path @?= "/app/config"
+      fmt @?= Just "json"
+
+  , testCase "path with :yaml suffix" $ do
+      let Right (path, fmt) = parseSsmPathLocation "ssm-path:/app/config:yaml"
+      path @?= "/app/config"
+      fmt @?= Just "yaml"
+
+  , testCase "path with unknown suffix treated as path" $ do
+      let Right (path, fmt) = parseSsmPathLocation "ssm-path:/app/config:xml"
+      path @?= "/app/config:xml"
+      fmt @?= Nothing
+
+  , testCase "empty path errors" $
+      case parseSsmPathLocation "ssm-path:" of
+        Left (ImportError e) -> assertBool "mentions invalid" ("Invalid" `T.isInfixOf` e)
+        Right _ -> fail "Expected error for empty path"
+
+  , testCase "without prefix works" $ do
+      let Right (path, fmt) = parseSsmPathLocation "/app/config"
+      path @?= "/app/config"
       fmt @?= Nothing
   ]
 

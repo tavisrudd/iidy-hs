@@ -34,7 +34,7 @@ import Iidy.Yaml.Engine
   ( preprocessYaml11
   , PreprocessResult(..)
   )
-import Iidy.Yaml.Imports.Loaders.File (dispatchLocalImport)
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher)
 import Iidy.Yaml.OValue (toValue)
 import Iidy.Yaml.Parser (parseYaml, ParseError(..))
 
@@ -73,7 +73,7 @@ loadStackArgs argsfile environment operation cliAws = do
 
     Right ast -> do
       -- Preprocess (YAML 1.1 for CFN compatibility)
-      result <- preprocessYaml11 dispatchLocalImport ast baseLocation
+      result <- preprocessYaml11 (mkFullDispatcher Nothing) ast baseLocation
       case result of
         Left err ->
           pure $ Left $ "Preprocess error in " <> baseLocation <> ": " <> T.pack (show err)

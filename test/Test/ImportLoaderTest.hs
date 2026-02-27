@@ -10,7 +10,7 @@ import Iidy.Yaml.Imports.Loaders.Env (loadEnvImport)
 import Iidy.Yaml.Imports.Loaders.Git (loadGitImport)
 import Iidy.Yaml.Imports.Loaders.Http (urlPath)
 import Iidy.Yaml.Imports.Loaders.Random (loadRandomImport)
-import Iidy.Yaml.Imports.Loaders.File (dispatchLocalImport)
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher)
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportType(..), ImportError(..))
 
 importLoaderTests :: [TestTree]
@@ -169,7 +169,7 @@ dispatchTests :: [TestTree]
 dispatchTests =
   [ testCase "dispatches env: to env loader" $ do
       setEnv "IIDY_DISPATCH_TEST" "dispatched"
-      result <- dispatchLocalImport "env:IIDY_DISPATCH_TEST" "."
+      result <- mkFullDispatcher Nothing "env:IIDY_DISPATCH_TEST" "."
       unsetEnv "IIDY_DISPATCH_TEST"
       case result of
         Left (ImportError e) -> fail (T.unpack e)
@@ -178,7 +178,7 @@ dispatchTests =
           idRawData dat @?= "dispatched"
 
   , testCase "dispatches git: to git loader" $ do
-      result <- dispatchLocalImport "git:sha" "."
+      result <- mkFullDispatcher Nothing "git:sha" "."
       case result of
         Left (ImportError e) -> fail (T.unpack e)
         Right dat -> do
@@ -186,7 +186,7 @@ dispatchTests =
           T.length (idRawData dat) @?= 40
 
   , testCase "dispatches random: to random loader" $ do
-      result <- dispatchLocalImport "random:int" "."
+      result <- mkFullDispatcher Nothing "random:int" "."
       case result of
         Left (ImportError e) -> fail (T.unpack e)
         Right dat -> do
@@ -197,7 +197,7 @@ dispatchTests =
   , testCase "AWS prefixes return error, not file fallthrough" $ do
       let awsPrefixes = ["cfn:stack/key", "ssm:/param", "ssm-path:/path", "s3://bucket/key"]
       mapM_ (\loc -> do
-        result <- dispatchLocalImport loc "."
+        result <- mkFullDispatcher Nothing loc "."
         case result of
           Left (ImportError e) ->
             assertBool ("AWS error for " <> T.unpack loc)

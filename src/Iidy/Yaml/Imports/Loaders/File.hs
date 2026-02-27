@@ -1,7 +1,6 @@
 module Iidy.Yaml.Imports.Loaders.File
   ( loadFileImport
   , loadFilehashImport
-  , dispatchLocalImport
   ) where
 
 import Control.Exception (IOException, try)
@@ -20,40 +19,8 @@ import Data.Word (Word8)
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import System.FilePath (takeExtension, takeDirectory, (</>))
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportType(..), ImportError(..))
-import Iidy.Yaml.Imports.Loaders.Env (loadEnvImport)
-import Iidy.Yaml.Imports.Loaders.Git (loadGitImport)
-import Iidy.Yaml.Imports.Loaders.Http (loadHttpImport)
-import Iidy.Yaml.Imports.Loaders.Random (loadRandomImport)
 import Iidy.Yaml.Parser (parseYaml)
 import Iidy.Yaml.Resolution.Resolver (astToValueRaw)
-
-------------------------------------------------------------------------
--- Import dispatcher
-------------------------------------------------------------------------
-
--- | Dispatch a local import based on its type prefix.
--- Routes filehash:/filehash-base64: to the filehash loader,
--- everything else to the file loader.
-dispatchLocalImport :: Text -> Text -> IO (Either ImportError ImportData)
-dispatchLocalImport location baseLocation
-  | "filehash-base64:" `T.isPrefixOf` location =
-      loadFilehashImport location baseLocation True
-  | "filehash:" `T.isPrefixOf` location =
-      loadFilehashImport location baseLocation False
-  | "env:" `T.isPrefixOf` location =
-      loadEnvImport location
-  | "git:" `T.isPrefixOf` location =
-      loadGitImport location baseLocation
-  | "random:" `T.isPrefixOf` location =
-      loadRandomImport location
-  | "http://" `T.isPrefixOf` location || "https://" `T.isPrefixOf` location =
-      loadHttpImport location
-  | "cfn:" `T.isPrefixOf` location || "ssm:" `T.isPrefixOf` location
-    || "ssm-path:" `T.isPrefixOf` location || "s3:" `T.isPrefixOf` location =
-      pure $ Left $ ImportError $
-        "AWS import type requires credentials and is not available in this context"
-  | otherwise =
-      loadFileImport location baseLocation
 
 ------------------------------------------------------------------------
 -- File import

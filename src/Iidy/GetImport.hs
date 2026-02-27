@@ -5,19 +5,14 @@ module Iidy.GetImport
 
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy.Char8 as BL8
-import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import System.IO (hPutStrLn, stderr)
 
 import Iidy.Cli (GetImportArgs(..))
 import Iidy.Yaml.Emitter (emitYaml)
-import Iidy.Yaml.Imports.Loaders.File (loadFileImport, loadFilehashImport)
-import Iidy.Yaml.Imports.Loaders.Env (loadEnvImport)
-import Iidy.Yaml.Imports.Loaders.Git (loadGitImport)
-import Iidy.Yaml.Imports.Loaders.Http (loadHttpImport)
-import Iidy.Yaml.Imports.Loaders.Random (loadRandomImport)
-import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..), parseImportType, ImportType(..))
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher)
+import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..))
 import Iidy.Yaml.OValue (fromValue)
 
 ------------------------------------------------------------------------
@@ -30,49 +25,24 @@ runGetImport :: GetImportArgs -> IO Int
 runGetImport args = do
   let location = giaImport args
       baseLocation = "."
+      dispatcher = mkFullDispatcher Nothing
 
-  -- Determine import type
-  case parseImportType location baseLocation of
+  result <- dispatcher location baseLocation
+  case result of
     Left (ImportError err) -> do
       hPutStrLn stderr $ "Import error: " <> T.unpack err
       pure 1
-    Right importType -> do
-      -- Load the import
-      result <- loadImportByType importType location baseLocation
-      case result of
-        Left (ImportError err) -> do
-          hPutStrLn stderr $ "Import error: " <> T.unpack err
-          pure 1
-        Right importData -> do
-          let doc = idDoc importData
-          -- Format output
-          case T.toLower (giaFormat args) of
-            "json" -> do
-              BL8.putStrLn (Aeson.encode doc)
-              pure 0
-            "yaml" -> do
-              TIO.putStr (emitYaml (fromValue doc))
-              pure 0
-            _ -> do
-              -- "raw" or any other format: print raw data
-              TIO.putStrLn (idRawData importData)
-              pure 0
-
-------------------------------------------------------------------------
--- Import dispatch
-------------------------------------------------------------------------
-
--- | Dispatch to the appropriate loader based on import type.
--- Non-AWS loaders are handled directly; AWS loaders require env setup.
-loadImportByType :: ImportType -> Text -> Text -> IO (Either ImportError ImportData)
-loadImportByType ImportFile location base = loadFileImport location base
-loadImportByType ImportEnv location _base = loadEnvImport location
-loadImportByType ImportGit location base = loadGitImport location base
-loadImportByType ImportRandom location _base = loadRandomImport location
-loadImportByType ImportHttp location _base = loadHttpImport location
-loadImportByType ImportFilehash location base = loadFilehashImport location base False
-loadImportByType ImportFilehashBase64 location base = loadFilehashImport location base True
-loadImportByType other _location _base =
-  pure $ Left $ ImportError $
-    "Import type '" <> T.pack (show other) <> "' requires AWS credentials. "
-    <> "Use the full render command for AWS-backed imports."
+    Right importData -> do
+      let doc = idDoc importData
+      -- Format output
+      case T.toLower (giaFormat args) of
+        "json" -> do
+          BL8.putStrLn (Aeson.encode doc)
+          pure 0
+        "yaml" -> do
+          TIO.putStr (emitYaml (fromValue doc))
+          pure 0
+        _ -> do
+          -- "raw" or any other format: print raw data
+          TIO.putStrLn (idRawData importData)
+          pure 0

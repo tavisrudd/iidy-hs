@@ -49,9 +49,11 @@ library
     Iidy.Yaml.Imports.Loaders.Random
     Iidy.Yaml.Imports.Loaders.S3
     Iidy.Yaml.Imports.Loaders.Ssm
+    Iidy.Yaml.Imports.Loaders.SsmPath
     Iidy.Yaml.Imports.Loaders.Cfn
     Iidy.Yaml.Imports.Loaders.Http
     Iidy.Yaml.Imports.Loaders.Git
+    Iidy.Yaml.Imports.Loaders.Dispatch
     Iidy.Output.Types
     Iidy.Output.Renderer
     Iidy.Output.Color
