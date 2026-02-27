@@ -1,6 +1,7 @@
 -- | HTTP/HTTPS import loader: fetch content from HTTP or HTTPS URLs.
 module Iidy.Yaml.Imports.Loaders.Http
   ( loadHttpImport
+  , urlPath
   ) where
 
 import Control.Exception (SomeException, try)
@@ -88,10 +89,15 @@ parseJsonOrString rawBytes content =
 
 -- | Extract the path component from a URL (everything after the host),
 -- for the purpose of inferring content type from the file extension.
+-- Strips query strings and fragments so takeExtension works correctly.
 urlPath :: Text -> Text
 urlPath url =
   let noScheme = maybe url id (T.stripPrefix "https://" url)
       noScheme' = maybe noScheme id (T.stripPrefix "http://" noScheme)
-  in  case T.dropWhile (/= '/') noScheme' of
+      rawPath = case T.dropWhile (/= '/') noScheme' of
         p | T.null p  -> "/"
           | otherwise -> p
+      -- Strip query string and fragment
+      noQuery = fst (T.breakOn "?" rawPath)
+      noFragment = fst (T.breakOn "#" noQuery)
+  in  noFragment

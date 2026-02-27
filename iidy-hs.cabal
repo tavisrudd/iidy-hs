@@ -192,6 +192,7 @@ test-suite iidy-hs-test
     Test.IntegrationTest
     Test.Phase14FixTest
     Test.FilehashTest
+    Test.ImportLoaderTest
   default-language: GHC2021
   default-extensions:
     LambdaCase

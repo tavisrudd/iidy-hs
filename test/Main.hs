@@ -28,6 +28,7 @@ import Test.RendererOutputTest (rendererOutputTests)
 import Test.IntegrationTest (integrationTests)
 import Test.Phase14FixTest (phase14FixTests)
 import Test.FilehashTest (filehashTests)
+import Test.ImportLoaderTest (importLoaderTests)
 
 main :: IO ()
 main = do
@@ -60,4 +61,5 @@ main = do
     , testGroup "Integration" integrationTests
     , testGroup "Phase14Fixes" phase14FixTests
     , testGroup "Filehash" filehashTests
+    , testGroup "ImportLoaders" importLoaderTests
     ]

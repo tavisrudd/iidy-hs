@@ -14,6 +14,9 @@ import Iidy.Cli (GetImportArgs(..))
 import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.Imports.Loaders.File (loadFileImport, loadFilehashImport)
 import Iidy.Yaml.Imports.Loaders.Env (loadEnvImport)
+import Iidy.Yaml.Imports.Loaders.Git (loadGitImport)
+import Iidy.Yaml.Imports.Loaders.Http (loadHttpImport)
+import Iidy.Yaml.Imports.Loaders.Random (loadRandomImport)
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..), parseImportType, ImportType(..))
 import Iidy.Yaml.OValue (fromValue)
 
@@ -64,6 +67,9 @@ runGetImport args = do
 loadImportByType :: ImportType -> Text -> Text -> IO (Either ImportError ImportData)
 loadImportByType ImportFile location base = loadFileImport location base
 loadImportByType ImportEnv location _base = loadEnvImport location
+loadImportByType ImportGit location base = loadGitImport location base
+loadImportByType ImportRandom location _base = loadRandomImport location
+loadImportByType ImportHttp location _base = loadHttpImport location
 loadImportByType ImportFilehash location base = loadFilehashImport location base False
 loadImportByType ImportFilehashBase64 location base = loadFilehashImport location base True
 loadImportByType other _location _base =
