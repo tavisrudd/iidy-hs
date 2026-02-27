@@ -30,7 +30,7 @@ considered a bug.
 | YAML output | `serde_yaml` | Custom OValue + emitter | Preserves key insertion order; correct YAML tag syntax |
 | JSON | `serde` + `serde_json` | `aeson` | Standard JSON library in both ecosystems |
 | JMESPath | `jmespath` crate | Custom implementation (~600 LOC) | No maintained Haskell JMESPath library exists |
-| Handlebars | `handlebars` crate | Custom implementation | Supports helpers (`toYaml`, `toJson`, `filehash`, etc.) and block helpers |
+| Handlebars | `handlebars` crate | Custom implementation | Supports helpers (`toYaml`, `toJson`, etc.) and block helpers |
 | JSON Schema | `jsonschema` (Draft 7) | Custom Draft 7 validator (~170 LOC) | Covers all keywords iidy uses for parameter validation |
 | NTP time sync | `ntp` crate | Custom SNTP client (~100 LOC) | No maintained Haskell NTP library; custom UDP-based implementation |
 | Async runtime | `tokio` | Plain IO + `forkIO` | GHC green threads; no async runtime needed |

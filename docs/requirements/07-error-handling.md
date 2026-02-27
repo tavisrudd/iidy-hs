@@ -517,7 +517,7 @@ delimiter syntax, and runtime evaluation failures.
 6. All five variants render the standard header-guidance-context-footer layout, with the
    YAML source context pointing to the scalar node that contains the Handlebars template
    string.
-7. Built-in helpers registered by iidy (`toYaml`, `filehash`, `filehashBase64`, plus
+7. Built-in helpers registered by iidy (`toYaml`, plus
    standard helpers) are included in the available-helpers list for ERR_6002.
 
 **Logic Flow:**
@@ -536,8 +536,7 @@ up to the display layer.
 
 **Error Scenarios:**
 
-- ERR_6005 when a helper performs I/O (e.g. `filehash` on a missing file): the
-  underlying filesystem error message is included.
+
 
 **Complexity Notes:**
 

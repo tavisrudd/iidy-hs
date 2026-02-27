@@ -539,8 +539,6 @@ Encoding (5):
 | `base64`         | Base64-encode UTF-8 bytes of input string                               |
 | `urlEncode`      | Percent-encode non-unreserved characters (RFC 3986)                     |
 | `sha256`         | SHA-256 of UTF-8 bytes; output as lowercase hex                         |
-| `filehash`       | SHA-256 of file or directory contents; hex. Directories: sorted recursive hash of all files |
-| `filehashBase64` | SHA-256 of file or directory contents; Base64-encoded                   |
 
 Serialization (6, including deprecated aliases):
 | Helper         | Behavior                                     |
@@ -584,7 +582,6 @@ Equality (1):
 - `length` on a string returns character count as a string; on an array returns
   element count as a string; on an object returns key count as a string.
 - `lookup` on an array with a non-integer string key returns empty string.
-- `filehash` on a directory: files are sorted lexicographically before hashing.
 - camelCase word splitter recognizes runs of uppercase letters as an acronym
   boundary: `"XMLParser"` splits to `["XML", "Parser"]`.
 

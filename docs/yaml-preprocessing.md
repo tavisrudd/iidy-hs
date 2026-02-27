@@ -731,8 +731,6 @@ the camelCase versions).
 | `base64` | Base64 encode | `{{ base64 value }}` |
 | `urlEncode` | URL-encode | `{{ urlEncode path }}` |
 | `sha256` | SHA256 hash (hex) | `{{ sha256 value }}` |
-| `filehash` | SHA256 of file contents | `{{ filehash "./template.yaml" }}` |
-| `filehashBase64` | Base64-encoded SHA256 of file | `{{ filehashBase64 "./template.yaml" }}` |
 
 ### String case
 

@@ -20,7 +20,7 @@ variable interpolation, environment access, and data transformation.
 The available Haskell packages (`stache`, `mustache`) implement
 Mustache, which is a subset of Handlebars. They do not support custom
 block helpers, and iidy relies on 28 custom helpers (`toJson`,
-`toYaml`, `filehash`, `env`, arithmetic operators, etc.).
+`toYaml`, `env`, arithmetic operators, etc.).
 
 **JSON Schema**: Used for validating iidy configuration files and stack
 arguments against user-provided schemas. The primary Haskell package
