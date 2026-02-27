@@ -305,3 +305,26 @@ natural place to add Env/Git/Random routing. Env loader takes only `location`
 - JS has no `cfn:Stack.Key` dot syntax; was a Rust-only addition → removed
 - SSM format suffix parsing matches both JS and Rust: split on `:` after prefix
 **Notes for next chunk**: Chunk 4 (SsmPath) depends on the SSM pattern established here. Chunk 5 (full dispatcher) needs AWS env parameter threading.
+
+### CFN Restructure + Session Wrap (2026-02-26)
+
+**Session**: current (continuation)
+**Completed**: CFN loader rewritten to match JS `cfn:field:location` parsing
+**Files modified**:
+- `src/Iidy/Yaml/Imports/Loaders/Cfn.hs` — full rewrite: `parseCfnLocation` replaces `parseCfnRef`, `CfnField` type, `cfn:output:` single+all implemented, other subtypes stubbed with clear error
+- `test/Test/AwsLoaderTest.hs` — replaced old CFN tests with 10 new tests covering all 6 subtypes + error cases
+- `docs/import-types.md` — removed dot syntax and shorthand examples
+- `docs/requirements/03-import-system.md` — updated known divergences
+- `notes/rust-js-divergences.md` — created tracker for Rust→JS fixes
+- Committed as `85a2f0e`
+**Deviations from plan**:
+- Removed bare `cfn:Stack/Key` shorthand (not just dot syntax) — JS doesn't support it either
+- Added `cfn:output:Stack` all-outputs path (returns Object mapping) ahead of Chunk 6
+**Key decisions**:
+- JS is source of truth for import behavior (user directive)
+- `notes/rust-js-divergences.md` tracks items to fix in Rust port
+**Notes for next session**:
+- Chunk 4 (SsmPath): New module, follows SSM pattern. Needs `GetParametersByPath` API, pagination, relative key stripping.
+- Chunk 5 (full dispatcher): `mkFullDispatcher :: Maybe Amazonka.Env -> LoadImportFn`. Extract from File.hs to Dispatch.hs.
+- Chunk 6 (CFN subtypes): `loadCfnImport` already has dispatch skeleton. Need: export (ListExports paginated), parameter, tag (DescribeStacks fields), resource (DescribeStackResources paginated), stack (combined mapping). JS also supports `?region=` query param on CFN locations.
+- File.hs parse-failure-fallback-to-string behavior diverges from JS (which throws). 37 snapshot tests pass with current behavior — investigate whether this is intentional or should be changed.
