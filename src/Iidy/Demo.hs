@@ -34,7 +34,7 @@ import Text.Regex.Posix ((=~))
 import Iidy.Types (ColorChoice(..))
 import Iidy.Yaml.Engine (preprocessYaml11, PreprocessResult(..))
 import Iidy.Yaml.Errors.Conversion (formatPreprocessErrorEnhanced, formatParseErrorEnhanced)
-import Iidy.Yaml.Imports.Loaders.File (loadFileImport)
+import Iidy.Yaml.Imports.Loaders.File (dispatchLocalImport)
 import Iidy.Yaml.OValue (toValue)
 import Iidy.Yaml.Parser (parseYaml, ParseError(..))
 
@@ -69,7 +69,7 @@ runDemo scriptPath timescaling maskSecrets = do
       pure 1
 
     Right ast -> do
-      result <- preprocessYaml11 loadFileImport ast baseLocation
+      result <- preprocessYaml11 dispatchLocalImport ast baseLocation
       case result of
         Left err -> do
           let source = TE.decodeUtf8 (BL.toStrict content)

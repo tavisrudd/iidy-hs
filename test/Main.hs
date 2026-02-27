@@ -27,6 +27,7 @@ import Test.ThemeVariantTest (themeVariantTests)
 import Test.RendererOutputTest (rendererOutputTests)
 import Test.IntegrationTest (integrationTests)
 import Test.Phase14FixTest (phase14FixTests)
+import Test.FilehashTest (filehashTests)
 
 main :: IO ()
 main = do
@@ -58,4 +59,5 @@ main = do
     , testGroup "RendererOutput" rendererOutputTests
     , testGroup "Integration" integrationTests
     , testGroup "Phase14Fixes" phase14FixTests
+    , testGroup "Filehash" filehashTests
     ]

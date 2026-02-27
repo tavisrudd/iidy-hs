@@ -191,6 +191,7 @@ test-suite iidy-hs-test
     Test.RendererOutputTest
     Test.IntegrationTest
     Test.Phase14FixTest
+    Test.FilehashTest
   default-language: GHC2021
   default-extensions:
     LambdaCase
@@ -214,4 +215,5 @@ test-suite iidy-hs-test
     , optparse-applicative
     , QuickCheck
     , tasty-quickcheck
+    , temporary
     , time

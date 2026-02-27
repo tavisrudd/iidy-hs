@@ -23,7 +23,7 @@ import Iidy.Yaml.Engine
   , PreprocessResult(..)
   )
 import Iidy.Yaml.Errors.Conversion (formatPreprocessErrorEnhanced, formatParseErrorEnhanced)
-import Iidy.Yaml.Imports.Loaders.File (loadFileImport)
+import Iidy.Yaml.Imports.Loaders.File (dispatchLocalImport)
 import Iidy.Yaml.JMESPath (applyJmesPath)
 import Iidy.Yaml.OValue (OValue, toValue, fromValue)
 import Iidy.Yaml.Parser (parseYaml, ParseError(..))
@@ -61,7 +61,7 @@ runRender args gopts = do
                         YamlAuto -> shouldUseYaml11Compatibility (detectYamlSpec source)
           preprocess = if useYaml11 then preprocessYaml11 else preprocessYaml
 
-      result <- preprocess loadFileImport ast baseLocation
+      result <- preprocess dispatchLocalImport ast baseLocation
       case result of
         Left err -> do
           formatted <- formatPreprocessErrorEnhanced (goColor gopts) baseLocation source err
