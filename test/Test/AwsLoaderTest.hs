@@ -8,7 +8,7 @@ import qualified Amazonka.S3 as S3
 import Iidy.Yaml.Imports.Loaders.S3 (parseS3Uri)
 import Iidy.Yaml.Imports.Loaders.Ssm (parseSsmLocation)
 import Iidy.Yaml.Imports.Loaders.SsmPath (parseSsmPathLocation)
-import Iidy.Yaml.Imports.Loaders.Cfn (parseCfnLocation)
+import Iidy.Yaml.Imports.Loaders.Cfn (parseCfnLocation, CfnField(..))
 import Iidy.Yaml.Imports.Types (ImportError(..))
 
 awsLoaderTests :: [TestTree]
@@ -184,4 +184,29 @@ cfnTests =
       case parseCfnLocation "cfn:Stack/Key" of
         Left _ -> pure ()
         Right _ -> fail "Expected error for bare cfn:Stack/Key (no subtype)"
+
+  , testCase "cfn:parameter:Stack (all parameters)" $ do
+      let Right (field, loc) = parseCfnLocation "cfn:parameter:my-stack"
+      field @?= CfnParameter
+      loc @?= "my-stack"
+
+  , testCase "cfn:tag:Stack (all tags)" $ do
+      let Right (field, loc) = parseCfnLocation "cfn:tag:my-stack"
+      field @?= CfnTag
+      loc @?= "my-stack"
+
+  , testCase "cfn:resource:Stack (all resources)" $ do
+      let Right (field, loc) = parseCfnLocation "cfn:resource:my-stack"
+      field @?= CfnResource
+      loc @?= "my-stack"
+
+  , testCase "cfn:export: parses with empty name" $ do
+      let Right (field, loc) = parseCfnLocation "cfn:export:"
+      field @?= CfnExport
+      loc @?= ""
+
+  , testCase "cfn:stack: parses with empty name" $ do
+      let Right (field, loc) = parseCfnLocation "cfn:stack:"
+      field @?= CfnStack
+      loc @?= ""
   ]

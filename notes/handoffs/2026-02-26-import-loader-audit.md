@@ -247,8 +247,8 @@ Per CLAUDE.md — use `~/.claude/bin/run-quiet` wrapper.
 - [x] CFN restructure: cfn:field:location format, remove shorthand (`85a2f0e`)
 - [x] Chunk 4: Add SsmPath loader (`ccaf7ee`)
 - [x] Chunk 5: Create full dispatcher with AWS config (`ccaf7ee`)
-- [ ] Chunk 6: Cfn subtypes (output, export, parameter, tag, resource, stack)
-- [ ] Final: `cabal build` zero warnings + `cabal test` all pass
+- [x] Chunk 6: Cfn subtypes (output, export, parameter, tag, resource, stack)
+- [x] Final: `cabal build` zero warnings + `cabal test` all pass
 
 ## Handoff Notes
 
@@ -354,3 +354,19 @@ natural place to add Env/Git/Random routing. Env loader takes only `location`
 - Chunk 6 (CFN subtypes): `loadCfnImport` already has CfnOutput implemented. Remaining: export (ListExports), parameter, tag (DescribeStacks fields), resource (DescribeStackResources), stack (combined). JS supports `?region=` query param.
 - StackArgsLoader could pass `Just awsEnv` if the caller provides it, but currently argsfile loading happens before AWS env is established (chicken-and-egg).
 - 464 tests passing, zero warnings.
+
+### Chunk 6 (2026-02-26)
+
+**Session**: new session
+**Completed**: All 6 CFN subtypes fully implemented
+**Files modified**:
+- `src/Iidy/Yaml/Imports/Loaders/Cfn.hs` — full implementation: export (ListExports), parameter (DescribeStacks), tag (DescribeStacks), resource (DescribeStackResources), stack (combined Outputs+Parameters+Tags). Added `withStack` helper, `mkImportData`/`mkMappingImportData`/`pairsToKeyMap` helpers, `resourceToValue` for resource mapping, `fetchExports`/`fetchResources` AWS calls. Exported `CfnField(..)`.
+- `test/Test/AwsLoaderTest.hs` — 5 new parsing tests (all-params, all-tags, all-resources, empty export/stack name edge cases)
+**Deviations from plan**:
+- ListExports is not paginated (matches Rust behavior)
+- DescribeStackResources is not paginated (matches Rust behavior)
+- No `?region=` query param support (deferred — not critical for import system)
+**Notes**:
+- 469 tests passing, zero warnings
+- All 11 import types now fully wired end-to-end
+- Import loader audit is COMPLETE
