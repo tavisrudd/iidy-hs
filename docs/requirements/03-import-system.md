@@ -25,15 +25,13 @@ in declaration order. Parallel resolution is a permitted optimization but not re
 
 **Known divergences from the Rust oracle** (see also `DIVERGENCES.md`):
 
-- **filehash loaders:** The `filehash:` and `filehash-base64:` import types are defined in the
-  security model and classified correctly as local-only, but the `$imports` loader path is not
-  implemented. The Handlebars helpers `filehash` and `filehashBase64` work for inline use in
-  template expressions.
-- **cfn sub-types:** Only the legacy `cfn:stackName.key` and `cfn:stackName/key` output lookup
-  forms are implemented. The extended forms (`cfn:output:`, `cfn:export:`, `cfn:parameter:`,
-  `cfn:tag:`, `cfn:resource:`, `cfn:stack:`) are not yet implemented.
-- **SSM format suffixes:** The `:json` and `:yaml` format suffixes for `ssm:` and the `ssm-path:`
-  sub-type are not yet implemented.
+- **filehash loaders:** Now implemented via `dispatchLocalImport` and `loadImportByType`.
+- **cfn sub-types:** Only `cfn:output:stackName/Key` (single output) is implemented. The extended
+  forms (`cfn:export:`, `cfn:parameter:`, `cfn:tag:`, `cfn:resource:`, `cfn:stack:`) are not yet
+  implemented. Note: JS does not support legacy dot syntax (`cfn:stackName.key`); this was a
+  Rust-only addition and is not ported.
+- **SSM format suffixes:** The `:json` and `:yaml` format suffixes for `ssm:` are now implemented.
+  The `ssm-path:` sub-type is not yet implemented.
 
 ---
 
@@ -282,7 +280,7 @@ from a central configuration store.
 - Content is fetched from S3 using the current AWS environment.
 - The response body is decoded as UTF-8. Non-UTF-8 bytes produce an import error.
 - Extension-based content parsing applies: `.yaml`/`.yml` → YAML parse; `.json` → JSON parse;
-  other → raw string. YAML and JSON parse failures fall back to raw string (not an error).
+  other → raw string. YAML and JSON parse failures are errors (matching JS behavior).
 - S3 fetch exceptions (network, credentials, access denied, object not found) are wrapped in a
   descriptive import error.
 - Templates loaded from S3 are considered remote (base location starts with `s3://`) and are
@@ -388,7 +386,6 @@ The following cfn sub-types are supported:
 
 | Syntax                           | Returns                                                       |
 |----------------------------------|---------------------------------------------------------------|
-| `cfn:stackName.OutputKey`        | Single output value (legacy dot syntax)                       |
 | `cfn:output:stackName/OutputKey` | Single output value                                           |
 | `cfn:output:stackName`           | All outputs as a YAML mapping                                 |
 | `cfn:export:ExportName`          | Named CloudFormation export value                             |
@@ -400,8 +397,6 @@ The following cfn sub-types are supported:
 | `cfn:resource:stackName`         | All resources as a mapping keyed by logical ID               |
 | `cfn:stack:stackName`            | Entire stack as mapping with `Outputs`, `Parameters`, `Tags` |
 
-- The legacy dot-separator form (`cfn:stackName.OutputKey`) and the canonical slash form
-  (`cfn:output:stackName/OutputKey`) are equivalent. Both resolve a single named output.
 - When a specific key is requested and not found, preprocessing fails with a descriptive error.
 - When no key is given (all-outputs/parameters/tags/resources forms), a YAML mapping is returned.
 - `cfn:resource:` items include `LogicalResourceId`, `PhysicalResourceId`, `ResourceType`, and
@@ -412,7 +407,7 @@ The following cfn sub-types are supported:
 - AWS credentials must be available. Access denied conditions produce a wrapped error.
 - This import type is allowed from remote templates.
 
-**NOTE:** Only the legacy form and `output:` sub-type are implemented; other sub-types are a
+**NOTE:** Only `output:` sub-type (single key) is implemented; other sub-types are a
 known divergence (see Technical Context above).
 
 **Logic Flow:**
@@ -425,7 +420,7 @@ known divergence (see Technical Context above).
    - `tag:` → DescribeStacks, extract named tag or all tags mapping.
    - `resource:` → ListStackResources (paginated), extract named resource or all resources mapping.
    - `stack:` → DescribeStacks, assemble combined mapping with `Outputs`, `Parameters`, `Tags`.
-   - Legacy form → same as `output:` with slash or dot separator.
+   - Invalid field → error.
 
 **Edge Cases:**
 
@@ -715,9 +710,10 @@ literal import paths.
 - **HTTP loader:** test URL path extraction; test extension detection for YAML/JSON/other;
   test 2xx acceptance; test non-2xx error; test JSON fallback for YAML extension; test
   UTF-8 error path.
-- **CFN loader:** test reference parsing with slash separator; test dot separator; test empty
-  stack name; test empty output key; test missing separator error. Integration tests against
-  mock CFN stubs for found/not-found stack and found/not-found output key.
+- **CFN loader:** test reference parsing with slash separator; test empty
+  stack name; test empty output key; test missing separator error; test that dot separator is
+  rejected. Integration tests against mock CFN stubs for found/not-found stack and
+  found/not-found output key.
 - **SSM loader:** test SSM prefix stripping; test mock GetParameter success; test mock
   parameter not found; test that decryption is enabled unconditionally.
 - **Security model:** test each local-only type rejected from each remote base (s3, http,

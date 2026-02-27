@@ -193,6 +193,7 @@ test-suite iidy-hs-test
     Test.Phase14FixTest
     Test.FilehashTest
     Test.ImportLoaderTest
+    Test.AwsLoaderTest
   default-language: GHC2021
   default-extensions:
     LambdaCase
@@ -206,6 +207,7 @@ test-suite iidy-hs-test
     , aeson
     , amazonka
     , amazonka-cloudformation
+    , amazonka-s3
     , bytestring
     , http-types
     , containers
