@@ -31,7 +31,6 @@ module Iidy.Cfn.Operations.Changeset
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (catch)
-import Control.Lens (set, view)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Conduit (runConduit, (.|))
 import qualified Data.Conduit.List as CL
@@ -47,6 +46,7 @@ import qualified Amazonka.CloudFormation.Types as CF
 import qualified Amazonka.CloudFormation.CreateChangeSet as CCS
 import qualified Amazonka.CloudFormation.ExecuteChangeSet as ECS
 import qualified Amazonka.CloudFormation.DescribeChangeSet as DCS
+import Amazonka.CloudFormation.DescribeChangeSet (DescribeChangeSet(stackName))
 import qualified Amazonka.CloudFormation.ListChangeSets as LCS
 
 import Iidy.Confirm (requestConfirmation)
@@ -111,9 +111,7 @@ createChangeset ctx args csName stackExists argsfilePath env = do
   resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
 
   -- Step 3: Extract the changeset ARN/ID (fall back to name for polling).
-  -- OverloadedRecordDot cannot be used for 'id' (conflicts with Prelude.id);
-  -- use the generated lens accessor instead.
-  let csId = fromMaybe csName (view CCS.createChangeSetResponse_id resp)
+  let csId = fromMaybe csName resp.id
 
   -- Step 4: Poll until CREATE_COMPLETE or FAILED
   pollChangesetCompletion ctx stackName csId
@@ -241,8 +239,7 @@ describeChangeset
   -> Text  -- ^ changeset name (or ARN)
   -> IO (Either Amazonka.Error ChangeSetInfo)
 describeChangeset ctx stackName csName = do
-  let req = set DCS.describeChangeSet_stackName (Just stackName)
-              (DCS.newDescribeChangeSet csName)
+  let req = (DCS.newDescribeChangeSet csName) { stackName = Just stackName }
   result <- fmap Right (runResourceT $ Amazonka.send (cfnEnv ctx) req)
     `catch` (\e -> pure (Left (e :: Amazonka.Error)))
   case result of

@@ -1,3 +1,10 @@
+-- | Handlebars template engine for iidy template processing.
+--
+-- Specification: Handlebars Language Guide (https://handlebarsjs.com/guide/)
+-- This is a custom implementation covering the subset used by iidy templates:
+-- variable interpolation ({{var}}), helpers with arguments, sub-expressions,
+-- block helpers ({{#if}}/{{#each}}/{{#with}}), and {{else}} clauses.
+-- Does not implement partials, decorators, or inline partials.
 module Iidy.Yaml.Handlebars.Engine
   ( interpolate
   , InterpolateError(..)
@@ -181,9 +188,7 @@ parseExpr input
       case T.stripPrefix ")" (T.stripStart rest) of
         Nothing -> Left (InterpolateError "Unclosed sub-expression")
         Just remaining -> Right (SubExpr name args, remaining)
-  | T.isPrefixOf "\"" input || T.isPrefixOf "'" input = do
-      let quote = T.head input
-      let after = T.drop 1 input
+  | Just (quote, after) <- T.uncons input, quote == '"' || quote == '\'' = do
       case T.breakOn (T.singleton quote) after of
         (str, rest)
           | T.null rest -> Left (InterpolateError "Unclosed string literal")
@@ -209,12 +214,17 @@ parseExpr input
           Right (HelperExpr ident args, rest)
         else Right (toPathExpr ident, afterIdent)
   where
-    startsWithDigit t = not (T.null t) && (isDigit (T.head t) || (T.head t == '-' && T.length t > 1 && isDigit (T.index t 1)))
-    isContinued t = not (T.null t) && isIdentChar (T.head t)
-    isArgStart t = not (T.null t)
-                 && not (T.isPrefixOf "}}" t)
-                 && not (T.isPrefixOf ")" t)
-                 && T.head t /= '}'
+    startsWithDigit t = case T.uncons t of
+      Just (c, rest) -> isDigit c || (c == '-' && maybe False (isDigit . fst) (T.uncons rest))
+      Nothing -> False
+    isContinued t = case T.uncons t of
+      Just (c, _) -> isIdentChar c
+      Nothing -> False
+    isArgStart t = case T.uncons t of
+      Nothing -> False
+      Just (c, _) -> not (T.isPrefixOf "}}" t)
+                   && not (T.isPrefixOf ")" t)
+                   && c /= '}'
 
 toPathExpr :: Text -> Expr
 toPathExpr t = PathExpr (T.splitOn "." t)

@@ -15,8 +15,6 @@ import qualified Data.Text as T
 import Data.Time (UTCTime, getCurrentTime, diffUTCTime)
 import Data.Coerce (coerce)
 import Control.Concurrent (threadDelay)
-import Data.Function ((&))
-import Control.Lens ((.~))
 
 import Control.Monad.Trans.Resource (runResourceT)
 
@@ -24,6 +22,7 @@ import qualified Amazonka
 import qualified Amazonka.CloudFormation.DetectStackDrift as DSD
 import qualified Amazonka.CloudFormation.DescribeStackDriftDetectionStatus as DSDDS
 import qualified Amazonka.CloudFormation.DescribeStackResourceDrifts as DSRD
+import Amazonka.CloudFormation.DescribeStackResourceDrifts (DescribeStackResourceDrifts(nextToken))
 import qualified Amazonka.CloudFormation.Types as CF
 
 import Iidy.Cfn.Context (CfnContext(..))
@@ -182,8 +181,7 @@ fetchAllDriftPages ctx stackName mToken = do
 -- | Build a DescribeStackResourceDrifts request with optional pagination token.
 mkDriftReq :: Text -> Maybe Text -> DSRD.DescribeStackResourceDrifts
 mkDriftReq sName mt =
-  DSRD.newDescribeStackResourceDrifts sName
-    & DSRD.describeStackResourceDrifts_nextToken .~ mt
+  (DSRD.newDescribeStackResourceDrifts sName) { nextToken = mt }
 
 -- | Extract nextToken from response (typed to disambiguate).
 driftRespNextToken :: DSRD.DescribeStackResourceDriftsResponse -> Maybe Text

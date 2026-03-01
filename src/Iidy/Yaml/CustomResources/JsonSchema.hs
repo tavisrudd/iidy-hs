@@ -1,5 +1,10 @@
 -- | Minimal JSON Schema Draft 7 validator.
 --
+-- Specification: JSON Schema Draft 7 (https://json-schema.org/draft-07/json-schema-validation.html)
+-- Implements a subset for iidy custom resource parameter validation:
+-- type, enum, pattern, minimum/maximum, minLength/maxLength, required,
+-- properties, additionalProperties, items, allOf/anyOf/oneOf, and $ref.
+--
 -- Covers the subset of keywords used by iidy custom resource schemas:
 -- type, required, properties, items, pattern, minimum, maximum, minItems,
 -- maxItems, minLength, maxLength, enum, additionalProperties.

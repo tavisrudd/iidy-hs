@@ -14,6 +14,7 @@ import Control.Monad.Trans.Resource (runResourceT)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
+import Lens.Micro ((^.))
 
 import Iidy.Confirm (requestConfirmation)
 import qualified Amazonka
@@ -22,7 +23,6 @@ import qualified Amazonka.SSM.PutParameter as PP
 import qualified Amazonka.SSM.DeleteParameter as DP
 import qualified Amazonka.SSM.Types.Parameter as SSMP
 import qualified Amazonka.SSM.Types.ParameterType as SSMPT
-import Control.Lens (( ^. ))
 
 ------------------------------------------------------------------------
 -- Review
@@ -104,4 +104,3 @@ applyPendingChange awsEnv path pendingValue pendingPath = do
       case delResult of
         Left ex -> pure (Left ("Parameter updated but failed to delete pending: " <> T.pack (show ex)))
         Right _ -> pure (Right ())
-

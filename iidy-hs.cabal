@@ -122,7 +122,7 @@ library
     , directory
     , filepath
     , HsYAML
-    , lens
+    , microlens
     , memory
     , mtl
     , network
@@ -140,7 +140,6 @@ library
     , unliftio
     , uuid
     , vector
-    , yaml
     , aeson-pretty
 
 executable iidy-hs

@@ -17,7 +17,7 @@ import Control.Monad.Trans.Resource (runResourceT)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
-import Control.Lens ((^.), (^?), _Just)
+import Lens.Micro ((^.))
 
 import qualified Amazonka
 import qualified Amazonka.SSM as SSM
@@ -112,7 +112,7 @@ fetchByPath awsEnv args = runResourceT $ do
 -- | Format a Parameter as "name=value".
 formatParam :: SSM.Parameter -> Text
 formatParam p =
-  let name  = p.name
+  let name  = p ^. SSMP.parameter_name
       value = p ^. SSMP.parameter_value
   in name <> "=" <> value
 
@@ -141,8 +141,8 @@ fetchHistory awsEnv paramName withDecryption = runResourceT $ do
 -- Skips entries where both version and value are absent.
 formatHistoryEntry :: SSM.ParameterHistory -> Maybe Text
 formatHistoryEntry ph =
-  let mValue   = ph ^? SSMPH.parameterHistory_value . _Just
-      mVersion = ph ^? SSMPH.parameterHistory_version . _Just
+  let mValue   = ph ^. SSMPH.parameterHistory_value
+      mVersion = ph ^. SSMPH.parameterHistory_version
   in case (mVersion, mValue) of
     (Just ver, Just val) -> Just $ "v" <> T.pack (show ver) <> ": " <> val
     (Nothing,  Just val) -> Just val

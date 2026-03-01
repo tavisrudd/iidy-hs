@@ -7,7 +7,6 @@ module Iidy.Yaml.Imports.Loaders.SsmPath
   ) where
 
 import Control.Exception (SomeException, try)
-import Control.Lens ((^.))
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Aeson (Value(..))
 import qualified Data.Aeson as Aeson
@@ -18,6 +17,7 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import Lens.Micro ((^.))
 
 import qualified Amazonka
 import qualified Amazonka.SSM.GetParametersByPath as GBP

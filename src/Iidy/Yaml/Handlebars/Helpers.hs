@@ -128,10 +128,12 @@ splitWords = filter (not . T.null) . go
         | isSep c -> ("", T.dropWhile isSep t)
         | isUpper c ->
             let (uppers, afterUppers) = T.span isUpper t
-            in if T.length uppers > 1 && not (T.null afterUppers) && not (isSep (T.head afterUppers))
-               then (T.init uppers, T.cons (T.last uppers) afterUppers)
-               else let (lowers, rest) = T.span (\x -> not (isUpper x) && not (isSep x)) afterUppers
-                    in (uppers <> lowers, rest)
+            in case (T.unsnoc uppers, T.uncons afterUppers) of
+                 (Just (uppersInit, lastUpper), Just (afterFirst, _))
+                   | T.length uppers > 1, not (isSep afterFirst)
+                   -> (uppersInit, T.cons lastUpper afterUppers)
+                 _ -> let (lowers, rest) = T.span (\x -> not (isUpper x) && not (isSep x)) afterUppers
+                      in (uppers <> lowers, rest)
         | otherwise ->
             T.span (\x -> not (isUpper x) && not (isSep x)) t
 

@@ -1,5 +1,9 @@
 -- | Time provider for CloudFormation operations.
 --
+-- Specification: RFC 4330 - SNTP Version 4 (https://datatracker.ietf.org/doc/html/rfc4330)
+-- Implements a minimal SNTP client for NTP time synchronization used to
+-- detect clock drift in CI environments where system time may be unreliable.
+--
 -- Supports NTP-synchronized time for write operations (create, update, delete)
 -- and plain system time for read-only operations. NTP addresses clock drift
 -- during long-running CloudFormation operations.

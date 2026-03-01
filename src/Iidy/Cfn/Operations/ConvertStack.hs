@@ -35,7 +35,6 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
 import qualified Data.Vector as V
-import qualified Data.Yaml as Yaml
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
@@ -51,6 +50,8 @@ import qualified Amazonka.SSM.PutParameter as PP
 import qualified Amazonka.SSM.Types.ParameterType as SSMPT
 
 import Iidy.Cfn.Context (CfnContext(..))
+import Iidy.Yaml.Parser (parseYaml)
+import Iidy.Yaml.Resolution.Resolver (astToValueRaw)
 
 ------------------------------------------------------------------------
 -- Constants
@@ -179,9 +180,9 @@ templateBodyToYaml body sortkeys =
       parsed :: Either String Value
       parsed = if T.isPrefixOf "{" trimmed
         then Aeson.eitherDecodeStrict' (TE.encodeUtf8 body)
-        else case Yaml.decodeEither' (TE.encodeUtf8 body) of
+        else case parseYaml (BL.fromStrict (TE.encodeUtf8 body)) "<template>" of
                Left err -> Left (show err)
-               Right v  -> Right v
+               Right ast -> Right (astToValueRaw ast)
   in case parsed of
     Left err -> Left (T.pack err)
     Right val -> Right (emitCfnYaml sortkeys val)

@@ -62,16 +62,17 @@ emitMultilineString s =
 
 needsQuotes :: Text -> Bool
 needsQuotes s
-  | T.null s = True
-  | isAmbiguousType s = True
-  | T.head s == ' ' = True
-  | T.any (== '\t') s = True
-  | not (isPlainSafeFirst (T.head s)) = True
-  | T.last s == ':' || T.last s == ' ' = True
-  | T.head s `elem` ("[]{},:" :: [Char]) = True
-  | T.isInfixOf ": " s = True
-  | T.isInfixOf " #" s = True
-  | otherwise = False
+  | Just (first, _) <- T.uncons s
+  , Just (_, lastCh) <- T.unsnoc s
+  = isAmbiguousType s
+    || first == ' '
+    || T.any (== '\t') s
+    || not (isPlainSafeFirst first)
+    || lastCh == ':' || lastCh == ' '
+    || first `elem` ("[]{},:" :: [Char])
+    || T.isInfixOf ": " s
+    || T.isInfixOf " #" s
+  | otherwise = True  -- empty string
 
 isAmbiguousType :: Text -> Bool
 isAmbiguousType s = s `elem` ambiguousWords || isAmbiguousNumber s
@@ -87,11 +88,11 @@ ambiguousWords =
   ]
 
 isAmbiguousNumber :: Text -> Bool
-isAmbiguousNumber s =
-  not (T.null s) &&
-  let first = T.head s
-      isNumStart c = isDigit c || c == '+' || c == '-' || c == '.'
-  in isNumStart first && isNumericLooking s
+isAmbiguousNumber s = case T.uncons s of
+  Nothing -> False
+  Just (first, _) ->
+    let isNumStart c = isDigit c || c == '+' || c == '-' || c == '.'
+    in isNumStart first && isNumericLooking s
 
 isNumericLooking :: Text -> Bool
 isNumericLooking s =

@@ -7,9 +7,9 @@
 
   outputs = { self, nixpkgs }:
     let
-      system = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${system};
-      hp = pkgs.haskellPackages;
+      supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+      forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+      pkgsFor = system: nixpkgs.legacyPackages.${system};
       haskellDeps = hpkgs: [
         hpkgs.aeson
         hpkgs.bytestring
@@ -29,7 +29,6 @@
         hpkgs.amazonka-ssm
         hpkgs.amazonka-sns
         hpkgs.aeson-pretty
-        hpkgs.yaml
         hpkgs.crypton
         hpkgs.memory
         hpkgs.lens
@@ -47,15 +46,24 @@
         hpkgs.QuickCheck
       ];
     in {
-      packages.${system}.default = hp.callCabal2nix "iidy-hs" self {};
+      packages = forAllSystems (system:
+        let pkgs = pkgsFor system;
+        in { default = pkgs.haskellPackages.callCabal2nix "iidy-hs" self {}; }
+      );
 
-      devShells.${system}.default = pkgs.mkShell {
-        buildInputs = [
-          (hp.ghcWithPackages haskellDeps)
-          hp.cabal-install
-          pkgs.pkg-config
-          pkgs.zlib
-        ];
-      };
+      devShells = forAllSystems (system:
+        let pkgs = pkgsFor system;
+            hp = pkgs.haskellPackages;
+        in {
+          default = pkgs.mkShell {
+            buildInputs = [
+              (hp.ghcWithPackages haskellDeps)
+              hp.cabal-install
+              pkgs.pkg-config
+              pkgs.zlib
+            ];
+          };
+        }
+      );
     };
 }

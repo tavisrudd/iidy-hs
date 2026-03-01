@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedRecordDot #-}
 module Main (main) where
 
 import Control.Exception (SomeException, IOException, catch, fromException, displayException)
@@ -93,9 +94,9 @@ handleUncaughtException e
 -- | Format an Amazonka error with the service error message extracted.
 handleAwsError :: Amazonka.Error -> IO ()
 handleAwsError (Amazonka.ServiceError se) = do
-  -- Extract the error message from the ServiceError using show and parsing
-  let rendered = show se
-      errMsg = extractServiceErrorMessage rendered
+  let Amazonka.ErrorCode code = se.code
+      msg = maybe "" Amazonka.fromErrorMessage se.message
+      errMsg = T.unpack (code <> ": " <> msg)
   hPutStrLn stderr $ "ERROR: " <> errMsg
   hPutStrLn stderr "  \x2022 Check the AWS CloudFormation console for more details"
 handleAwsError err = do
@@ -105,20 +106,6 @@ handleAwsError err = do
     firstLine' s = case lines s of
       (l:_) -> l
       []    -> s
-
--- | Extract a readable error message from a ServiceError's Show output.
--- Looks for ErrorMessage content between quotes.
-extractServiceErrorMessage :: String -> String
-extractServiceErrorMessage s =
-  case T.breakOn "ErrorMessage {fromErrorMessage = \"" (T.pack s) of
-    (_, after) | not (T.null after) ->
-      let trimmed = T.drop (T.length "ErrorMessage {fromErrorMessage = \"") after
-      in T.unpack (T.takeWhile (/= '"') trimmed)
-    _ -> case T.breakOn "ErrorCode \"" (T.pack s) of
-      (_, after') | not (T.null after') ->
-        let trimmed = T.drop (T.length "ErrorCode \"") after'
-        in T.unpack (T.takeWhile (/= '"') trimmed)
-      _ -> "AWS service error"
 
 ------------------------------------------------------------------------
 -- Command dispatch

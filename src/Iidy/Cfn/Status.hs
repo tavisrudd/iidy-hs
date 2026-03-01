@@ -10,25 +10,16 @@ module Iidy.Cfn.Status
 import Data.Text (Text)
 import qualified Data.Text as T
 
-terminalResourceStatuses :: [Text]
-terminalResourceStatuses =
-  [ "CREATE_COMPLETE"
-  , "ROLLBACK_COMPLETE"
-  , "DELETE_COMPLETE"
-  , "UPDATE_COMPLETE"
-  , "UPDATE_ROLLBACK_COMPLETE"
-  , "IMPORT_COMPLETE"
-  , "IMPORT_ROLLBACK_COMPLETE"
-  , "CREATE_FAILED"
-  , "DELETE_FAILED"
-  , "ROLLBACK_FAILED"
-  , "UPDATE_ROLLBACK_FAILED"
-  , "IMPORT_ROLLBACK_FAILED"
-  , "DELETE_SKIPPED"
-  ]
+import Iidy.Cfn.Context (allTerminalStatuses)
 
+-- | Terminal resource statuses — the full terminal set minus REVIEW_IN_PROGRESS,
+-- which is a stack-level-only state (changeset-created stacks awaiting execution).
+terminalResourceStatuses :: [Text]
+terminalResourceStatuses = filter (/= "REVIEW_IN_PROGRESS") allTerminalStatuses
+
+-- | Terminal stack statuses — the full terminal status set from Context.
 terminalStackStatuses :: [Text]
-terminalStackStatuses = terminalResourceStatuses <> ["REVIEW_IN_PROGRESS"]
+terminalStackStatuses = allTerminalStatuses
 
 isTerminalResourceStatus :: Text -> Bool
 isTerminalResourceStatus s = s `elem` terminalResourceStatuses

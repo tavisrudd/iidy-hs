@@ -1,3 +1,9 @@
+-- | JMESPath query engine for iidy template processing.
+--
+-- Specification: JMESPath (https://jmespath.org/specification.html)
+-- This is a partial implementation covering the subset used by iidy templates:
+-- field access, nested/index/slice expressions, projections, filters,
+-- multi-select lists/hashes, pipe expressions, and literal values.
 module Iidy.Yaml.JMESPath
   ( applyJmesPath
   , JMESPathError(..)
@@ -99,7 +105,7 @@ parseAtom input
       parseLiteralString (T.drop 1 input)
   | T.isPrefixOf "`" input = do
       parseJsonLiteral (T.drop 1 input)
-  | isIdentStart (T.head input) = do
+  | Just (c, _) <- T.uncons input, isIdentStart c = do
       let (ident, rest) = T.span isIdentChar input
       Right (JField ident, rest)
   | otherwise =
@@ -229,8 +235,8 @@ parseMultiSelectHash = go []
 parseIndexOrMultiSelect :: Text -> Either JMESPathError (JExpr, Text)
 parseIndexOrMultiSelect input
   | T.null input = Left (JMESPathError "Parse error: Expected number, ':', or '*' -- found Eof")
-  | isDigitOrMinus (T.head input) = do
-      let (numStr, afterNum) = T.span (\c -> isDigit c || c == '-') input
+  | Just (c, _) <- T.uncons input, isDigitOrMinus c = do
+      let (numStr, afterNum) = T.span (\c' -> isDigit c' || c' == '-') input
       case reads (T.unpack numStr) :: [(Int, String)] of
         [(n, "")] ->
           case T.stripPrefix "]" afterNum of

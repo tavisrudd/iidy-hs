@@ -1,0 +1,18 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "iidy-hs CI demo stack - minimal resources for integration testing"
+Resources:
+  DemoWaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+  DemoParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Value: "iidy-hs-ci-demo-value"
+      Description: "Demo parameter for iidy-hs CI testing"
+Outputs:
+  WaitHandleUrl:
+    Description: "Wait condition handle URL"
+    Value: !Ref DemoWaitHandle
+  ParameterName:
+    Description: "SSM parameter name"
+    Value: !Ref DemoParameter

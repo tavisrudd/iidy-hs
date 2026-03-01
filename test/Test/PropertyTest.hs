@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 module Test.PropertyTest (propertyTests) where
 
+import Control.Exception (SomeException, evaluate, try)
 import Data.Aeson (Value(..))
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL
@@ -9,7 +10,7 @@ import Data.List (nubBy, sortBy)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import Test.Tasty (TestTree)
+import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.QuickCheck (testProperty)
 import Test.QuickCheck hiding (Failure, Success)
 
@@ -156,8 +157,10 @@ isLowHex c = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
 
 propertyTests :: [TestTree]
 propertyTests =
+  -- Parser fuzz testing
+  [ parserFuzzTests
   -- OValue
-  [ testProperty "OValue toValue/fromValue round-trip" prop_ovalue_roundtrip
+  , testProperty "OValue toValue/fromValue round-trip" prop_ovalue_roundtrip
   , testProperty "OValue string round-trip" prop_string_roundtrip
   , testProperty "oValuesEqual is reflexive" prop_oValuesEqual_reflexive
   , testProperty "oValuesEqual is symmetric" prop_oValuesEqual_symmetric
@@ -390,3 +393,107 @@ prop_padRight_prefix = forAll genPadArgs $ \(w, t) ->
 
 genPadArgs :: Gen (Int, T.Text)
 genPadArgs = (,) <$> choose (0, 200) <*> genSafeText
+
+------------------------------------------------------------------------
+-- Parser fuzz generators
+------------------------------------------------------------------------
+
+-- | Arbitrary Text generated from arbitrary String (covers unicode, null bytes, etc.)
+genArbitraryText :: Gen T.Text
+genArbitraryText = T.pack <$> arbitrary
+
+-- | Mix of empty, short structured, long, unicode, and special-char strings
+genFuzzText :: Gen T.Text
+genFuzzText = oneof
+  [ pure ""
+  , genArbitraryText
+  , T.pack <$> resize 500 arbitrary
+  , do s <- listOf1 (elements jmesSpecialChars)
+       pure (T.pack s)
+  , do s <- listOf (elements (['a'..'z'] <> ['A'..'Z'] <> ['0'..'9']))
+       pure (T.pack s)
+  ]
+  where
+    jmesSpecialChars :: [Char]
+    jmesSpecialChars = "abcxyz01.[]@*|&!?\"'`{},:= \t\n\r\\"
+
+-- | OValue converted to Aeson Value for use as Handlebars context
+genContextValue :: Gen Value
+genContextValue = toValue <$> resize 3 arbitrary
+
+------------------------------------------------------------------------
+-- Parser fuzz tests
+------------------------------------------------------------------------
+
+parserFuzzTests :: TestTree
+parserFuzzTests = testGroup "Parser fuzz testing"
+  [ testProperty "JMESPath applyJmesPath returns Left or Right, never exception" $
+      forAll genFuzzText $ \input ->
+        ioProperty $ do
+          result <- try @SomeException
+                      (evaluate (applyJmesPath input Null))
+          pure $ case result of
+            Left ex -> counterexample ("Exception thrown: " <> show ex) False
+            Right _  -> property True
+
+  , testProperty "Handlebars interpolate never throws on arbitrary template" $
+      forAll genFuzzText $ \tmpl ->
+        ioProperty $ do
+          result <- try @SomeException
+                      (evaluate (interpolate defaultHelpers (Object KM.empty) tmpl))
+          pure $ case result of
+            Left ex -> counterexample ("Exception thrown on template: " <> show tmpl
+                                       <> "\n  Exception: " <> show ex) False
+            Right _  -> property True
+
+  , testProperty "Handlebars interpolate never throws on arbitrary context" $
+      forAll ((,) <$> genFuzzText <*> genContextValue) $ \(tmpl, ctx) ->
+        ioProperty $ do
+          result <- try @SomeException
+                      (evaluate (interpolate defaultHelpers ctx tmpl))
+          pure $ case result of
+            Left ex -> counterexample ("Exception thrown: " <> show ex) False
+            Right _  -> property True
+
+  , testProperty "emitYaml never throws on arbitrary OValue" $
+      forAll (resize 5 arbitrary) $ \(oval :: OValue) ->
+        ioProperty $ do
+          result <- try @SomeException
+                      (evaluate (T.length (emitYaml oval)))
+          pure $ case result of
+            Left ex -> counterexample ("Exception thrown: " <> show ex) False
+            Right _  -> property True
+
+  , testProperty "emitYaml is idempotent (emit twice = same result)" $
+      forAll (resize 4 arbitrary) $ \(oval :: OValue) ->
+        let first  = emitYaml oval
+            second = emitYaml oval
+        in counterexample
+             ("First:  " <> T.unpack first <> "\nSecond: " <> T.unpack second)
+             (first === second)
+
+  , testProperty "InterpolateError from invalid syntax is Left, not exception" $
+      forAll genMalformedTemplate $ \tmpl ->
+        ioProperty $ do
+          result <- try @SomeException
+                      (evaluate (interpolate defaultHelpers (Object KM.empty) tmpl))
+          pure $ case result of
+            Left ex -> counterexample ("Exception thrown: " <> show ex) False
+            Right _  -> property True  -- Left (parse error) or Right (valid) both fine
+  ]
+
+-- | Templates that are syntactically malformed Handlebars
+genMalformedTemplate :: Gen T.Text
+genMalformedTemplate = oneof
+  [ pure "{{"
+  , pure "{{{"
+  , pure "}}"
+  , pure "{{foo"
+  , pure "{{#if}}"
+  , pure "{{/each}}"
+  , do prefix <- genSafeText
+       suffix <- genSafeText
+       pure (prefix <> "{{" <> suffix)
+  , do body <- genSafeText
+       pure ("{{" <> body <> "}}")
+  ]

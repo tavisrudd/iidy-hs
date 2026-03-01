@@ -1,0 +1,6 @@
+StackName: iidy-hs-ci-demo
+Template: cfn-template.yaml
+Region: us-east-1
+Tags:
+  project: iidy-hs
+  purpose: ci-demo
