@@ -9,7 +9,6 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
 import Iidy.Yaml.Ast
-import Iidy.Yaml.CustomResources.Params (TemplateInfo(..), ParamDef(..))
 import Iidy.Yaml.Location (zeroPosition)
 import Iidy.Yaml.OValue
 import Iidy.Yaml.Resolution.Context
