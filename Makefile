@@ -22,6 +22,7 @@ modules:
 	@find src -name '*.hs' | wc -l
 
 ci:
+	cabal update
 	cabal build all --ghc-options="-Wall -Wcompat -Werror"
 	cabal test all --test-show-details=direct
 	cabal run iidy-hs -- --help
