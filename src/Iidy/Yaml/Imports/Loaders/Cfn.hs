@@ -13,7 +13,8 @@ import Control.Monad.Trans.Resource (runResourceT)
 import Data.Aeson (Value(..))
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
-import Data.List (find, foldl')
+import Data.List (find)
+import qualified Data.List as List
 import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -221,7 +222,7 @@ loadCfnResource awsEnv location resolvedLoc = do
                       rawData = T.pack (show doc)
                   pure $ Right $ mkImportData location rawData doc
             Nothing -> do
-              let km = foldl' (\acc r ->
+              let km = List.foldl' (\acc r ->
                         KM.insert (Key.fromText r.logicalResourceId)
                                   (resourceToValue r) acc)
                       KM.empty resources
@@ -338,7 +339,7 @@ mkMappingImportData location pairs =
 
 -- | Convert key-value pairs to a KeyMap.
 pairsToKeyMap :: [(Text, Text)] -> KM.KeyMap Value
-pairsToKeyMap = foldl' (\acc (k, v) -> KM.insert (Key.fromText k) (String v) acc) KM.empty
+pairsToKeyMap = List.foldl' (\acc (k, v) -> KM.insert (Key.fromText k) (String v) acc) KM.empty
 
 -- | Split "Stack/Key" into (Stack, Just Key) or "Stack" into (Stack, Nothing).
 splitStackKey :: Text -> (Text, Maybe Text)
