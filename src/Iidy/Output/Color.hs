@@ -22,6 +22,8 @@ module Iidy.Output.Color
 import Data.Text (Text)
 import qualified Data.Text as T
 
+import Iidy.Output.Status (StatusCategory (..), categorizeStatus)
+
 ------------------------------------------------------------------------
 -- Dynamic color type (matches Rust's owo_colors::DynColors)
 ------------------------------------------------------------------------
@@ -219,12 +221,12 @@ bold theme t
 
 -- | Colorize a CloudFormation resource status
 colorizeResourceStatus :: IidyTheme -> Text -> Text
-colorizeResourceStatus theme status
-  | T.isInfixOf "IN_PROGRESS" status = colorize theme (thWarning theme) status
-  | T.isInfixOf "COMPLETE" status    = colorize theme (thSuccess theme) status
-  | T.isInfixOf "FAILED" status      = colorize theme (thError theme) status
-  | status == "DELETE_SKIPPED"        = colorize theme (thSkipped theme) status
-  | otherwise                         = colorize theme (thInfo theme) status
+colorizeResourceStatus theme status = case categorizeStatus status of
+  StatusInProgress -> colorize theme (thWarning theme) status
+  StatusComplete   -> colorize theme (thSuccess theme) status
+  StatusFailed     -> colorize theme (thError theme) status
+  StatusSkipped    -> colorize theme (thSkipped theme) status
+  StatusUnknown    -> colorize theme (thInfo theme) status
 
 -- | Color text by environment name
 colorByEnvironment :: IidyTheme -> Text -> Text -> Text

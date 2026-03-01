@@ -43,6 +43,7 @@ import Data.List (sortBy)
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Foldable (asum)
 import Data.Maybe (fromMaybe)
 import Data.Ord (comparing)
 import Data.Text (Text)
@@ -191,12 +192,12 @@ startSpinner r msg = do
       stopSpinner r
       sp <- newSpinner (irStdout r) SpinnerDots12
       spinnerSetMessage sp msg
-      writeIORef (irSpinner r) (Just sp)
+      atomicWriteIORef (irSpinner r) (Just sp)
       -- Start background tick thread
       let colorCode = "\ESC[36;1m"  -- cyan bold for Dots/Dots12
           interval  = spinnerIntervalMs SpinnerDots12 * 1000  -- microseconds
       tid <- forkIO $ spinnerTickLoop sp colorCode interval
-      writeIORef (irSpinnerThread r) (Just tid)
+      atomicWriteIORef (irSpinnerThread r) (Just tid)
       -- Start timing task
       startTimingTask r
 
@@ -217,13 +218,13 @@ stopSpinner r = mask_ $ do
   case mTid of
     Just tid -> killThread tid
     Nothing  -> pure ()
-  writeIORef (irSpinnerThread r) Nothing
+  atomicWriteIORef (irSpinnerThread r) Nothing
   -- Clear spinner display
   mSp <- readIORef (irSpinner r)
   case mSp of
     Just sp -> spinnerFinishAndClear sp
     Nothing -> pure ()
-  writeIORef (irSpinner r) Nothing
+  atomicWriteIORef (irSpinner r) Nothing
 
 ------------------------------------------------------------------------
 -- Timing task (updates spinner message with elapsed time every 1s)
@@ -244,13 +245,13 @@ formatTimingText totalElapsed mSinceLastEvent =
 startTimingTask :: InteractiveRenderer -> IO ()
 startTimingTask r = do
   now <- getCurrentTime
-  writeIORef (irTimingState r) (Just (now, Nothing))
+  atomicWriteIORef (irTimingState r) (Just (now, Nothing))
   mSp <- readIORef (irSpinner r)
   case mSp of
     Nothing -> pure ()
     Just sp -> do
       tid <- forkIO $ timingLoop r sp
-      writeIORef (irTimingThread r) (Just tid)
+      atomicWriteIORef (irTimingThread r) (Just tid)
 
 -- | Background loop that updates spinner message with elapsed time every 1 second.
 timingLoop :: InteractiveRenderer -> Spinner -> IO ()
@@ -276,8 +277,8 @@ stopTimingTask r = mask_ $ do
   case mTid of
     Just tid -> killThread tid
     Nothing  -> pure ()
-  writeIORef (irTimingThread r) Nothing
-  writeIORef (irTimingState r) Nothing
+  atomicWriteIORef (irTimingThread r) Nothing
+  atomicWriteIORef (irTimingState r) Nothing
 
 -- | Update the last event time for timing display.
 updateLastEventTime :: InteractiveRenderer -> UTCTime -> IO ()
@@ -285,7 +286,7 @@ updateLastEventTime r eventTime = do
   mState <- readIORef (irTimingState r)
   case mState of
     Just (startTime, _) ->
-      writeIORef (irTimingState r) (Just (startTime, Just eventTime))
+      atomicWriteIORef (irTimingState r) (Just (startTime, Just eventTime))
     Nothing -> pure ()
 
 ------------------------------------------------------------------------
@@ -423,7 +424,7 @@ prettyFormatTags tags maxTags
   | Map.null tags = ""
   | otherwise =
     let envKeys = ["Environment", "environment", "ENVIRONMENT", "env", "ENV"] :: [Text]
-        envTag = firstJust (\k -> (k,) <$> Map.lookup k tags) envKeys
+        envTag = asum (map (\k -> (k,) <$> Map.lookup k tags) envKeys)
         envFormatted = case envTag of
           Just (k, v) -> [k <> "=" <> v]
           Nothing     -> []
@@ -434,9 +435,11 @@ prettyFormatTags tags maxTags
           Nothing -> otherFormatted
           Just mx ->
             let remaining = mx - length envFormatted
-            in if remaining < length otherFormatted
-               then take (remaining - 1) otherFormatted <> ["..."]
-               else otherFormatted
+            in if remaining <= 0
+               then []
+               else if remaining < length otherFormatted
+                    then take (remaining - 1) otherFormatted <> ["..."]
+                    else otherFormatted
     in T.intercalate ", " (envFormatted <> truncated)
 
 -- | Pretty format parameters (sorted key=value)
@@ -444,17 +447,6 @@ prettyFormatParameters :: Map Text Text -> Text
 prettyFormatParameters params
   | Map.null params = ""
   | otherwise = T.intercalate ", " $ map (\(k, v) -> k <> "=" <> v) $ sortBy (comparing fst) $ Map.toList params
-
--- | Pretty format a small map (sorted key=value)
-prettyFormatSmallMap :: Map Text Text -> Text
-prettyFormatSmallMap = prettyFormatParameters
-
--- | Find first matching value
-firstJust :: (a -> Maybe b) -> [a] -> Maybe b
-firstJust _ []     = Nothing
-firstJust f (x:xs) = case f x of
-  Just v  -> Just v
-  Nothing -> firstJust f xs
 
 ------------------------------------------------------------------------
 -- Rendering methods
@@ -472,7 +464,7 @@ renderCommandMetadata r meta = do
   printSectionEntry r "IAM Service Role:" (colorize (th r) (thPrimary (th r)) serviceRole)
   printSectionEntry r "Current IAM Principal:" (colorize (th r) (thPrimary (th r)) (cmCurrentIamPrincipal meta))
   printSectionEntry r "Credential Source:" (styleMuted r (cmCredentialSource meta))
-  printSectionEntry r "CLI Arguments:" (styleMuted r (prettyFormatSmallMap (cmCliArguments meta)))
+  printSectionEntry r "CLI Arguments:" (styleMuted r (prettyFormatParameters (cmCliArguments meta)))
   printSectionEntry r "iidy Version:" (styleMuted r (cmVersion meta))
   let tokenText = styleMuted r (tiValue (cmPrimaryToken meta))
         <> " " <> styleMuted r ("(" <> formatTokenSource (tiSource (cmPrimaryToken meta)) <> ")")
@@ -874,9 +866,11 @@ renderNewStackEvents r events = do
     -- Restore preserved start time and update last event time
     case preservedState of
       Just (startTime, _) -> do
-        let lastEvt = NE.last (NE.fromList events)
-            mLastEventTime = seTimestamp (sewEvent lastEvt)
-        writeIORef (irTimingState r) (Just (startTime, mLastEventTime))
+        case NE.nonEmpty events of
+          Just ne -> do
+            let mLastEventTime = seTimestamp (sewEvent (NE.last ne))
+            atomicWriteIORef (irTimingState r) (Just (startTime, mLastEventTime))
+          Nothing -> pure ()
       Nothing -> pure ()
 
 renderOperationComplete :: InteractiveRenderer -> OperationCompleteInfo -> IO ()

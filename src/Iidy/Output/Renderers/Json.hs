@@ -163,7 +163,7 @@ outputLine r text = do
 encodeValue :: JsonOptions -> Value -> Text
 encodeValue opts val =
   if joPrettyPrint opts
-  then TL.toStrict (TLE.decodeUtf8 (Aeson.encode val))  -- compact for now
+  then TL.toStrict (TLE.decodeUtf8 (Pretty.encodePretty val))
   else TL.toStrict (TLE.decodeUtf8 (Aeson.encode val))
 
 ------------------------------------------------------------------------
