@@ -33,6 +33,7 @@ import Test.AwsLoaderTest (awsLoaderTests)
 import Test.ErrorIdTest (errorIdTests)
 import Test.ErrorClassificationTest (errorClassificationTests)
 import Test.ResolverTest (resolverTests)
+import Test.CfnYamlEmitterTest (cfnYamlEmitterTests)
 
 main :: IO ()
 main = do
@@ -70,4 +71,5 @@ main = do
     , testGroup "ErrorIds" errorIdTests
     , testGroup "ErrorClassification" errorClassificationTests
     , testGroup "Resolver" resolverTests
+    , testGroup "CfnYamlEmitter" cfnYamlEmitterTests
     ]

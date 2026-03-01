@@ -7,6 +7,7 @@ module Iidy.Cfn.Operations.DeleteStack
   ( deleteStack
   ) where
 
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -103,7 +104,7 @@ deleteStack ctx stackName skipConfirmation env emit = do
         else do
           -- Step 2: Obtain stack ID/ARN for reliable post-delete polling
           mStackId <- getStackId ctx stackName
-          let pollTarget = maybe stackName id mStackId
+          let pollTarget = fromMaybe stackName mStackId
 
           -- Step 3: Build the DeleteStack request
           (req, _token) <- buildDeleteStackRequest ctx stackName

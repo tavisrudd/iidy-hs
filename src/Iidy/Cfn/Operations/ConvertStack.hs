@@ -14,6 +14,9 @@ module Iidy.Cfn.Operations.ConvertStack
   , sortCfnKeys
   , templateBodyToYaml
   , buildStackArgsYaml
+  , emitCfnYaml
+  , inlineValue
+  , quoteYamlString
   ) where
 
 import Control.Exception (SomeException, try)
@@ -21,13 +24,16 @@ import Data.Aeson (Value(..))
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
+import qualified Data.Aeson.Encode.Pretty as AesonPretty
 import qualified Data.ByteString.Lazy as BL
 import Data.List (sortBy)
 import Data.Maybe (fromMaybe)
+import qualified Data.Scientific as Scientific
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
+import qualified Data.Vector as V
 import qualified Data.Yaml as Yaml
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
@@ -163,17 +169,7 @@ sortObjectPairs weightFn km =
 sortCfnValue :: Text -> Text -> Value -> Value
 sortCfnValue parentKey currentKey val = case val of
   Object km ->
-    let weightFn
-          | T.null parentKey && T.null currentKey = cfnDocumentWeight
-          | parentKey == "Parameters" = cfnParameterWeight
-          | parentKey == "Resources"  = cfnResourceWeight
-          | parentKey == "Tags"       = cfnTagWeight
-          | parentKey == "Outputs"    = cfnOutputWeight
-          | parentKey == "Statement"  = cfnIamStatementWeight
-          | currentKey == "PolicyDocument" || currentKey == "AssumeRolePolicyDocument" = cfnPolicyDocWeight
-          | parentKey == "Policies"   = cfnPolicyWeight
-          | otherwise = const defaultSortWeight
-        sorted = sortObjectPairs weightFn km
+    let sorted = sortObjectPairs (chooseWeightFn parentKey currentKey) km
         newPairs = map (\(k, v) ->
           let keyStr = Key.toText k
               newParent = if T.null parentKey && T.null currentKey
@@ -226,12 +222,11 @@ emitValue doSort indent parentKey currentKey val = case val of
          in emitPair doSort indent newParent kText k v
          ) pairs
   Array arr ->
-    let items = foldr (:) [] arr
-    in if null items
+    if V.null arr
        then "[]\n"
        else T.concat $ map (\v ->
          emitItem doSort indent currentKey v
-         ) items
+         ) (V.toList arr)
   _ -> inlineValue val <> "\n"
 
 emitPair :: Bool -> Int -> Text -> Text -> Key.Key -> Value -> Text
@@ -241,7 +236,7 @@ emitPair doSort indent parentKey currentKey k v =
   in case v of
     Object km | not (KM.null km) ->
       prefix <> key <> ":\n" <> emitValue doSort (indent + 2) parentKey currentKey v
-    Array arr | not (null (foldr (:) [] arr)) ->
+    Array arr | not (V.null arr) ->
       prefix <> key <> ":\n" <> emitValue doSort (indent + 2) parentKey currentKey v
     _ -> prefix <> key <> ": " <> inlineValue v <> "\n"
 
@@ -257,7 +252,15 @@ emitItem doSort indent parentKey v =
         [] -> prefix <> "- {}\n"
         ((firstK, firstV):rest) ->
           let fkText = Key.toText firstK
-              firstLine = prefix <> "- " <> fkText <> ": " <> inlineValue firstV <> "\n"
+              firstLine = case firstV of
+                Object fkm | not (KM.null fkm) ->
+                  prefix <> "- " <> fkText <> ":\n"
+                  <> emitValue doSort (indent + 4) parentKey fkText firstV
+                Array farr | not (V.null farr) ->
+                  prefix <> "- " <> fkText <> ":\n"
+                  <> emitValue doSort (indent + 4) parentKey fkText firstV
+                _ ->
+                  prefix <> "- " <> fkText <> ": " <> inlineValue firstV <> "\n"
               restLines = T.concat $ map (\(rk, rv) ->
                 emitPair doSort (indent + 2) parentKey (Key.toText rk) rk rv
                 ) rest
@@ -280,12 +283,14 @@ chooseWeightFn parentKey currentKey
 inlineValue :: Value -> Text
 inlineValue val = case val of
   String s -> quoteYamlString s
-  Number n -> T.pack (show n)
+  Number n -> case Scientific.floatingOrInteger n of
+    Left (d :: Double) -> T.pack (show d)
+    Right (i :: Integer) -> T.pack (show i)
   Bool True -> "true"
   Bool False -> "false"
   Null -> "null"
   Object km | KM.null km -> "{}"
-  Array arr | null (foldr (:) [] arr) -> "[]"
+  Array arr | V.null arr -> "[]"
   _ -> T.pack (show val)
 
 -- | Quote a YAML string value if needed.
@@ -416,7 +421,7 @@ processStack ctx stack stackName templateBody originalExt
 
   -- Pretty-print the policy JSON if valid
   let prettyPolicy = case Aeson.eitherDecodeStrict' (TE.encodeUtf8 policyBody) :: Either String Value of
-        Right v -> TE.decodeUtf8 (BL.toStrict (Aeson.encode v))
+        Right v -> TE.decodeUtf8 (BL.toStrict (AesonPretty.encodePretty v))
         Left _  -> policyBody
 
   let dir = T.unpack outputDir

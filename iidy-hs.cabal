@@ -199,6 +199,7 @@ test-suite iidy-hs-test
     Test.ErrorIdTest
     Test.ErrorClassificationTest
     Test.ResolverTest
+    Test.CfnYamlEmitterTest
   default-language: GHC2021
   default-extensions:
     LambdaCase

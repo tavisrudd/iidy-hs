@@ -28,9 +28,12 @@ import Control.Concurrent (threadDelay)
 import Control.Exception (catch)
 import Control.Lens (set, view)
 import Control.Monad.Trans.Resource (runResourceT)
+import qualified Data.ByteString as BS
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
+import qualified Data.Vector as V
 import System.Random (randomRIO)
 
 import qualified Amazonka
@@ -131,19 +134,38 @@ createChangeset ctx args csName stackExists argsfilePath env = do
 
 -- | Poll DescribeChangeSet every 2s until the changeset reaches a terminal
 -- state (CREATE_COMPLETE or FAILED).  Returns the ChangeSetInfo on completion.
+-- Retries transient errors up to 30 times (60 seconds).
 pollChangesetCompletion :: CfnContext -> Text -> Text -> IO ChangeSetInfo
-pollChangesetCompletion ctx stackName csId = go
+pollChangesetCompletion ctx stackName csId = go (0 :: Int)
   where
-    go :: IO ChangeSetInfo
-    go = do
+    maxRetries :: Int
+    maxRetries = 30
+
+    go :: Int -> IO ChangeSetInfo
+    go errorCount = do
       threadDelay (2 * 1000000)  -- 2 seconds
       result <- describeChangesetRaw ctx stackName csId
       case result of
-        Left _    -> go   -- transient error: keep polling
+        Left err
+          | errorCount >= maxRetries ->
+              -- Return a FAILED info after too many errors
+              pure ChangeSetInfo
+                { csiChangeSetName = csId
+                , csiChangeSetId   = csId
+                , csiStackId       = ""
+                , csiStackName     = stackName
+                , csiDescription   = Nothing
+                , csiStatus        = "FAILED"
+                , csiStatusReason  = Just ("Polling failed after " <> T.pack (show maxRetries) <> " retries: " <> err)
+                , csiCreationTime  = Nothing
+                , csiExecutionStatus = Nothing
+                , csiChanges       = []
+                }
+          | otherwise -> go (errorCount + 1)
         Right info ->
           if isTerminalCsStatus (csiStatus info)
             then pure info
-            else go
+            else go 0  -- reset error count on success
 
     isTerminalCsStatus :: Text -> Bool
     isTerminalCsStatus s = s `elem` ["CREATE_COMPLETE", "FAILED", "DELETE_COMPLETE", "DELETE_FAILED"]
@@ -347,17 +369,18 @@ extractRegionFromArn arn =
 
 -- | Percent-encode a text string for use in URLs.
 -- Encodes everything except unreserved characters (RFC 3986).
+-- Correctly handles Unicode by UTF-8 encoding first.
 percentEncode :: Text -> Text
-percentEncode = T.concatMap encChar
+percentEncode t = T.concat $ map encByte (BS.unpack (TE.encodeUtf8 t))
   where
-    encChar c
-      | isUnreserved c = T.singleton c
-      | otherwise      = T.pack ['%', hexDigit (fromEnum c `div` 16), hexDigit (fromEnum c `mod` 16)]
-    isUnreserved c = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
-                  || (c >= '0' && c <= '9') || c `elem` ("-_.~" :: [Char])
+    encByte b
+      | isUnreserved b = T.singleton (toEnum (fromIntegral b))
+      | otherwise      = T.pack ['%', hexDigit (b `div` 16), hexDigit (b `mod` 16)]
+    isUnreserved b = (b >= 0x41 && b <= 0x5A) || (b >= 0x61 && b <= 0x7A)
+                  || (b >= 0x30 && b <= 0x39) || b `elem` [0x2D, 0x2E, 0x5F, 0x7E]
     hexDigit n
-      | n < 10    = toEnum (fromEnum '0' + n)
-      | otherwise = toEnum (fromEnum 'A' + n - 10)
+      | n < 10    = toEnum (fromEnum '0' + fromIntegral n)
+      | otherwise = toEnum (fromEnum 'A' + fromIntegral n - 10)
 
 ------------------------------------------------------------------------
 -- Shared helpers for changeset flows
@@ -405,14 +428,14 @@ findPendingChangeset ctx stackName = do
 -- Used as default changeset name when user doesn't provide one.
 generateDashedName :: IO Text
 generateDashedName = do
-  adjIdx <- randomRIO (0, length adjectives - 1)
-  nounIdx <- randomRIO (0, length nouns - 1)
-  pure $ (adjectives !! adjIdx) <> "-" <> (nouns !! nounIdx)
+  adjIdx <- randomRIO (0, V.length adjectives - 1)
+  nounIdx <- randomRIO (0, V.length nouns - 1)
+  pure $ (adjectives V.! adjIdx) <> "-" <> (nouns V.! nounIdx)
   where
-    adjectives :: [Text]
-    adjectives = ["red", "blue", "green", "happy", "clever", "brave", "swift", "mighty"]
-    nouns :: [Text]
-    nouns = ["cat", "dog", "bird", "fish", "lion", "eagle", "shark", "tiger"]
+    adjectives :: V.Vector Text
+    adjectives = V.fromList ["red", "blue", "green", "happy", "clever", "brave", "swift", "mighty"]
+    nouns :: V.Vector Text
+    nouns = V.fromList ["cat", "dog", "bird", "fish", "lion", "eagle", "shark", "tiger"]
 
 -- | Prompt the user to confirm changeset execution.
 -- Returns True if confirmed (or if --yes flag was provided), False otherwise.

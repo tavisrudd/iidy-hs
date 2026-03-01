@@ -26,6 +26,7 @@ import Control.Monad (when)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.IORef
 import Data.Maybe (fromMaybe, mapMaybe)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time (UTCTime, getCurrentTime, diffUTCTime)
@@ -105,7 +106,7 @@ collectStackContents ctx sName = do
   let resReq = DRes.newDescribeStackResources
                  { DRes.stackName = Just sName }
   resourcesResp <- runResourceT $ Amazonka.send (cfnEnv ctx) resReq
-  let resources = mapMaybe convertResource (fromMaybe [] resourcesResp.stackResources)
+  let resources = map convertResource (fromMaybe [] resourcesResp.stackResources)
 
   -- Fetch stack for outputs and status
   mStack <- getStack ctx sName
@@ -192,7 +193,8 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
       events <- fetchEvents
       now <- getCurrentTime
       -- Filter to new events only
-      let newEvents = filter (\e -> e.eventId `notElem` lastEventIds) events
+      let lastEventSet = Set.fromList lastEventIds
+          newEvents = filter (\e -> e.eventId `notElem` lastEventSet) events
       when (not (null newEvents)) $ do
         writeIORef lastEventTimeRef now
         writeIORef hasSeenNewEventsRef True
@@ -253,8 +255,8 @@ stackNameFromId sid = case T.splitOn "/" sid of
 -- AWS type conversion helpers
 ------------------------------------------------------------------------
 
-convertResource :: CF.StackResource -> Maybe StackResourceInfo
-convertResource r = Just StackResourceInfo
+convertResource :: CF.StackResource -> StackResourceInfo
+convertResource r = StackResourceInfo
   { sriLogicalResourceId = r.logicalResourceId
   , sriPhysicalResourceId = r.physicalResourceId
   , sriResourceType = r.resourceType
