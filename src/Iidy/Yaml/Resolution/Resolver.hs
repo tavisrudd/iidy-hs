@@ -53,10 +53,6 @@ data ResolveError = ResolveError
 
 type Resolve a = Either ResolveError a
 
--- | Generic resolve error (fallback — prefer specific constructors).
-resolveError :: SrcMeta -> Text -> Resolve a
-resolveError meta msg = Left (ResolveError (smStart meta) msg REGeneric)
-
 -- | Tag syntax error with optional tag name.
 tagSyntaxError :: SrcMeta -> Maybe Text -> Text -> Resolve a
 tagSyntaxError meta tagName msg = Left (ResolveError (smStart meta) msg (RETagSyntax tagName))
