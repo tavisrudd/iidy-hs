@@ -554,7 +554,8 @@ recommendation) and the dependency cleanup.
 | 4 | setEnv thread-safety                           | Medium/Low   | Medium/Low   | UNCHANGED. Remains a known limitation, acceptable     |
 |   |                                                |              |              | for CLI use.                                          |
 | 5 | NTP unencrypted                                | Low/Low      | Low/Low      | UNCHANGED. Acceptable for display-only timestamps.    |
-| 6 | regex-posix ReDoS                              | Medium/Low   | Medium/Low   | UNCHANGED. Still using POSIX regex in JSON Schema.    |
+| 6 | regex-posix ReDoS                              | Medium/Low   | --           | RESOLVED. Replaced regex-posix with regex-tdfa        |
+|   |                                                |              |              | (Thompson NFA, linear-time, no backtracking).         |
 | 7 | No production deployment history               | High/N/A     | High/N/A     | UNCHANGED. Demo fixtures now exist but have not been  |
 |   |                                                |              |              | exercised in a real deployment.                       |
 | 8 | AI-generated semantic bugs in untested paths   | Medium/Med   | Medium/Med   | UNCHANGED. Fuzz testing helps at the parser level     |
@@ -563,14 +564,20 @@ recommendation) and the dependency cleanup.
 | 9 | Two YAML libraries                             | Low/High     | --           | RESOLVED. yaml dependency removed entirely.           |
 | 10| Single-arch Nix flake                          | Medium/High  | --           | RESOLVED. 4 platforms via genAttrs.                   |
 
-**Net**: 4 of 10 risks fully resolved, 1 partially mitigated, 5 unchanged.
-The resolved risks include the two highest-likelihood items (CI and dual YAML).
+**Net**: 5 of 10 risks fully resolved, 1 partially mitigated, 4 unchanged.
+The resolved risks include the two highest-likelihood items (CI and dual YAML)
+plus the ReDoS vector (regex-posix → regex-tdfa).
 
 **Remaining top risks** (re-ranked by residual severity):
 1. No production deployment history (High) -- unchanged, can only be addressed by deploying
 2. Custom parser semantic correctness (Medium) -- fuzz testing helps but is not sufficient
 3. AI-generated semantic bugs in untested CFN paths (Medium) -- live testing is the mitigation
-4. regex-posix ReDoS (Medium/Low) -- low priority, trusted input context
+
+**Note on snapshot parity**: The render fixture comparison (37 fixtures) and error
+fixture tests (49 fixtures) are already part of the `cabal test` suite via
+`Test.FixtureTest` and `Test.ErrorFixtureTest`, with expected outputs vendored in
+`test-fixtures/expected-outputs/`. A separate CI job for snapshot comparison against
+the Rust repo was considered and dropped as redundant — the test suite already covers it.
 
 No new risks were introduced by the fixes.
 
