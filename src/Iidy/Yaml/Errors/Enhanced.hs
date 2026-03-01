@@ -47,14 +47,13 @@ data YamlSyntaxInfo = YamlSyntaxInfo
   } deriving stock (Show, Eq)
 
 data TagParsingInfo = TagParsingInfo
-  { tpiErrorId     :: !ErrorId
-  , tpiTagName     :: !Text
-  , tpiMessage     :: !Text
-  , tpiGuidance    :: !(Maybe Text)
-  , tpiLocation    :: !SourceLocation
-  , tpiSuggestion  :: !(Maybe Text)
-  , tpiCaretColumn :: !Int
-  , tpiSpanLen     :: !Int
+  { tpiErrorId    :: !ErrorId
+  , tpiTagName    :: !Text
+  , tpiMessage    :: !Text
+  , tpiGuidance   :: !(Maybe Text)
+  , tpiLocation   :: !SourceLocation
+  , tpiSuggestion :: !(Maybe Text)
+  , tpiSpanLen    :: !Int
   } deriving stock (Show, Eq)
 
 data LookupQueryInfo = LookupQueryInfo

@@ -31,7 +31,6 @@ data TagContext = TagContext
   { tcVariables          :: !(Map Text OValue)
   , tcInputUri           :: !(Maybe Text)
   , tcCustomTemplateDefs :: !(Map Text TemplateInfo)
-  , tcInResourcesSection :: !Bool
   } deriving stock (Show, Eq)
 
 emptyContext :: TagContext
@@ -39,7 +38,6 @@ emptyContext = TagContext
   { tcVariables          = Map.empty
   , tcInputUri           = Nothing
   , tcCustomTemplateDefs = Map.empty
-  , tcInResourcesSection = False
   }
 
 withBindings :: Map Text OValue -> TagContext -> TagContext

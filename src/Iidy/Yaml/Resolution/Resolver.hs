@@ -99,8 +99,6 @@ isSpecialKey k = k `elem` ["$imports", "$defs", "$envValues", "$params"]
 
 resolveMapping :: TagContext -> [(YamlAst, YamlAst)] -> Resolve OValue
 resolveMapping ctx pairs
-  | tcInResourcesSection ctx && not (Map.null (tcCustomTemplateDefs ctx)) =
-      resolveResourcesMapping ctx pairs
   | not (Map.null (tcCustomTemplateDefs ctx)) && hasResourcesKey pairs = do
       -- This is a top-level mapping containing "Resources" — resolve with expansion
       resolveMappingWithExpansion ctx pairs
@@ -165,32 +163,6 @@ resolveMappingWithExpansion ctx pairs = do
     mergeGlobalSection (OObject a) (OObject b) = OObject (a ++ [(k, v) | (k, v) <- b, k `notElem` map fst a])
     mergeGlobalSection _ b = b
 
--- | Resolve a mapping that represents the Resources section.
--- Check each resource's Type against custom template defs and expand if matched.
-resolveResourcesMapping :: TagContext -> [(YamlAst, YamlAst)] -> Resolve OValue
-resolveResourcesMapping ctx pairs = do
-  let resCtx = ctx { tcInResourcesSection = False }
-  resolved <- traverse (resolvePairWith resCtx) pairs
-  let filtered = [(k, v) | (k, v) <- resolved, not (isSpecialKey k)]
-      parentResourceNames = Set.fromList
-        [ name | (name, val) <- filtered
-        , case getResourceType val of
-            Just typeName -> not (Map.member typeName (tcCustomTemplateDefs ctx))
-            Nothing -> True
-        ]
-  expanded <- foldM (expandIfCustom parentResourceNames) [] filtered
-  let deduped = deduplicateResources expanded
-  pure $ OObject deduped
-  where
-    expandIfCustom parentNames acc (resName, resVal) =
-      case getResourceType resVal of
-        Just typeName | Just tmplInfo <- Map.lookup typeName (tcCustomTemplateDefs ctx) -> do
-          let reparseF = buildReparse ctx
-          case expandCustomResource resName resVal tmplInfo reparseF parentNames of
-            Left err -> Left (ResolveError zeroPosition ("Custom resource expansion error: " <> err))
-            Right expansionResult -> pure (acc ++ erResources expansionResult)
-        _ -> pure (acc ++ [(resName, resVal)])
-
 getResourceType :: OValue -> Maybe Text
 getResourceType (OObject kvs) = case lookupO "Type" kvs of
   Just (OString t) -> Just t
@@ -220,7 +192,6 @@ buildReparse parentCtx params rawBody =
     Right templateAst ->
       let subCtx = parentCtx
             { tcVariables = Map.union params (tcVariables parentCtx)
-            , tcInResourcesSection = False
             }
       in case resolveAst subCtx templateAst of
            Left (ResolveError _ msg) -> Left msg
@@ -280,57 +251,96 @@ resolveCfnTag :: TagContext -> SrcMeta -> CloudFormationTag -> Resolve OValue
 resolveCfnTag ctx meta tag = do
   let (name, inner) = cfnTagParts tag
   resolved <- resolveAst ctx inner
-  validateCfnTag meta name resolved
-  pure $ OObject [(name, resolved)]
+  -- Single-element array unpacking (matches Rust behavior)
+  let unpacked = case resolved of
+        OArray [x] -> x
+        _          -> resolved
+  validateCfnTag meta name unpacked
+  pure $ OObject [(name, unpacked)]
 
 -- | Validate CloudFormation intrinsic function arguments.
+-- Matches Rust's validate_cloudformation_tag validation rules.
 validateCfnTag :: SrcMeta -> Text -> OValue -> Resolve ()
 validateCfnTag meta name val = case name of
   "!Ref" -> case val of
     ONull -> resolveError meta "!Ref cannot have null value"
-    OArray [] -> resolveError meta "!Ref expects a string (resource or parameter name), found array"
-    _ -> pure ()
-  "!Base64" -> case val of
-    ONull -> resolveError meta "!Base64 cannot have null value"
-    _ -> pure ()
-  "!GetAZs" -> case val of
-    ONull -> resolveError meta "!GetAZs cannot have null value"
-    _ -> pure ()
-  "!ImportValue" -> case val of
-    ONull -> resolveError meta "!ImportValue cannot have null value"
-    _ -> pure ()
-  "!Join" -> case val of
-    OArray [OString _, OArray _] -> pure ()
-    OArray [_, _] -> resolveError meta $ "!Join expects a 2-element array [delimiter, array], got wrong types"
-    OArray items -> resolveError meta $ "!Join expects a 2-element array, found " <> describeFirstElement items
-    _ -> resolveError meta $ "!Join expects a 2-element array, found " <> oValueTypeName val
-  "!Select" -> case val of
-    OArray items | length items /= 2 ->
-      resolveError meta $ "!Select expects a 2-element array [index, array], got " <> T.pack (show (length items)) <> " elements"
-    _ -> pure ()
-  "!FindInMap" -> case val of
-    OArray items | length items /= 3 ->
-      resolveError meta $ "!FindInMap expects a 3-element array [map, key1, key2], got " <> T.pack (show (length items)) <> " elements"
-    _ -> pure ()
-  "!If" -> case val of
-    OArray items | length items /= 3 ->
-      resolveError meta $ "!If expects a 3-element array [condition, true_value, false_value], got " <> T.pack (show (length items)) <> " elements"
-    OArray _ -> pure ()
-    _ -> resolveError meta $ "!If expects a 3-element array, found " <> oValueTypeName val
-  "!Equals" -> case val of
-    OArray items | length items /= 2 ->
-      resolveError meta $ "!Equals expects a 2-element array, got " <> T.pack (show (length items)) <> " elements"
-    _ -> pure ()
-  "!Not" -> case val of
-    OArray items | length items /= 1 ->
-      resolveError meta $ "!Not expects a 1-element array, got " <> T.pack (show (length items)) <> " elements"
-    _ -> pure ()
-  _ -> pure ()
+    OString t | T.null t -> resolveError meta "!Ref cannot reference empty string"
+    OString _ -> pure ()
+    _ -> resolveError meta $ "!Ref expects a string (resource or parameter name), found " <> oValueTypeName val
 
--- | Describe the first element type for error messages.
-describeFirstElement :: [OValue] -> Text
-describeFirstElement [] = "empty array"
-describeFirstElement (v:_) = oValueTypeName v
+  "!Sub" -> case val of
+    ONull -> resolveError meta "!Sub cannot have null value"
+    OString _ -> pure ()
+    OArray [OString _, OObject _] -> pure ()
+    OArray [OString _, v] -> resolveError meta $ "!Sub array form expects [string, object], found [string, " <> oValueTypeName v <> "]"
+    OArray [v, _] -> resolveError meta $ "!Sub array form expects [string, object], found [" <> oValueTypeName v <> ", " <> oValueTypeName val <> "]"
+    OArray items -> resolveError meta $ "!Sub with array expects exactly 2 elements [string, variables], found " <> showLen items <> " elements"
+    _ -> resolveError meta $ "!Sub expects a string or 2-element array, found " <> oValueTypeName val
+
+  "!GetAtt" -> case val of
+    ONull -> resolveError meta "!GetAtt cannot have null value"
+    OString t | "." `T.isInfixOf` t -> pure ()
+    OString _ -> resolveError meta "!GetAtt string format requires dot notation: 'ResourceName.AttributeName'"
+    OArray [OString _, OString _] -> pure ()
+    OArray [v1, v2] -> resolveError meta $ "!GetAtt array form expects [string, string], found [" <> oValueTypeName v1 <> ", " <> oValueTypeName v2 <> "]"
+    OArray items -> resolveError meta $ "!GetAtt expects exactly 2 elements [resource, attribute], found " <> showLen items <> " elements"
+    _ -> resolveError meta $ "!GetAtt expects a string or 2-element array, found " <> oValueTypeName val
+
+  "!Join" -> case val of
+    ONull -> resolveError meta "!Join cannot have null value"
+    OArray [OString _, OArray _] -> pure ()
+    OArray [OString _, v] -> resolveError meta $ "!Join expects [delimiter, array], found [string, " <> oValueTypeName v <> "]"
+    OArray [v, _] -> resolveError meta $ "!Join expects [string, array], found [" <> oValueTypeName v <> ", " <> oValueTypeName val <> "]"
+    OArray items -> resolveError meta $ "!Join expects exactly 2 elements [delimiter, array], found " <> showLen items <> " elements"
+    _ -> resolveError meta $ "!Join expects a 2-element array, found " <> oValueTypeName val
+
+  "!Select" -> case val of
+    ONull -> resolveError meta "!Select cannot have null value"
+    OArray [ONumber _, OArray _] -> pure ()
+    OArray [ONumber _, v] -> resolveError meta $ "!Select expects [index, array], found [number, " <> oValueTypeName v <> "]"
+    OArray [v, _] -> resolveError meta $ "!Select expects [number, array], found [" <> oValueTypeName v <> ", " <> oValueTypeName val <> "]"
+    OArray items -> resolveError meta $ "!Select expects exactly 2 elements [index, array], found " <> showLen items <> " elements"
+    _ -> resolveError meta $ "!Select expects a 2-element array, found " <> oValueTypeName val
+
+  "!Split" -> case val of
+    ONull -> resolveError meta "!Split cannot have null value"
+    OArray [OString _, OString _] -> pure ()
+    OArray [v1, v2] -> resolveError meta $ "!Split expects [string, string], found [" <> oValueTypeName v1 <> ", " <> oValueTypeName v2 <> "]"
+    OArray items -> resolveError meta $ "!Split expects exactly 2 elements [delimiter, string], found " <> showLen items <> " elements"
+    _ -> resolveError meta $ "!Split expects a 2-element array, found " <> oValueTypeName val
+
+  "!FindInMap" -> case val of
+    ONull -> resolveError meta "!FindInMap cannot have null value"
+    OArray items | length items == 3 -> pure ()
+    OArray items -> resolveError meta $ "!FindInMap expects exactly 3 elements [map_name, key1, key2], found " <> showLen items <> " elements"
+    _ -> resolveError meta $ "!FindInMap expects a 3-element array, found " <> oValueTypeName val
+
+  "!If" -> case val of
+    ONull -> resolveError meta "!If cannot have null value"
+    OArray items | length items == 3 -> pure ()
+    OArray items -> resolveError meta $ "!If expects a 3-element array [condition, true_value, false_value], found " <> showLen items <> " elements"
+    _ -> resolveError meta $ "!If expects a 3-element array, found " <> oValueTypeName val
+
+  "!Equals" -> case val of
+    ONull -> resolveError meta "!Equals cannot have null value"
+    OArray items | length items == 2 -> pure ()
+    OArray items -> resolveError meta $ "!Equals expects a 2-element array, found " <> showLen items <> " elements"
+    _ -> resolveError meta $ "!Equals expects a 2-element array, found " <> oValueTypeName val
+
+  "!Not" -> case val of
+    ONull -> resolveError meta "!Not cannot have null value"
+    OArray items | length items == 1 -> pure ()
+    OArray items -> resolveError meta $ "!Not expects a 1-element array, found " <> showLen items <> " elements"
+    _ -> resolveError meta $ "!Not expects a 1-element array, found " <> oValueTypeName val
+
+  -- Null-only validation for remaining tags (matches Rust catch-all)
+  _ -> case val of
+    ONull -> resolveError meta $ name <> " cannot have null value"
+    _ -> pure ()
+
+-- | Show list length as Text.
+showLen :: [a] -> Text
+showLen = T.pack . show . length
 
 cfnTagParts :: CloudFormationTag -> (Text, YamlAst)
 cfnTagParts = \case

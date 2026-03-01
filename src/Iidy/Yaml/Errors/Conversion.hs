@@ -94,7 +94,12 @@ classifyResolveError filePath source (ResolveError pos msg) =
 -- | Pattern-match on error message to determine error type and produce
 -- the appropriate EnhancedPreprocessingError variant.
 classifyMessage :: Text -> SourceLocation -> Text -> EnhancedPreprocessingError
-classifyMessage source loc msg
+classifyMessage source loc msg = classifyMessage' allLines loc msg
+  where allLines = T.lines source
+
+-- | Internal classifier that takes pre-split lines to avoid repeated T.lines.
+classifyMessage' :: [Text] -> SourceLocation -> Text -> EnhancedPreprocessingError
+classifyMessage' allLines loc msg
 
   -- Unknown preprocessing tag: "'!$mapp' is not a valid iidy tag" (ERR_4001)
   | "' is not a valid iidy tag" `T.isSuffixOf` msg =
@@ -106,7 +111,6 @@ classifyMessage source loc msg
         , tpiGuidance    = Just "check tag spelling or see documentation for valid tags"
         , tpiLocation    = loc
         , tpiSuggestion  = Nothing
-        , tpiCaretColumn = 0
         , tpiSpanLen     = T.length unknownTagName
         }
 
@@ -118,8 +122,7 @@ classifyMessage source loc msg
         , tpiMessage     = msg
         , tpiGuidance    = Just "check field spelling and tag documentation"
         , tpiLocation    = loc
-        , tpiSuggestion  = findTagExampleForUnexpectedField source loc
-        , tpiCaretColumn = 0
+        , tpiSuggestion  = findTagExampleForUnexpectedField allLines loc
         , tpiSpanLen     = 0
         }
 
@@ -132,22 +135,20 @@ classifyMessage source loc msg
         , tpiGuidance    = Just "use one or the other, not both"
         , tpiLocation    = loc
         , tpiSuggestion  = Just "!$ variable_name"
-        , tpiCaretColumn = 0
         , tpiSpanLen     = 0
         }
 
   -- Property not found in mapping (lookup query) (ERR_2006)
   | "property '" `T.isPrefixOf` msg && "' not found in mapping" `T.isInfixOf` msg =
-      let propName = T.takeWhile (/= '\'') (T.drop (T.length "property '") msg)
+      let propName = T.takeWhile (/= '\'') (fromMaybe msg (T.stripPrefix "property '" msg))
           -- Extract variable path: "... Variable: config. Keys: ..."
           varPath = case T.breakOn "Variable: " msg of
-            (_, rest) | not (T.null rest) ->
-              T.takeWhile (/= '.') (T.drop (T.length "Variable: ") rest)
-            _ -> ""
+            (_, rest) ->
+              T.takeWhile (/= '.') (fromMaybe rest (T.stripPrefix "Variable: " rest))
           -- Extract available keys: "... Keys: host, port"
           availKeys = case T.breakOn "Keys: " msg of
             (_, rest) | not (T.null rest) ->
-              T.splitOn ", " (T.drop (T.length "Keys: ") rest)
+              T.splitOn ", " (fromMaybe rest (T.stripPrefix "Keys: " rest))
             _ -> []
       in LookupQueryError LookupQueryInfo
         { lqiErrorId       = LookupQueryFailed
@@ -170,11 +171,11 @@ classifyMessage source loc msg
 
   -- Variable not found: "Variable not found: path. Available: x, y"
   | "Variable not found: " `T.isPrefixOf` msg =
-      let rest = T.drop (T.length "Variable not found: ") msg
+      let rest = fromMaybe msg (T.stripPrefix "Variable not found: " msg)
           (varPath, avail) = T.breakOn ". Available: " rest
           availVars = if T.null avail
                       then []
-                      else T.splitOn ", " (T.drop (T.length ". Available: ") avail)
+                      else T.splitOn ", " (fromMaybe avail (T.stripPrefix ". Available: " avail))
       in VariableNotFoundError VariableNotFoundInfo
         { vnfErrorId       = VariableNotFound
         , vnfVariable      = varPath
@@ -189,7 +190,7 @@ classifyMessage source loc msg
           (fieldQuoted, rest) = T.breakOn "' missing in " msg
           field = T.drop 1 fieldQuoted  -- drop leading '
           -- Extract tag name: text after "' missing in "
-          tagPart = T.drop (T.length "' missing in ") rest
+          tagPart = fromMaybe rest (T.stripPrefix "' missing in " rest)
           tagName = T.strip (T.takeWhile (/= ' ') tagPart)
       in TagParsingError TagParsingInfo
         { tpiErrorId     = MissingRequiredTagField
@@ -198,7 +199,6 @@ classifyMessage source loc msg
         , tpiGuidance    = Just ("add '" <> field <> "' field to " <> tagName <> " tag")
         , tpiLocation    = loc
         , tpiSuggestion  = Just $ tagExample tagName
-        , tpiCaretColumn = 0
         , tpiSpanLen     = 0
         }
 
@@ -211,44 +211,41 @@ classifyMessage source loc msg
         , tpiGuidance    = Just "add 'in' field containing the expression to evaluate"
         , tpiLocation    = loc
         , tpiSuggestion  = Just $ tagExample "!$let"
-        , tpiCaretColumn = 0
         , tpiSpanLen     = 0
         }
 
   -- "must be a mapping ..." (ERR_4003)
   | "must be a mapping" `T.isPrefixOf` msg =
       let guidance = extractMustBeGuidance msg
-          foundTag = findTagOnSourceLine source loc
+          foundTag = findTagOnSourceLine allLines loc
           example = case foundTag of
             Just t  -> let ex = tagExample t in if T.null ex then guessExampleFromMustBe msg else Just ex
             Nothing -> guessExampleFromMustBe msg
       in TagParsingError TagParsingInfo
-        { tpiErrorId     = InvalidTagFieldValue
-        , tpiTagName     = fromMaybe "" foundTag
-        , tpiMessage     = msg
-        , tpiGuidance    = Just guidance
-        , tpiLocation    = loc
-        , tpiSuggestion  = example
-        , tpiCaretColumn = 0
-        , tpiSpanLen     = 0
+        { tpiErrorId    = InvalidTagFieldValue
+        , tpiTagName    = fromMaybe "" foundTag
+        , tpiMessage    = msg
+        , tpiGuidance   = Just guidance
+        , tpiLocation   = loc
+        , tpiSuggestion = example
+        , tpiSpanLen    = 0
         }
 
   -- "must be a sequence ..." (ERR_4003)
   | "must be a sequence" `T.isPrefixOf` msg =
       let guidance = extractMustBeGuidance msg
-          foundTag = findTagOnSourceLine source loc
+          foundTag = findTagOnSourceLine allLines loc
           example = case foundTag of
             Just t  -> let ex = tagExample t in if T.null ex then guessExampleFromMustBe msg else Just ex
             Nothing -> guessExampleFromMustBe msg
       in TagParsingError TagParsingInfo
-        { tpiErrorId     = InvalidTagFieldValue
-        , tpiTagName     = fromMaybe "" foundTag
-        , tpiMessage     = msg
-        , tpiGuidance    = Just guidance
-        , tpiLocation    = loc
-        , tpiSuggestion  = example
-        , tpiCaretColumn = 0
-        , tpiSpanLen     = 0
+        { tpiErrorId    = InvalidTagFieldValue
+        , tpiTagName    = fromMaybe "" foundTag
+        , tpiMessage    = msg
+        , tpiGuidance   = Just guidance
+        , tpiLocation   = loc
+        , tpiSuggestion = example
+        , tpiSpanLen    = 0
         }
 
   -- "must have exactly 2 elements to compare" (ERR_4003 for !$eq)
@@ -260,7 +257,6 @@ classifyMessage source loc msg
         , tpiGuidance    = Just "use format: [value1, value2]"
         , tpiLocation    = loc
         , tpiSuggestion  = Just $ tagExample "!$eq"
-        , tpiCaretColumn = 0
         , tpiSpanLen     = 0
         }
 
@@ -273,7 +269,6 @@ classifyMessage source loc msg
         , tpiGuidance    = Just "use string variable name"
         , tpiLocation    = loc
         , tpiSuggestion  = Just "!$ variable_name"
-        , tpiCaretColumn = 0
         , tpiSpanLen     = 0
         }
 
@@ -281,8 +276,8 @@ classifyMessage source loc msg
   -- "expected X, found Y" format (Rust-compatible messages from resolver)
   | "expected " `T.isPrefixOf` msg && ", found " `T.isInfixOf` msg =
       let (expPart, rest) = T.breakOn ", found " msg
-          expected = T.drop (T.length "expected ") expPart
-          rawFound = T.drop (T.length ", found ") rest
+          expected = fromMaybe expPart (T.stripPrefix "expected " expPart)
+          rawFound = fromMaybe rest (T.stripPrefix ", found " rest)
           -- Strip context tags like " [delimiter]" from found type
           found = T.strip $ fst $ T.breakOn " [" rawFound
           -- Clean message for display (no context tags)
@@ -324,7 +319,7 @@ classifyMessage source loc msg
       let -- Extract variable path from ". Variable: path" suffix
           varPath = case T.breakOn ". Variable: " msg of
             (_, rest) | not (T.null rest) ->
-              T.drop (T.length ". Variable: ") rest
+              fromMaybe rest (T.stripPrefix ". Variable: " rest)
             _ -> ""
           -- Strip the ". Variable: path" suffix for display message
           displayMsg = case T.breakOn ". Variable: " msg of
@@ -340,7 +335,7 @@ classifyMessage source loc msg
 
   -- Handlebars errors
   | "Handlebars error: " `T.isPrefixOf` msg =
-      let detail = T.drop (T.length "Handlebars error: ") msg
+      let detail = fromMaybe msg (T.stripPrefix "Handlebars error: " msg)
       in YamlSyntaxError YamlSyntaxInfo
         { ysiErrorId      = HandlebarsSyntaxError
         , ysiShortMessage = detail
@@ -387,14 +382,13 @@ classifyMessage source loc msg
   -- Fallback: treat as generic tag error
   | otherwise =
       TagParsingError TagParsingInfo
-        { tpiErrorId     = TagSyntaxError
-        , tpiTagName     = ""
-        , tpiMessage     = msg
-        , tpiGuidance    = Nothing
-        , tpiLocation    = loc
-        , tpiSuggestion  = Nothing
-        , tpiCaretColumn = 0
-        , tpiSpanLen     = 0
+        { tpiErrorId    = TagSyntaxError
+        , tpiTagName    = ""
+        , tpiMessage    = msg
+        , tpiGuidance   = Nothing
+        , tpiLocation   = loc
+        , tpiSuggestion = Nothing
+        , tpiSpanLen    = 0
         }
 
 -- | Classify import errors.
@@ -467,7 +461,7 @@ adjustLocationForTag source loc msg =
           adjustForTypeMismatch allLines loc msg
       -- Variable not found: search for variable reference pattern
       | "Variable not found: " `T.isPrefixOf` msg ->
-          let rest = T.drop (T.length "Variable not found: ") msg
+          let rest = fromMaybe msg (T.stripPrefix "Variable not found: " msg)
               varPath = fst (T.breakOn ". Available: " rest)
           in case findVariableColumn allLines lineNum varPath of
             Just (ln, col) -> loc { srcLocLine = ln, srcLocColumn = col }
@@ -693,9 +687,8 @@ findSecondTag line =
     _ -> Nothing
 
 -- | Find the full tag name (e.g., "!$mapListToHash") on the source line at the given location.
-findTagOnSourceLine :: Text -> SourceLocation -> Maybe Text
-findTagOnSourceLine source loc = do
-  let allLines = T.lines source
+findTagOnSourceLine :: [Text] -> SourceLocation -> Maybe Text
+findTagOnSourceLine allLines loc = do
   line <- safeLine allLines (srcLocLine loc)
   col <- findSubstring "!$" line
   let rest = T.drop col line
@@ -717,7 +710,7 @@ extractTagName msg
   -- "'field' missing in !$tag tag"
   | "' missing in " `T.isInfixOf` msg =
       let (_, rest) = T.breakOn "' missing in " msg
-          afterMissing = T.drop (T.length "' missing in ") rest
+          afterMissing = fromMaybe rest (T.stripPrefix "' missing in " rest)
           tag = T.takeWhile (\c -> c /= ' ' && c /= '\n') afterMissing
       in if T.null tag then Nothing else Just tag
   -- "missing required 'in' field" — it's !$let
@@ -828,8 +821,10 @@ isCfnValidationMessage msg = any (\p -> p `T.isPrefixOf` msg) cfnValidationPrefi
   where
     cfnValidationPrefixes :: [Text]
     cfnValidationPrefixes =
-      [ "!Ref ", "!Base64 ", "!GetAZs ", "!ImportValue ", "!Join "
-      , "!Select ", "!FindInMap ", "!If ", "!Equals ", "!Not ", "!Sub "
+      [ "!Ref ", "!Sub ", "!GetAtt ", "!Join ", "!Select ", "!Split "
+      , "!FindInMap ", "!Base64 ", "!GetAZs ", "!ImportValue "
+      , "!Cidr ", "!Length ", "!ToJsonString ", "!Transform ", "!ForEach "
+      , "!If ", "!Equals ", "!And ", "!Or ", "!Not "
       ]
 
 -- | Extract CFN tag name from validation message.
@@ -858,14 +853,33 @@ cfnHelpText tag _msg
   | tag == "!FindInMap" =
       "!FindInMap expects [map, key1, key2] with exactly 3 elements\n" <>
       "   example: AMI: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]"
+  | tag == "!Sub" =
+      "!Sub expects a string or [string, variables_map]\n" <>
+      "   example: Name: !Sub '${AWS::StackName}-resource'\n" <>
+      "   example: Name: !Sub ['${Param}-suffix', {Param: !Ref MyParam}]"
+  | tag == "!GetAtt" =
+      "!GetAtt expects 'Resource.Attribute' or [resource, attribute]\n" <>
+      "   example: Arn: !GetAtt MyBucket.Arn\n" <>
+      "   example: Arn: !GetAtt [MyBucket, Arn]"
+  | tag == "!Split" =
+      "!Split expects [delimiter, string] with exactly 2 elements\n" <>
+      "   example: Parts: !Split [',', 'a,b,c']"
+  | tag == "!If" =
+      "!If expects [condition, true_value, false_value] with exactly 3 elements\n" <>
+      "   example: Value: !If [IsProduction, 'prod', 'dev']"
+  | tag == "!Equals" =
+      "!Equals expects [value1, value2] with exactly 2 elements\n" <>
+      "   example: !Equals [!Ref EnvParam, 'production']"
+  | tag == "!Not" =
+      "!Not expects a 1-element array containing a condition\n" <>
+      "   example: !Not [!Equals [!Ref EnvParam, 'production']]"
   | otherwise = tag <> " usage error"
 
 -- | Find a tag example for unexpected field errors by looking at the source line.
-findTagExampleForUnexpectedField :: Text -> SourceLocation -> Maybe Text
-findTagExampleForUnexpectedField source loc =
-  let allLines = T.lines source
-      lineNum = srcLocLine loc
-  in case findTagOnSourceLine source (loc { srcLocLine = max 1 (lineNum - 3) }) of
+findTagExampleForUnexpectedField :: [Text] -> SourceLocation -> Maybe Text
+findTagExampleForUnexpectedField allLines loc =
+  let lineNum = srcLocLine loc
+  in case findTagOnSourceLine allLines (loc { srcLocLine = max 1 (lineNum - 3) }) of
     Just t  -> let ex = tagExample t in if T.null ex then Nothing else Just ex
     Nothing -> findTagInNearbyLines allLines lineNum
 
