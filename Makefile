@@ -1,10 +1,13 @@
-.PHONY: build test clean run help ci ci-act
+.PHONY: build build-strict test clean run help ci ci-act
 
 build:
 	cabal build
 
+build-strict:
+	cabal build all --ghc-options="-Wall -Wcompat -Werror"
+
 test:
-	cabal test
+	cabal test all --test-show-details=direct
 
 run:
 	cabal run iidy-hs -- $(ARGS)
@@ -23,8 +26,8 @@ modules:
 
 ci:
 	cabal update
-	cabal build all --ghc-options="-Wall -Wcompat -Werror"
-	cabal test all --test-show-details=direct
+	$(MAKE) build-strict
+	$(MAKE) test
 	cabal run iidy-hs -- --help
 	cabal run iidy-hs -- --version
 
