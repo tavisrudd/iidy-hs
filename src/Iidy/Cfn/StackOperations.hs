@@ -20,6 +20,10 @@ module Iidy.Cfn.StackOperations
     -- * Helpers (exported for testing)
   , stackNameFromId
   , isStackNotFoundError
+    -- * AWS type conversion (exported for testing)
+  , convertResource
+  , convertOutput
+  , convertChangeSetSummary
     -- * URL utilities
   , percentEncode
   ) where

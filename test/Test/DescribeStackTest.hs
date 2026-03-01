@@ -1,13 +1,20 @@
+{-# LANGUAGE DisambiguateRecordFields #-}
 module Test.DescribeStackTest (describeStackTests) where
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime(..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
-import Iidy.Cfn.Operations.DescribeStack (calculateEventDurations, buildConsoleUrl)
-import Iidy.Output.Types (StackEventWithTiming(..))
+import qualified Amazonka.CloudFormation.Types as CF
+import qualified Amazonka.CloudFormation.Types.StackEvent as SE
+import qualified Amazonka.CloudFormation.Types.Stack as ST
+import qualified Amazonka.CloudFormation.Types.Parameter as Param
+import Amazonka.Data.Time (Time(..))
+import Iidy.Cfn.Operations.DescribeStack (calculateEventDurations, buildConsoleUrl, convertEvent, convertStack, buildEventsDisplay)
+import Iidy.Output.Types
 import Test.Shared (mkEvent)
 
 ------------------------------------------------------------------------
@@ -121,4 +128,139 @@ describeStackTests =
         -- Region should also appear in the query parameter
         assertBool "region in query" (T.isInfixOf "?region=eu-west-1" url)
     ]
+
+  , testGroup "convertEvent"
+    [ testCase "converts all required fields from CF.StackEvent" $ do
+        let cfEvent = (SE.newStackEvent "stack-id-123" "evt-001" "my-stack" epoch)
+              { SE.logicalResourceId = Just "MyBucket"
+              , SE.physicalResourceId = Just "my-bucket-phys"
+              , SE.resourceType = Just "AWS::S3::Bucket"
+              , SE.resourceStatus = Just CF.ResourceStatus_CREATE_COMPLETE
+              , SE.resourceStatusReason = Just "Resource creation complete"
+              , SE.resourceProperties = Just "{\"BucketName\":\"test\"}"
+              , SE.clientRequestToken = Just "tok-abc"
+              }
+            result = convertEvent cfEvent
+        seEventId result @?= "evt-001"
+        seStackId result @?= "stack-id-123"
+        seStackName result @?= "my-stack"
+        seLogicalResourceId result @?= "MyBucket"
+        sePhysicalResourceId result @?= Just "my-bucket-phys"
+        seResourceType result @?= "AWS::S3::Bucket"
+        seResourceStatus result @?= "CREATE_COMPLETE"
+        seResourceStatusReason result @?= Just "Resource creation complete"
+        seResourceProperties result @?= Just "{\"BucketName\":\"test\"}"
+        seClientRequestToken result @?= Just "tok-abc"
+
+    , testCase "missing optional fields default correctly" $ do
+        let cfEvent = SE.newStackEvent "stack-id" "evt-002" "stack" epoch
+            result = convertEvent cfEvent
+        seLogicalResourceId result @?= ""
+        sePhysicalResourceId result @?= Nothing
+        seResourceType result @?= ""
+        seResourceStatus result @?= ""
+        seResourceStatusReason result @?= Nothing
+        seResourceProperties result @?= Nothing
+        seClientRequestToken result @?= Nothing
+
+    , testCase "timestamp is extracted" $ do
+        let ts = UTCTime (fromGregorian 2026 3 1) (12 * 3600)
+            cfEvent = SE.newStackEvent "sid" "eid" "sn" ts
+            result = convertEvent cfEvent
+        seTimestamp result @?= Just ts
+    ]
+
+  , testGroup "convertStack"
+    [ testCase "converts all fields from CF.Stack" $ do
+        let cfStack = (ST.newStack "my-stack" epoch CF.StackStatus_CREATE_COMPLETE)
+              { ST.stackId = Just "arn:aws:cloudformation:us-east-1:123:stack/my-stack/guid"
+              , ST.description = Just "Test stack description"
+              , ST.stackStatusReason = Just "Stack created"
+              , ST.capabilities = Just [CF.Capability_CAPABILITY_IAM, CF.Capability_CAPABILITY_NAMED_IAM]
+              , ST.roleARN = Just "arn:aws:iam::123:role/cfn-role"
+              , ST.tags = Just [CF.newTag "Env" "prod", CF.newTag "Team" "platform"]
+              , ST.parameters = Just
+                  [ (CF.newParameter) { Param.parameterKey = Just "VpcId", Param.parameterValue = Just "vpc-123" }
+                  , (CF.newParameter) { Param.parameterKey = Just "Env", Param.parameterValue = Just "prod" }
+                  ]
+              , ST.notificationARNs = Just ["arn:aws:sns:us-east-1:123:topic"]
+              , ST.disableRollback = Just True
+              , ST.enableTerminationProtection = Just True
+              , ST.timeoutInMinutes = Just 30
+              , ST.lastUpdatedTime = Just (Time epoch2)
+              }
+            result = convertStack cfStack "us-east-1"
+        sdName result @?= "my-stack"
+        sdDescription result @?= Just "Test stack description"
+        sdStatus result @?= "CREATE_COMPLETE"
+        sdStatusReason result @?= Just "Stack created"
+        sdCapabilities result @?= ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"]
+        sdServiceRole result @?= Just "arn:aws:iam::123:role/cfn-role"
+        Map.lookup "Env" (sdTags result) @?= Just "prod"
+        Map.lookup "Team" (sdTags result) @?= Just "platform"
+        Map.lookup "VpcId" (sdParameters result) @?= Just "vpc-123"
+        Map.lookup "Env" (sdParameters result) @?= Just "prod"
+        sdNotificationArns result @?= ["arn:aws:sns:us-east-1:123:topic"]
+        sdDisableRollback result @?= True
+        sdTerminationProtection result @?= True
+        sdTimeoutInMinutes result @?= Just 30
+        sdCreationTime result @?= Just epoch
+        sdLastUpdatedTime result @?= Just epoch2
+        sdArn result @?= "arn:aws:cloudformation:us-east-1:123:stack/my-stack/guid"
+        sdRegion result @?= "us-east-1"
+        assertBool "console URL contains region" (T.isInfixOf "us-east-1" (sdConsoleUrl result))
+
+    , testCase "minimal stack (no optional fields)" $ do
+        let cfStack = ST.newStack "minimal-stack" epoch CF.StackStatus_DELETE_COMPLETE
+            result = convertStack cfStack "eu-west-1"
+        sdName result @?= "minimal-stack"
+        sdDescription result @?= Nothing
+        sdStatus result @?= "DELETE_COMPLETE"
+        sdStatusReason result @?= Nothing
+        sdCapabilities result @?= []
+        sdServiceRole result @?= Nothing
+        sdTags result @?= Map.empty
+        sdParameters result @?= Map.empty
+        sdNotificationArns result @?= []
+        sdDisableRollback result @?= False
+        sdTerminationProtection result @?= False
+        sdTimeoutInMinutes result @?= Nothing
+        sdLastUpdatedTime result @?= Nothing
+        sdStackPolicy result @?= Nothing
+        sdArn result @?= ""
+        sdRegion result @?= "eu-west-1"
+
+    , testCase "StackSetName extracted from tags" $ do
+        let cfStack = (ST.newStack "ss-stack" epoch CF.StackStatus_CREATE_COMPLETE)
+              { ST.tags = Just [CF.newTag "StackSetName" "my-stackset"]
+              }
+            result = convertStack cfStack "us-west-2"
+        sdStacksetName result @?= Just "my-stackset"
+    ]
+
+  , testGroup "buildEventsDisplay"
+    [ testCase "truncation info when events exceed max" $ do
+        let events = [ SE.newStackEvent "sid" ("e" <> T.pack (show i)) "sn" epoch | i <- [1..10 :: Int] ]
+            result = buildEventsDisplay 5 events
+        sedMaxEvents result @?= Just 5
+        case sedTruncated result of
+          Just ti -> do
+            truncShown ti @?= 5
+            truncTotal ti @?= 10
+          Nothing -> assertFailure "expected truncation info"
+
+    , testCase "no truncation when events within limit" $ do
+        let events = [ SE.newStackEvent "sid" ("e" <> T.pack (show i)) "sn" epoch | i <- [1..3 :: Int] ]
+            result = buildEventsDisplay 10 events
+        sedTruncated result @?= Nothing
+
+    , testCase "title includes max count" $ do
+        let result = buildEventsDisplay 25 []
+        assertBool "title has count" (T.isInfixOf "25" (sedTitle result))
+    ]
   ]
+  where
+    epoch :: UTCTime
+    epoch = UTCTime (fromGregorian 2024 1 1) 0
+    epoch2 :: UTCTime
+    epoch2 = UTCTime (fromGregorian 2024 6 15) (10 * 3600)

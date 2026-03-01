@@ -36,6 +36,7 @@ import Test.ResolverTest (resolverTests)
 import Test.CfnYamlEmitterTest (cfnYamlEmitterTests)
 import Test.ChangesetHelpersTest (changesetHelpersTests)
 import Test.DescribeStackTest (describeStackTests)
+import Test.StackOpsConverterTest (stackOpsConverterTests)
 
 main :: IO ()
 main = do
@@ -76,4 +77,5 @@ main = do
     , testGroup "CfnYamlEmitter" cfnYamlEmitterTests
     , testGroup "ChangesetHelpers" changesetHelpersTests
     , testGroup "DescribeStack" describeStackTests
+    , testGroup "StackOpsConverters" stackOpsConverterTests
     ]

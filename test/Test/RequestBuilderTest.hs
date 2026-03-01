@@ -1,12 +1,17 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Test.RequestBuilderTest (requestBuilderTests) where
 
+import qualified Data.Aeson as Aeson
 import qualified Data.Map.Strict
+import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import qualified Amazonka.CloudFormation.Types as CF
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
-import Iidy.Cfn.RequestBuilder (mapCapability, mapCapabilities, mapParameters, mapTags, mapOnFailure)
+import Iidy.Cfn.RequestBuilder (mapCapability, mapCapabilities, mapParameters, mapTags, mapOnFailure, serializeStackPolicy)
 
 requestBuilderTests :: [TestTree]
 requestBuilderTests =
@@ -72,4 +77,24 @@ requestBuilderTests =
 
   , testCase "mapOnFailure: unknown -> Nothing" $
       mapOnFailure (Just "INVALID") @?= Nothing
+
+  , testCase "serializeStackPolicy: Nothing -> Nothing" $
+      serializeStackPolicy Nothing @?= Nothing
+
+  , testCase "serializeStackPolicy: serializes JSON object to text" $ do
+      let policy = Aeson.object [ "Statement" Aeson..= ([] :: [Aeson.Value]) ]
+      case serializeStackPolicy (Just policy) of
+        Just txt -> assertBool "contains Statement" (T.isInfixOf "Statement" txt)
+        Nothing -> assertFailure "expected Just"
+
+  , testCase "serializeStackPolicy: round-trips through JSON decode" $ do
+      let policy = Aeson.object
+            [ "Statement" Aeson..= ([] :: [Aeson.Value])
+            , "Effect" Aeson..= ("Allow" :: Text)
+            ]
+      case serializeStackPolicy (Just policy) of
+        Just txt -> case Aeson.decodeStrict (TE.encodeUtf8 txt) of
+          Just (v :: Aeson.Value) -> v @?= policy
+          Nothing -> assertFailure "failed to parse serialized policy"
+        Nothing -> assertFailure "expected Just"
   ]

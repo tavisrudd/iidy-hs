@@ -15,14 +15,19 @@ module Iidy.Cfn.RequestBuilder
   , mapParameters
   , mapTags
   , mapOnFailure
+  , serializeStackPolicy
   ) where
 
+import Control.Applicative ((<|>))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Encoding as TLE
 
+import qualified Data.Aeson as Aeson
 import qualified Amazonka.CloudFormation as CF
 -- Import operation modules with unique qualifiers for unambiguous field access
 import qualified Amazonka.CloudFormation.CreateStack as CS
@@ -62,13 +67,14 @@ buildCreateStackRequest ctx args usePrimary argsfilePath env = do
         , CS.capabilities = mapCapabilities (saCapabilities args)
         , CS.parameters = mapParameters (saParameters args)
         , CS.tags = mapTags (saTags args)
-        , CS.roleARN = saServiceRoleArn args
+        , CS.roleARN = saServiceRoleArn args <|> saRoleArn args
         , CS.clientRequestToken = Just (tiValue token)
         , CS.notificationARNs = saNotificationArns args
         , CS.timeoutInMinutes = fromIntegral <$> saTimeoutInMinutes args
         , CS.disableRollback = saDisableRollback args
         , CS.enableTerminationProtection = saEnableTerminationProtection args
         , CS.onFailure = mapOnFailure (saOnFailure args)
+        , CS.stackPolicyBody = serializeStackPolicy (saStackPolicy args)
         }
   pure (req, token)
 
@@ -93,17 +99,19 @@ buildUpdateStackRequest ctx args usePrimary argsfilePath env = do
         , US.capabilities = mapCapabilities (saCapabilities args)
         , US.parameters = mapParameters (saParameters args)
         , US.tags = mapTags (saTags args)
-        , US.roleARN = saServiceRoleArn args
+        , US.roleARN = saServiceRoleArn args <|> saRoleArn args
         , US.clientRequestToken = Just (tiValue token)
         , US.notificationARNs = saNotificationArns args
+        , US.stackPolicyBody = serializeStackPolicy (saStackPolicy args)
         }
   pure (req, token)
 
 -- | Build a DeleteStack request.
+-- Uses the primary token (not derived), matching Rust behavior.
 buildDeleteStackRequest :: CfnContext -> Text -> IO (CF.DeleteStack, TokenInfo)
 buildDeleteStackRequest ctx sName = do
-  token <- ctxDeriveToken ctx "delete-stack"
-  let baseReq = DS.newDeleteStack sName
+  let token = cfnPrimaryToken ctx
+      baseReq = DS.newDeleteStack sName
       req = baseReq
         { DS.clientRequestToken = Just (tiValue token)
         }
@@ -129,7 +137,7 @@ buildCreateChangeSetRequest ctx args csName csType argsfilePath env = do
         , CCS.capabilities = mapCapabilities (saCapabilities args)
         , CCS.parameters = mapParameters (saParameters args)
         , CCS.tags = mapTags (saTags args)
-        , CCS.roleARN = saServiceRoleArn args
+        , CCS.roleARN = saServiceRoleArn args <|> saRoleArn args
         , CCS.clientToken = Just (tiValue token)
         , CCS.changeSetType = Just csType
         , CCS.notificationARNs = saNotificationArns args
@@ -199,3 +207,13 @@ mapOnFailure (Just t) = case T.toUpper t of
   "ROLLBACK"  -> Just CF.OnFailure_ROLLBACK
   "DO_NOTHING" -> Just CF.OnFailure_DO_NOTHING
   _            -> Nothing
+
+------------------------------------------------------------------------
+-- Stack policy serialization
+------------------------------------------------------------------------
+
+-- | Serialize a stack policy JSON value to Text for the AWS API.
+-- The AWS CloudFormation API accepts stack policy as a JSON string.
+serializeStackPolicy :: Maybe Aeson.Value -> Maybe Text
+serializeStackPolicy Nothing = Nothing
+serializeStackPolicy (Just v) = Just (TL.toStrict (TLE.decodeUtf8 (Aeson.encode v)))
