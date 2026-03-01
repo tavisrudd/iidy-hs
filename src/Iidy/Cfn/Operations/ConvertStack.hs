@@ -296,8 +296,13 @@ quoteYamlString s
       '\t' -> "\\t"
       '\\' -> "\\\\"
       '"'  -> "\\\""
-      _    | c < ' '   -> "\\x" <> T.pack (showHex (fromEnum c) "")
+      _    | c < ' '   -> "\\x" <> T.pack (padHex (fromEnum c))
            | otherwise -> T.singleton c
+
+    -- | Zero-pad a hex string to at least 2 digits, as required by YAML spec.
+    -- E.g. 0x01 => "01", 0x0f => "0f", 0x10 => "10".
+    padHex :: Int -> String
+    padHex n = let h = showHex n "" in if length h < 2 then '0' : h else h
 
     needsQuoting t =
       T.any (`elem` (":{}&*?|>!%@`#,[]\"" :: String)) t

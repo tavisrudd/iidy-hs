@@ -118,6 +118,7 @@ deleteSuccessStates = ["DELETE_COMPLETE"]
 ------------------------------------------------------------------------
 
 -- | All terminal stack statuses (superset used by watch-stack).
+-- NOTE: Using [Text] instead of Set for simplicity; list sizes are small (<15 elements).
 allTerminalStatuses :: [Text]
 allTerminalStatuses =
   [ "CREATE_COMPLETE", "CREATE_FAILED"

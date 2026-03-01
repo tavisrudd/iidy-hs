@@ -19,6 +19,7 @@ module Iidy.Cfn.StackOperations
   , PollResult(..)
     -- * Helpers (exported for testing)
   , stackNameFromId
+  , isStackNotFoundError
     -- * URL utilities
   , percentEncode
   ) where

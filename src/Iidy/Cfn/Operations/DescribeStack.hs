@@ -130,7 +130,7 @@ convertStack s regionText =
 buildEventsDisplay :: Int -> [CF.StackEvent] -> StackEventsDisplay
 buildEventsDisplay numEvents events =
   let (taken, rest) = splitAt numEvents events
-      total      = numEvents + length rest
+      total      = length taken + length rest
       converted  = map convertEvent taken
       wrapped    = calculateEventDurations converted
       truncInfo  = if total > numEvents

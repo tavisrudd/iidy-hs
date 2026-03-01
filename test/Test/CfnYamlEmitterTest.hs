@@ -219,6 +219,29 @@ cfnYamlEmitterTests =
       , testCase "bare single quote is quoted" $
           quoteYamlString "'" @?= "''''"
       ]
+
+    , testGroup "control characters (double-quoted)"
+      [ testCase "string with newline is double-quoted with \\n escape" $
+          quoteYamlString "line1\nline2" @?= "\"line1\\nline2\""
+
+      , testCase "string with tab is double-quoted with \\t escape" $
+          quoteYamlString "col1\tcol2" @?= "\"col1\\tcol2\""
+
+      , testCase "string with \\r\\n is double-quoted with \\r\\n escapes" $
+          quoteYamlString "line1\r\nline2" @?= "\"line1\\r\\nline2\""
+
+      , testCase "string with newline and single quote uses double-quoting" $
+          quoteYamlString "it's\na test" @?= "\"it's\\na test\""
+
+      , testCase "string with backslash and newline escapes both" $
+          quoteYamlString "path\\to\nfile" @?= "\"path\\\\to\\nfile\""
+
+      , testCase "string with embedded double quote escapes it" $
+          quoteYamlString "say \"hello\"\n" @?= "\"say \\\"hello\\\"\\n\""
+
+      , testCase "plain string with no special chars is unquoted" $
+          quoteYamlString "hello world" @?= "hello world"
+      ]
     ]
 
   , testGroup "emitCfnYaml"

@@ -31,6 +31,8 @@ import Control.Concurrent (threadDelay)
 import Control.Exception (catch)
 import Control.Lens (set, view)
 import Control.Monad.Trans.Resource (runResourceT)
+import Data.Conduit (runConduit, (.|))
+import qualified Data.Conduit.List as CL
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -67,7 +69,7 @@ import Iidy.Cfn.StackOperations
   )
 import Iidy.Cfn.Types (StackArgs(..), getStackName)
 import Iidy.Output.Types
-  ( OutputData(..), StackEventsDisplay(..)
+  ( OutputData(..)
   , ChangeSetInfo(..), ChangeInfo(..), ChangeDetail(..)
   , ChangeSetCreationResult(..)
   )
@@ -306,11 +308,19 @@ buildChangeSetCreationResult info stackExists argsfile =
       regionText = extractRegionFromArn (csiStackId info)
       consoleUrl = buildChangesetConsoleUrl regionText (csiStackId info) (csiChangeSetId info)
       hasChanges = not (null (csiChanges info))
+      -- Only show REVIEW_IN_PROGRESS instructions for CREATE changesets;
+      -- UPDATE changesets do not put the stack into that state.
       nextSteps =
-        [ "Your new stack is now in REVIEW_IN_PROGRESS state. To create the resources run the following"
-        , "  iidy --region " <> regionText <> " exec-changeset --stack-name "
-          <> csiStackName info <> " " <> argsfile <> " " <> csiChangeSetName info
-        ]
+        if csType == "CREATE"
+          then
+            [ "Your new stack is now in REVIEW_IN_PROGRESS state. To create the resources run the following"
+            , "  iidy --region " <> regionText <> " exec-changeset --stack-name "
+              <> csiStackName info <> " " <> argsfile <> " " <> csiChangeSetName info
+            ]
+          else
+            [ "  iidy --region " <> regionText <> " exec-changeset --stack-name "
+              <> csiStackName info <> " " <> argsfile <> " " <> csiChangeSetName info
+            ]
   in ChangeSetCreationResult
     { csrChangesetName     = csiChangeSetName info
     , csrStackName         = csiStackName info
@@ -368,12 +378,14 @@ checkStackState ctx stackName = do
           pure StackNormal
 
 -- | Find the name of a pending changeset on a stack in REVIEW_IN_PROGRESS.
+-- Paginates ListChangeSets to handle stacks with many changesets.
 findPendingChangeset :: CfnContext -> Text -> IO Text
 findPendingChangeset ctx stackName = do
-  let req = LCS.newListChangeSets stackName
-  resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
-  let summaries = fromMaybe [] resp.summaries
-      pending = [ s | s <- summaries
+  csPages <- runResourceT $ runConduit $
+    Amazonka.paginate (cfnEnv ctx) (LCS.newListChangeSets stackName)
+    .| CL.consume
+  let allSummaries = concatMap (fromMaybe [] . (.summaries)) csPages
+      pending = [ s | s <- allSummaries
                 , fmap CF.fromExecutionStatus s.executionStatus == Just "AVAILABLE"
                 ]
   case pending of

@@ -78,7 +78,12 @@ watchStack ctx stackName timeoutSeconds emit = do
             }
       pollResult <- pollForCompletion ctx sId allTerminalStatuses pollCfg
 
-      -- 6. If DELETE_COMPLETE, nothing more to collect; otherwise collect contents
+      -- 6. If DELETE_COMPLETE, nothing more to collect; otherwise collect contents.
+      -- All non-DELETE_COMPLETE results — including PollInactivityTimeout — return
+      -- exit code 0 because watch-stack is observational: it does not start the
+      -- operation, so it cannot "fail" when one stalls. Callers that need to
+      -- distinguish timeout from completion should check the OdInactivityTimeout
+      -- event emitted by pcOnInactivityTimeout above.
       case pollResult of
         PollSuccess "DELETE_COMPLETE" -> pure (Right 0)
         _ -> do

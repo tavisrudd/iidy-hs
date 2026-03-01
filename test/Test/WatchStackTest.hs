@@ -3,16 +3,20 @@ module Test.WatchStackTest (watchStackTests) where
 
 import Data.IORef (newIORef, readIORef, writeIORef, modifyIORef')
 import Data.Text (Text)
+import qualified Amazonka
+import qualified Amazonka.Types as AT
 import qualified Amazonka.CloudFormation.Types as CF
 import qualified Amazonka.CloudFormation.Types.StackEvent as SE
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime(..))
-import Test.Tasty (TestTree)
+import Network.HTTP.Types.Status (status400)
+import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
 import Iidy.Cfn.Context (allTerminalStatuses)
+import Iidy.Cfn.Operations.UpdateStack (isNoUpdatesError)
 import Iidy.Cfn.Operations.WatchStack (formatEvent)
-import Iidy.Cfn.StackOperations (stackNameFromId, pollForCompletionWith, PollConfig(..), defaultPollConfig, PollResult(..))
+import Iidy.Cfn.StackOperations (stackNameFromId, isStackNotFoundError, pollForCompletionWith, PollConfig(..), defaultPollConfig, PollResult(..))
 
 watchStackTests :: [TestTree]
 watchStackTests =
@@ -161,6 +165,45 @@ watchStackTests =
                   allTerminalStatuses
                   (testPollConfig { pcOnNewEvents = const (pure ()) })
       result @?= PollSuccess "UPDATE_ROLLBACK_COMPLETE"
+
+  -- isNoUpdatesError tests
+  , testGroup "isNoUpdatesError"
+    [ testCase "returns True for ValidationError with 'No updates' message" $
+        isNoUpdatesError (mkAwsServiceError "ValidationError" "No updates are to be performed") @?= True
+
+    , testCase "returns True when message contains 'No updates' substring" $
+        isNoUpdatesError (mkAwsServiceError "ValidationError" "Stack: No updates are to be performed.") @?= True
+
+    , testCase "returns False for different error code" $
+        isNoUpdatesError (mkAwsServiceError "InternalFailure" "No updates are to be performed") @?= False
+
+    , testCase "returns False for different message" $
+        isNoUpdatesError (mkAwsServiceError "ValidationError" "Stack does not exist") @?= False
+
+    , testCase "returns False for non-ServiceError" $
+        isNoUpdatesError (mkSerializeError "parse error") @?= False
+    ]
+
+  -- isStackNotFoundError tests
+  , testGroup "isStackNotFoundError"
+    [ testCase "returns True for ValidationError with 'does not exist' message" $
+        isStackNotFoundError (mkAwsServiceError "ValidationError" "Stack [my-stack] does not exist") @?= True
+
+    , testCase "returns True when message contains 'does not exist' substring" $
+        isStackNotFoundError (mkAwsServiceError "ValidationError" "Stack with id my-stack does not exist in region us-east-1") @?= True
+
+    , testCase "returns False for different error code" $
+        isStackNotFoundError (mkAwsServiceError "AccessDeniedException" "Stack does not exist") @?= False
+
+    , testCase "returns False for different message" $
+        isStackNotFoundError (mkAwsServiceError "ValidationError" "Template format error") @?= False
+
+    , testCase "returns False for ServiceError with no message" $
+        isStackNotFoundError (mkAwsServiceErrorNoMsg "ValidationError") @?= False
+
+    , testCase "returns False for non-ServiceError" $
+        isStackNotFoundError (mkSerializeError "parse error") @?= False
+    ]
   ]
   where
     epoch :: UTCTime
@@ -186,3 +229,20 @@ watchStackTests =
         , SE.resourceType = Just resType
         , SE.resourceStatus = Just status
         }
+
+    -- | Construct an Amazonka ServiceError for testing
+    mkAwsServiceError :: Text -> Text -> Amazonka.Error
+    mkAwsServiceError code msg =
+      Amazonka.ServiceError (AT.ServiceError' "CloudFormation" status400 []
+        (Amazonka.ErrorCode code) (Just (Amazonka.ErrorMessage msg)) Nothing)
+
+    -- | Construct an Amazonka ServiceError with no message
+    mkAwsServiceErrorNoMsg :: Text -> Amazonka.Error
+    mkAwsServiceErrorNoMsg code =
+      Amazonka.ServiceError (AT.ServiceError' "CloudFormation" status400 []
+        (Amazonka.ErrorCode code) Nothing Nothing)
+
+    -- | Construct a non-ServiceError (SerializeError variant) for negative testing
+    mkSerializeError :: String -> Amazonka.Error
+    mkSerializeError msg =
+      Amazonka.SerializeError (AT.SerializeError' "CloudFormation" status400 Nothing msg)

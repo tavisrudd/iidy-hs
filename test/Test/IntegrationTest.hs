@@ -179,7 +179,7 @@ jsonRendererIntegrationTests =
 
 outputSequenceTests :: [TestTree]
 outputSequenceTests =
-  [ testCase "allTestOutputData covers all 27 OutputData variant types" $ do
+  [ testCase "allTestOutputData covers all 26 OutputData variant types" $ do
       let uniqueTypes = nub (map odConstructorName allTestOutputData)
       assertEqual "unique OutputData constructors covered"
         26
