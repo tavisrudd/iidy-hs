@@ -117,38 +117,53 @@ deleteSuccessStates = ["DELETE_COMPLETE"]
 -- Terminal status helpers
 ------------------------------------------------------------------------
 
--- | All terminal stack statuses (superset used by watch-stack).
--- NOTE: Using [Text] instead of Set for simplicity; list sizes are small (<15 elements).
+-- | All terminal stack statuses (14 total). Matches iidy-js statusTypes.ts
+-- TERMINAL set and iidy-rs is_terminal_status.rs exactly.
+--
+-- Source of truth: iidy-js/src/cfn/statusTypes.ts
+-- Verified against: iidy/src/cfn/is_terminal_status.rs
+--
+-- Notable inclusions:
+--   DELETE_SKIPPED  — resource-level only, but included for parity with
+--                     iidy-js. Harmless: the main stack's AWS::CloudFormation::Stack
+--                     resource never has this status.
+--   REVIEW_IN_PROGRESS — stable stack state for changeset-created stacks
+--                     that haven't been executed yet. Needed so polling stops
+--                     correctly in the create-changeset flow.
+--
+-- Notable exclusion:
+--   UPDATE_FAILED   — NOT terminal in iidy's model. CloudFormation auto-initiates
+--                     rollback after UPDATE_FAILED, so the polling loop must
+--                     continue until UPDATE_ROLLBACK_COMPLETE or
+--                     UPDATE_ROLLBACK_FAILED. Stopping at UPDATE_FAILED would
+--                     be premature. Both iidy-js and iidy-rs exclude it.
 allTerminalStatuses :: [Text]
 allTerminalStatuses =
   [ "CREATE_COMPLETE", "CREATE_FAILED"
   , "DELETE_COMPLETE", "DELETE_FAILED"
   , "ROLLBACK_COMPLETE", "ROLLBACK_FAILED"
-  , "UPDATE_COMPLETE", "UPDATE_FAILED"
+  , "UPDATE_COMPLETE"
   , "UPDATE_ROLLBACK_COMPLETE", "UPDATE_ROLLBACK_FAILED"
   , "IMPORT_COMPLETE", "IMPORT_ROLLBACK_COMPLETE", "IMPORT_ROLLBACK_FAILED"
+  , "DELETE_SKIPPED"
+  , "REVIEW_IN_PROGRESS"
   ]
 
 -- | Terminal statuses for create-stack polling.
--- Currently identical to updateTerminalStatuses; kept separate for
--- independent evolution if create/update terminal conditions diverge.
+-- Uses the full terminal set (matches iidy-js watchStack behavior).
 createTerminalStatuses :: [Text]
 createTerminalStatuses = allTerminalStatuses
 
 -- | Terminal statuses for update-stack polling.
--- Currently identical to createTerminalStatuses; kept separate for
--- independent evolution if create/update terminal conditions diverge.
+-- Uses the full terminal set (matches iidy-js watchStack behavior).
 updateTerminalStatuses :: [Text]
 updateTerminalStatuses = allTerminalStatuses
 
 -- | Terminal statuses for delete-stack polling.
+-- Uses the full terminal set (matches iidy-js deleteStack which delegates
+-- to watchStack with the full TERMINAL set).
 deleteTerminalStatuses :: [Text]
-deleteTerminalStatuses =
-  [ "DELETE_COMPLETE", "DELETE_FAILED"
-  , "CREATE_FAILED"
-  , "ROLLBACK_COMPLETE", "ROLLBACK_FAILED"
-  , "UPDATE_ROLLBACK_FAILED"
-  ]
+deleteTerminalStatuses = allTerminalStatuses
 
 -- | Terminal statuses for changeset execution polling.
 changesetTerminalStatuses :: [Text]

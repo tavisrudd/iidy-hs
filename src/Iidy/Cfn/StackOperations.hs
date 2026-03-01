@@ -280,8 +280,9 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
                       }
                     pure (PollSuccess currentStatus)
                   else
-                    let newEventIds = Set.fromList (map (.eventId) newEvents)
-                    in go (Set.union lastEventSet newEventIds)
+                    let !newSet = Set.union lastEventSet
+                                   (Set.fromList (map (.eventId) newEvents))
+                    in go newSet
   -- Note: starts with empty seen set, so the first poll batch includes all
   -- pre-existing events. This matches the Rust behavior. watchStack has its
   -- own second dedup layer to filter these; write operations emit them as

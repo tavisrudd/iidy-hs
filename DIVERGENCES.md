@@ -61,6 +61,37 @@ Event pagination for `describe-stack` and `list-stacks` uses AWS SDK pagination.
 Both implementations fetch events and paginate, but exact pagination behavior
 cannot be verified without live AWS API calls. Verified by code review.
 
+## Drift Detection Polling Timeout
+
+**Cause**: Intentional safety improvement in Haskell.
+
+Rust polls `DescribeStackDriftDetectionStatus` indefinitely with no timeout.
+Haskell adds a configurable safety cap (default: 100 iterations x 3s = 5 minutes)
+to prevent infinite hangs on stuck drift detections. Emits a `LevelWarning`
+status update if the cap is reached and proceeds with potentially incomplete
+results. Constants are in `DescribeStackDrift.hs` (`driftPollMaxIterations`,
+`driftPollIntervalSecs`).
+
+**TODO**: Fix Rust to also have a timeout cap.
+
+## Terminal Status List: UPDATE_FAILED Bug (Fixed in Haskell)
+
+**Cause**: Bug in Rust iidy (inherited from iidy-js, then fixed in iidy-js).
+
+The Rust port (`is_terminal_status.rs`) does NOT include `UPDATE_FAILED` in
+its terminal status list, which is correct — CloudFormation auto-initiates
+rollback after `UPDATE_FAILED`, so the polling loop must continue until
+`UPDATE_ROLLBACK_COMPLETE` or `UPDATE_ROLLBACK_FAILED`. iidy-hs matches this.
+
+However, an earlier iidy-hs bug DID include `UPDATE_FAILED`, which would have
+caused premature polling termination. Fixed 2026-03-01.
+
+Source of truth: `iidy-js/src/cfn/statusTypes.ts` (14 terminal statuses).
+See `Context.hs` for detailed provenance documentation.
+
+**TODO**: Audit Rust terminal status list against iidy-js to confirm full
+alignment (DELETE_SKIPPED, REVIEW_IN_PROGRESS presence).
+
 ## Live AWS Operations (Untestable Offline)
 
 The following behaviors require live AWS and are verified by code review only:

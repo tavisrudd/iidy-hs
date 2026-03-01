@@ -11,6 +11,7 @@ module Iidy.Cfn.Operations.DescribeStackDrift
 
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Time (UTCTime, getCurrentTime, diffUTCTime)
 import Data.Coerce (coerce)
 import Control.Concurrent (threadDelay)
@@ -76,7 +77,19 @@ describeStackDrift ctx stackName driftCacheSecs emit = do
           let detectionId = resp.stackDriftDetectionId
 
           -- Step 4: Poll for completion
-          pollDriftDetection ctx detectionId
+          completed <- pollDriftDetection ctx driftPollMaxIterations detectionId
+          if not completed
+            then do
+              let timeoutMins = (driftPollMaxIterations * driftPollIntervalSecs) `div` 60
+              now2 <- getCurrentTime
+              emit (OdStatusUpdate StatusUpdate
+                { suMessage   = "Drift detection timed out after "
+                                <> T.pack (show timeoutMins)
+                                <> " minutes. Results may be incomplete."
+                , suTimestamp = now2
+                , suLevel     = LevelWarning
+                })
+            else pure ()
         else
           pure ()
 
@@ -114,25 +127,32 @@ checkTimestampStale di now cacheSecs =
 -- Drift detection polling
 ------------------------------------------------------------------------
 
--- | Poll DescribeStackDriftDetectionStatus until detection completes.
--- Times out after 100 iterations (300 seconds / 5 minutes).
-pollDriftDetection :: CfnContext -> Text -> IO ()
-pollDriftDetection ctx detectionId = go (0 :: Int)
-  where
-    maxIterations :: Int
-    maxIterations = 100
+-- | Drift polling interval in seconds.
+driftPollIntervalSecs :: Int
+driftPollIntervalSecs = 3
 
-    go :: Int -> IO ()
+-- | Max drift polling iterations. At 3s per iteration, 100 iterations = 5 minutes.
+-- Note: Rust iidy polls indefinitely. We add a safety cap to avoid infinite hangs
+-- on stuck drift detections while still allowing plenty of time for large stacks.
+driftPollMaxIterations :: Int
+driftPollMaxIterations = 100
+
+-- | Poll DescribeStackDriftDetectionStatus until detection completes.
+-- Returns True if detection completed, False if timed out.
+pollDriftDetection :: CfnContext -> Int -> Text -> IO Bool
+pollDriftDetection ctx maxIter detectionId = go (0 :: Int)
+  where
+    go :: Int -> IO Bool
     go iteration
-      | iteration >= maxIterations = pure ()  -- give up silently after 5 minutes
+      | iteration >= maxIter = pure False
       | otherwise = do
           let req = DSDDS.newDescribeStackDriftDetectionStatus detectionId
           resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
           case resp.detectionStatus of
             s | s == CF.StackDriftDetectionStatus_DETECTION_IN_PROGRESS -> do
-              threadDelay 3_000_000  -- 3 seconds
+              threadDelay (driftPollIntervalSecs * 1_000_000)
               go (iteration + 1)
-            _ -> pure ()
+            _ -> pure True
 
 ------------------------------------------------------------------------
 -- Drift data collection

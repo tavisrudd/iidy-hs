@@ -216,13 +216,24 @@ emitValue doSort indent parentKey currentKey val = case val of
 emitPair :: Bool -> Int -> Text -> Text -> Key.Key -> Value -> Text
 emitPair doSort indent parentKey currentKey k v =
   let prefix = T.replicate indent " "
-      key = Key.toText k
+      key = quoteYamlKey (Key.toText k)
   in case v of
     Object km | not (KM.null km) ->
       prefix <> key <> ":\n" <> emitValue doSort (indent + 2) parentKey currentKey v
     Array arr | not (V.null arr) ->
       prefix <> key <> ":\n" <> emitValue doSort (indent + 2) parentKey currentKey v
     _ -> prefix <> key <> ": " <> inlineValue v <> "\n"
+
+-- | Quote a YAML key if it contains characters that make it ambiguous.
+-- Most CFN keys are plain identifiers, but intrinsic functions like
+-- Fn::Sub, Fn::Join contain colons that need quoting.
+quoteYamlKey :: Text -> Text
+quoteYamlKey k
+  | needsKeyQuoting k = "'" <> T.replace "'" "''" k <> "'"
+  | otherwise = k
+  where
+    needsKeyQuoting :: Text -> Bool
+    needsKeyQuoting t = T.any (`elem` [':' :: Char, '{', '}', '[', ']', ',', '#', '&', '*', '?', '|', '>', '!', '%', '@', '`']) t
 
 emitItem :: Bool -> Int -> Text -> Value -> Text
 emitItem doSort indent parentKey v =
