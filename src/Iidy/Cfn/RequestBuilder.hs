@@ -132,6 +132,7 @@ buildCreateChangeSetRequest ctx args csName csType argsfilePath env = do
         , CCS.roleARN = saServiceRoleArn args
         , CCS.clientToken = Just (tiValue token)
         , CCS.changeSetType = Just csType
+        , CCS.notificationARNs = saNotificationArns args
         }
   pure (req, token)
 

@@ -5,13 +5,11 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 module Iidy.Cfn.Operations.WatchStack
   ( watchStack
-  , formatEvent
   ) where
 
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import qualified Data.Text as T
 
 import qualified Amazonka
 import qualified Amazonka.CloudFormation.Types as CF
@@ -91,16 +89,3 @@ watchStack ctx stackName timeoutSeconds emit = do
           emit (OdStackContents contents)
           pure (Right 0)
 
-------------------------------------------------------------------------
--- Event formatting
-------------------------------------------------------------------------
-
--- | Format a stack event as a human-readable summary line.
-formatEvent :: CF.StackEvent -> Text
-formatEvent e =
-  T.intercalate " | "
-    [ fromMaybe "" e.logicalResourceId
-    , fromMaybe "" e.resourceType
-    , maybe "" CF.fromResourceStatus e.resourceStatus
-    , fromMaybe "" e.resourceStatusReason
-    ]

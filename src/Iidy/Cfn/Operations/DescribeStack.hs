@@ -130,11 +130,10 @@ convertStack s regionText =
 buildEventsDisplay :: Int -> [CF.StackEvent] -> StackEventsDisplay
 buildEventsDisplay numEvents events =
   let (taken, rest) = splitAt numEvents events
-      total      = length taken + length rest
       converted  = map convertEvent taken
       wrapped    = calculateEventDurations converted
-      truncInfo  = if total > numEvents
-                     then Just TruncationInfo { truncShown = numEvents, truncTotal = total }
+      truncInfo  = if not (null rest)
+                     then Just TruncationInfo { truncShown = length taken, truncTotal = length taken + length rest }
                      else Nothing
   in StackEventsDisplay
        { sedTitle     = "Previous Stack Events (max " <> T.pack (show numEvents) <> "):"

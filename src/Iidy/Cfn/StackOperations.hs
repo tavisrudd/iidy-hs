@@ -228,64 +228,62 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
   startTime <- maybe getCurrentTime pure (pcStartTime config)
   lastEventTimeRef <- newIORef startTime
   hasSeenNewEventsRef <- newIORef False
-  go startTime lastEventTimeRef hasSeenNewEventsRef Set.empty
+  let go :: Set.Set Text -> IO PollResult
+      go lastEventSet = do
+        threadDelay (pcIntervalSeconds config * 1000000)
+        pcOnPollTick config
+        events <- fetchEvents
+        now <- getCurrentTime
+        -- Filter to new events only (O(log n) per event via Set.notMember)
+        let newEvents = filter (\e -> Set.notMember e.eventId lastEventSet) events
+        when (not (null newEvents)) $ do
+          writeIORef lastEventTimeRef now
+          writeIORef hasSeenNewEventsRef True
+          pcOnNewEvents config (reverse newEvents)
+        -- Check inactivity timeout (only when we've seen events or not waiting)
+        hasSeenNewEvents <- readIORef hasSeenNewEventsRef
+        lastEventTime <- readIORef lastEventTimeRef
+        let inactivityElapsed = round (diffUTCTime now lastEventTime) :: Int
+        case pcInactivityTimeoutSecs config of
+          Just timeout | timeout > 0 && null newEvents && inactivityElapsed > timeout
+                       , not (pcWaitForStatusChange config) || hasSeenNewEvents -> do
+            let elapsed = round (diffUTCTime now startTime) :: Int
+            pcOnInactivityTimeout config InactivityTimeoutInfo
+              { itiTimeoutSeconds     = timeout
+              , itiElapsedSeconds     = elapsed
+              , itiOperationStartTime = startTime
+              }
+            pure PollInactivityTimeout
+          _ -> do
+            -- Check overall timeout
+            let totalElapsed = round (diffUTCTime now startTime) :: Int
+            case pcTimeoutSeconds config of
+              Just t | t > 0 && totalElapsed > t -> pure PollTimeout
+              _ -> do
+                -- Check if we hit a terminal status
+                let stackEvents = filter isStackEvent events
+                    currentStatus = case stackEvents of
+                      (e:_) -> maybe "" CF.fromResourceStatus e.resourceStatus
+                      _     -> ""
+                -- When pcWaitForStatusChange is True, only exit on terminal
+                -- status after we've seen new events (i.e., a new operation started)
+                let shouldCheckTerminal = not (pcWaitForStatusChange config)
+                                       || hasSeenNewEvents
+                if shouldCheckTerminal && currentStatus `elem` terminalStatuses
+                  then do
+                    let elapsed = round (diffUTCTime now startTime) :: Int
+                        isDelete = "DELETE_COMPLETE" `elem` terminalStatuses
+                    pcOnOperationComplete config OperationCompleteInfo
+                      { ociElapsedSeconds        = elapsed
+                      , ociOperationStartTime    = startTime
+                      , ociSkipRemainingSections = isDelete && currentStatus == "DELETE_COMPLETE"
+                      }
+                    pure (PollSuccess currentStatus)
+                  else
+                    let newEventIds = Set.fromList (map (.eventId) newEvents)
+                    in go (Set.union lastEventSet newEventIds)
+  go Set.empty
   where
-    go :: UTCTime -> IORef UTCTime -> IORef Bool -> Set.Set Text -> IO PollResult
-    go startTime lastEventTimeRef hasSeenNewEventsRef lastEventSet = do
-      threadDelay (pcIntervalSeconds config * 1000000)
-      pcOnPollTick config
-      events <- fetchEvents
-      now <- getCurrentTime
-      -- Filter to new events only (O(log n) per event via Set.notMember)
-      let newEvents = filter (\e -> Set.notMember e.eventId lastEventSet) events
-      when (not (null newEvents)) $ do
-        writeIORef lastEventTimeRef now
-        writeIORef hasSeenNewEventsRef True
-        pcOnNewEvents config (reverse newEvents)
-      -- Check inactivity timeout (only when we've seen events or not waiting)
-      hasSeenNewEvents <- readIORef hasSeenNewEventsRef
-      lastEventTime <- readIORef lastEventTimeRef
-      let inactivityElapsed = round (diffUTCTime now lastEventTime) :: Int
-      case pcInactivityTimeoutSecs config of
-        Just timeout | timeout > 0 && null newEvents && inactivityElapsed > timeout
-                     , not (pcWaitForStatusChange config) || hasSeenNewEvents -> do
-          let elapsed = round (diffUTCTime now startTime) :: Int
-          pcOnInactivityTimeout config InactivityTimeoutInfo
-            { itiTimeoutSeconds     = timeout
-            , itiElapsedSeconds     = elapsed
-            , itiOperationStartTime = startTime
-            }
-          pure PollInactivityTimeout
-        _ -> do
-          -- Check overall timeout
-          let totalElapsed = round (diffUTCTime now startTime) :: Int
-          case pcTimeoutSeconds config of
-            Just t | t > 0 && totalElapsed > t -> pure PollTimeout
-            _ -> do
-              -- Check if we hit a terminal status
-              let stackEvents = filter isStackEvent events
-                  currentStatus = case stackEvents of
-                    (e:_) -> maybe "" CF.fromResourceStatus e.resourceStatus
-                    _     -> ""
-              -- When pcWaitForStatusChange is True, only exit on terminal
-              -- status after we've seen new events (i.e., a new operation started)
-              let shouldCheckTerminal = not (pcWaitForStatusChange config)
-                                     || hasSeenNewEvents
-              if shouldCheckTerminal && currentStatus `elem` terminalStatuses
-                then do
-                  let elapsed = round (diffUTCTime now startTime) :: Int
-                      isDelete = "DELETE_COMPLETE" `elem` terminalStatuses
-                  pcOnOperationComplete config OperationCompleteInfo
-                    { ociElapsedSeconds        = elapsed
-                    , ociOperationStartTime    = startTime
-                    , ociSkipRemainingSections = isDelete && currentStatus == "DELETE_COMPLETE"
-                    }
-                  pure (PollSuccess currentStatus)
-                else
-                  let newEventIds = Set.fromList (map (.eventId) newEvents)
-                  in go startTime lastEventTimeRef hasSeenNewEventsRef
-                        (Set.union lastEventSet newEventIds)
-
     -- | True only for the stack's own status event (logicalResourceId = stackName
     -- AND resourceType = AWS::CloudFormation::Stack). Using AND prevents nested
     -- stack events from being mistaken for the top-level stack's status event.

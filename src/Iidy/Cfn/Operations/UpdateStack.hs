@@ -150,26 +150,24 @@ updateStackWithChangeset ctx args yesFlag argsfilePath env emit = do
       csName = "iidy-update-" <> tokenPrefix
 
   -- Step 3: Create the UPDATE changeset
-  result <- createChangeset ctx args csName True argsfilePath env
-  case result of
-    Left err -> pure (Left err)
-    Right info -> do
-      -- Step 4: Emit ChangeSetResult
-      let argsfileText = maybe "" T.pack argsfilePath
-          csResult = buildChangeSetCreationResult info True argsfileText
-      emit (OdChangeSetResult csResult)
+  info <- createChangeset ctx args csName True argsfilePath env
 
-      -- Step 5: Check if changeset failed (e.g. invalid parameters)
-      if csiStatus info == "FAILED"
-        then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
+  -- Step 4: Emit ChangeSetResult
+  let argsfileText = maybe "" T.pack argsfilePath
+      csResult = buildChangeSetCreationResult info True argsfileText
+  emit (OdChangeSetResult csResult)
+
+  -- Step 5: Check if changeset failed (e.g. invalid parameters)
+  if csiStatus info == "FAILED"
+    then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
+    else do
+      -- Step 6: Confirm execution
+      confirmed <- confirmChangesetExecution yesFlag
+      if not confirmed
+        then pure (Right 130)  -- user cancelled
         else do
-          -- Step 6: Confirm execution
-          confirmed <- confirmChangesetExecution yesFlag
-          if not confirmed
-            then pure (Right 130)  -- user cancelled
-            else do
-              -- Step 7: Execute changeset and watch
-              executeChangeset ctx stackName csName emit
+          -- Step 7: Execute changeset and watch
+          executeChangeset ctx stackName csName emit
 
 ------------------------------------------------------------------------
 -- Helpers

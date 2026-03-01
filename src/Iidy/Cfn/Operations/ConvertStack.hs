@@ -264,6 +264,10 @@ chooseWeightFn parentKey currentKey
   | otherwise = const defaultSortWeight
 
 -- | Format a value inline (no newlines).
+-- The Object and Array cases only match empty collections; non-empty
+-- collections are handled by 'emitPair'/'emitItem' before reaching this
+-- function (they render as block YAML, not inline).  The catch-all
+-- therefore cannot be reached in practice, but is retained for totality.
 inlineValue :: Value -> Text
 inlineValue val = case val of
   String s -> quoteYamlString s
@@ -275,7 +279,9 @@ inlineValue val = case val of
   Null -> "null"
   Object km | KM.null km -> "{}"
   Array arr | V.null arr -> "[]"
-  _ -> T.pack (show val)
+  -- Non-empty Object/Array: unreachable — callers render these as block YAML.
+  Object _ -> "{...}"
+  Array _  -> "[...]"
 
 -- | Quote a YAML string value if needed.
 -- Uses double-quoting with escape sequences for strings containing control

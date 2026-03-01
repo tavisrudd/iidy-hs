@@ -87,6 +87,9 @@ import Iidy.Output.Types
 --   3. Extract the changeset ID from the response.
 --   4. Poll DescribeChangeSet every 2s until status is CREATE_COMPLETE or FAILED.
 --   5. Return the final ChangeSetInfo.
+--
+-- Exceptions from the AWS API propagate to the caller; this function does not
+-- wrap them in Either.
 createChangeset
   :: CfnContext
   -> StackArgs
@@ -94,7 +97,7 @@ createChangeset
   -> Bool            -- ^ stack exists? (True => UPDATE, False => CREATE type)
   -> Maybe FilePath  -- ^ argsfile path for template resolution
   -> Text            -- ^ environment name
-  -> IO (Either Text ChangeSetInfo)
+  -> IO ChangeSetInfo
 createChangeset ctx args csName stackExists argsfilePath env = do
   let csType = if stackExists
                  then CF.ChangeSetType_UPDATE
@@ -111,9 +114,7 @@ createChangeset ctx args csName stackExists argsfilePath env = do
   let csId = fromMaybe csName (view CCS.createChangeSetResponse_id resp)
 
   -- Step 4: Poll until CREATE_COMPLETE or FAILED
-  finalInfo <- pollChangesetCompletion ctx stackName csId
-
-  pure (Right finalInfo)
+  pollChangesetCompletion ctx stackName csId
 
 -- | Poll DescribeChangeSet every 2s until the changeset reaches a terminal
 -- state (CREATE_COMPLETE or FAILED).  Returns the ChangeSetInfo on completion.
@@ -127,7 +128,7 @@ pollChangesetCompletion ctx stackName csId = go (0 :: Int)
     go :: Int -> IO ChangeSetInfo
     go errorCount = do
       threadDelay (2 * 1000000)  -- 2 seconds
-      result <- describeChangesetRaw ctx stackName csId
+      result <- describeChangeset ctx stackName csId
       case result of
         Left err
           | errorCount >= maxRetries ->
@@ -215,27 +216,14 @@ executeChangeset ctx stackName csName emit = do
 -- Changeset description
 ------------------------------------------------------------------------
 
--- | Describe a CloudFormation change set and return its ChangeSetInfo.
-describeChangeset
-  :: CfnContext
-  -> Text  -- ^ stack name
-  -> Text  -- ^ changeset name
-  -> IO (Either Text ChangeSetInfo)
-describeChangeset ctx stackName csName =
-  describeChangesetRaw ctx stackName csName
-
-------------------------------------------------------------------------
--- Internal: raw DescribeChangeSet call
-------------------------------------------------------------------------
-
 -- | Call DescribeChangeSet and convert the response to ChangeSetInfo.
--- Returns Left on Amazonka errors.
-describeChangesetRaw
+-- Returns Left on Amazonka errors, Right on success.
+describeChangeset
   :: CfnContext
   -> Text  -- ^ stack name
   -> Text  -- ^ changeset name (or ARN)
   -> IO (Either Text ChangeSetInfo)
-describeChangesetRaw ctx stackName csName = do
+describeChangeset ctx stackName csName = do
   let req = set DCS.describeChangeSet_stackName (Just stackName)
               (DCS.newDescribeChangeSet csName)
   result <- fmap Right (runResourceT $ Amazonka.send (cfnEnv ctx) req)

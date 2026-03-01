@@ -15,35 +15,11 @@ import Test.Tasty.HUnit
 
 import Iidy.Cfn.Context (allTerminalStatuses)
 import Iidy.Cfn.Operations.UpdateStack (isNoUpdatesError)
-import Iidy.Cfn.Operations.WatchStack (formatEvent)
 import Iidy.Cfn.StackOperations (stackNameFromId, isStackNotFoundError, pollForCompletionWith, PollConfig(..), defaultPollConfig, PollResult(..))
 
 watchStackTests :: [TestTree]
 watchStackTests =
-  [ testCase "formatEvent - all fields present" $ do
-      let e = mkBaseEvent
-                { SE.logicalResourceId = Just "MyBucket"
-                , SE.resourceType = Just "AWS::S3::Bucket"
-                , SE.resourceStatus = Just CF.ResourceStatus_CREATE_COMPLETE
-                , SE.resourceStatusReason = Just "Resource creation complete"
-                }
-      formatEvent e @?= "MyBucket | AWS::S3::Bucket | CREATE_COMPLETE | Resource creation complete"
-  , testCase "formatEvent - missing optional fields" $ do
-      let e = mkBaseEvent
-      formatEvent e @?= " |  |  | "
-  , testCase "formatEvent - partial fields" $ do
-      let e = mkBaseEvent
-                { SE.logicalResourceId = Just "MyFunc"
-                , SE.resourceStatus = Just CF.ResourceStatus_CREATE_IN_PROGRESS
-                }
-      formatEvent e @?= "MyFunc |  | CREATE_IN_PROGRESS | "
-  , testCase "formatEvent - with reason but no type" $ do
-      let e = mkBaseEvent
-                { SE.logicalResourceId = Just "Stack"
-                , SE.resourceStatusReason = Just "User Initiated"
-                }
-      formatEvent e @?= "Stack |  |  | User Initiated"
-  , testCase "allTerminalStatuses - contains expected statuses" $ do
+  [ testCase "allTerminalStatuses - contains expected statuses" $ do
       assertBool "CREATE_COMPLETE" ("CREATE_COMPLETE" `elem` allTerminalStatuses)
       assertBool "DELETE_COMPLETE" ("DELETE_COMPLETE" `elem` allTerminalStatuses)
       assertBool "UPDATE_COMPLETE" ("UPDATE_COMPLETE" `elem` allTerminalStatuses)
@@ -208,8 +184,6 @@ watchStackTests =
   where
     epoch :: UTCTime
     epoch = UTCTime (fromGregorian 2024 1 1) 0
-    mkBaseEvent :: SE.StackEvent
-    mkBaseEvent = SE.newStackEvent "stack-id" "event-1" "test-stack" epoch
 
     testPollConfig :: PollConfig
     testPollConfig = defaultPollConfig { pcIntervalSeconds = 0 }
