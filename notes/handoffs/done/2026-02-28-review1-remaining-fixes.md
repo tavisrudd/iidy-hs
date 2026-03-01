@@ -219,3 +219,25 @@ Per CLAUDE.md. Use `~/.claude/bin/run-quiet` for noisy output.
   If splitting the module (issue F), it should go with the position-adjustment code.
 - Issue A: after deleting `resolveResourcesMapping`, the `deduplicateResources`
   top-level function is still needed by `resolveMappingWithExpansion` — don't delete it.
+
+### Session 3 (2026-02-28, night)
+
+**Completed**: All remaining actionable items + bonus work beyond original scope.
+**Commits**:
+- `01a7c4c` — Review cleanup: dead code, T.stripPrefix, allLines threading, CFN validation (A-E)
+- `7da92f6` — Doc updates
+- `891352e` — NI-C1: Structured resolve errors (ResolveErrorKind sum type)
+- `54db3bd` — Doc update for NI-C1
+- `92abaa5` — Review 1b fixes: CFN error message bug, dead code removal
+- `68e7e65` — 125 new tests: 13 resolver tag groups + CFN validation
+
+**Beyond original scope**:
+- NI-C1: Replaced string-based error classification with `ResolveErrorKind` (10 variants) + smart constructors
+- Fixed ImportError `show` bug (constructor name wrapping)
+- Ran independent review 1b (Opus, no prior review context) — found and fixed BUG-1 (wrong type in CFN error messages)
+- Removed dead code: `VariableSource` type, `withInputUri` function
+- Added 125 tests covering all 22 resolver tags + all CFN validation rules
+- Review 1c grade assessment written
+
+**Final state**: 686 tests, zero warnings, clean build.
+**Only deferred item**: F (Conversion.hs module split) — not blocking anything.
