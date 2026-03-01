@@ -13,43 +13,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: haskell-actions/setup@v2
-        id: setup
+      - uses: cachix/install-nix-action@v30
         with:
-          ghc-version: '9.10.3'
-          cabal-version: '3.14'
+          nix_path: nixpkgs=channel:nixpkgs-unstable
 
-      - name: Configure build
-        run: |
-          cabal configure --enable-tests --enable-benchmarks
-          cabal build all --dry-run
-
-      - uses: actions/cache/restore@v4
-        id: cache
-        with:
-          path: ${{ steps.setup.outputs.cabal-store }}
-          key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ hashFiles('**/cabal.project', '**/*.cabal') }}-plan-${{ hashFiles('dist-newstyle/cache/plan.json') }}
-          restore-keys: |
-            ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ hashFiles('**/cabal.project', '**/*.cabal') }}-
-            ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-
-
-      - name: Install dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: cabal build all --only-dependencies
-
-      - uses: actions/cache/save@v4
-        if: steps.cache.outputs.cache-hit != 'true'
-        with:
-          path: ${{ steps.setup.outputs.cabal-store }}
-          key: ${{ steps.cache.outputs.cache-primary-key }}
+      - uses: DeterminateSystems/magic-nix-cache-action@main
 
       - name: Build
-        run: cabal build all -Wall -Wcompat
+        run: nix develop --command bash -c 'cabal build all -Wall -Wcompat'
 
       - name: Run tests
-        run: cabal test all --test-show-details=direct
+        run: nix develop --command bash -c 'cabal test all --test-show-details=direct'
 
       - name: Smoke test binary
         run: |
-          cabal run iidy-hs -- --help
-          cabal run iidy-hs -- --version
+          nix develop --command bash -c 'cabal run iidy-hs -- --help'
+          nix develop --command bash -c 'cabal run iidy-hs -- --version'

@@ -1,17 +1,5 @@
 packages: .
 jobs: 4
 
--- amazonka 2.0 on Hackage has base <4.19 but works fine with base 4.20 (GHC 9.10)
--- nixpkgs-unstable already patches this; this lets plain cabal (CI) work too
-allow-newer:
-  amazonka:base,
-  amazonka-core:base,
-  amazonka-cloudformation:base,
-  amazonka-s3:base,
-  amazonka-sts:base,
-  amazonka-ssm:base,
-  amazonka-sns:base,
-  amazonka-sso:base
-
 package iidy-hs
   ghc-options: -O0
