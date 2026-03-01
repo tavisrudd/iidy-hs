@@ -129,7 +129,7 @@ library
     , optparse-applicative
     , prettyprinter
     , random
-    , regex-posix
+    , regex-tdfa
     , resourcet
     , scientific
     , text

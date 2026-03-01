@@ -31,7 +31,8 @@
         hpkgs.aeson-pretty
         hpkgs.crypton
         hpkgs.memory
-        hpkgs.lens
+        hpkgs.microlens
+        hpkgs.regex-tdfa
         hpkgs.conduit
         hpkgs.resourcet
         hpkgs.mtl

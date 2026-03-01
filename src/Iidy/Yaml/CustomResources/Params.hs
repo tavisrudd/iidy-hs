@@ -16,7 +16,7 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Vector as V
-import Text.Regex.Posix ((=~))
+import Text.Regex.TDFA ((=~))
 import Iidy.Yaml.CustomResources.JsonSchema (validateSchema)
 import Iidy.Yaml.OValue
 

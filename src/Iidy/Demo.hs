@@ -29,7 +29,7 @@ import System.FilePath ((</>), takeDirectory)
 import System.IO (hFlush, stdout, stderr, hSetBuffering, BufferMode(..))
 import System.Process (createProcess, proc, waitForProcess,
                        CreateProcess(..), StdStream(..))
-import Text.Regex.Posix ((=~))
+import Text.Regex.TDFA ((=~))
 
 import Iidy.Types (ColorChoice(..))
 import Iidy.Yaml.Engine (preprocessYaml11, PreprocessResult(..))

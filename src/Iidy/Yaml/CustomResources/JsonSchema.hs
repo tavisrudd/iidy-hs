@@ -19,7 +19,7 @@ import Data.Scientific (Scientific, isInteger)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Vector as V
-import Text.Regex.Posix ((=~))
+import Text.Regex.TDFA ((=~))
 
 -- | Validate a JSON value against a JSON Schema.
 -- Returns Left with an error message on validation failure.
