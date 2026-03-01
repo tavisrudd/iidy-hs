@@ -11,7 +11,6 @@ module Iidy.Cfn.Operations.ConvertStack
   -- * Exported for testing
   , parameterizeEnv
   , parameterizeStackName
-  , sortCfnKeys
   , templateBodyToYaml
   , buildStackArgsYaml
   , emitCfnYaml
@@ -27,7 +26,7 @@ import qualified Data.Aeson.KeyMap as KM
 import qualified Data.Aeson.Encode.Pretty as AesonPretty
 import qualified Data.ByteString.Lazy as BL
 import Data.List (sortBy)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (catMaybes, fromMaybe)
 import qualified Data.Scientific as Scientific
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -164,27 +163,6 @@ sortObjectPairs weightFn km =
       let aKey = Key.toText a
           bKey = Key.toText b
       in compare (weightFn aKey) (weightFn bKey) <> compare aKey bKey
-
--- | Recursively sort CFN template keys in canonical order.
-sortCfnValue :: Text -> Text -> Value -> Value
-sortCfnValue parentKey currentKey val = case val of
-  Object km ->
-    let sorted = sortObjectPairs (chooseWeightFn parentKey currentKey) km
-        newPairs = map (\(k, v) ->
-          let keyStr = Key.toText k
-              newParent = if T.null parentKey && T.null currentKey
-                          then keyStr
-                          else currentKey
-          in (k, sortCfnValue newParent keyStr v)
-          ) sorted
-    in Object (KM.fromList newPairs)
-  Array arr ->
-    Array (fmap (\v -> sortCfnValue currentKey "" v) arr)
-  _ -> val
-
--- | Sort top-level CFN keys in canonical order.
-sortCfnKeys :: Value -> Value
-sortCfnKeys = sortCfnValue "" ""
 
 -- | Convert a template body (JSON or YAML) to sorted YAML text.
 -- Uses a custom YAML emitter that sorts keys during emission to avoid
@@ -517,18 +495,25 @@ extractDisableRollback stack = fromMaybe False stack.disableRollback
 ------------------------------------------------------------------------
 
 -- | Migrate non-environment parameters to SSM as SecureString.
+-- Returns only the keys that were successfully written.
+-- Prints a warning to stderr for any parameters that fail.
 moveParamsToSSM :: CfnContext -> [(Text, Text)] -> Text -> Text -> IO [Text]
 moveParamsToSSM ctx params currentEnv project = do
   let ssmPrefix = "/" <> currentEnv <> "/" <> project <> "/"
       eligible = filter (\(k, _) -> k /= "Environment" && k /= "environment") params
-  mapM_ (\(k, v) -> do
+  results <- mapM (\(k, v) -> do
     let name = ssmPrefix <> k
     hPutStrLn stderr $ "Writing SSM parameter: " <> T.unpack name
     let req = (PP.newPutParameter name v)
                 { PP.overwrite = Just True
                 , PP.type' = Just SSMPT.ParameterType_SecureString
                 }
-    _ <- try (runResourceT $ Amazonka.send (cfnEnv ctx) req) :: IO (Either SomeException PP.PutParameterResponse)
-    pure ()
+    result <- try (runResourceT $ Amazonka.send (cfnEnv ctx) req) :: IO (Either SomeException PP.PutParameterResponse)
+    case result of
+      Left e -> do
+        hPutStrLn stderr $ "WARNING: Failed to write SSM parameter "
+          <> T.unpack name <> ": " <> show e
+        pure Nothing
+      Right _ -> pure (Just k)
     ) eligible
-  pure (map fst eligible)
+  pure (catMaybes results)

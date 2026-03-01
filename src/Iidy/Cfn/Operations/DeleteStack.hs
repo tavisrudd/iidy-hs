@@ -17,7 +17,7 @@ import qualified Amazonka
 import qualified Amazonka.CloudFormation.Types as CF
 
 import Iidy.Aws.Sts (getCallerIdentity)
-import Iidy.Cfn.Context (CfnContext(..), deleteSuccessStates)
+import Iidy.Cfn.Context (CfnContext(..), deleteSuccessStates, deleteTerminalStatuses)
 import Iidy.Cfn.Operations.DescribeStack (convertEventWithDuration, convertStack, buildEventsDisplay)
 import Iidy.Cfn.RequestBuilder (buildDeleteStackRequest)
 import Iidy.Cfn.StackOperations
@@ -27,24 +27,10 @@ import Iidy.Cfn.StackOperations
   , getStack
   , PollConfig(..)
   , pollForCompletion
+  , PollResult(..)
   )
 import Iidy.Confirm (requestConfirmation)
 import Iidy.Output.Types (OutputData(..), StackAbsentInfo(..))
-
-------------------------------------------------------------------------
--- Terminal statuses for delete-stack polling
-------------------------------------------------------------------------
-
--- | All terminal stack statuses relevant to a delete operation.
-allTerminalStatuses :: [Text]
-allTerminalStatuses =
-  [ "DELETE_COMPLETE"
-  , "DELETE_FAILED"
-  , "CREATE_FAILED"
-  , "ROLLBACK_COMPLETE"
-  , "ROLLBACK_FAILED"
-  , "UPDATE_ROLLBACK_FAILED"
-  ]
 
 ------------------------------------------------------------------------
 -- Delete stack operation
@@ -119,10 +105,12 @@ deleteStack ctx stackName skipConfirmation env emit = do
                     emit (OdNewStackEvents converted)
                 , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
                 }
-          finalStatus <- pollForCompletion ctx pollTarget allTerminalStatuses pollCfg
+          pollResult <- pollForCompletion ctx pollTarget deleteTerminalStatuses pollCfg
 
           -- Step 6: Return exit code based on final status
-          if finalStatus `elem` deleteSuccessStates
-            then pure (Right 0)
-            else pure (Right 1)
+          case pollResult of
+            PollSuccess finalStatus
+              | finalStatus `elem` deleteSuccessStates -> pure (Right 0)
+              | otherwise -> pure (Right 1)
+            _ -> pure (Right 1)  -- timeout = failure
 

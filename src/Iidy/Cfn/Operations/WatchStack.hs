@@ -18,7 +18,7 @@ import qualified Amazonka
 import qualified Amazonka.CloudFormation as CF
 import qualified Amazonka.CloudFormation.Types as CF
 
-import Iidy.Cfn.Context (CfnContext(..))
+import Iidy.Cfn.Context (CfnContext(..), allTerminalStatuses)
 import Iidy.Cfn.Operations.DescribeStack (convertStack, convertEventWithDuration, buildEventsDisplay)
 import Iidy.Cfn.StackOperations
   ( getStack
@@ -28,23 +28,9 @@ import Iidy.Cfn.StackOperations
   , pollForCompletion
   , PollConfig(..)
   , defaultPollConfig
+  , PollResult(..)
   )
 import Iidy.Output.Types (OutputData(..))
-
-------------------------------------------------------------------------
--- Terminal statuses
-------------------------------------------------------------------------
-
--- | All terminal CloudFormation stack statuses.
-allTerminalStatuses :: [Text]
-allTerminalStatuses =
-  [ "CREATE_COMPLETE", "CREATE_FAILED"
-  , "DELETE_COMPLETE", "DELETE_FAILED"
-  , "ROLLBACK_COMPLETE", "ROLLBACK_FAILED"
-  , "UPDATE_COMPLETE", "UPDATE_FAILED"
-  , "UPDATE_ROLLBACK_COMPLETE", "UPDATE_ROLLBACK_FAILED"
-  , "IMPORT_COMPLETE", "IMPORT_ROLLBACK_COMPLETE", "IMPORT_ROLLBACK_FAILED"
-  ]
 
 ------------------------------------------------------------------------
 -- Main entry point
@@ -97,12 +83,12 @@ watchStack ctx stackName timeoutSeconds emit = do
             , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
             , pcOnInactivityTimeout = \info -> emit (OdInactivityTimeout info)
             }
-      finalStatus <- pollForCompletion ctx sId allTerminalStatuses pollCfg
+      pollResult <- pollForCompletion ctx sId allTerminalStatuses pollCfg
 
       -- 6. If DELETE_COMPLETE, nothing more to collect; otherwise collect contents
-      if finalStatus == "DELETE_COMPLETE"
-        then pure (Right 0)
-        else do
+      case pollResult of
+        PollSuccess "DELETE_COMPLETE" -> pure (Right 0)
+        _ -> do
           contents <- collectStackContents ctx stackName
           emit (OdStackContents contents)
           pure (Right 0)

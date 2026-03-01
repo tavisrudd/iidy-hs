@@ -14,6 +14,12 @@ module Iidy.Cfn.Context
   , updateSuccessStates
   , deleteSuccessStates
   , determineOperationSuccess
+    -- * Terminal status helpers
+  , allTerminalStatuses
+  , createTerminalStatuses
+  , updateTerminalStatuses
+  , deleteTerminalStatuses
+  , changesetTerminalStatuses
   ) where
 
 import Data.IORef
@@ -112,3 +118,41 @@ deleteSuccessStates = ["DELETE_COMPLETE"]
 determineOperationSuccess :: Text -> [Text] -> Bool
 determineOperationSuccess finalStatus expectedStates =
   finalStatus `elem` expectedStates
+
+------------------------------------------------------------------------
+-- Terminal status helpers
+------------------------------------------------------------------------
+
+-- | All terminal stack statuses (superset used by watch-stack).
+allTerminalStatuses :: [Text]
+allTerminalStatuses =
+  [ "CREATE_COMPLETE", "CREATE_FAILED"
+  , "DELETE_COMPLETE", "DELETE_FAILED"
+  , "ROLLBACK_COMPLETE", "ROLLBACK_FAILED"
+  , "UPDATE_COMPLETE", "UPDATE_FAILED"
+  , "UPDATE_ROLLBACK_COMPLETE", "UPDATE_ROLLBACK_FAILED"
+  , "IMPORT_COMPLETE", "IMPORT_ROLLBACK_COMPLETE", "IMPORT_ROLLBACK_FAILED"
+  ]
+
+-- | Terminal statuses for create-stack polling.
+createTerminalStatuses :: [Text]
+createTerminalStatuses = allTerminalStatuses
+  ++ ["DELETE_SKIPPED", "REVIEW_IN_PROGRESS"]
+
+-- | Terminal statuses for update-stack polling.
+updateTerminalStatuses :: [Text]
+updateTerminalStatuses = allTerminalStatuses
+  ++ ["DELETE_SKIPPED", "REVIEW_IN_PROGRESS"]
+
+-- | Terminal statuses for delete-stack polling.
+deleteTerminalStatuses :: [Text]
+deleteTerminalStatuses =
+  [ "DELETE_COMPLETE", "DELETE_FAILED"
+  , "CREATE_FAILED"
+  , "ROLLBACK_COMPLETE", "ROLLBACK_FAILED"
+  , "UPDATE_ROLLBACK_FAILED"
+  ]
+
+-- | Terminal statuses for changeset execution polling.
+changesetTerminalStatuses :: [Text]
+changesetTerminalStatuses = allTerminalStatuses

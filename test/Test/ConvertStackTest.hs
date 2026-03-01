@@ -50,7 +50,7 @@ convertStackTests =
         Left err -> assertFailure $ T.unpack err
         Right yaml -> assertBool "Contains AWSTemplateFormatVersion" (T.isInfixOf "AWSTemplateFormatVersion" yaml)
 
-  , testCase "sortCfnKeys reorders top level" $ do
+  , testCase "templateBodyToYaml sorts top-level keys" $ do
       let input = "Resources: {}\nDescription: hello\nAWSTemplateFormatVersion: '2010-09-09'\nOutputs: {}\nParameters: {}\n"
       case templateBodyToYaml input True of
         Left err -> assertFailure $ T.unpack err
@@ -65,7 +65,7 @@ convertStackTests =
           assertBool "params < resources" (paramsPos < resourcesPos)
           assertBool "resources < outputs" (resourcesPos < outputsPos)
 
-  , testCase "sortCfnKeys disabled does not sort" $ do
+  , testCase "templateBodyToYaml unsorted when disabled" $ do
       let input = "Resources: {}\nAWSTemplateFormatVersion: '2010-09-09'\n"
       case templateBodyToYaml input False of
         Left err -> assertFailure $ T.unpack err

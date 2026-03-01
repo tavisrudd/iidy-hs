@@ -54,6 +54,7 @@ import Iidy.Cfn.Context
   , createSuccessStates
   , updateSuccessStates
   , ctxDeriveToken
+  , changesetTerminalStatuses
   )
 import Iidy.Cfn.RequestBuilder (buildCreateChangeSetRequest)
 import Iidy.Cfn.Operations.DescribeStack (convertEventWithDuration, convertStack, buildEventsDisplay)
@@ -65,6 +66,7 @@ import Iidy.Cfn.StackOperations
   , getStack
   , collectStackContents
   , pollForCompletion
+  , PollResult(..)
   )
 import Iidy.Cfn.Types (StackArgs(..), getStackName)
 import Iidy.Output.Types
@@ -72,27 +74,6 @@ import Iidy.Output.Types
   , ChangeSetInfo(..), ChangeInfo(..), ChangeDetail(..)
   , ChangeSetCreationResult(..)
   )
-
-------------------------------------------------------------------------
--- Terminal statuses for post-execute stack polling
-------------------------------------------------------------------------
-
--- | All terminal stack statuses used when polling after ExecuteChangeSet.
-allTerminalStatuses :: [Text]
-allTerminalStatuses =
-  [ "CREATE_COMPLETE"
-  , "ROLLBACK_COMPLETE"
-  , "DELETE_COMPLETE"
-  , "UPDATE_COMPLETE"
-  , "UPDATE_ROLLBACK_COMPLETE"
-  , "IMPORT_COMPLETE"
-  , "IMPORT_ROLLBACK_COMPLETE"
-  , "CREATE_FAILED"
-  , "DELETE_FAILED"
-  , "ROLLBACK_FAILED"
-  , "UPDATE_ROLLBACK_FAILED"
-  , "IMPORT_ROLLBACK_FAILED"
-  ]
 
 ------------------------------------------------------------------------
 -- Changeset creation
@@ -226,20 +207,20 @@ executeChangeset ctx stackName csName emit = do
             emit (OdNewStackEvents converted)
         , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
         }
-  finalStatus <- pollForCompletion ctx stackId allTerminalStatuses pollCfg
+  pollResult <- pollForCompletion ctx stackId changesetTerminalStatuses pollCfg
 
   -- Step 4: Emit StackContents
   let successStates = createSuccessStates ++ updateSuccessStates
-  if finalStatus /= "DELETE_COMPLETE"
-    then do
+  case pollResult of
+    PollSuccess "DELETE_COMPLETE" -> pure (Right 1)
+    PollSuccess finalStatus -> do
       contents <- collectStackContents ctx stackName
       emit (OdStackContents contents)
-    else pure ()
-
-  -- Step 5: Return exit code
-  if finalStatus `elem` successStates
-    then pure (Right 0)
-    else pure (Right 1)
+      -- Step 5: Return exit code
+      if finalStatus `elem` successStates
+        then pure (Right 0)
+        else pure (Right 1)
+    _ -> pure (Right 1)  -- timeout = failure
 
 ------------------------------------------------------------------------
 -- Changeset description

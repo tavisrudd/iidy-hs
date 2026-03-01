@@ -11,7 +11,7 @@ import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
 import Iidy.Cfn.Operations.WatchStack (formatEvent, allTerminalStatuses)
-import Iidy.Cfn.StackOperations (stackNameFromId, pollForCompletionWith, PollConfig(..), defaultPollConfig)
+import Iidy.Cfn.StackOperations (stackNameFromId, pollForCompletionWith, PollConfig(..), defaultPollConfig, PollResult(..))
 
 watchStackTests :: [TestTree]
 watchStackTests =
@@ -68,7 +68,7 @@ watchStackTests =
       result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
                   allTerminalStatuses
                   (testPollConfig { pcOnNewEvents = const (pure ()) })
-      result @?= "CREATE_COMPLETE"
+      result @?= PollSuccess "CREATE_COMPLETE"
 
   , testCase "pollForCompletionWith - polls multiple times until terminal" $ do
       let inProgress = [mkStackEvt "evt-1" CF.ResourceStatus_CREATE_IN_PROGRESS]
@@ -86,7 +86,7 @@ watchStackTests =
       result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
                   allTerminalStatuses
                   (testPollConfig { pcOnNewEvents = const (pure ()) })
-      result @?= "CREATE_COMPLETE"
+      result @?= PollSuccess "CREATE_COMPLETE"
       polls <- readIORef pollCount
       assertBool "should poll at least twice" (polls >= 2)
 
@@ -130,7 +130,7 @@ watchStackTests =
       result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
                   allTerminalStatuses
                   (testPollConfig { pcOnNewEvents = const (pure ()) })
-      result @?= "CREATE_COMPLETE"
+      result @?= PollSuccess "CREATE_COMPLETE"
 
   , testCase "pollForCompletionWith - detects DELETE_COMPLETE" $ do
       let events = [mkStackEvt "evt-1" CF.ResourceStatus_DELETE_COMPLETE]
@@ -143,7 +143,7 @@ watchStackTests =
       result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
                   allTerminalStatuses
                   (testPollConfig { pcOnNewEvents = const (pure ()) })
-      result @?= "DELETE_COMPLETE"
+      result @?= PollSuccess "DELETE_COMPLETE"
 
   , testCase "pollForCompletionWith - detects UPDATE_ROLLBACK_COMPLETE" $ do
       let inProgress = [mkStackEvt "evt-1" CF.ResourceStatus_UPDATE_IN_PROGRESS]
@@ -159,7 +159,7 @@ watchStackTests =
       result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
                   allTerminalStatuses
                   (testPollConfig { pcOnNewEvents = const (pure ()) })
-      result @?= "UPDATE_ROLLBACK_COMPLETE"
+      result @?= PollSuccess "UPDATE_ROLLBACK_COMPLETE"
   ]
   where
     epoch :: UTCTime

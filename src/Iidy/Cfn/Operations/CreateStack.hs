@@ -15,7 +15,7 @@ import Control.Monad.Trans.Resource (runResourceT)
 import qualified Amazonka
 import qualified Amazonka.CloudFormation.CreateStack as CS
 
-import Iidy.Cfn.Context (CfnContext(..), createSuccessStates)
+import Iidy.Cfn.Context (CfnContext(..), createSuccessStates, createTerminalStatuses)
 import Iidy.Cfn.Operations.DescribeStack (convertEventWithDuration, convertStack)
 import Iidy.Cfn.RequestBuilder (buildCreateStackRequest)
 import Iidy.Cfn.StackOperations
@@ -24,32 +24,10 @@ import Iidy.Cfn.StackOperations
   , defaultPollConfig
   , PollConfig(..)
   , pollForCompletion
+  , PollResult(..)
   )
 import Iidy.Cfn.Types (StackArgs(..), getStackName)
 import Iidy.Output.Types (OutputData(..))
-
-------------------------------------------------------------------------
--- Terminal statuses for create-stack polling
-------------------------------------------------------------------------
-
--- | All terminal stack statuses: polling stops when any of these is reached.
-allTerminalStatuses :: [Text]
-allTerminalStatuses =
-  [ "CREATE_COMPLETE"
-  , "ROLLBACK_COMPLETE"
-  , "DELETE_COMPLETE"
-  , "UPDATE_COMPLETE"
-  , "UPDATE_ROLLBACK_COMPLETE"
-  , "IMPORT_COMPLETE"
-  , "IMPORT_ROLLBACK_COMPLETE"
-  , "CREATE_FAILED"
-  , "DELETE_FAILED"
-  , "ROLLBACK_FAILED"
-  , "UPDATE_ROLLBACK_FAILED"
-  , "IMPORT_ROLLBACK_FAILED"
-  , "DELETE_SKIPPED"
-  , "REVIEW_IN_PROGRESS"
-  ]
 
 ------------------------------------------------------------------------
 -- Create stack operation
@@ -98,12 +76,12 @@ createStack ctx args argsfilePath env emit = do
             emit (OdNewStackEvents converted)
         , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
         }
-  finalStatus <- pollForCompletion ctx stackId allTerminalStatuses pollCfg
+  pollResult <- pollForCompletion ctx stackId createTerminalStatuses pollCfg
 
   -- Step 5: Handle DELETE_COMPLETE (rollback caused stack deletion)
-  if finalStatus == "DELETE_COMPLETE"
-    then pure (Right 1)
-    else do
+  case pollResult of
+    PollSuccess "DELETE_COMPLETE" -> pure (Right 1)
+    PollSuccess finalStatus -> do
       -- Step 6: Collect and emit stack contents
       contents <- collectStackContents ctx stackName
       emit (OdStackContents contents)
@@ -112,3 +90,4 @@ createStack ctx args argsfilePath env emit = do
       if finalStatus `elem` createSuccessStates
         then pure (Right 0)
         else pure (Right 1)
+    _ -> pure (Right 1)  -- timeout = failure

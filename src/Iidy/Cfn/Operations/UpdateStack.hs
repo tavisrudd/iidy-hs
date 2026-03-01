@@ -27,7 +27,7 @@ import qualified Amazonka
 import qualified Amazonka.CloudFormation.UpdateStack as US
 
 import Iidy.Aws.ClientReqToken (TokenInfo(..))
-import Iidy.Cfn.Context (CfnContext(..), updateSuccessStates)
+import Iidy.Cfn.Context (CfnContext(..), updateSuccessStates, updateTerminalStatuses)
 import Iidy.Cfn.Operations.Changeset
   ( createChangeset
   , executeChangeset
@@ -43,32 +43,10 @@ import Iidy.Cfn.StackOperations
   , PollConfig(..)
   , getStackId
   , pollForCompletion
+  , PollResult(..)
   )
 import Iidy.Cfn.Types (StackArgs(..), getStackName)
 import Iidy.Output.Types (OutputData(..), ChangeSetInfo(..))
-
-------------------------------------------------------------------------
--- Terminal statuses for update-stack polling
-------------------------------------------------------------------------
-
--- | All terminal stack statuses: polling stops when any of these is reached.
-allTerminalStatuses :: [Text]
-allTerminalStatuses =
-  [ "CREATE_COMPLETE"
-  , "ROLLBACK_COMPLETE"
-  , "DELETE_COMPLETE"
-  , "UPDATE_COMPLETE"
-  , "UPDATE_ROLLBACK_COMPLETE"
-  , "IMPORT_COMPLETE"
-  , "IMPORT_ROLLBACK_COMPLETE"
-  , "CREATE_FAILED"
-  , "DELETE_FAILED"
-  , "ROLLBACK_FAILED"
-  , "UPDATE_ROLLBACK_FAILED"
-  , "IMPORT_ROLLBACK_FAILED"
-  , "DELETE_SKIPPED"
-  , "REVIEW_IN_PROGRESS"
-  ]
 
 -- | The CloudFormation error message returned when there are no changes to apply.
 noUpdatesMessage :: Text
@@ -143,16 +121,18 @@ updateStack ctx args argsfilePath env emit = do
                 emit (OdNewStackEvents converted)
             , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
             }
-      finalStatus <- pollForCompletion ctx stackId allTerminalStatuses pollCfg
+      pollResult <- pollForCompletion ctx stackId updateTerminalStatuses pollCfg
 
       -- Step 6: Collect and emit stack contents
       contents <- collectStackContents ctx stackName
       emit (OdStackContents contents)
 
       -- Step 7: Return exit code based on success/failure
-      if finalStatus `elem` updateSuccessStates
-        then pure (Right 0)
-        else pure (Right 1)
+      case pollResult of
+        PollSuccess finalStatus
+          | finalStatus `elem` updateSuccessStates -> pure (Right 0)
+          | otherwise -> pure (Right 1)
+        _ -> pure (Right 1)  -- timeout = failure
 
 ------------------------------------------------------------------------
 -- Update stack via changeset (--changeset path)

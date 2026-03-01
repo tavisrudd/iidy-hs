@@ -16,6 +16,7 @@ module Iidy.Cfn.StackOperations
   , pollForCompletionWith
   , PollConfig(..)
   , defaultPollConfig
+  , PollResult(..)
     -- * Helpers (exported for testing)
   , stackNameFromId
   ) where
@@ -39,6 +40,7 @@ import qualified Amazonka.CloudFormation.DescribeStacks as DStacks
 import qualified Amazonka.CloudFormation.DescribeStackEvents as DEvents
 import qualified Amazonka.CloudFormation.DescribeStackResources as DRes
 import qualified Amazonka.CloudFormation.ListChangeSets as LCS
+import qualified Amazonka.CloudFormation.ListExports as LE
 
 import Iidy.Cfn.Context (CfnContext(..))
 import Iidy.Output.Types
@@ -126,10 +128,26 @@ collectStackContents ctx sName = do
     LCS.newListChangeSets sName
   let changesets = mapMaybe convertChangeSetSummary (fromMaybe [] changesetsResp.summaries)
 
+  -- Fetch exports from this stack (filter by exportingStackId matching stack ARN)
+  exportsResp <- runResourceT $ Amazonka.send (cfnEnv ctx) LE.newListExports
+  let allExports = fromMaybe [] exportsResp.exports
+      stackExports = case mStack of
+        Nothing -> []
+        Just s  ->
+          [ StackExportInfo
+              { seiName             = fromMaybe "" e.name
+              , seiValue            = fromMaybe "" e.value
+              , seiExportingStackId = fromMaybe "" e.exportingStackId
+              , seiImportingStacks  = []
+              }
+          | e <- allExports
+          , e.exportingStackId == s.stackId
+          ]
+
   pure StackContents
     { scResources = resources
     , scOutputs = outputs
-    , scExports = []  -- Exports require separate ListExports call
+    , scExports = stackExports
     , scCurrentStatus = statusInfo
     , scPendingChangesets = changesets
     }
@@ -163,14 +181,21 @@ defaultPollConfig = PollConfig
   , pcOnPollTick            = pure ()
   }
 
+-- | Result of a polling operation.
+data PollResult
+  = PollSuccess Text        -- ^ Terminal status reached
+  | PollTimeout             -- ^ Overall timeout elapsed
+  | PollInactivityTimeout   -- ^ Inactivity timeout elapsed
+  deriving stock (Show, Eq)
+
 -- | Poll for stack operation completion.
--- Returns the final stack status.
+-- Returns a PollResult describing how polling ended.
 pollForCompletion
   :: CfnContext
   -> Text          -- ^ stack ID (use ID not name for deletes)
   -> [Text]        -- ^ terminal status strings
   -> PollConfig
-  -> IO Text       -- ^ final status
+  -> IO PollResult
 pollForCompletion ctx sId = pollForCompletionWith (fetchStackEvents ctx sId) sId
 
 -- | Testable polling loop — takes an event-fetching action instead of CfnContext.
@@ -179,14 +204,14 @@ pollForCompletionWith
   -> Text                -- ^ stack ID (for isStackEvent check)
   -> [Text]              -- ^ terminal status strings
   -> PollConfig
-  -> IO Text             -- ^ final status
+  -> IO PollResult
 pollForCompletionWith fetchEvents sId terminalStatuses config = do
   startTime <- maybe getCurrentTime pure (pcStartTime config)
   lastEventTimeRef <- newIORef startTime
   hasSeenNewEventsRef <- newIORef False
   go startTime lastEventTimeRef hasSeenNewEventsRef Set.empty
   where
-    go :: UTCTime -> IORef UTCTime -> IORef Bool -> Set.Set Text -> IO Text
+    go :: UTCTime -> IORef UTCTime -> IORef Bool -> Set.Set Text -> IO PollResult
     go startTime lastEventTimeRef hasSeenNewEventsRef lastEventSet = do
       threadDelay (pcIntervalSeconds config * 1000000)
       pcOnPollTick config
@@ -211,12 +236,12 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
             , itiElapsedSeconds     = elapsed
             , itiOperationStartTime = startTime
             }
-          pure ""  -- timed out
+          pure PollInactivityTimeout
         _ -> do
           -- Check overall timeout
           let totalElapsed = round (diffUTCTime now startTime) :: Int
           case pcTimeoutSeconds config of
-            Just t | t > 0 && totalElapsed > t -> pure ""  -- overall timeout
+            Just t | t > 0 && totalElapsed > t -> pure PollTimeout
             _ -> do
               -- Check if we hit a terminal status
               let stackEvents = filter isStackEvent events
@@ -236,7 +261,7 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
                     , ociOperationStartTime    = startTime
                     , ociSkipRemainingSections = isDelete && currentStatus == "DELETE_COMPLETE"
                     }
-                  pure currentStatus
+                  pure (PollSuccess currentStatus)
                 else go startTime lastEventTimeRef hasSeenNewEventsRef
                        (Set.fromList (map (.eventId) events))
 
