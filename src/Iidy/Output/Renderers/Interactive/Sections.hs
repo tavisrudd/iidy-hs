@@ -34,6 +34,11 @@ module Iidy.Output.Renderers.Interactive.Sections
   , renderApprovalResult
   ) where
 
+-- Note: This module is ~580 LOC, slightly above the 300-500 LOC guideline.
+-- Each function is a self-contained render case for one OutputData variant.
+-- Further splitting would create artificial module boundaries without
+-- improving readability.
+
 import Control.Concurrent.STM (readTVarIO, atomically, writeTVar)
 import Control.Monad (when, unless)
 import Data.List (sortBy)
@@ -298,6 +303,10 @@ renderFinalCommandSummary r summ = do
     SummaryFailure -> rPutStrLn r "Fix and try again."
     _ -> pure ()
 
+-- | Render stack list. The interactive renderer uses a fixed column layout
+-- (timestamp, status, name, tags) regardless of sldColumns/sldQueryMode/sldFiltersApplied.
+-- The JSON renderer respects these fields for machine consumers.
+-- This matches Rust iidy's interactive behavior.
 renderStackList :: InteractiveRenderer -> StackListDisplay -> IO ()
 renderStackList r lst = do
   if null (sldStacks lst)
@@ -467,6 +476,10 @@ renderNewStackEvents r events = do
         case NE.nonEmpty events of
           Just ne -> do
             let mLastEventTime = seTimestamp (sewEvent (NE.last ne))
+            -- Restore preserved timing state. There is a brief (~microsecond) window
+            -- between startTimingTask setting fresh state and this overwrite, during
+            -- which the timing thread could read the wrong start time. This is benign:
+            -- the timing thread sleeps 1s before its first read.
             atomically $ writeTVar (irTimingState r) (Just (startTime, mLastEventTime))
           Nothing -> pure ()
       Nothing -> pure ()
