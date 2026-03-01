@@ -196,6 +196,9 @@ test-suite iidy-hs-test
     Test.FilehashTest
     Test.ImportLoaderTest
     Test.AwsLoaderTest
+    Test.ErrorIdTest
+    Test.ErrorClassificationTest
+    Test.ResolverTest
   default-language: GHC2021
   default-extensions:
     LambdaCase

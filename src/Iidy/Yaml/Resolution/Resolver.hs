@@ -14,6 +14,7 @@ import qualified Data.List as List
 import qualified Data.Map.Strict as Map
 import qualified Data.Scientific as Sci
 import qualified Data.Set as Set
+import Data.Maybe (isNothing, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -83,6 +84,19 @@ resolveSequence ctx items = do
   vals <- traverse (resolveAst ctx) items
   pure $ OArray vals
 
+-- | Resolve an AST key-value pair to a (Text, OValue) pair.
+resolvePairWith :: TagContext -> (YamlAst, YamlAst) -> Resolve (Text, OValue)
+resolvePairWith ctx (keyAst, valAst) = do
+  kv <- resolveAst ctx keyAst
+  let k = oValueToText kv
+  vv <- resolveAst ctx valAst
+  pure (k, vv)
+
+-- | Keys that are consumed by the import/preprocessing layer and should be
+-- filtered from the output.
+isSpecialKey :: Text -> Bool
+isSpecialKey k = k `elem` ["$imports", "$defs", "$envValues", "$params"]
+
 resolveMapping :: TagContext -> [(YamlAst, YamlAst)] -> Resolve OValue
 resolveMapping ctx pairs
   | tcInResourcesSection ctx && not (Map.null (tcCustomTemplateDefs ctx)) =
@@ -91,17 +105,10 @@ resolveMapping ctx pairs
       -- This is a top-level mapping containing "Resources" — resolve with expansion
       resolveMappingWithExpansion ctx pairs
   | otherwise = do
-      resolved <- traverse resolvePair pairs
+      resolved <- traverse (resolvePairWith ctx) pairs
       let filtered = [(k, v) | (k, v) <- resolved, not (isSpecialKey k)]
       pure $ OObject filtered
   where
-    resolvePair (keyAst, valAst) = do
-      kv <- resolveAst ctx keyAst
-      let k = oValueToText kv
-      vv <- resolveAst ctx valAst
-      pure (k, vv)
-    isSpecialKey k = k `elem` ["$imports", "$defs", "$envValues", "$params"]
-
     hasResourcesKey = any (\(k, _) -> isResourcesKey k)
     isResourcesKey (AstPlainString "Resources" _) = True
     isResourcesKey _ = False
@@ -112,7 +119,7 @@ resolveMapping ctx pairs
 resolveMappingWithExpansion :: TagContext -> [(YamlAst, YamlAst)] -> Resolve OValue
 resolveMappingWithExpansion ctx pairs = do
   -- First resolve all pairs, marking Resources for special handling
-  resolved <- traverse resolvePair pairs
+  resolved <- traverse (resolvePairWith ctx) pairs
   let filtered = [(k, v) | (k, v) <- resolved, not (isSpecialKey k)]
   -- Find the Resources section and expand custom resources
   case extractResources filtered of
@@ -124,13 +131,6 @@ resolveMappingWithExpansion ctx pairs = do
           newGlobals = [(k, v) | (k, v) <- Map.toList globalSections, k `notElem` existingKeys]
       pure $ OObject (beforeRes ++ [("Resources", OObject expanded)] ++ afterRes ++ newGlobals)
   where
-    resolvePair (keyAst, valAst) = do
-      kv <- resolveAst ctx keyAst
-      let k = oValueToText kv
-      vv <- resolveAst ctx valAst
-      pure (k, vv)
-    isSpecialKey k = k `elem` ["$imports", "$defs", "$envValues", "$params"]
-
     extractResources :: [(Text, OValue)] -> Maybe ([(Text, OValue)], [(Text, OValue)], [(Text, OValue)])
     extractResources kvs =
       let (before, rest) = break (\(k, _) -> k == "Resources") kvs
@@ -140,8 +140,6 @@ resolveMappingWithExpansion ctx pairs = do
 
     expandResources :: [(Text, OValue)] -> Resolve ([(Text, OValue)], Map.Map Text OValue)
     expandResources resources = do
-      -- Collect all non-custom resource names as additional globals for ref rewriting.
-      -- This prevents refs to parent resources from being prefixed.
       let parentResourceNames = Set.fromList
             [ name | (name, val) <- resources
             , case getResourceType val of
@@ -149,7 +147,6 @@ resolveMappingWithExpansion ctx pairs = do
                 Nothing -> True
             ]
       (expanded, globals) <- foldM (expandOne parentResourceNames) ([], Map.empty) resources
-      -- Deduplicate: if a raw resource has the same name as an expanded one, keep the raw version.
       let deduped = deduplicateResources expanded
       pure (deduped, globals)
       where
@@ -164,22 +161,6 @@ resolveMappingWithExpansion ctx pairs = do
                   in pure (acc ++ erResources expansionResult, mergedGlobals)
             _ -> pure (acc ++ [(resName, resVal)], globals)
 
-    -- | When a raw resource has the same name as an expanded resource,
-    -- the raw resource wins. Keep the first occurrence's position but use
-    -- the last occurrence's value (raw resources override expanded ones).
-    deduplicateResources :: [(Text, OValue)] -> [(Text, OValue)]
-    deduplicateResources kvs =
-      let -- Build a map with last-seen values
-          lastVals = Map.fromList kvs
-          -- Walk the list, emitting each key only once (first position) with last value
-          go _seen [] = []
-          go seen ((k, _v):rest)
-            | Set.member k seen = go seen rest
-            | otherwise = case Map.lookup k lastVals of
-                Just v' -> (k, v') : go (Set.insert k seen) rest
-                Nothing -> go seen rest
-      in go Set.empty kvs
-
     mergeGlobalSection :: OValue -> OValue -> OValue
     mergeGlobalSection (OObject a) (OObject b) = OObject (a ++ [(k, v) | (k, v) <- b, k `notElem` map fst a])
     mergeGlobalSection _ b = b
@@ -188,7 +169,8 @@ resolveMappingWithExpansion ctx pairs = do
 -- Check each resource's Type against custom template defs and expand if matched.
 resolveResourcesMapping :: TagContext -> [(YamlAst, YamlAst)] -> Resolve OValue
 resolveResourcesMapping ctx pairs = do
-  resolved <- traverse resolvePair pairs
+  let resCtx = ctx { tcInResourcesSection = False }
+  resolved <- traverse (resolvePairWith resCtx) pairs
   let filtered = [(k, v) | (k, v) <- resolved, not (isSpecialKey k)]
       parentResourceNames = Set.fromList
         [ name | (name, val) <- filtered
@@ -197,16 +179,9 @@ resolveResourcesMapping ctx pairs = do
             Nothing -> True
         ]
   expanded <- foldM (expandIfCustom parentResourceNames) [] filtered
-  let deduped = deduplicateResources' expanded
+  let deduped = deduplicateResources expanded
   pure $ OObject deduped
   where
-    resolvePair (keyAst, valAst) = do
-      kv <- resolveAst ctx keyAst
-      let k = oValueToText kv
-      vv <- resolveAst (ctx { tcInResourcesSection = False }) valAst
-      pure (k, vv)
-    isSpecialKey k = k `elem` ["$imports", "$defs", "$envValues", "$params"]
-
     expandIfCustom parentNames acc (resName, resVal) =
       case getResourceType resVal of
         Just typeName | Just tmplInfo <- Map.lookup typeName (tcCustomTemplateDefs ctx) -> do
@@ -216,28 +191,31 @@ resolveResourcesMapping ctx pairs = do
             Right expansionResult -> pure (acc ++ erResources expansionResult)
         _ -> pure (acc ++ [(resName, resVal)])
 
-    deduplicateResources' :: [(Text, OValue)] -> [(Text, OValue)]
-    deduplicateResources' kvs =
-      let lastVals = Map.fromList kvs
-          go _seen [] = []
-          go seen ((k, _v):rest)
-            | Set.member k seen = go seen rest
-            | otherwise = case Map.lookup k lastVals of
-                Just v' -> (k, v') : go (Set.insert k seen) rest
-                Nothing -> go seen rest
-      in go Set.empty kvs
-
 getResourceType :: OValue -> Maybe Text
 getResourceType (OObject kvs) = case lookupO "Type" kvs of
   Just (OString t) -> Just t
   _ -> Nothing
 getResourceType _ = Nothing
 
+-- | Deduplicate a list of (key, value) pairs. When a key appears multiple times,
+-- keep the first occurrence's position but use the last occurrence's value
+-- (raw resources override expanded ones).
+deduplicateResources :: [(Text, OValue)] -> [(Text, OValue)]
+deduplicateResources kvs =
+  let lastVals = Map.fromList kvs
+      go _seen [] = []
+      go seen ((k, _v):rest)
+        | Set.member k seen = go seen rest
+        | otherwise = case Map.lookup k lastVals of
+            Just v' -> (k, v') : go (Set.insert k seen) rest
+            Nothing -> go seen rest
+  in go Set.empty kvs
+
 -- | Build the reparse function for expandCustomResource.
 -- Returns OValue to preserve key ordering from the template.
 buildReparse :: TagContext -> Map.Map Text OValue -> Text -> Either Text OValue
 buildReparse parentCtx params rawBody =
-  case parseYaml (BL.fromStrict (TE.encodeUtf8 rawBody)) (maybe "<template>" id (tcInputUri parentCtx)) of
+  case parseYaml (BL.fromStrict (TE.encodeUtf8 rawBody)) (fromMaybe "<template>" (tcInputUri parentCtx)) of
     Left (ParseError _ msg) -> Left ("Parse error: " <> msg)
     Right templateAst ->
       let subCtx = parentCtx
@@ -430,20 +408,23 @@ resolveVarLookup ctx meta (VarLookupTag rawPath query jmesPathExpr) = do
         "Invalid JMESPath expression '" <> expr <> "': " <> msg <> ". Variable: " <> path
 
 expandBrackets :: Text -> TagContext -> Text
-expandBrackets path ctx
-  | T.isInfixOf "[" path =
-      let (before, rest) = T.breakOn "[" path
-          (varName, after) = T.breakOn "]" (T.drop 1 rest)
-          suffix = T.drop 1 after
-          resolved = case getVariable varName ctx of
-            Just (OString s) -> s
-            Just (ONumber n) -> case Sci.floatingOrInteger n of
-              Left (d :: Double) -> T.pack (show d)
-              Right (i :: Integer) -> T.pack (show i)
-            _ -> varName
-          expanded = before <> "." <> resolved <> suffix
-      in expandBrackets expanded ctx
-  | otherwise = path
+expandBrackets path ctx = go (10 :: Int) path
+  where
+    go depth p
+      | depth <= 0 = p  -- prevent infinite recursion
+      | T.isInfixOf "[" p =
+          let (before, rest) = T.breakOn "[" p
+              (varName, after) = T.breakOn "]" (T.drop 1 rest)
+              suffix = T.drop 1 after
+              resolved = case getVariable varName ctx of
+                Just (OString s) -> s
+                Just (ONumber n) -> case Sci.floatingOrInteger n of
+                  Left (d :: Double) -> T.pack (show d)
+                  Right (i :: Integer) -> T.pack (show i)
+                _ -> varName
+              expanded = before <> "." <> resolved <> suffix
+          in go (depth - 1) expanded
+      | otherwise = p
 
 -- | Resolve a dot-path to an OValue (preserving key ordering)
 resolveDotPathO :: Text -> TagContext -> Maybe OValue
@@ -463,7 +444,9 @@ traversePathO (seg:rest) val = case val of
     Just v  -> traversePathO rest v
     Nothing -> Nothing
   OArray arr  -> case reads (T.unpack seg) of
-    [(i, "")] | i >= 0 && i < length arr -> traversePathO rest (arr !! i)
+    [(i, "")] | i >= 0 -> case drop i arr of
+      (v:_) -> traversePathO rest v
+      _     -> Nothing
     _ -> Nothing
   _ -> Nothing
 
@@ -475,7 +458,7 @@ applyDotQueryValidated meta varPath q val
   | T.isInfixOf "," q = case val of
       OObject kvs ->
         let keys = map T.strip (T.splitOn "," q)
-            missing = filter (\k -> lookupO k kvs == Nothing) keys
+            missing = filter (\k -> isNothing (lookupO k kvs)) keys
         in case missing of
           (m:_) -> resolveError meta $
             "property '" <> m <> "' not found in mapping. Variable: " <>
@@ -629,8 +612,7 @@ resolveMapListToHash ctx meta (MapListToHashTag items template var filterExpr) =
       pure $ OObject pairs
     _ -> resolveError meta "!$mapListToHash: unexpected result"
   where
-    extractPair (OArray pair)
-      | length pair == 2 = pure (oValueToText (pair !! 0), pair !! 1)
+    extractPair (OArray [k, v]) = pure (oValueToText k, v)
     extractPair (OObject kvs)
       | Just k <- lookupO "key" kvs, Just v <- lookupO "value" kvs =
           pure (oValueToText k, v)
@@ -679,9 +661,7 @@ resolveFromPairs ctx meta (FromPairsTag sourceAst) = do
       pure $ OObject pairs
     _ -> typeMismatchError meta "sequence" sourceVal
   where
-    extractPair (OArray pair)
-      | length pair == 2 =
-          pure (oValueToText (pair !! 0), pair !! 1)
+    extractPair (OArray [k, v]) = pure (oValueToText k, v)
     extractPair v = typeMismatchError meta "sequence" v
 
 resolveToYamlString :: TagContext -> SrcMeta -> ToYamlStringTag -> Resolve OValue
@@ -781,6 +761,12 @@ astToValueRaw = \case
 rawKeyText :: YamlAst -> Text
 rawKeyText (AstPlainString t _) = t
 rawKeyText (AstTemplatedString t _) = t
+rawKeyText (AstBool True _) = "true"
+rawKeyText (AstBool False _) = "false"
+rawKeyText (AstNull _) = "null"
+rawKeyText (AstNumber n _) = case Sci.floatingOrInteger n of
+  Left (d :: Double) -> T.pack (show d)
+  Right (i :: Integer) -> T.pack (show i)
 rawKeyText _ = ""
 
 ------------------------------------------------------------------------
@@ -798,7 +784,7 @@ insertO k v ((k', v'):rest)
 ------------------------------------------------------------------------
 
 fromMaybeVar :: Maybe Text -> Text
-fromMaybeVar = maybe "item" id
+fromMaybeVar = fromMaybe "item"
 
 imapMaybeM :: Monad m => (Int -> a -> m (Maybe b)) -> [a] -> m [b]
 imapMaybeM f xs = go 0 xs

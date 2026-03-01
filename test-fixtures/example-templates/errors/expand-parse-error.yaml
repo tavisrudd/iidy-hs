@@ -1,0 +1,13 @@
+$defs:
+  BrokenTemplate:
+    $params:
+      - Name: Greeting
+        Type: String
+    body: |
+      message: {{Greeting}
+      broken: [unterminated
+
+result: !$expand
+  template: BrokenTemplate
+  params:
+    Greeting: Hello

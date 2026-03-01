@@ -4,6 +4,7 @@
 module Iidy.Yaml.Errors.Conversion
   ( formatPreprocessErrorEnhanced
   , formatParseErrorEnhanced
+  , classifyMessage
   ) where
 
 import Control.Applicative ((<|>))
@@ -46,29 +47,24 @@ translateParseError source pos msg
   | "Lexical error" `T.isPrefixOf` msg =
       let allLines = T.lines source
           lineNum = posLine pos
-          line = if lineNum >= 1 && lineNum <= length allLines
-                 then Just (allLines !! (lineNum - 1))
-                 else Nothing
-          -- Check if the line has chained tags (two !$ on same line)
+          line = safeLine allLines lineNum
           hasChainedTags = case line of
-            Just l -> let idxs = findAllSubstring "!$" l
-                      in length idxs >= 2
+            Just l -> length (findAllSubstring "!$" l) >= 2
             Nothing -> False
       in if hasChainedTags
          then case line of
            Just l -> case findSecondTag l of
-             Just col -> ("invalid YAML structure", pos { posColumn = col + 1 })  -- 1-based
+             Just col -> ("invalid YAML structure", pos { posColumn = col + 1 })
              Nothing -> ("invalid YAML structure", pos)
            Nothing -> ("invalid YAML structure", pos)
          else (msg, pos)
   -- HsYAML "Unexpected '<newline>'" with unterminated string: Rust sees "unexpected end of file"
   | "Unexpected '" `T.isPrefixOf` msg && T.any (== '\n') msg =
-      -- Rust reports the error on the NEXT line, at the end of it
       let allLines = T.lines source
           nextLine = posLine pos + 1
-          nextCol = if nextLine >= 1 && nextLine <= length allLines
-                    then T.length (allLines !! (nextLine - 1)) + 1
-                    else 0
+          nextCol = case safeLine allLines nextLine of
+            Just l  -> T.length l + 1
+            Nothing -> 0
       in ("unexpected end of file", pos { posLine = nextLine, posColumn = nextCol })
   | otherwise = (msg, pos)
 
@@ -524,16 +520,16 @@ adjustForTypeMismatch allLines loc msg =
           fieldResult = if isItemsError
                         then findFieldColumn allLines tagLn tagText
                         else Nothing
+          fallback = loc { srcLocLine = tagLn, srcLocColumn = tagCol0 + tagFallbackOffset tagText }
       in case fieldResult of
         Just (fieldLn, fieldCol) -> loc { srcLocLine = fieldLn, srcLocColumn = fieldCol }
         Nothing ->
           -- Try flow-style position adjustment on the tag line
-          let tagLine = allLines !! (tagLn - 1)
-          in case findFlowColumn tagLine tagText msg of
-            Just flowCol -> loc { srcLocLine = tagLn, srcLocColumn = flowCol }
-            Nothing ->
-              -- Fallback: use Rust-style tag_fallback with family-specific offset
-              loc { srcLocLine = tagLn, srcLocColumn = tagCol0 + tagFallbackOffset tagText }
+          case safeLine allLines tagLn of
+            Just tagLine -> case findFlowColumn tagLine tagText msg of
+              Just flowCol -> loc { srcLocLine = tagLn, srcLocColumn = flowCol }
+              Nothing -> fallback
+            Nothing -> fallback
     Nothing -> loc
 
 -- | Get the fallback offset for a tag, matching Rust's tag_fallback patterns.
@@ -554,16 +550,12 @@ tagFallbackOffset tagText
 
 -- | Find a !$ tag on a line, returning (lineNum, 0-based col, tag text).
 findAnyTagOnLine :: [Text] -> Int -> Maybe (Int, Int, Text)
-findAnyTagOnLine allLines lineNum
-  | lineNum >= 1 && lineNum <= length allLines =
-      let line = allLines !! (lineNum - 1)
-      in case findSubstring "!$" line of
-           Just col0 ->
-             let rest = T.drop col0 line
-                 tag = T.takeWhile (\c -> c /= ' ' && c /= '\n' && c /= '\t' && c /= '{' && c /= '[' && c /= ':') rest
-             in if T.length tag > 2 then Just (lineNum, col0, tag) else Nothing
-           Nothing -> Nothing
-  | otherwise = Nothing
+findAnyTagOnLine allLines lineNum = do
+  line <- safeLine allLines lineNum
+  col0 <- findSubstring "!$" line
+  let rest = T.drop col0 line
+      tag = T.takeWhile (\c -> c /= ' ' && c /= '\n' && c /= '\t' && c /= '{' && c /= '[' && c /= ':') rest
+  if T.length tag > 2 then Just (lineNum, col0, tag) else Nothing
 
 -- | Search subsequent lines after a tag for field keywords.
 -- Returns (lineNum, column) matching Rust's find_after_keyword logic.
@@ -619,33 +611,28 @@ findSecondBracketArg line = do
 findUnquotedComma :: Text -> Maybe Int
 findUnquotedComma = go 0 False
   where
-    go _ _ t | T.null t = Nothing
-    go i inQ t =
-      let c = T.head t
-          rest = T.tail t
-      in if inQ
-         then if c == '"' then go (i+1) False rest else go (i+1) True rest
-         else case c of
-           ',' -> Just i
-           '"' -> go (i+1) True rest
-           _   -> go (i+1) False rest
+    go i inQ t = case T.uncons t of
+      Nothing -> Nothing
+      Just (c, rest)
+        | inQ       -> go (i+1) (c /= '"') rest
+        | c == ','  -> Just i
+        | c == '"'  -> go (i+1) True rest
+        | otherwise -> go (i+1) False rest
 
 
 -- | Find the position of a variable reference in source lines.
 -- Searches for patterns like "!$ variable", "!$variable", "{{variable}}".
 -- Returns (lineNum, column) matching Rust's find_variable_column.
 findVariableColumn :: [Text] -> Int -> Text -> Maybe (Int, Int)
-findVariableColumn allLines lineNum varPath
-  | lineNum >= 1 && lineNum <= length allLines =
-      let line = allLines !! (lineNum - 1)
-      in case findSubstring ("!$ " <> varPath) line of
-           Just col -> Just (lineNum, col + 4)  -- skip "!$ " + 1 for Rust compat
-           Nothing -> case findSubstring ("!$" <> varPath) line of
-             Just col -> Just (lineNum, col + 3)
-             Nothing -> case findSubstring ("{{" <> varPath <> "}}") line of
-               Just col -> Just (lineNum, col + 2)
-               Nothing -> Nothing
-  | otherwise = Nothing
+findVariableColumn allLines lineNum varPath = do
+  line <- safeLine allLines lineNum
+  case findSubstring ("!$ " <> varPath) line of
+    Just col -> Just (lineNum, col + 4)  -- skip "!$ " + 1 for Rust compat
+    Nothing -> case findSubstring ("!$" <> varPath) line of
+      Just col -> Just (lineNum, col + 3)
+      Nothing -> case findSubstring ("{{" <> varPath <> "}}") line of
+        Just col -> Just (lineNum, col + 2)
+        Nothing -> Nothing
 
 -- | Find the column after a keyword and whitespace (Rust-compatible).
 findAfterKeyword :: Text -> Text -> Maybe Int
@@ -659,22 +646,24 @@ findAfterKeyword line keyword =
 
 -- | Find a tag in a specific source line. Returns (lineNum, 1-based column).
 findTagInLine :: [Text] -> Int -> Text -> Maybe (Int, Int)
-findTagInLine allLines lineNum tag
-  | lineNum >= 1 && lineNum <= length allLines =
-      let line = allLines !! (lineNum - 1)
-      in case findSubstring tag line of
-           Just col -> Just (lineNum, col + 1)  -- 1-based
-           Nothing  -> Nothing
-  | otherwise = Nothing
+findTagInLine allLines lineNum tag = do
+  line <- safeLine allLines lineNum
+  col <- findSubstring tag line
+  Just (lineNum, col + 1)  -- 1-based
 
 -- | Find any !$ tag on a source line. Returns (lineNum, 1-based column).
 findAnyTagInLine :: [Text] -> Int -> Maybe (Int, Int)
-findAnyTagInLine allLines lineNum
-  | lineNum >= 1 && lineNum <= length allLines =
-      let line = allLines !! (lineNum - 1)
-      in case findSubstring "!$" line of
-           Just col -> Just (lineNum, col + 1)  -- 1-based
-           Nothing  -> Nothing
+findAnyTagInLine allLines lineNum = do
+  line <- safeLine allLines lineNum
+  col <- findSubstring "!$" line
+  Just (lineNum, col + 1)  -- 1-based
+
+-- | Safe 1-based line access into a list of lines.
+safeLine :: [Text] -> Int -> Maybe Text
+safeLine lns n
+  | n >= 1 = case drop (n - 1) lns of
+      (x:_) -> Just x
+      _     -> Nothing
   | otherwise = Nothing
 
 -- | Find a substring in a text, return 0-based column position.
@@ -705,20 +694,13 @@ findSecondTag line =
 
 -- | Find the full tag name (e.g., "!$mapListToHash") on the source line at the given location.
 findTagOnSourceLine :: Text -> SourceLocation -> Maybe Text
-findTagOnSourceLine source loc =
+findTagOnSourceLine source loc = do
   let allLines = T.lines source
-      lineNum = srcLocLine loc
-  in if lineNum >= 1 && lineNum <= length allLines
-     then extractFullTag (allLines !! (lineNum - 1))
-     else Nothing
-  where
-    extractFullTag line =
-      case findSubstring "!$" line of
-        Nothing -> Nothing
-        Just col ->
-          let rest = T.drop col line
-              tag = T.takeWhile (\c -> c /= ' ' && c /= '\n' && c /= '\t' && c /= '{' && c /= '[' && c /= ':') rest
-          in if T.length tag > 2 then Just tag else Nothing
+  line <- safeLine allLines (srcLocLine loc)
+  col <- findSubstring "!$" line
+  let rest = T.drop col line
+      tag = T.takeWhile (\c -> c /= ' ' && c /= '\n' && c /= '\t' && c /= '{' && c /= '[' && c /= ':') rest
+  if T.length tag > 2 then Just tag else Nothing
 
 -- | Check if this is a parse-time error (not a resolve-time type mismatch).
 -- Parse errors need the position adjusted to point at the tag, not the value.
@@ -807,7 +789,14 @@ extractExpected msg
 
 -- | Extract found type from error message (best effort).
 extractFound :: Text -> Text
-extractFound _ = "wrong type"
+extractFound msg
+  | "found a string" `T.isInfixOf` msg = "string"
+  | "found a sequence" `T.isInfixOf` msg = "sequence"
+  | "found a mapping" `T.isInfixOf` msg || "found an object" `T.isInfixOf` msg = "object"
+  | "found a number" `T.isInfixOf` msg = "number"
+  | "found a boolean" `T.isInfixOf` msg = "boolean"
+  | "found null" `T.isInfixOf` msg = "null"
+  | otherwise = "wrong type"
 
 -- | Generate type conversion help text matching Rust's output.
 -- Rust only provides hints for object/string conversions.
@@ -835,18 +824,13 @@ tagExample tag = case T.toLower tag of
 
 -- | Check if a message is a CloudFormation validation error.
 isCfnValidationMessage :: Text -> Bool
-isCfnValidationMessage msg =
-  ("!Ref " `T.isPrefixOf` msg) ||
-  ("!Base64 " `T.isPrefixOf` msg) ||
-  ("!GetAZs " `T.isPrefixOf` msg) ||
-  ("!ImportValue " `T.isPrefixOf` msg) ||
-  ("!Join " `T.isPrefixOf` msg) ||
-  ("!Select " `T.isPrefixOf` msg) ||
-  ("!FindInMap " `T.isPrefixOf` msg) ||
-  ("!If " `T.isPrefixOf` msg) ||
-  ("!Equals " `T.isPrefixOf` msg) ||
-  ("!Not " `T.isPrefixOf` msg) ||
-  ("!Sub " `T.isPrefixOf` msg)
+isCfnValidationMessage msg = any (\p -> p `T.isPrefixOf` msg) cfnValidationPrefixes
+  where
+    cfnValidationPrefixes :: [Text]
+    cfnValidationPrefixes =
+      [ "!Ref ", "!Base64 ", "!GetAZs ", "!ImportValue ", "!Join "
+      , "!Select ", "!FindInMap ", "!If ", "!Equals ", "!Not ", "!Sub "
+      ]
 
 -- | Extract CFN tag name from validation message.
 parseCfnValidationMessage :: Text -> (Text, Text)
@@ -889,16 +873,12 @@ findTagExampleForUnexpectedField source loc =
 findTagInNearbyLines :: [Text] -> Int -> Maybe Text
 findTagInNearbyLines allLines lineNum =
   let searchRange = [max 1 (lineNum - 5) .. lineNum]
-      findTag ln
-        | ln >= 1 && ln <= length allLines =
-            let line = allLines !! (ln - 1)
-            in case findSubstring "!$" line of
-                 Just col ->
-                   let rest = T.drop col line
-                       tag = T.takeWhile (\c -> c /= ' ' && c /= '\n' && c /= '\t' && c /= '{' && c /= '[' && c /= ':') rest
-                   in if T.length tag > 2 then Just tag else Nothing
-                 Nothing -> Nothing
-        | otherwise = Nothing
+      findTag ln = do
+        line <- safeLine allLines ln
+        col <- findSubstring "!$" line
+        let rest = T.drop col line
+            tag = T.takeWhile (\c -> c /= ' ' && c /= '\n' && c /= '\t' && c /= '{' && c /= '[' && c /= ':') rest
+        if T.length tag > 2 then Just tag else Nothing
   in case concatMap (\ln -> maybe [] (:[]) (findTag ln)) searchRange of
     (t:_) -> let ex = tagExample t in if T.null ex then Nothing else Just ex
     [] -> Nothing

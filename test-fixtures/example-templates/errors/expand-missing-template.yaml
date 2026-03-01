@@ -1,0 +1,4 @@
+result: !$expand
+  template: NonExistentTemplate
+  params:
+    key: value

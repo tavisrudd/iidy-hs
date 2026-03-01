@@ -30,6 +30,9 @@ import Test.Phase14FixTest (phase14FixTests)
 import Test.FilehashTest (filehashTests)
 import Test.ImportLoaderTest (importLoaderTests)
 import Test.AwsLoaderTest (awsLoaderTests)
+import Test.ErrorIdTest (errorIdTests)
+import Test.ErrorClassificationTest (errorClassificationTests)
+import Test.ResolverTest (resolverTests)
 
 main :: IO ()
 main = do
@@ -64,4 +67,7 @@ main = do
     , testGroup "Filehash" filehashTests
     , testGroup "ImportLoaders" importLoaderTests
     , testGroup "AwsLoaders" awsLoaderTests
+    , testGroup "ErrorIds" errorIdTests
+    , testGroup "ErrorClassification" errorClassificationTests
+    , testGroup "Resolver" resolverTests
     ]

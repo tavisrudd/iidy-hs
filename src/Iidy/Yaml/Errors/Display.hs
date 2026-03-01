@@ -145,8 +145,8 @@ formatSourceContext c source loc spanLen inlineDesc =
       prevLine = getSourceLine allLines (lineNum - 1)
       currLine = getSourceLine allLines lineNum
       nextLine = getSourceLine allLines (lineNum + 1)
-      -- Skip carets when column is 0 (no position) or past end of line
-      showCarets = case currLine of
+      -- Skip carets when spanLen is 0, column is 0, or past end of line
+      showCarets = spanLen > 0 && case currLine of
         Just l  -> col > 0 && col <= T.length l
         Nothing -> False
   in T.concat
@@ -173,25 +173,8 @@ formatSourceContext c source loc spanLen inlineDesc =
     ]
 
 -- | Format source context without caret line (for tag errors with missing fields).
--- Line numbers are right-aligned in a fixed 4-character gutter (matching Rust's {:4}).
 formatSourceContextNoCarets :: ErrorColors -> Text -> SourceLocation -> Text
-formatSourceContextNoCarets c source loc =
-  let allLines = T.lines source
-      lineNum = srcLocLine loc  -- 1-based
-      prevLine = getSourceLine allLines (lineNum - 1)
-      currLine = getSourceLine allLines lineNum
-      nextLine = getSourceLine allLines (lineNum + 1)
-  in T.concat
-    [ maybe "" (\l ->
-        ecDarkGrey c <> padGutter4 (lineNum - 1) <> ecReset c <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
-        ) prevLine
-    , maybe "" (\l ->
-        ecRed c <> padGutter4 lineNum <> ecReset c <> " | " <> l <> "\n"
-        ) currLine
-    , maybe "" (\l ->
-        ecDarkGrey c <> padGutter4 (lineNum + 1) <> ecReset c <> " | " <> ecGrey c <> l <> ecReset c <> "\n"
-        ) nextLine
-    ]
+formatSourceContextNoCarets c source loc = formatSourceContext c source loc 0 ""
 
 -- | Right-align a line number in a fixed 4-character field (matching Rust's {:4}).
 padGutter4 :: Int -> Text
@@ -202,7 +185,9 @@ padGutter4 n =
 
 getSourceLine :: [Text] -> Int -> Maybe Text
 getSourceLine lns n
-  | n >= 1 && n <= length lns = Just (lns !! (n - 1))
+  | n >= 1 = case drop (n - 1) lns of
+      (x:_) -> Just x
+      _     -> Nothing
   | otherwise = Nothing
 
 -- | Format available variables list (trailing \n for blank line before footer).
