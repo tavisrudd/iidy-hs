@@ -8,7 +8,7 @@ import qualified Amazonka.Types as AT
 import qualified Amazonka.CloudFormation.Types as CF
 import qualified Amazonka.CloudFormation.Types.StackEvent as SE
 import Data.Time.Calendar (fromGregorian)
-import Data.Time.Clock (UTCTime(..))
+import Data.Time.Clock (UTCTime(..), addUTCTime)
 import Network.HTTP.Types.Status (status400)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -141,6 +141,43 @@ watchStackTests =
                   allTerminalStatuses
                   (testPollConfig { pcOnNewEvents = const (pure ()) })
       result @?= PollSuccess "UPDATE_ROLLBACK_COMPLETE"
+
+  , testCase "pollForCompletionWith - returns PollTimeout when overall timeout exceeded" $ do
+      -- Set startTime 120 seconds in the past so elapsed > timeout immediately
+      let pastTime = addUTCTime (-120) epoch
+          events = [mkStackEvt "evt-1" CF.ResourceStatus_CREATE_IN_PROGRESS]
+      eventsRef <- newIORef [events]
+      let fetchEvents = do
+            batches <- readIORef eventsRef
+            case batches of
+              (b:rest) -> writeIORef eventsRef rest >> pure b
+              []       -> pure events
+      result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
+                  allTerminalStatuses
+                  (testPollConfig { pcOnNewEvents = const (pure ())
+                                 , pcTimeoutSeconds = Just 60
+                                 , pcStartTime = Just pastTime
+                                 })
+      result @?= PollTimeout
+
+  , testCase "pollForCompletionWith - returns PollInactivityTimeout when idle too long" $ do
+      -- Set startTime in the past so inactivity elapsed > timeout.
+      -- pcWaitForStatusChange = False so we don't need to see new events first.
+      let pastTime = addUTCTime (-120) epoch
+          events = [mkStackEvt "evt-1" CF.ResourceStatus_CREATE_IN_PROGRESS]
+      eventsRef <- newIORef [events, events]  -- same events both times (no new)
+      let fetchEvents = do
+            batches <- readIORef eventsRef
+            case batches of
+              (b:rest) -> writeIORef eventsRef rest >> pure b
+              []       -> pure events
+      result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
+                  allTerminalStatuses
+                  (testPollConfig { pcOnNewEvents = const (pure ())
+                                 , pcInactivityTimeoutSecs = Just 30
+                                 , pcStartTime = Just pastTime
+                                 })
+      result @?= PollInactivityTimeout
 
   -- isNoUpdatesError tests
   , testGroup "isNoUpdatesError"

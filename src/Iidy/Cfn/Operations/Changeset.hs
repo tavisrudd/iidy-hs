@@ -25,6 +25,8 @@ module Iidy.Cfn.Operations.Changeset
   , percentEncode
   , extractRegionFromArn
   , buildChangesetConsoleUrl
+  , formatAmazonkaError
+  , isNonRetryableError
   ) where
 
 import Control.Concurrent (threadDelay)
@@ -131,25 +133,31 @@ pollChangesetCompletion ctx stackName csId = go (0 :: Int)
       result <- describeChangeset ctx stackName csId
       case result of
         Left err
+          | isNonRetryableError err ->
+              -- Permanent error (not found, access denied) — fail immediately
+              mkFailedInfo (formatAmazonkaError err)
           | errorCount >= maxRetries ->
-              -- Return a FAILED info after too many errors
-              pure ChangeSetInfo
-                { csiChangeSetName = csId
-                , csiChangeSetId   = csId
-                , csiStackId       = ""
-                , csiStackName     = stackName
-                , csiDescription   = Nothing
-                , csiStatus        = "FAILED"
-                , csiStatusReason  = Just ("Polling failed after " <> T.pack (show maxRetries) <> " retries: " <> err)
-                , csiCreationTime  = Nothing
-                , csiExecutionStatus = Nothing
-                , csiChanges       = []
-                }
+              -- Transient errors exhausted retry budget
+              mkFailedInfo ("Polling failed after " <> T.pack (show maxRetries) <> " retries: " <> formatAmazonkaError err)
           | otherwise -> go (errorCount + 1)
         Right info ->
           if isTerminalCsStatus (csiStatus info)
             then pure info
             else go 0  -- reset error count on success
+
+    mkFailedInfo :: Text -> IO ChangeSetInfo
+    mkFailedInfo reason = pure ChangeSetInfo
+      { csiChangeSetName  = csId
+      , csiChangeSetId    = csId
+      , csiStackId        = ""
+      , csiStackName      = stackName
+      , csiDescription    = Nothing
+      , csiStatus         = "FAILED"
+      , csiStatusReason   = Just reason
+      , csiCreationTime   = Nothing
+      , csiExecutionStatus = Nothing
+      , csiChanges        = []
+      }
 
     isTerminalCsStatus :: Text -> Bool
     isTerminalCsStatus s = s `elem` ["CREATE_COMPLETE", "FAILED", "DELETE_COMPLETE", "DELETE_FAILED"]
@@ -217,17 +225,18 @@ executeChangeset ctx stackName csName emit = do
 ------------------------------------------------------------------------
 
 -- | Call DescribeChangeSet and convert the response to ChangeSetInfo.
--- Returns Left on Amazonka errors, Right on success.
+-- Returns Left on Amazonka errors (preserving the error for retryability
+-- checks), Right on success.
 describeChangeset
   :: CfnContext
   -> Text  -- ^ stack name
   -> Text  -- ^ changeset name (or ARN)
-  -> IO (Either Text ChangeSetInfo)
+  -> IO (Either Amazonka.Error ChangeSetInfo)
 describeChangeset ctx stackName csName = do
   let req = set DCS.describeChangeSet_stackName (Just stackName)
               (DCS.newDescribeChangeSet csName)
   result <- fmap Right (runResourceT $ Amazonka.send (cfnEnv ctx) req)
-    `catch` (\e -> pure (Left (T.pack (show (e :: Amazonka.Error)))))
+    `catch` (\e -> pure (Left (e :: Amazonka.Error)))
   case result of
     Left err   -> pure (Left err)
     Right resp -> pure (Right (convertDescribeResponse resp))
@@ -246,6 +255,25 @@ convertDescribeResponse resp = ChangeSetInfo
   , csiExecutionStatus = CF.fromExecutionStatus <$> resp.executionStatus
   , csiChanges         = mapMaybe convertChange (fromMaybe [] resp.changes)
   }
+
+-- | Extract a clean, user-friendly error message from an Amazonka error.
+formatAmazonkaError :: Amazonka.Error -> Text
+formatAmazonkaError (Amazonka.ServiceError se) =
+  let Amazonka.ErrorCode code = se.code
+      msg = maybe "" Amazonka.fromErrorMessage se.message
+  in code <> ": " <> msg
+formatAmazonkaError e = T.pack (show e)
+
+-- | Check if an Amazonka error is non-retryable (permanent).
+-- Access denied and not-found errors will not resolve on retry.
+isNonRetryableError :: Amazonka.Error -> Bool
+isNonRetryableError (Amazonka.ServiceError se) =
+  se.code `elem` map Amazonka.ErrorCode
+    [ "ChangeSetNotFoundException"
+    , "AccessDeniedException"
+    , "ValidationError"
+    ]
+isNonRetryableError _ = False
 
 ------------------------------------------------------------------------
 -- AWS type conversion helpers

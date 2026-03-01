@@ -272,16 +272,19 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
                 if shouldCheckTerminal && currentStatus `elem` terminalStatuses
                   then do
                     let elapsed = round (diffUTCTime now startTime) :: Int
-                        isDelete = "DELETE_COMPLETE" `elem` terminalStatuses
                     pcOnOperationComplete config OperationCompleteInfo
                       { ociElapsedSeconds        = elapsed
                       , ociOperationStartTime    = startTime
-                      , ociSkipRemainingSections = isDelete && currentStatus == "DELETE_COMPLETE"
+                      , ociSkipRemainingSections = currentStatus == "DELETE_COMPLETE"
                       }
                     pure (PollSuccess currentStatus)
                   else
                     let newEventIds = Set.fromList (map (.eventId) newEvents)
                     in go (Set.union lastEventSet newEventIds)
+  -- Note: starts with empty seen set, so the first poll batch includes all
+  -- pre-existing events. This matches the Rust behavior. watchStack has its
+  -- own second dedup layer to filter these; write operations emit them as
+  -- part of the initial event display.
   go Set.empty
   where
     -- | True only for the stack's own status event (logicalResourceId = stackName
