@@ -44,22 +44,22 @@ errorColorTests =
 
   , testCase "footer uses light blue (not grey)" $ do
       let output = formatError defaultColors testSource sampleVarError
-          footer = case reverse (T.lines output) of
-                     (x:_) -> x
-                     []    -> error "expected non-empty output"
-      assertBool "footer has light blue" ("\ESC[38;5;75m" `T.isInfixOf` footer)
-      assertBool "footer has no grey" (not $ "\ESC[38;5;245m" `T.isInfixOf` footer)
+      case reverse (T.lines output) of
+        [] -> assertFailure "expected non-empty output"
+        (footer:_) -> do
+          assertBool "footer has light blue" ("\ESC[38;5;75m" `T.isInfixOf` footer)
+          assertBool "footer has no grey" (not $ "\ESC[38;5;245m" `T.isInfixOf` footer)
 
   , testCase "available variables line is fully colored" $ do
       let output = formatError defaultColors testSource sampleVarError
-          avLine = case filter ("available variables" `T.isInfixOf`) (T.lines output) of
-                     (x:_) -> x
-                     []    -> error "expected 'available variables' line"
-      assertBool "light blue before label" ("\ESC[38;5;75m" `T.isInfixOf` avLine)
-      assertBool "reset after vars" ("\ESC[0m" `T.isInfixOf` avLine)
-      let afterLabel = snd $ T.breakOn "available variables: " avLine
-      let resetCount = length $ T.splitOn "\ESC[0m" afterLabel
-      assertEqual "single reset at end of vars" 2 resetCount
+      case filter ("available variables" `T.isInfixOf`) (T.lines output) of
+        [] -> assertFailure "expected 'available variables' line"
+        (avLine:_) -> do
+          assertBool "light blue before label" ("\ESC[38;5;75m" `T.isInfixOf` avLine)
+          assertBool "reset after vars" ("\ESC[0m" `T.isInfixOf` avLine)
+          let afterLabel = snd $ T.breakOn "available variables: " avLine
+          let resetCount = length $ T.splitOn "\ESC[0m" afterLabel
+          assertEqual "single reset at end of vars" 2 resetCount
 
   , testCase "type mismatch help is colored" $ do
       let err = TypeMismatchError TypeMismatchInfo

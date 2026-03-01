@@ -63,6 +63,8 @@ library
     Iidy.Output.Spinner
     Iidy.Output.Manager
     Iidy.Output.Renderers.Interactive
+    Iidy.Output.Renderers.Interactive.Types
+    Iidy.Output.Renderers.Interactive.Sections
     Iidy.Output.Renderers.Json
     Iidy.Confirm
     Iidy.Cli
@@ -132,6 +134,7 @@ library
     , regex-tdfa
     , resourcet
     , scientific
+    , stm
     , text
     , time
     , transformers
@@ -226,6 +229,7 @@ test-suite iidy-hs-test
     , vector
     , optparse-applicative
     , QuickCheck
+    , stm
     , tasty-quickcheck
     , temporary
     , time

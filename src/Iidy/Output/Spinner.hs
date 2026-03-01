@@ -52,28 +52,36 @@ newSpinner h style = do
     , spHandle   = h
     }
 
+-- | Safe cyclic indexing into a NonEmpty list
+cycleIndex :: NonEmpty a -> Int -> a
+cycleIndex ne i = go (i `mod` NE.length ne) (NE.toList ne)
+  where
+    go 0 (x:_)  = x
+    go n (_:xs) = go (n - 1) xs
+    go _ []     = NE.head ne  -- unreachable due to mod, but total
+
 -- | Advance the spinner to the next frame, returning the current frame character
 spinnerTick :: Spinner -> IO Text
 spinnerTick sp = do
   frame <- readIORef (spFrameRef sp)
   let frames = spinnerFrames (spStyle sp)
-      current = NE.toList frames !! (frame `mod` NE.length frames)
-  writeIORef (spFrameRef sp) (frame + 1)
-  writeIORef (spActive sp) True
+      current = cycleIndex frames frame
+  atomicWriteIORef (spFrameRef sp) (frame + 1)
+  atomicWriteIORef (spActive sp) True
   pure current
 
 -- | Clear the spinner state
 spinnerClear :: Spinner -> IO ()
 spinnerClear sp = do
-  writeIORef (spActive sp) False
-  writeIORef (spFrameRef sp) 0
+  atomicWriteIORef (spActive sp) False
+  atomicWriteIORef (spFrameRef sp) 0
 
 -- | Get the current frame without advancing
 spinnerFrame :: Spinner -> IO Text
 spinnerFrame sp = do
   frame <- readIORef (spFrameRef sp)
   let frames = spinnerFrames (spStyle sp)
-  pure $ NE.toList frames !! (frame `mod` NE.length frames)
+  pure $ cycleIndex frames frame
 
 -- | Set the spinner message
 spinnerSetMessage :: Spinner -> Text -> IO ()

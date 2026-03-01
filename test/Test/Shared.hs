@@ -44,6 +44,7 @@ module Test.Shared
 import Data.Aeson (Value(..))
 import qualified Data.Aeson.Key as AesonKey
 import qualified Data.Aeson.KeyMap as KM
+import Control.Concurrent.STM (newTVarIO)
 import Data.IORef (newIORef)
 import System.IO (stdout, stderr)
 import qualified Data.Map.Strict as Map
@@ -84,16 +85,17 @@ isObject _ = False
 mkColoredRenderer :: IO InteractiveRenderer
 mkColoredRenderer = do
   hasRendered <- newIORef False
-  spinnerRef <- newIORef Nothing
-  spinnerThreadRef <- newIORef Nothing
-  timingStateRef <- newIORef Nothing
-  timingThreadRef <- newIORef Nothing
+  spinnerRef <- newTVarIO Nothing
+  spinnerThreadRef <- newTVarIO Nothing
+  timingStateRef <- newTVarIO Nothing
+  timingThreadRef <- newTVarIO Nothing
   pure InteractiveRenderer
     { irStdout             = stdout
     , irStderr             = stderr
     , irTheme              = darkTheme
     , irOptions            = defaultInteractiveOptions
     , irTerminalWidth      = 130
+    , irIsTty              = False
     , irHasRenderedContent = hasRendered
     , irSpinner            = spinnerRef
     , irSpinnerThread      = spinnerThreadRef
@@ -105,16 +107,17 @@ mkColoredRenderer = do
 mkPlainRenderer :: IO InteractiveRenderer
 mkPlainRenderer = do
   hasRendered <- newIORef False
-  spinnerRef <- newIORef Nothing
-  spinnerThreadRef <- newIORef Nothing
-  timingStateRef <- newIORef Nothing
-  timingThreadRef <- newIORef Nothing
+  spinnerRef <- newTVarIO Nothing
+  spinnerThreadRef <- newTVarIO Nothing
+  timingStateRef <- newTVarIO Nothing
+  timingThreadRef <- newTVarIO Nothing
   pure InteractiveRenderer
     { irStdout             = stdout
     , irStderr             = stderr
     , irTheme              = noColorTheme
     , irOptions            = plainInteractiveOptions
     , irTerminalWidth      = 130
+    , irIsTty              = False
     , irHasRenderedContent = hasRendered
     , irSpinner            = spinnerRef
     , irSpinnerThread      = spinnerThreadRef

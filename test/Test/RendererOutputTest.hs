@@ -138,8 +138,9 @@ rendererOutputTests =
         Nothing -> assertFailure "Failed to parse JSON"
         Just (Array arr) -> do
           assertEqual "one event" 1 (V.length arr)
-          case V.head arr of
-            Object _ -> pure ()
-            other -> assertFailure ("Expected object in array, got: " <> show other)
+          case arr V.!? 0 of
+            Just (Object _) -> pure ()
+            Just other -> assertFailure ("Expected object in array, got: " <> show other)
+            Nothing -> assertFailure "expected at least one element"
         Just other -> assertFailure ("Expected array, got: " <> show other)
   ]
