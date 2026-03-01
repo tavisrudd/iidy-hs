@@ -71,23 +71,19 @@ changesetTests =
                   , CRCD.changeSource = Just CF.ChangeSource_DirectModification
                   , CRCD.causingEntity = Just "MyParam"
                   }
-      case convertDetail det of
-        Nothing -> assertFailure "Expected Just ChangeDetail"
-        Just cd -> do
-          cdTarget cd @?= "Properties"
-          cdEvaluation cd @?= Just "Static"
-          cdChangeSource cd @?= Just "DirectModification"
-          cdCausingEntity cd @?= Just "MyParam"
+          cd = convertDetail det
+      cdTarget cd @?= "Properties"
+      cdEvaluation cd @?= Just "Static"
+      cdChangeSource cd @?= Just "DirectModification"
+      cdCausingEntity cd @?= Just "MyParam"
 
   , testCase "convertDetail: empty detail" $ do
       let det = CRCD.newResourceChangeDetail
-      case convertDetail det of
-        Nothing -> assertFailure "Expected Just ChangeDetail"
-        Just cd -> do
-          cdTarget cd @?= ""
-          cdEvaluation cd @?= Nothing
-          cdChangeSource cd @?= Nothing
-          cdCausingEntity cd @?= Nothing
+          cd = convertDetail det
+      cdTarget cd @?= ""
+      cdEvaluation cd @?= Nothing
+      cdChangeSource cd @?= Nothing
+      cdCausingEntity cd @?= Nothing
 
   , testCase "generateDashedName: produces adjective-noun format" $ do
       name <- generateDashedName

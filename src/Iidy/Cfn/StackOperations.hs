@@ -184,17 +184,16 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
   startTime <- maybe getCurrentTime pure (pcStartTime config)
   lastEventTimeRef <- newIORef startTime
   hasSeenNewEventsRef <- newIORef False
-  go startTime lastEventTimeRef hasSeenNewEventsRef []
+  go startTime lastEventTimeRef hasSeenNewEventsRef Set.empty
   where
-    go :: UTCTime -> IORef UTCTime -> IORef Bool -> [Text] -> IO Text
-    go startTime lastEventTimeRef hasSeenNewEventsRef lastEventIds = do
+    go :: UTCTime -> IORef UTCTime -> IORef Bool -> Set.Set Text -> IO Text
+    go startTime lastEventTimeRef hasSeenNewEventsRef lastEventSet = do
       threadDelay (pcIntervalSeconds config * 1000000)
       pcOnPollTick config
       events <- fetchEvents
       now <- getCurrentTime
-      -- Filter to new events only
-      let lastEventSet = Set.fromList lastEventIds
-          newEvents = filter (\e -> e.eventId `notElem` lastEventSet) events
+      -- Filter to new events only (O(log n) per event via Set.notMember)
+      let newEvents = filter (\e -> Set.notMember e.eventId lastEventSet) events
       when (not (null newEvents)) $ do
         writeIORef lastEventTimeRef now
         writeIORef hasSeenNewEventsRef True
@@ -238,7 +237,8 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
                     , ociSkipRemainingSections = isDelete && currentStatus == "DELETE_COMPLETE"
                     }
                   pure currentStatus
-                else go startTime lastEventTimeRef hasSeenNewEventsRef (map (.eventId) events)
+                else go startTime lastEventTimeRef hasSeenNewEventsRef
+                       (Set.fromList (map (.eventId) events))
 
     isStackEvent :: CF.StackEvent -> Bool
     isStackEvent e =

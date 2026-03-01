@@ -6,10 +6,12 @@ module Iidy.Cfn.Types
   , UpdateResult(..)
   , StackArgs(..)
   , emptyStackArgs
+  , getStackName
   ) where
 
 import Data.Aeson (Value)
 import Data.Map.Strict (Map)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 
 data CfnOperation
@@ -96,6 +98,10 @@ data StackArgs = StackArgs
   , saUsePreviousParameterValues  :: !(Maybe [Text])
   , saCommandsBefore              :: !(Maybe [Text])
   } deriving stock (Show, Eq)
+
+-- | Extract the stack name from StackArgs, falling back to "unnamed-stack".
+getStackName :: StackArgs -> Text
+getStackName args = fromMaybe "unnamed-stack" (saStackName args)
 
 emptyStackArgs :: StackArgs
 emptyStackArgs = StackArgs

@@ -360,12 +360,12 @@ buildStackArgsYaml stackName project params tags caps mTimeout
     formatParam (k, v)
       | k == "Environment" || k == "environment" = "  " <> k <> ": '{{environment}}'"
       | k `elem` ssmParamKeys = "  " <> k <> ": __SSM_REF__" <> k
-      | otherwise = "  " <> k <> ": " <> v
+      | otherwise = "  " <> k <> ": " <> quoteYamlString v
 
     formatTag (k, v)
       | k == "project" = "  " <> k <> ": '{{project}}'"
       | k == "environment" || k == "Environment" = "  " <> k <> ": '{{environment}}'"
-      | otherwise = "  " <> k <> ": " <> v
+      | otherwise = "  " <> k <> ": " <> quoteYamlString v
 
 ------------------------------------------------------------------------
 -- AWS operations

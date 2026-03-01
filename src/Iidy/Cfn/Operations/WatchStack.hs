@@ -10,6 +10,7 @@ module Iidy.Cfn.Operations.WatchStack
   ) where
 
 import Data.Maybe (fromMaybe)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -80,7 +81,7 @@ watchStack ctx stackName timeoutSeconds emit = do
       initialEvents <- fetchStackEvents ctx sId
       let prevEventsDisplay = buildEventsDisplay stackName 10 initialEvents
       emit (OdStackEvents prevEventsDisplay)
-      let seenIds = map (.eventId) initialEvents
+      let seenIds = Set.fromList (map (.eventId) initialEvents)
 
       -- 5. Poll until terminal status, emitting live events
       emit (OdPollingStarted "Loading live events...")
@@ -88,7 +89,7 @@ watchStack ctx stackName timeoutSeconds emit = do
             { pcWaitForStatusChange = True
             , pcInactivityTimeoutSecs = if timeoutSeconds > 0 then Just timeoutSeconds else Nothing
             , pcOnNewEvents = \newEvents -> do
-                let fresh = filter (\e -> e.eventId `notElem` seenIds) newEvents
+                let fresh = filter (\e -> Set.notMember e.eventId seenIds) newEvents
                 if null fresh then pure ()
                 else do
                   let converted = map (convertEventWithDuration (cfnStartTime ctx)) fresh

@@ -33,7 +33,7 @@ import Iidy.Cfn.Operations.CreateStack (createStack)
 import Iidy.Cfn.Operations.DescribeStack (convertStack)
 import Iidy.Cfn.Operations.UpdateStack (updateStack)
 import Iidy.Cfn.StackOperations (stackExists, getStack)
-import Iidy.Cfn.Types (StackArgs(..))
+import Iidy.Cfn.Types (StackArgs(..), getStackName)
 import Iidy.Output.Types (OutputData(..), ChangeSetInfo(..))
 
 ------------------------------------------------------------------------
@@ -54,7 +54,7 @@ createOrUpdate
   -> (OutputData -> IO ())  -- ^ output emitter for progress display
   -> IO (Either Text Int)
 createOrUpdate ctx args useChangeset yesFlag argsfilePath env emit = do
-  let stackName = fromMaybe "unnamed-stack" (saStackName args)
+  let stackName = getStackName args
 
   exists <- stackExists ctx stackName
 
@@ -86,7 +86,7 @@ updateWithChangeset
   -> (OutputData -> IO ())  -- ^ output emitter
   -> IO (Either Text Int)
 updateWithChangeset ctx args yesFlag argsfilePath env emit = do
-  let stackName = fromMaybe "unnamed-stack" (saStackName args)
+  let stackName = getStackName args
       regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
 
   -- Fetch and emit StackDefinition
@@ -134,7 +134,7 @@ createWithChangeset
   -> (OutputData -> IO ())  -- ^ output emitter
   -> IO (Either Text Int)
 createWithChangeset ctx args yesFlag argsfilePath env emit = do
-  let stackName = fromMaybe "unnamed-stack" (saStackName args)
+  let stackName = getStackName args
       regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
 
   -- Generate random changeset name (docker-style)

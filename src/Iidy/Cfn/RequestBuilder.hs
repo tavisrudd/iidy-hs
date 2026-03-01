@@ -19,7 +19,7 @@ module Iidy.Cfn.RequestBuilder
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe, catMaybes)
+import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -34,7 +34,7 @@ import qualified Amazonka.CloudFormation.Types.Parameter as Param
 import Iidy.Aws.ClientReqToken (TokenInfo(..))
 import Iidy.Cfn.Context (CfnContext(..), ctxDeriveToken)
 import Iidy.Cfn.TemplateLoader (TemplateResult(..), loadCfnTemplate)
-import Iidy.Cfn.Types (StackArgs(..))
+import Iidy.Cfn.Types (StackArgs(..), getStackName)
 
 ------------------------------------------------------------------------
 -- Request builders
@@ -50,7 +50,7 @@ buildCreateStackRequest
   -> Text           -- ^ environment name
   -> IO (CF.CreateStack, TokenInfo)
 buildCreateStackRequest ctx args usePrimary argsfilePath env = do
-  let sName = fromMaybe "unnamed-stack" (saStackName args)
+  let sName = getStackName args
   token <- if usePrimary
     then pure (cfnPrimaryToken ctx)
     else ctxDeriveToken ctx "create-stack"
@@ -81,7 +81,7 @@ buildUpdateStackRequest
   -> Text           -- ^ environment name
   -> IO (CF.UpdateStack, TokenInfo)
 buildUpdateStackRequest ctx args usePrimary argsfilePath env = do
-  let sName = fromMaybe "unnamed-stack" (saStackName args)
+  let sName = getStackName args
   token <- if usePrimary
     then pure (cfnPrimaryToken ctx)
     else ctxDeriveToken ctx "update-stack"
@@ -119,7 +119,7 @@ buildCreateChangeSetRequest
   -> Text     -- ^ environment
   -> IO (CF.CreateChangeSet, TokenInfo)
 buildCreateChangeSetRequest ctx args csName csType argsfilePath env = do
-  let sName = fromMaybe "unnamed-stack" (saStackName args)
+  let sName = getStackName args
   token <- ctxDeriveToken ctx "create-changeset"
   tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env
   let baseReq = CCS.newCreateChangeSet sName csName

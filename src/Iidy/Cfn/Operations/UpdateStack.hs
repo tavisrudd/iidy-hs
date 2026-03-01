@@ -44,7 +44,7 @@ import Iidy.Cfn.StackOperations
   , getStackId
   , pollForCompletion
   )
-import Iidy.Cfn.Types (StackArgs(..))
+import Iidy.Cfn.Types (StackArgs(..), getStackName)
 import Iidy.Output.Types (OutputData(..), ChangeSetInfo(..))
 
 ------------------------------------------------------------------------
@@ -97,7 +97,7 @@ updateStack
   -> (OutputData -> IO ()) -- ^ output emitter for progress display
   -> IO (Either Text Int)
 updateStack ctx args argsfilePath env emit = do
-  let stackName = fromMaybe "unnamed-stack" (saStackName args)
+  let stackName = getStackName args
 
   -- Step 1: Build the UpdateStack request (use primary token)
   (req, _token) <- buildUpdateStackRequest ctx args True argsfilePath env
@@ -177,7 +177,7 @@ updateStackWithChangeset
   -> (OutputData -> IO ())  -- ^ output emitter for progress display
   -> IO (Either Text Int)
 updateStackWithChangeset ctx args yesFlag argsfilePath env emit = do
-  let stackName = fromMaybe "unnamed-stack" (saStackName args)
+  let stackName = getStackName args
       regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
 
   -- Step 1: Fetch and emit StackDefinition

@@ -22,6 +22,9 @@ module Iidy.Cfn.Operations.Changeset
   -- * Internal (exported for testing)
   , convertChange
   , convertDetail
+  , percentEncode
+  , extractRegionFromArn
+  , buildChangesetConsoleUrl
   ) where
 
 import Control.Concurrent (threadDelay)
@@ -63,7 +66,7 @@ import Iidy.Cfn.StackOperations
   , collectStackContents
   , pollForCompletion
   )
-import Iidy.Cfn.Types (StackArgs(..))
+import Iidy.Cfn.Types (StackArgs(..), getStackName)
 import Iidy.Output.Types
   ( OutputData(..), StackEventsDisplay(..)
   , ChangeSetInfo(..), ChangeInfo(..), ChangeDetail(..)
@@ -116,7 +119,7 @@ createChangeset ctx args csName stackExists argsfilePath env = do
   let csType = if stackExists
                  then CF.ChangeSetType_UPDATE
                  else CF.ChangeSetType_CREATE
-      stackName = fromMaybe "unnamed-stack" (saStackName args)
+      stackName = getStackName args
 
   -- Step 1 & 2: Build and send the CreateChangeSet request
   (req, _token) <- buildCreateChangeSetRequest ctx args csName csType argsfilePath env
@@ -303,16 +306,16 @@ convertChange ch = do
     , ciResourceType       = rType
     , ciReplacement        = CF.fromReplacement <$> rc.replacement
     , ciScope              = fmap (map CF.fromResourceAttribute) rc.scope
-    , ciDetails            = mapMaybe convertDetail (fromMaybe [] rc.details)
+    , ciDetails            = map convertDetail (fromMaybe [] rc.details)
     }
 
 -- | Convert a CF.ResourceChangeDetail to ChangeDetail.
-convertDetail :: CF.ResourceChangeDetail -> Maybe ChangeDetail
+convertDetail :: CF.ResourceChangeDetail -> ChangeDetail
 convertDetail d =
   let targetText = case d.target of
         Nothing -> ""
         Just t  -> fromMaybe "" (fmap CF.fromResourceAttribute t.attribute)
-  in Just ChangeDetail
+  in ChangeDetail
        { cdTarget        = targetText
        , cdEvaluation    = CF.fromEvaluationType <$> d.evaluation
        , cdChangeSource  = CF.fromChangeSource <$> d.changeSource

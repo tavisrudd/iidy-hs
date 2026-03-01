@@ -14,6 +14,7 @@ import qualified Data.Text as T
 import Control.Monad.Trans.Resource (runResourceT)
 
 import qualified Amazonka
+import qualified Amazonka.CloudFormation.Types as CF
 
 import Iidy.Aws.Sts (getCallerIdentity)
 import Iidy.Cfn.Context (CfnContext(..), deleteSuccessStates)
@@ -25,7 +26,6 @@ import Iidy.Cfn.StackOperations
   , fetchStackEvents
   , getStack
   , PollConfig(..)
-  , getStackId
   , pollForCompletion
   )
 import Iidy.Confirm (requestConfirmation)
@@ -84,7 +84,7 @@ deleteStack ctx stackName skipConfirmation env emit = do
         , saiAuthArn     = authArn
         }
       pure (Right 0)
-    Just cfnStack -> do
+    Just (cfnStack :: CF.Stack) -> do
       -- Step 1a: Show stack definition before confirmation
       emit (OdStackDefinition (convertStack cfnStack regionText) True)
 
@@ -102,9 +102,8 @@ deleteStack ctx stackName skipConfirmation env emit = do
       if not confirmed
         then pure (Right 130)  -- Exit code 130 = user cancelled
         else do
-          -- Step 2: Obtain stack ID/ARN for reliable post-delete polling
-          mStackId <- getStackId ctx stackName
-          let pollTarget = fromMaybe stackName mStackId
+          -- Step 2: Use stack ID/ARN from the already-fetched stack for reliable post-delete polling
+          let pollTarget = fromMaybe stackName cfnStack.stackId
 
           -- Step 3: Build the DeleteStack request
           (req, _token) <- buildDeleteStackRequest ctx stackName
