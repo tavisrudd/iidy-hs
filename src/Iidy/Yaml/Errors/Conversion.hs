@@ -20,7 +20,7 @@ import Iidy.Yaml.Errors.Ids
 import Iidy.Yaml.Handlebars.Engine (InterpolateError(..))
 import Iidy.Yaml.Imports.Types (ImportError(..))
 import Iidy.Yaml.Location (Position(..), SourceLocation(..))
-import Iidy.Yaml.Resolution.Resolver (ResolveError(..))
+import Iidy.Yaml.Resolution.Resolver (ResolveError(..), ResolveErrorKind(..))
 
 -- | Format a PreprocessError with enhanced display (matching Rust output format).
 formatPreprocessErrorEnhanced :: ColorChoice -> Text -> Text -> PreprocessError -> IO Text
@@ -83,13 +83,114 @@ convertToEnhanced filePath source = \case
     , ysiExample      = Nothing
     }
 
--- | Classify a ResolveError by pattern-matching on its message text.
--- Adjusts position to point at the tag (not value) by searching the source.
+-- | Classify a ResolveError using its structured kind.
+-- Falls back to string-based classification only for REGeneric.
 classifyResolveError :: Text -> Text -> ResolveError -> EnhancedPreprocessingError
-classifyResolveError filePath source (ResolveError pos msg) =
+classifyResolveError filePath source (ResolveError pos msg kind) =
   let loc = posToSourceLocation filePath pos
       adjustedLoc = adjustLocationForTag source loc msg
-  in classifyMessage source adjustedLoc msg
+      allLines = T.lines source
+  in case kind of
+    REVariableNotFound path available ->
+      VariableNotFoundError VariableNotFoundInfo
+        { vnfErrorId       = VariableNotFound
+        , vnfVariable      = path
+        , vnfLocation      = adjustedLoc
+        , vnfAvailableVars = available
+        , vnfSuggestions   = []
+        }
+
+    REJmesPath _expr _detail varPath ->
+      let displayMsg = case T.breakOn ". Variable: " msg of
+            (before, rest) | not (T.null rest) -> before
+            _ -> msg
+      in LookupQueryError LookupQueryInfo
+        { lqiErrorId       = LookupQueryFailed
+        , lqiVariablePath  = varPath
+        , lqiMessage       = displayMsg
+        , lqiLocation      = adjustedLoc
+        , lqiAvailableKeys = []
+        }
+
+    REPropertyNotFound _key varPath availKeys ->
+      let propName = case T.stripPrefix "property '" msg of
+            Just rest -> T.takeWhile (/= '\'') rest
+            Nothing -> ""
+      in LookupQueryError LookupQueryInfo
+        { lqiErrorId       = LookupQueryFailed
+        , lqiVariablePath  = varPath
+        , lqiMessage       = "property '" <> propName <> "' not found in mapping"
+        , lqiLocation      = adjustedLoc { srcLocColumn = 0 }
+        , lqiAvailableKeys = availKeys
+        }
+
+    RETypeMismatch expected found ctx ->
+      let cleanMsg = "expected " <> expected <> ", found " <> found
+      in TypeMismatchError TypeMismatchInfo
+        { tmiErrorId  = TypeMismatchInOperation
+        , tmiExpected = expected
+        , tmiFound    = found
+        , tmiLocation = adjustedLoc
+        , tmiContext  = case ctx of
+            Nothing  -> cleanMsg
+            Just tag -> cleanMsg <> " [" <> tag <> "]"
+        , tmiHelp     = generateTypeConversionHelp expected found
+        }
+
+    RECfnValidation cfnTag ->
+      CfnValidationError CfnValidationInfo
+        { cviErrorId  = InvalidCloudFormationIntrinsic
+        , cviTagName  = cfnTag
+        , cviMessage  = msg
+        , cviLocation = adjustedLoc
+        , cviHelpText = cfnHelpText cfnTag msg
+        }
+
+    REHandlebars ->
+      let detail = fromMaybe msg (T.stripPrefix "Handlebars error: " msg)
+      in YamlSyntaxError YamlSyntaxInfo
+        { ysiErrorId      = HandlebarsSyntaxError
+        , ysiShortMessage = detail
+        , ysiGuidance     = "template syntax error"
+        , ysiLocation     = adjustedLoc
+        , ysiFixHint      = Nothing
+        , ysiExample      = Nothing
+        }
+
+    RETagSyntax tagName ->
+      TagParsingError TagParsingInfo
+        { tpiErrorId     = TagSyntaxError
+        , tpiTagName     = fromMaybe "" tagName
+        , tpiMessage     = msg
+        , tpiGuidance    = Nothing
+        , tpiLocation    = adjustedLoc
+        , tpiSuggestion  = Nothing
+        , tpiSpanLen     = 0
+        }
+
+    REExpandNotFound _templateName ->
+      YamlSyntaxError YamlSyntaxInfo
+        { ysiErrorId      = InvalidYamlSyntax
+        , ysiShortMessage = msg
+        , ysiGuidance     = "parsing failed"
+        , ysiLocation     = adjustedLoc
+        , ysiFixHint      = Nothing
+        , ysiExample      = Nothing
+        }
+
+    REParseSyntax ->
+      YamlSyntaxError YamlSyntaxInfo
+        { ysiErrorId      = InvalidYamlSyntax
+        , ysiShortMessage = msg
+        , ysiGuidance     = "parsing failed"
+        , ysiLocation     = adjustedLoc
+        , ysiFixHint      = Nothing
+        , ysiExample      = Nothing
+        }
+
+    REGeneric ->
+      -- Fall back to string-based classification for unstructured errors
+      classifyMessage' allLines adjustedLoc msg
 
 -- | Pattern-match on error message to determine error type and produce
 -- the appropriate EnhancedPreprocessingError variant.
@@ -393,9 +494,8 @@ classifyMessage' allLines loc msg
 
 -- | Classify import errors.
 classifyImportError :: Text -> ImportError -> EnhancedPreprocessingError
-classifyImportError filePath ie =
+classifyImportError filePath (ImportError msg) =
   let loc = SourceLocation filePath 0 0 ""
-      msg = T.pack (show ie)
   in YamlSyntaxError YamlSyntaxInfo
     { ysiErrorId      = ImportFileNotFound
     , ysiShortMessage = msg

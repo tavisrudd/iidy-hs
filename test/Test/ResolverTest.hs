@@ -71,7 +71,7 @@ assertResolves :: TagContext -> YamlAst -> OValue -> Assertion
 assertResolves ctx ast expected =
   case resolveAst ctx ast of
     Right val -> val @?= expected
-    Left (ResolveError _ msg) -> assertFailure ("resolve failed: " <> T.unpack msg)
+    Left (ResolveError _ msg _) -> assertFailure ("resolve failed: " <> T.unpack msg)
 
 -- | Assert a resolve fails.
 assertResolveFails :: TagContext -> YamlAst -> Assertion
@@ -84,7 +84,7 @@ assertResolveFails ctx ast =
 assertResolveFailsWith :: TagContext -> YamlAst -> Text -> Assertion
 assertResolveFailsWith ctx ast substr =
   case resolveAst ctx ast of
-    Left (ResolveError _ msg)
+    Left (ResolveError _ msg _)
       | substr `T.isInfixOf` msg -> pure ()
       | otherwise -> assertFailure
           ("error message " <> show msg <> " does not contain " <> show substr)

@@ -2,6 +2,7 @@ module Iidy.Yaml.Resolution.Resolver
   ( resolveAst
   , astToValueRaw
   , ResolveError(..)
+  , ResolveErrorKind(..)
   ) where
 
 import Control.Monad (foldM)
@@ -29,15 +30,36 @@ import Iidy.Yaml.OValue
 import Iidy.Yaml.Parser (parseYaml, ParseError(..))
 import Iidy.Yaml.Resolution.Context
 
+-- | Structured classification of resolve errors.
+-- Carries the semantic category so downstream code can classify without parsing message strings.
+data ResolveErrorKind
+  = REVariableNotFound  !Text ![Text]           -- ^ path, available vars
+  | REJmesPath          !Text !Text !Text       -- ^ expr, detail, varPath
+  | REPropertyNotFound  !Text !Text ![Text]     -- ^ missingKey, varPath, availKeys
+  | RETypeMismatch      !Text !Text !(Maybe Text) -- ^ expected, found, contextTag
+  | RECfnValidation     !Text                   -- ^ cfnTagName
+  | REHandlebars                                -- ^ handlebars template error
+  | RETagSyntax         !(Maybe Text)           -- ^ tagName (if extractable)
+  | REExpandNotFound    !Text                   -- ^ templateName
+  | REParseSyntax                               -- ^ !$parseYaml/Json/expand parse error
+  | REGeneric                                   -- ^ fallback
+  deriving stock (Show, Eq)
+
 data ResolveError = ResolveError
   { rePosition :: !Position
   , reMessage  :: !Text
+  , reKind     :: !ResolveErrorKind
   } deriving stock (Show, Eq)
 
 type Resolve a = Either ResolveError a
 
+-- | Generic resolve error (fallback — prefer specific constructors).
 resolveError :: SrcMeta -> Text -> Resolve a
-resolveError meta msg = Left (ResolveError (smStart meta) msg)
+resolveError meta msg = Left (ResolveError (smStart meta) msg REGeneric)
+
+-- | Tag syntax error with optional tag name.
+tagSyntaxError :: SrcMeta -> Maybe Text -> Text -> Resolve a
+tagSyntaxError meta tagName msg = Left (ResolveError (smStart meta) msg (RETagSyntax tagName))
 
 -- | Describe an OValue's type for error messages (matching Rust format)
 oValueTypeName :: OValue -> Text
@@ -49,10 +71,60 @@ oValueTypeName = \case
   OArray _   -> "sequence"
   OObject _  -> "object"
 
--- | Create a "expected X, found Y" error message
+-- | Type mismatch: "expected X, found Y"
 typeMismatchError :: SrcMeta -> Text -> OValue -> Resolve a
 typeMismatchError meta expected val =
-  resolveError meta ("expected " <> expected <> ", found " <> oValueTypeName val)
+  Left (ResolveError (smStart meta) msg (RETypeMismatch expected found Nothing))
+  where
+    found = oValueTypeName val
+    msg = "expected " <> expected <> ", found " <> found
+
+-- | Type mismatch with context tag (e.g., "[delimiter]")
+typeMismatchErrorCtx :: SrcMeta -> Text -> OValue -> Text -> Resolve a
+typeMismatchErrorCtx meta expected val ctx =
+  Left (ResolveError (smStart meta) msg (RETypeMismatch expected found (Just ctx)))
+  where
+    found = oValueTypeName val
+    msg = "expected " <> expected <> ", found " <> found <> " [" <> ctx <> "]"
+
+-- | Variable not found with available vars list.
+variableNotFoundError :: SrcMeta -> Text -> [Text] -> Resolve a
+variableNotFoundError meta path available =
+  Left (ResolveError (smStart meta) msg (REVariableNotFound path available))
+  where msg = "Variable not found: " <> path <> ". Available: " <> T.intercalate ", " available
+
+-- | JMESPath expression error.
+jmesPathError :: SrcMeta -> Text -> Text -> Text -> Resolve a
+jmesPathError meta expr detail varPath =
+  Left (ResolveError (smStart meta) msg (REJmesPath expr detail varPath))
+  where msg = "Invalid JMESPath expression '" <> expr <> "': " <> detail <> ". Variable: " <> varPath
+
+-- | Property not found in mapping during dot-query.
+propertyNotFoundError :: SrcMeta -> Text -> Text -> [Text] -> Resolve a
+propertyNotFoundError meta key varPath availKeys =
+  Left (ResolveError (smStart meta) msg (REPropertyNotFound key varPath availKeys))
+  where msg = "property '" <> key <> "' not found in mapping. Variable: " <> varPath <> ". Keys: " <> T.intercalate ", " availKeys
+
+-- | CloudFormation tag validation error.
+cfnValidationError :: SrcMeta -> Text -> Text -> Resolve a
+cfnValidationError meta _tagName detail =
+  Left (ResolveError (smStart meta) detail (RECfnValidation _tagName))
+
+-- | Handlebars template interpolation error.
+handlebarsError :: SrcMeta -> Text -> Resolve a
+handlebarsError meta msg =
+  Left (ResolveError (smStart meta) ("Handlebars error: " <> msg) REHandlebars)
+
+-- | Template not found in !$expand.
+expandNotFoundError :: SrcMeta -> Text -> Resolve a
+expandNotFoundError meta templateName =
+  Left (ResolveError (smStart meta) msg (REExpandNotFound templateName))
+  where msg = "!$expand: template '" <> templateName <> "' not found"
+
+-- | Parse syntax error from !$parseYaml, !$parseJson, !$expand.
+parseSyntaxError :: SrcMeta -> Text -> Text -> Resolve a
+parseSyntaxError meta prefix detail =
+  Left (ResolveError (smStart meta) (prefix <> detail) REParseSyntax)
 
 ------------------------------------------------------------------------
 -- Main resolution
@@ -153,7 +225,7 @@ resolveMappingWithExpansion ctx pairs = do
             Just typeName | Just tmplInfo <- Map.lookup typeName (tcCustomTemplateDefs ctx) -> do
               let reparseF = buildReparse ctx
               case expandCustomResource resName resVal tmplInfo reparseF parentNames of
-                Left err -> Left (ResolveError zeroPosition ("Custom resource expansion error: " <> err))
+                Left err -> Left (ResolveError zeroPosition ("Custom resource expansion error: " <> err) REGeneric)
                 Right expansionResult ->
                   let mergedGlobals = Map.unionWith mergeGlobalSection globals (erGlobalSections expansionResult)
                   in pure (acc ++ erResources expansionResult, mergedGlobals)
@@ -194,7 +266,7 @@ buildReparse parentCtx params rawBody =
             { tcVariables = Map.union params (tcVariables parentCtx)
             }
       in case resolveAst subCtx templateAst of
-           Left (ResolveError _ msg) -> Left msg
+           Left (ResolveError _ msg _) -> Left msg
            Right resolved -> Right resolved
 
 ------------------------------------------------------------------------
@@ -205,15 +277,13 @@ resolveTemplateString :: TagContext -> SrcMeta -> Text -> Resolve OValue
 resolveTemplateString ctx meta template =
   -- Pre-validate: check that template variables exist in context
   case findMissingTemplateVar (tcVariables ctx) template of
-    Just missing -> resolveError meta $
-      "Variable not found: " <> missing <> ". Available: " <>
-      T.intercalate ", " (contextVariableNames ctx)
+    Just missing -> variableNotFoundError meta missing (contextVariableNames ctx)
     Nothing ->
       let ctxValue = Object (KM.fromList
             [(Key.fromText k, toValue v) | (k, v) <- Map.toList (tcVariables ctx)])
       in case interpolate defaultHelpers ctxValue template of
            Right s -> pure (OString s)
-           Left (InterpolateError msg) -> resolveError meta ("Handlebars error: " <> msg)
+           Left (InterpolateError msg) -> handlebarsError meta msg
 
 -- | Find the first undefined variable in a handlebars template.
 -- Only checks simple {{var}} references, not block helpers or comments.
@@ -263,79 +333,79 @@ resolveCfnTag ctx meta tag = do
 validateCfnTag :: SrcMeta -> Text -> OValue -> Resolve ()
 validateCfnTag meta name val = case name of
   "!Ref" -> case val of
-    ONull -> resolveError meta "!Ref cannot have null value"
-    OString t | T.null t -> resolveError meta "!Ref cannot reference empty string"
+    ONull -> cfnValidationError meta "!Ref" "!Ref cannot have null value"
+    OString t | T.null t -> cfnValidationError meta "!Ref" "!Ref cannot reference empty string"
     OString _ -> pure ()
-    _ -> resolveError meta $ "!Ref expects a string (resource or parameter name), found " <> oValueTypeName val
+    _ -> cfnValidationError meta "!Ref" $ "!Ref expects a string (resource or parameter name), found " <> oValueTypeName val
 
   "!Sub" -> case val of
-    ONull -> resolveError meta "!Sub cannot have null value"
+    ONull -> cfnValidationError meta "!Sub" "!Sub cannot have null value"
     OString _ -> pure ()
     OArray [OString _, OObject _] -> pure ()
-    OArray [OString _, v] -> resolveError meta $ "!Sub array form expects [string, object], found [string, " <> oValueTypeName v <> "]"
-    OArray [v, _] -> resolveError meta $ "!Sub array form expects [string, object], found [" <> oValueTypeName v <> ", " <> oValueTypeName val <> "]"
-    OArray items -> resolveError meta $ "!Sub with array expects exactly 2 elements [string, variables], found " <> showLen items <> " elements"
-    _ -> resolveError meta $ "!Sub expects a string or 2-element array, found " <> oValueTypeName val
+    OArray [OString _, v] -> cfnValidationError meta "!Sub" $ "!Sub array form expects [string, object], found [string, " <> oValueTypeName v <> "]"
+    OArray [v, _] -> cfnValidationError meta "!Sub" $ "!Sub array form expects [string, object], found [" <> oValueTypeName v <> ", " <> oValueTypeName val <> "]"
+    OArray items -> cfnValidationError meta "!Sub" $ "!Sub with array expects exactly 2 elements [string, variables], found " <> showLen items <> " elements"
+    _ -> cfnValidationError meta "!Sub" $ "!Sub expects a string or 2-element array, found " <> oValueTypeName val
 
   "!GetAtt" -> case val of
-    ONull -> resolveError meta "!GetAtt cannot have null value"
+    ONull -> cfnValidationError meta "!GetAtt" "!GetAtt cannot have null value"
     OString t | "." `T.isInfixOf` t -> pure ()
-    OString _ -> resolveError meta "!GetAtt string format requires dot notation: 'ResourceName.AttributeName'"
+    OString _ -> cfnValidationError meta "!GetAtt" "!GetAtt string format requires dot notation: 'ResourceName.AttributeName'"
     OArray [OString _, OString _] -> pure ()
-    OArray [v1, v2] -> resolveError meta $ "!GetAtt array form expects [string, string], found [" <> oValueTypeName v1 <> ", " <> oValueTypeName v2 <> "]"
-    OArray items -> resolveError meta $ "!GetAtt expects exactly 2 elements [resource, attribute], found " <> showLen items <> " elements"
-    _ -> resolveError meta $ "!GetAtt expects a string or 2-element array, found " <> oValueTypeName val
+    OArray [v1, v2] -> cfnValidationError meta "!GetAtt" $ "!GetAtt array form expects [string, string], found [" <> oValueTypeName v1 <> ", " <> oValueTypeName v2 <> "]"
+    OArray items -> cfnValidationError meta "!GetAtt" $ "!GetAtt expects exactly 2 elements [resource, attribute], found " <> showLen items <> " elements"
+    _ -> cfnValidationError meta "!GetAtt" $ "!GetAtt expects a string or 2-element array, found " <> oValueTypeName val
 
   "!Join" -> case val of
-    ONull -> resolveError meta "!Join cannot have null value"
+    ONull -> cfnValidationError meta "!Join" "!Join cannot have null value"
     OArray [OString _, OArray _] -> pure ()
-    OArray [OString _, v] -> resolveError meta $ "!Join expects [delimiter, array], found [string, " <> oValueTypeName v <> "]"
-    OArray [v, _] -> resolveError meta $ "!Join expects [string, array], found [" <> oValueTypeName v <> ", " <> oValueTypeName val <> "]"
-    OArray items -> resolveError meta $ "!Join expects exactly 2 elements [delimiter, array], found " <> showLen items <> " elements"
-    _ -> resolveError meta $ "!Join expects a 2-element array, found " <> oValueTypeName val
+    OArray [OString _, v] -> cfnValidationError meta "!Join" $ "!Join expects [delimiter, array], found [string, " <> oValueTypeName v <> "]"
+    OArray [v, _] -> cfnValidationError meta "!Join" $ "!Join expects [string, array], found [" <> oValueTypeName v <> ", " <> oValueTypeName val <> "]"
+    OArray items -> cfnValidationError meta "!Join" $ "!Join expects exactly 2 elements [delimiter, array], found " <> showLen items <> " elements"
+    _ -> cfnValidationError meta "!Join" $ "!Join expects a 2-element array, found " <> oValueTypeName val
 
   "!Select" -> case val of
-    ONull -> resolveError meta "!Select cannot have null value"
+    ONull -> cfnValidationError meta "!Select" "!Select cannot have null value"
     OArray [ONumber _, OArray _] -> pure ()
-    OArray [ONumber _, v] -> resolveError meta $ "!Select expects [index, array], found [number, " <> oValueTypeName v <> "]"
-    OArray [v, _] -> resolveError meta $ "!Select expects [number, array], found [" <> oValueTypeName v <> ", " <> oValueTypeName val <> "]"
-    OArray items -> resolveError meta $ "!Select expects exactly 2 elements [index, array], found " <> showLen items <> " elements"
-    _ -> resolveError meta $ "!Select expects a 2-element array, found " <> oValueTypeName val
+    OArray [ONumber _, v] -> cfnValidationError meta "!Select" $ "!Select expects [index, array], found [number, " <> oValueTypeName v <> "]"
+    OArray [v, _] -> cfnValidationError meta "!Select" $ "!Select expects [number, array], found [" <> oValueTypeName v <> ", " <> oValueTypeName val <> "]"
+    OArray items -> cfnValidationError meta "!Select" $ "!Select expects exactly 2 elements [index, array], found " <> showLen items <> " elements"
+    _ -> cfnValidationError meta "!Select" $ "!Select expects a 2-element array, found " <> oValueTypeName val
 
   "!Split" -> case val of
-    ONull -> resolveError meta "!Split cannot have null value"
+    ONull -> cfnValidationError meta "!Split" "!Split cannot have null value"
     OArray [OString _, OString _] -> pure ()
-    OArray [v1, v2] -> resolveError meta $ "!Split expects [string, string], found [" <> oValueTypeName v1 <> ", " <> oValueTypeName v2 <> "]"
-    OArray items -> resolveError meta $ "!Split expects exactly 2 elements [delimiter, string], found " <> showLen items <> " elements"
-    _ -> resolveError meta $ "!Split expects a 2-element array, found " <> oValueTypeName val
+    OArray [v1, v2] -> cfnValidationError meta "!Split" $ "!Split expects [string, string], found [" <> oValueTypeName v1 <> ", " <> oValueTypeName v2 <> "]"
+    OArray items -> cfnValidationError meta "!Split" $ "!Split expects exactly 2 elements [delimiter, string], found " <> showLen items <> " elements"
+    _ -> cfnValidationError meta "!Split" $ "!Split expects a 2-element array, found " <> oValueTypeName val
 
   "!FindInMap" -> case val of
-    ONull -> resolveError meta "!FindInMap cannot have null value"
+    ONull -> cfnValidationError meta "!FindInMap" "!FindInMap cannot have null value"
     OArray items | length items == 3 -> pure ()
-    OArray items -> resolveError meta $ "!FindInMap expects exactly 3 elements [map_name, key1, key2], found " <> showLen items <> " elements"
-    _ -> resolveError meta $ "!FindInMap expects a 3-element array, found " <> oValueTypeName val
+    OArray items -> cfnValidationError meta "!FindInMap" $ "!FindInMap expects exactly 3 elements [map_name, key1, key2], found " <> showLen items <> " elements"
+    _ -> cfnValidationError meta "!FindInMap" $ "!FindInMap expects a 3-element array, found " <> oValueTypeName val
 
   "!If" -> case val of
-    ONull -> resolveError meta "!If cannot have null value"
+    ONull -> cfnValidationError meta "!If" "!If cannot have null value"
     OArray items | length items == 3 -> pure ()
-    OArray items -> resolveError meta $ "!If expects a 3-element array [condition, true_value, false_value], found " <> showLen items <> " elements"
-    _ -> resolveError meta $ "!If expects a 3-element array, found " <> oValueTypeName val
+    OArray items -> cfnValidationError meta "!If" $ "!If expects a 3-element array [condition, true_value, false_value], found " <> showLen items <> " elements"
+    _ -> cfnValidationError meta "!If" $ "!If expects a 3-element array, found " <> oValueTypeName val
 
   "!Equals" -> case val of
-    ONull -> resolveError meta "!Equals cannot have null value"
+    ONull -> cfnValidationError meta "!Equals" "!Equals cannot have null value"
     OArray items | length items == 2 -> pure ()
-    OArray items -> resolveError meta $ "!Equals expects a 2-element array, found " <> showLen items <> " elements"
-    _ -> resolveError meta $ "!Equals expects a 2-element array, found " <> oValueTypeName val
+    OArray items -> cfnValidationError meta "!Equals" $ "!Equals expects a 2-element array, found " <> showLen items <> " elements"
+    _ -> cfnValidationError meta "!Equals" $ "!Equals expects a 2-element array, found " <> oValueTypeName val
 
   "!Not" -> case val of
-    ONull -> resolveError meta "!Not cannot have null value"
+    ONull -> cfnValidationError meta "!Not" "!Not cannot have null value"
     OArray items | length items == 1 -> pure ()
-    OArray items -> resolveError meta $ "!Not expects a 1-element array, found " <> showLen items <> " elements"
-    _ -> resolveError meta $ "!Not expects a 1-element array, found " <> oValueTypeName val
+    OArray items -> cfnValidationError meta "!Not" $ "!Not expects a 1-element array, found " <> showLen items <> " elements"
+    _ -> cfnValidationError meta "!Not" $ "!Not expects a 1-element array, found " <> oValueTypeName val
 
   -- Null-only validation for remaining tags (matches Rust catch-all)
   _ -> case val of
-    ONull -> resolveError meta $ name <> " cannot have null value"
+    ONull -> cfnValidationError meta name (name <> " cannot have null value")
     _ -> pure ()
 
 -- | Show list length as Text.
@@ -404,9 +474,7 @@ resolveVarLookup ctx meta (VarLookupTag rawPath query jmesPathExpr) = do
   let path = expandBrackets rawPath ctx
   baseVal <- case resolveDotPathO path ctx of
     Just val -> pure val
-    Nothing -> resolveError meta $
-      "Variable not found: " <> path <> ". Available: " <>
-      T.intercalate ", " (contextVariableNames ctx)
+    Nothing -> variableNotFoundError meta path (contextVariableNames ctx)
   queriedVal <- case query of
     Nothing -> pure baseVal
     Just q -> applyDotQueryValidated meta path q baseVal
@@ -414,8 +482,7 @@ resolveVarLookup ctx meta (VarLookupTag rawPath query jmesPathExpr) = do
     Nothing -> pure queriedVal
     Just expr -> case applyJmesPath expr (toValue queriedVal) of
       Right v -> pure (fromValue v)
-      Left (JMESPathError msg) -> resolveError meta $
-        "Invalid JMESPath expression '" <> expr <> "': " <> msg <> ". Variable: " <> path
+      Left (JMESPathError msg) -> jmesPathError meta expr msg path
 
 expandBrackets :: Text -> TagContext -> Text
 expandBrackets path ctx = go (10 :: Int) path
@@ -470,9 +537,7 @@ applyDotQueryValidated meta varPath q val
         let keys = map T.strip (T.splitOn "," q)
             missing = filter (\k -> isNothing (lookupO k kvs)) keys
         in case missing of
-          (m:_) -> resolveError meta $
-            "property '" <> m <> "' not found in mapping. Variable: " <>
-            varPath <> ". Keys: " <> T.intercalate ", " (map fst kvs)
+          (m:_) -> propertyNotFoundError meta m varPath (map fst kvs)
           [] -> pure $ OObject [(k, v) | k <- keys, Just v <- [lookupO k kvs]]
       _ -> pure ONull
   -- Single dot-path traversal
@@ -590,14 +655,14 @@ resolveJoin ctx meta (JoinTag delimAst arrAst) = do
         ) arr
       pure $ OString $ T.intercalate d texts
     (OString _, v) -> typeMismatchError meta "sequence" v
-    (v, _)          -> resolveError meta $ "expected string, found " <> oValueTypeName v <> " [delimiter]"
+    (v, _)          -> typeMismatchErrorCtx meta "string" v "delimiter"
 
 resolveConcatMap :: TagContext -> SrcMeta -> ConcatMapTag -> Resolve OValue
 resolveConcatMap ctx meta (ConcatMapTag items template var filterExpr) = do
   result <- resolveMapItems ctx meta items template (fromMaybeVar var) filterExpr
   case result of
     OArray arr -> pure $ OArray $ concatMap flattenItem arr
-    _ -> resolveError meta "!$concatMap: unexpected result"
+    _ -> tagSyntaxError meta (Just "!$concatMap") "!$concatMap: unexpected result"
   where
     flattenItem (OArray inner) = inner
     flattenItem other = [other]
@@ -611,7 +676,7 @@ resolveMergeMap ctx meta (MergeMapTag items template var) = do
             OObject kvs -> pure $ mergeOObjects acc kvs
             _ -> typeMismatchError meta "object" v
       foldM merge (OObject []) arr
-    _ -> resolveError meta "!$mergeMap: unexpected result"
+    _ -> tagSyntaxError meta (Just "!$mergeMap") "!$mergeMap: unexpected result"
 
 resolveMapListToHash :: TagContext -> SrcMeta -> MapListToHashTag -> Resolve OValue
 resolveMapListToHash ctx meta (MapListToHashTag items template var filterExpr) = do
@@ -620,7 +685,7 @@ resolveMapListToHash ctx meta (MapListToHashTag items template var filterExpr) =
     OArray arr -> do
       pairs <- traverse extractPair arr
       pure $ OObject pairs
-    _ -> resolveError meta "!$mapListToHash: unexpected result"
+    _ -> tagSyntaxError meta (Just "!$mapListToHash") "!$mapListToHash: unexpected result"
   where
     extractPair (OArray [k, v]) = pure (oValueToText k, v)
     extractPair (OObject kvs)
@@ -628,8 +693,8 @@ resolveMapListToHash ctx meta (MapListToHashTag items template var filterExpr) =
           pure (oValueToText k, v)
     extractPair (OObject kvs) = case kvs of
       [(k, v)] -> pure (k, v)
-      _ -> resolveError meta "!$mapListToHash: object item must have exactly one key"
-    extractPair v = resolveError meta $ "expected 2-element sequence or object, found " <> oValueTypeName v
+      _ -> tagSyntaxError meta (Just "!$mapListToHash") "!$mapListToHash: object item must have exactly one key"
+    extractPair v = typeMismatchError meta "2-element sequence or object" v
 
 resolveMapValues :: TagContext -> SrcMeta -> MapValuesTag -> Resolve OValue
 resolveMapValues ctx meta (MapValuesTag itemsAst templateAst var) = do
@@ -686,7 +751,7 @@ resolveParseYaml ctx meta (ParseYamlTag strAst) = do
     OString s ->
       case parseYaml (BL.fromStrict (TE.encodeUtf8 s)) "<parseYaml>" of
         Right ast -> Right (fromValue (astToValueRaw ast))
-        Left (ParseError _ msg) -> resolveError meta $ "!$parseYaml: " <> msg
+        Left (ParseError _ msg) -> parseSyntaxError meta "!$parseYaml: " msg
     _ -> typeMismatchError meta "string" val
 
 resolveToJsonString :: TagContext -> SrcMeta -> ToJsonStringTag -> Resolve OValue
@@ -700,7 +765,7 @@ resolveParseJson ctx meta (ParseJsonTag strAst) = do
   case val of
     OString s -> case Aeson.eitherDecodeStrict' (TE.encodeUtf8 s) of
       Right v  -> pure (fromValue v)
-      Left err -> resolveError meta $ "!$parseJson: " <> T.pack err
+      Left err -> parseSyntaxError meta "!$parseJson: " (T.pack err)
     _ -> typeMismatchError meta "string" val
 
 resolveEscape :: TagContext -> SrcMeta -> EscapeTag -> Resolve OValue
@@ -714,7 +779,7 @@ resolveExpand ctx meta (ExpandTag templateRefAst paramsAst) = do
   let templateName = oValueToText templateVal
   -- 2. Look up template info
   case Map.lookup templateName (tcCustomTemplateDefs ctx) of
-    Nothing -> resolveError meta $ "!$expand: template '" <> templateName <> "' not found"
+    Nothing -> expandNotFoundError meta templateName
     Just tmplInfo -> do
       -- 3. Resolve provided params
       providedParams <- resolveAst ctx paramsAst
@@ -725,7 +790,7 @@ resolveExpand ctx meta (ExpandTag templateRefAst paramsAst) = do
       let merged = mergeExpandParams (tiParams tmplInfo) provided
       -- 5. Re-parse the raw template YAML
       case parseYaml (BL.fromStrict (TE.encodeUtf8 (tiRawBody tmplInfo))) (tiLocation tmplInfo) of
-        Left (ParseError _ msg) -> resolveError meta $ "!$expand parse error: " <> msg
+        Left (ParseError _ msg) -> parseSyntaxError meta "!$expand parse error: " msg
         Right templateAst' -> do
           -- 6. Build sub-context with merged params as variables
           let subCtx = ctx
