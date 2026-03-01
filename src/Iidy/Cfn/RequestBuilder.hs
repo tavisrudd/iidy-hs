@@ -146,6 +146,13 @@ mapCapability t = case T.toUpper t of
   "CAPABILITY_AUTO_EXPAND" -> Just CF.Capability_CAPABILITY_AUTO_EXPAND
   _                        -> Nothing
 
+-- | Map a list of capability strings to CloudFormation Capability values.
+-- Unrecognised strings are silently dropped: schema validation upstream
+-- (stack-args.yaml loading) is expected to reject unknown values before
+-- this point.  Any string that survives to here and does not match a
+-- known capability was already accepted by the user's stack-args file,
+-- so dropping it is the safe fallback (AWS would reject the request
+-- anyway).
 mapCapabilities :: Maybe [Text] -> Maybe [CF.Capability]
 mapCapabilities Nothing = Nothing
 mapCapabilities (Just caps) =

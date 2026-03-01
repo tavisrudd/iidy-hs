@@ -31,11 +31,9 @@ import Control.Concurrent (threadDelay)
 import Control.Exception (catch)
 import Control.Lens (set, view)
 import Control.Monad.Trans.Resource (runResourceT)
-import qualified Data.ByteString as BS
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
 import qualified Data.Vector as V
 import System.Random (randomRIO)
 
@@ -64,6 +62,7 @@ import Iidy.Cfn.StackOperations
   , getStack
   , collectStackContents
   , pollForCompletion
+  , percentEncode
   , PollResult(..)
   )
 import Iidy.Cfn.Types (StackArgs(..), getStackName)
@@ -343,21 +342,6 @@ extractRegionFromArn arn =
   case drop 3 (T.splitOn ":" arn) of
     (region:_) -> region
     _          -> "us-east-1"
-
--- | Percent-encode a text string for use in URLs.
--- Encodes everything except unreserved characters (RFC 3986).
--- Correctly handles Unicode by UTF-8 encoding first.
-percentEncode :: Text -> Text
-percentEncode t = T.concat $ map encByte (BS.unpack (TE.encodeUtf8 t))
-  where
-    encByte b
-      | isUnreserved b = T.singleton (toEnum (fromIntegral b))
-      | otherwise      = T.pack ['%', hexDigit (b `div` 16), hexDigit (b `mod` 16)]
-    isUnreserved b = (b >= 0x41 && b <= 0x5A) || (b >= 0x61 && b <= 0x7A)
-                  || (b >= 0x30 && b <= 0x39) || b `elem` [0x2D, 0x2E, 0x5F, 0x7E]
-    hexDigit n
-      | n < 10    = toEnum (fromEnum '0' + fromIntegral n)
-      | otherwise = toEnum (fromEnum 'A' + fromIntegral n - 10)
 
 ------------------------------------------------------------------------
 -- Shared helpers for changeset flows

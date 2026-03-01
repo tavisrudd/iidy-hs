@@ -89,6 +89,7 @@ However, several issues warrant attention: three API calls lack pagination (coul
 **File**: `/home/tavis/src/iidy-hs/src/Iidy/Cfn/Operations/ConvertStack.hs`:434-436
 **What**: The code looks up the environment from tags using `lookup "environment"` first, then falls back to `lookup "Environment"`. But `formatTag` (line 346) only matches lowercase `"environment"` and capitalized `"Environment"` for parameterization. If a user has a tag named e.g. `"ENV"`, it won't be detected. This is a minor consistency concern rather than a bug.
 **Fix**: Document the expected tag name convention, or normalize tag keys to lowercase before comparison.
+**Resolution**: FIXED — changed to case-insensitive lookup via `T.toLower`. CF tags have no case convention.
 
 ### OPS-16: `mapCapabilities` silently drops invalid capabilities (Severity: Minor)
 **File**: `/home/tavis/src/iidy-hs/src/Iidy/Cfn/RequestBuilder.hs`:150-153

@@ -19,6 +19,8 @@ module Iidy.Cfn.StackOperations
   , PollResult(..)
     -- * Helpers (exported for testing)
   , stackNameFromId
+    -- * URL utilities
+  , percentEncode
   ) where
 
 import Control.Concurrent (threadDelay)
@@ -31,7 +33,9 @@ import Data.IORef
 import Data.Maybe (fromMaybe, mapMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.ByteString as BS
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import Data.Time (UTCTime, getCurrentTime, diffUTCTime)
 
 import qualified Amazonka
@@ -150,7 +154,8 @@ collectStackContents ctx sName = do
               , seiImportingStacks  = []
               }
           | e <- allExports
-          , e.exportingStackId == s.stackId
+          , Just sArn <- [s.stackId]
+          , e.exportingStackId == Just sArn
           ]
 
   pure StackContents
@@ -328,3 +333,22 @@ convertChangeSetSummary cs = do
     , csiExecutionStatus = CF.fromExecutionStatus <$> cs.executionStatus
     , csiChanges = []
     }
+
+------------------------------------------------------------------------
+-- URL utilities
+------------------------------------------------------------------------
+
+-- | Percent-encode a text string for use in URL query parameter values.
+-- Encodes everything except unreserved characters (RFC 3986).
+-- Correctly handles Unicode by UTF-8 encoding first.
+percentEncode :: Text -> Text
+percentEncode t = T.concat $ map encByte (BS.unpack (TE.encodeUtf8 t))
+  where
+    encByte b
+      | isUnreserved b = T.singleton (toEnum (fromIntegral b))
+      | otherwise      = T.pack ['%', hexDigit (b `div` 16), hexDigit (b `mod` 16)]
+    isUnreserved b = (b >= 0x41 && b <= 0x5A) || (b >= 0x61 && b <= 0x7A)
+                  || (b >= 0x30 && b <= 0x39) || b `elem` [0x2D, 0x2E, 0x5F, 0x7E]
+    hexDigit n
+      | n < 10    = toEnum (fromEnum '0' + fromIntegral n)
+      | otherwise = toEnum (fromEnum 'A' + fromIntegral n - 10)

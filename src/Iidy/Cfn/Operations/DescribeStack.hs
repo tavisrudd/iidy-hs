@@ -21,7 +21,6 @@ import Data.Ord (comparing)
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Data.Coerce (coerce)
 import Data.Time (UTCTime, diffUTCTime)
 import qualified Amazonka
 import qualified Amazonka.CloudFormation as CF
@@ -35,6 +34,7 @@ import Iidy.Cfn.StackOperations
   , collectStackContents
   , PollConfig(..)
   , defaultPollConfig
+  , percentEncode
   )
 import Iidy.Output.Types
 
@@ -111,8 +111,8 @@ convertStack s regionText =
        , sdParameters            = paramMap
        , sdDisableRollback       = fromMaybe False s.disableRollback
        , sdTerminationProtection = fromMaybe False s.enableTerminationProtection
-       , sdCreationTime          = Just (coerce s.creationTime :: UTCTime)
-       , sdLastUpdatedTime       = fmap (\t -> coerce t :: UTCTime) s.lastUpdatedTime
+       , sdCreationTime          = Just s.creationTime.fromTime
+       , sdLastUpdatedTime       = fmap (.fromTime) s.lastUpdatedTime
        , sdTimeoutInMinutes      = fmap fromIntegral s.timeoutInMinutes
        , sdNotificationArns      = notifArns
        , sdStackPolicy           = Nothing
@@ -151,7 +151,7 @@ convertEvent e = StackEvent
   , seLogicalResourceId    = fromMaybe "" e.logicalResourceId
   , sePhysicalResourceId   = e.physicalResourceId
   , seResourceType         = fromMaybe "" e.resourceType
-  , seTimestamp            = Just (coerce e.timestamp :: UTCTime)
+  , seTimestamp            = Just e.timestamp.fromTime
   , seResourceStatus       = maybe "" CF.fromResourceStatus e.resourceStatus
   , seResourceStatusReason = e.resourceStatusReason
   , seResourceProperties   = e.resourceProperties
@@ -205,6 +205,7 @@ convertEventWithDuration startTime e =
 ------------------------------------------------------------------------
 
 -- | Build the AWS CloudFormation console URL for a stack.
+-- The stack ARN is percent-encoded as it appears in a URL query parameter value.
 buildConsoleUrl :: Text -> Text -> Text
 buildConsoleUrl regionText stackArn =
   "https://"
@@ -212,7 +213,7 @@ buildConsoleUrl regionText stackArn =
     <> ".console.aws.amazon.com/cloudformation/home?region="
     <> regionText
     <> "#/stacks/stackinfo?stackId="
-    <> stackArn
+    <> percentEncode stackArn
 
 ------------------------------------------------------------------------
 -- Standard poll config helper

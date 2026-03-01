@@ -26,7 +26,7 @@ import qualified Data.Aeson.KeyMap as KM
 import qualified Data.Aeson.Encode.Pretty as AesonPretty
 import qualified Data.ByteString.Lazy as BL
 import Data.List (sortBy)
-import Data.Maybe (catMaybes, fromMaybe)
+import Data.Maybe (catMaybes, fromMaybe, listToMaybe)
 import qualified Data.Scientific as Scientific
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -279,7 +279,7 @@ quoteYamlString s
   | otherwise = s
   where
     needsQuoting t =
-      T.any (`elem` (":{}&*?|>!%@`#,[]" :: String)) t
+      T.any (`elem` (":{}&*?|>!%@`#,[]\"" :: String)) t
       || T.any (< ' ') t  -- control characters including \n, \r, \t
       || t == "true" || t == "false" || t == "null"
       || t == "yes" || t == "no"
@@ -431,9 +431,8 @@ processStack ctx stack stackName templateBody originalExt
           project = fromMaybe
             (fromMaybe "" (lookup "project" stackTags))
             mProject
-          currentEnv = case lookup "environment" stackTags of
-            Just e  -> e
-            Nothing -> fromMaybe "development" (lookup "Environment" stackTags)
+          currentEnv = fromMaybe "development" $
+            listToMaybe [ v | (k, v) <- stackTags, T.toLower k == "environment" ]
           stackParams = extractParams stack
 
       -- 9. Optionally migrate params to SSM
