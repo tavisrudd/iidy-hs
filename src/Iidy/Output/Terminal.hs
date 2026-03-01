@@ -8,10 +8,9 @@ import System.IO (stdout, hIsTerminalDevice)
 
 -- | Terminal capabilities detection result
 data TerminalCapabilities = TerminalCapabilities
-  { tcHasColor     :: !Bool
-  , tcHasTrueColor :: !Bool
-  , tcWidth        :: !(Maybe Int)
-  , tcIsTty        :: !Bool
+  { tcHasColor :: !Bool
+  , tcWidth    :: !(Maybe Int)
+  , tcIsTty    :: !Bool
   } deriving stock (Show, Eq)
 
 -- | Detect terminal capabilities from environment
@@ -20,17 +19,12 @@ detectCapabilities = do
   isTty <- hIsTerminalDevice stdout
   noColor <- lookupEnv "NO_COLOR"
   forceColor <- lookupEnv "FORCE_COLOR"
-  colorTerm <- lookupEnv "COLORTERM"
   columns <- lookupEnv "COLUMNS"
 
   let hasColor = case (noColor, forceColor) of
         (Just _, _) -> False
         (_, Just _) -> True
         _           -> isTty
-
-      hasTrueColor = case colorTerm of
-        Just ct -> ct `elem` ["truecolor", "24bit"]
-        Nothing -> False
 
       width = case columns of
         Just s -> case reads s of
@@ -39,8 +33,7 @@ detectCapabilities = do
         Nothing -> if isTty then Just 80 else Nothing
 
   pure TerminalCapabilities
-    { tcHasColor     = hasColor
-    , tcHasTrueColor = hasTrueColor
-    , tcWidth        = width
-    , tcIsTty        = isTty
+    { tcHasColor = hasColor
+    , tcWidth    = width
+    , tcIsTty    = isTty
     }

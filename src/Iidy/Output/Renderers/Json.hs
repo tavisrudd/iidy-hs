@@ -111,14 +111,11 @@ renderOutputDataJson r = \case
   OdOperationComplete info       -> outputJson r "operation_complete" (operationCompleteToValue info)
   OdInactivityTimeout info       -> outputJson r "inactivity_timeout" (inactivityTimeoutToValue info)
   OdConfirmationPrompt req       -> do
-    now <- getCurrentTime
-    let val = object
-          [ "type" .= ("confirmation_required" :: Text)
-          , "message" .= cfrMessage req
-          , "timestamp" .= iso8601Show now
-          , "response" .= ("declined_non_interactive" :: Text)
-          ]
-    outputLine r (encodeValue (jrOptions r) val)
+    outputJson r "confirmation_prompt" (object
+      [ "message" .= cfrMessage req
+      , "key" .= cfrKey req
+      , "response" .= ("declined_non_interactive" :: Text)
+      ])
   OdStackChangeDetails details   -> outputJson r "stack_change_details" (changeDetailsToValue details)
   OdStackAbsentInfo info         -> outputJson r "stack_absent_info" (absentInfoToValue info)
   OdCostEstimate est             -> outputJson r "cost_estimate" (costEstimateToValue est)

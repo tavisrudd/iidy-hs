@@ -66,7 +66,7 @@ spinnerTick sp = do
   frame <- readIORef (spFrameRef sp)
   let frames = spinnerFrames (spStyle sp)
       current = cycleIndex frames frame
-  atomicWriteIORef (spFrameRef sp) (frame + 1)
+  atomicWriteIORef (spFrameRef sp) ((frame + 1) `mod` NE.length frames)
   atomicWriteIORef (spActive sp) True
   pure current
 
@@ -85,7 +85,7 @@ spinnerFrame sp = do
 
 -- | Set the spinner message
 spinnerSetMessage :: Spinner -> Text -> IO ()
-spinnerSetMessage sp msg = writeIORef (spMessage sp) msg
+spinnerSetMessage sp msg = atomicWriteIORef (spMessage sp) msg
 
 -- | Render the spinner to the configured handle (overwriting current line with \r)
 spinnerRender :: Spinner -> Text -> IO ()
@@ -119,7 +119,7 @@ spinnerIntervalMs = \case
 spinnerFrames :: SpinnerStyle -> NonEmpty Text
 spinnerFrames = \case
   SpinnerDots   -> "⠋" :| map T.singleton "⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-  SpinnerDots12 -> "⠋" :| map T.singleton "⠙⠹⠸⠼⠴⠦⠧⠇⠏⠋⠙"
+  SpinnerDots12 -> "⠋" :| map T.singleton "⠙⠹⠸⠼⠴⠦⠧⠇⠏⠋⠙"  -- intentional repeat for smoother loop (matches npm spinners)
   SpinnerLine   -> "⠂" :| map T.singleton "⠄⠅⠇⡇⣇⣧⣷⣿⣸⣰⣠⣀"
   SpinnerArrow  -> "←" :| map T.singleton "↖↑↗→↘↓↙"
   SpinnerPulse  -> "⚫" :| ["⚪"]

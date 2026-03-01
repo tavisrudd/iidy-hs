@@ -35,7 +35,7 @@ module Iidy.Output.Renderers.Interactive.Sections
   ) where
 
 import Control.Concurrent.STM (readTVarIO, atomically, writeTVar)
-import Control.Monad (when, unless, mapM_)
+import Control.Monad (when, unless)
 import Data.List (sortBy)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
@@ -413,8 +413,8 @@ renderStackDrift r drift = do
     then rPutStrLn r "No drift detected. Stack resources are in sync with template."
     else do
       printSectionHeadingLn r "Drifted Resources"
-      let idPad = maximum (0 : map (T.length . drLogicalResourceId) (sdrDriftedResources drift))
-          typePad = maximum (0 : map (T.length . drResourceType) (sdrDriftedResources drift))
+      let idPad = calcPadding (sdrDriftedResources drift) drLogicalResourceId
+          typePad = calcPadding (sdrDriftedResources drift) drResourceType
       mapM_ (\d -> do
         rPutStrLn r (" " <> colorize (th r) (thResourceId (th r)) (padRight idPad (drLogicalResourceId d))
           <> " " <> styleMuted r (padRight typePad (drResourceType d))

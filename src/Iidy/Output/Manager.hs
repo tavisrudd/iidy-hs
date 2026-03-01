@@ -61,6 +61,8 @@ mkOutputDispatch go = do
   case mode of
     OutputJson -> pure $ DispatchJson (newJsonRenderer defaultJsonOptions)
     _ -> do
+      -- Note: newInteractiveRenderer calls detectCapabilities internally,
+      -- duplicating the check above. This is harmless (cheap I/O) but redundant.
       r <- newInteractiveRenderer InteractiveOptions
         { ioTheme          = colorTheme
         , ioShowTimestamps = True
