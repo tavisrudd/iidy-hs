@@ -21,6 +21,7 @@ module Iidy.Cfn.Operations.ConvertStack
 import Control.Exception (SomeException, try)
 import Data.Aeson (Value(..))
 import Data.Char (isDigit)
+import Numeric (showHex)
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
@@ -277,15 +278,29 @@ inlineValue val = case val of
   _ -> T.pack (show val)
 
 -- | Quote a YAML string value if needed.
+-- Uses double-quoting with escape sequences for strings containing control
+-- characters (single-quoted YAML scalars cannot contain literal newlines).
+-- Uses single-quoting for all other special cases.
 quoteYamlString :: Text -> Text
 quoteYamlString s
   | T.null s = "''"
+  | hasControlChars s = "\"" <> escapeForDoubleQuote s <> "\""
   | needsQuoting s = "'" <> T.replace "'" "''" s <> "'"
   | otherwise = s
   where
+    hasControlChars t = T.any (< ' ') t
+
+    escapeForDoubleQuote = T.concatMap $ \c -> case c of
+      '\n' -> "\\n"
+      '\r' -> "\\r"
+      '\t' -> "\\t"
+      '\\' -> "\\\\"
+      '"'  -> "\\\""
+      _    | c < ' '   -> "\\x" <> T.pack (showHex (fromEnum c) "")
+           | otherwise -> T.singleton c
+
     needsQuoting t =
       T.any (`elem` (":{}&*?|>!%@`#,[]\"" :: String)) t
-      || T.any (< ' ') t  -- control characters including \n, \r, \t
       || t == "true" || t == "false" || t == "null"
       || t == "yes" || t == "no"
       || t == "~"  -- YAML null alias

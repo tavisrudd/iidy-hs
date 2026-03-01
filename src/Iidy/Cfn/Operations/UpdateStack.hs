@@ -107,16 +107,15 @@ updateStack ctx args argsfilePath env emit = do
       let pollCfg = mkStandardPollConfig ctx emit
       pollResult <- pollForCompletion ctx stackId updateTerminalStatuses pollCfg
 
-      -- Step 6: Collect and emit stack contents
-      contents <- collectStackContents ctx stackName
-      emit (OdStackContents contents)
-
-      -- Step 7: Return exit code based on success/failure
+      -- Step 6: Return exit code based on success/failure
       case pollResult of
-        PollSuccess finalStatus
-          | finalStatus `elem` updateSuccessStates -> pure (Right 0)
-          | otherwise -> pure (Right 1)
-        _ -> pure (Right 1)  -- timeout = failure
+        PollSuccess finalStatus -> do
+          contents <- collectStackContents ctx stackName
+          emit (OdStackContents contents)
+          if finalStatus `elem` updateSuccessStates
+            then pure (Right 0)
+            else pure (Right 1)
+        _ -> pure (Right 1)  -- timeout = failure; skip collectStackContents (stack may be transitioning)
 
 ------------------------------------------------------------------------
 -- Update stack via changeset (--changeset path)
@@ -180,7 +179,8 @@ updateStackWithChangeset ctx args yesFlag argsfilePath env emit = do
 -- ValidationError that CloudFormation returns when there are no stack changes.
 isNoUpdatesError :: Amazonka.Error -> Bool
 isNoUpdatesError (Amazonka.ServiceError se) =
-  case se.message of
-    Just msg -> noUpdatesMessage `T.isInfixOf` Amazonka.fromErrorMessage msg
-    Nothing  -> False
+  se.code == Amazonka.ErrorCode "ValidationError"
+  && case se.message of
+       Just msg -> noUpdatesMessage `T.isInfixOf` Amazonka.fromErrorMessage msg
+       Nothing  -> False
 isNoUpdatesError _ = False

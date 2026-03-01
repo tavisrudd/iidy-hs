@@ -76,7 +76,7 @@ deleteStack ctx stackName skipConfirmation env emit = do
       -- These API calls happen before the user confirms, matching Rust behavior:
       -- showing stack info helps the user decide whether to proceed.
       events <- fetchStackEvents ctx stackName
-      emit (OdStackEvents (buildEventsDisplay stackName 10 events))
+      emit (OdStackEvents (buildEventsDisplay 10 events))
       contents <- collectStackContents ctx stackName
       emit (OdStackContents contents)
 

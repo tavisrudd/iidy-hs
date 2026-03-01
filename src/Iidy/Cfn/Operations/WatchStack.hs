@@ -20,7 +20,6 @@ import Iidy.Cfn.Context (CfnContext(..), allTerminalStatuses)
 import Iidy.Cfn.Operations.DescribeStack (convertStack, buildEventsDisplay, mkStandardPollConfig)
 import Iidy.Cfn.StackOperations
   ( getStack
-  , getStackId
   , fetchStackEvents
   , collectStackContents
   , pollForCompletion
@@ -56,13 +55,12 @@ watchStack ctx stackName timeoutSeconds emit = do
           stackDef = convertStack cfnStack regionText
       emit (OdStackDefinition stackDef True)
 
-      -- 3. Get stable stack ID
-      mStackId <- getStackId ctx stackName
-      let sId = fromMaybe stackName mStackId
+      -- 3. Get stable stack ID (from already-fetched stack, no extra API call)
+      let sId = fromMaybe stackName cfnStack.stackId
 
       -- 4. Fetch and emit previous events
       initialEvents <- fetchStackEvents ctx sId
-      let prevEventsDisplay = buildEventsDisplay stackName 10 initialEvents
+      let prevEventsDisplay = buildEventsDisplay 10 initialEvents
       emit (OdStackEvents prevEventsDisplay)
       let seenIds = Set.fromList (map (.eventId) initialEvents)
 

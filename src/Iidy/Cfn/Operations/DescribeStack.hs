@@ -73,7 +73,7 @@ describeStack ctx stackName numEvents env emit = do
       events    <- fetchStackEvents ctx stackName
       contents  <- collectStackContents ctx stackName
       let stackDef      = convertStack cfnStack regionText
-          eventsDisplay = buildEventsDisplay stackName numEvents events
+          eventsDisplay = buildEventsDisplay numEvents events
       emit (OdStackDefinition stackDef True)
       emit (OdStackEvents eventsDisplay)
       emit (OdStackContents contents)
@@ -127,10 +127,10 @@ convertStack s regionText =
 ------------------------------------------------------------------------
 
 -- | Build a StackEventsDisplay from raw CF events, limited to @n@ entries.
-buildEventsDisplay :: Text -> Int -> [CF.StackEvent] -> StackEventsDisplay
-buildEventsDisplay _sName numEvents events =
-  let total      = length events
-      taken      = take numEvents events
+buildEventsDisplay :: Int -> [CF.StackEvent] -> StackEventsDisplay
+buildEventsDisplay numEvents events =
+  let (taken, rest) = splitAt numEvents events
+      total      = numEvents + length rest
       converted  = map convertEvent taken
       wrapped    = calculateEventDurations converted
       truncInfo  = if total > numEvents

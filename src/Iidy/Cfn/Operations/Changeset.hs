@@ -188,9 +188,8 @@ executeChangeset ctx stackName csName emit = do
 
   -- Step 2c: Emit previous events (unique to exec-changeset)
   prevEvents <- fetchStackEvents ctx stackName
-  let eventsDisplay = buildEventsDisplay stackName 10 prevEvents
-      eventsWithTitle = eventsDisplay { sedTitle = "Previous Stack Events (max 10):" }
-  emit (OdStackEvents eventsWithTitle)
+  let eventsDisplay = buildEventsDisplay 10 prevEvents
+  emit (OdStackEvents eventsDisplay)
 
   -- Step 3: Poll for completion, emitting events through renderer
   emit (OdPollingStarted "Loading live events...")
