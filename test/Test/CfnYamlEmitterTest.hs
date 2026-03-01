@@ -146,6 +146,79 @@ cfnYamlEmitterTests =
 
     , testCase "ampersand triggers quoting" $
         quoteYamlString "&anchor" @?= "'&anchor'"
+
+    , testGroup "YAML number-like strings"
+      [ testCase "integer string is quoted" $
+          quoteYamlString "123" @?= "'123'"
+
+      , testCase "zero string is quoted" $
+          quoteYamlString "0" @?= "'0'"
+
+      , testCase "negative integer string is quoted" $
+          quoteYamlString "-7" @?= "'-7'"
+
+      , testCase "positive integer string is quoted" $
+          quoteYamlString "+42" @?= "'+42'"
+
+      , testCase "float string is quoted" $
+          quoteYamlString "0.5" @?= "'0.5'"
+
+      , testCase "scientific notation string is quoted" $
+          quoteYamlString "1e3" @?= "'1e3'"
+
+      , testCase "negative float string is quoted" $
+          quoteYamlString "-3.14" @?= "'-3.14'"
+
+      , testCase "positive float string is quoted" $
+          quoteYamlString "+1.0" @?= "'+1.0'"
+
+      , testCase "string starting with digit then alpha is quoted" $
+          quoteYamlString "3abc" @?= "'3abc'"
+
+      , testCase "bare minus not followed by digit is not number-quoted" $
+          quoteYamlString "-abc" @?= "-abc"
+      ]
+
+    , testGroup "YAML dash-sequence strings"
+      [ testCase "bare dash is quoted" $
+          quoteYamlString "-" @?= "'-'"
+
+      , testCase "dash-space prefix is quoted" $
+          quoteYamlString "- item" @?= "'- item'"
+
+      , testCase "dash without space (not sequence) is not quoted" $
+          quoteYamlString "-abc" @?= "-abc"
+      ]
+
+    , testGroup "YAML tilde (null alias)"
+      [ testCase "tilde is quoted" $
+          quoteYamlString "~" @?= "'~'"
+
+      , testCase "tilde in longer string is not quoted" $
+          quoteYamlString "a~b" @?= "a~b"
+      ]
+
+    , testGroup "YAML dot-prefix strings"
+      [ testCase "dot-prefixed string is quoted" $
+          quoteYamlString ".inf" @?= "'.inf'"
+
+      , testCase "dot-nan is quoted" $
+          quoteYamlString ".nan" @?= "'.nan'"
+
+      , testCase "bare dot is quoted" $
+          quoteYamlString "." @?= "'.'"
+
+      , testCase "dotfile-like path is quoted" $
+          quoteYamlString ".hidden" @?= "'.hidden'"
+      ]
+
+    , testGroup "YAML single-quote prefix strings"
+      [ testCase "string starting with single quote is quoted" $
+          quoteYamlString "'hello" @?= "'''hello'"
+
+      , testCase "bare single quote is quoted" $
+          quoteYamlString "'" @?= "''''"
+      ]
     ]
 
   , testGroup "emitCfnYaml"

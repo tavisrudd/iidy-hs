@@ -34,11 +34,10 @@ import Iidy.Cfn.Operations.Changeset
   , buildChangeSetCreationResult
   , confirmChangesetExecution
   )
-import Iidy.Cfn.Operations.DescribeStack (convertStack, mkStandardPollConfig)
+import Iidy.Cfn.Operations.DescribeStack (mkStandardPollConfig, emitStackDefinition)
 import Iidy.Cfn.RequestBuilder (buildUpdateStackRequest)
 import Iidy.Cfn.StackOperations
   ( collectStackContents
-  , getStack
   , getStackId
   , pollForCompletion
   , PollResult(..)
@@ -86,11 +85,7 @@ updateStack ctx args argsfilePath env emit = do
     Left awsErr
       | isNoUpdatesError awsErr -> do
           -- Show Stack Details before re-throwing, matching Rust behavior
-          let regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
-          mStack <- getStack ctx stackName
-          case mStack of
-            Just cfnStack -> emit (OdStackDefinition (convertStack cfnStack regionText) True)
-            Nothing -> pure ()
+          emitStackDefinition ctx stackName emit
           -- Re-throw so the error handler displays the ValidationError
           throwIO awsErr
       | otherwise ->
@@ -103,13 +98,9 @@ updateStack ctx args argsfilePath env emit = do
         Nothing  -> getStackId ctx stackName
 
       let stackId = fromMaybe stackName mStackId
-          regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
 
       -- Step 4b: Fetch and emit StackDefinition
-      mStack <- getStack ctx stackId
-      case mStack of
-        Just cfnStack -> emit (OdStackDefinition (convertStack cfnStack regionText) True)
-        Nothing -> pure ()
+      emitStackDefinition ctx stackId emit
 
       -- Step 5: Poll for completion, emitting events through renderer
       emit (OdPollingStarted "Loading live events...")
@@ -151,13 +142,9 @@ updateStackWithChangeset
   -> IO (Either Text Int)
 updateStackWithChangeset ctx args yesFlag argsfilePath env emit = do
   let stackName = getStackName args
-      regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
 
   -- Step 1: Fetch and emit StackDefinition
-  mStack <- getStack ctx stackName
-  case mStack of
-    Just cfnStack -> emit (OdStackDefinition (convertStack cfnStack regionText) True)
-    Nothing -> pure ()
+  emitStackDefinition ctx stackName emit
 
   -- Step 2: Generate deterministic changeset name from token
   let tokenPrefix = T.take 8 (tiValue (cfnPrimaryToken ctx))

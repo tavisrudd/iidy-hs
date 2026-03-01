@@ -12,6 +12,7 @@ module Iidy.Cfn.Operations.DescribeStack
   , buildEventsDisplay
   , buildConsoleUrl
   , mkStandardPollConfig
+  , emitStackDefinition
   ) where
 
 import Data.List (sortBy)
@@ -230,3 +231,19 @@ mkStandardPollConfig ctx emit = defaultPollConfig
       emit (OdNewStackEvents converted)
   , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
   }
+
+------------------------------------------------------------------------
+-- Shared stack definition helper
+------------------------------------------------------------------------
+
+-- | Fetch a stack and emit its StackDefinition if found.
+-- This is the common pattern used by most write operations to show the
+-- stack definition before polling begins.  Does nothing if the stack
+-- is not found.
+emitStackDefinition :: CfnContext -> Text -> (OutputData -> IO ()) -> IO ()
+emitStackDefinition ctx stackId emit = do
+  let regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
+  mStack <- getStack ctx stackId
+  case mStack of
+    Just cfnStack -> emit (OdStackDefinition (convertStack cfnStack regionText) True)
+    Nothing -> pure ()

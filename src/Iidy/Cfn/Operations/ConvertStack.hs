@@ -20,6 +20,7 @@ module Iidy.Cfn.Operations.ConvertStack
 
 import Control.Exception (SomeException, try)
 import Data.Aeson (Value(..))
+import Data.Char (isDigit)
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
@@ -66,6 +67,10 @@ defaultStackPolicy = "{\n \"Statement\": [\n  {\n   \"Effect\": \"Allow\",\n   \
 ------------------------------------------------------------------------
 
 -- | Replace known environment names with {{environment}} template variable.
+-- NOTE: Uses sequential T.replace via foldl. If a string contains multiple
+-- environment names (e.g. "testing-production"), earlier replacements can
+-- cause later ones to match, producing double-replacement. This matches
+-- the Rust implementation behavior.
 parameterizeEnv :: Text -> Text
 parameterizeEnv s = foldl (\acc env -> T.replace env "{{environment}}" acc) s knownEnvironments
 
@@ -283,7 +288,36 @@ quoteYamlString s
       || T.any (< ' ') t  -- control characters including \n, \r, \t
       || t == "true" || t == "false" || t == "null"
       || t == "yes" || t == "no"
+      || t == "~"  -- YAML null alias
       || T.isPrefixOf " " t || T.isSuffixOf " " t
+      || T.isPrefixOf "." t  -- YAML float prefix (.inf, .nan, etc.)
+      || T.isPrefixOf "'" t  -- single-quote opens a flow scalar
+      || looksLikeNumber t
+      || looksLikeDashSeq t
+
+    -- Detect strings that YAML would interpret as numbers:
+    -- integers (123, +42, -7), floats (0.5, +1.0, -3.14),
+    -- scientific notation (1e3, 2.5E-4), and special YAML floats
+    -- like octal (0o17) and hex (0x1f).
+    looksLikeNumber :: Text -> Bool
+    looksLikeNumber t =
+      case T.uncons t of
+        Nothing -> False
+        Just (c, rest)
+          | c == '+' || c == '-' -> not (T.null rest) && startsNumeric rest
+          | isDigit c            -> True
+          | otherwise            -> False
+
+    startsNumeric :: Text -> Bool
+    startsNumeric t =
+      case T.uncons t of
+        Just (c, _) -> isDigit c || c == '.'  -- covers +.inf, -.inf too
+        Nothing     -> False
+
+    -- Detect block sequence indicator: "-" alone or "- " prefix
+    looksLikeDashSeq :: Text -> Bool
+    looksLikeDashSeq t =
+      t == "-" || T.isPrefixOf "- " t
 
 -- | Build the stack-args.yaml content from stack metadata.
 buildStackArgsYaml

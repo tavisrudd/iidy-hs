@@ -72,7 +72,9 @@ deleteStack ctx stackName skipConfirmation env emit = do
       -- Step 1a: Show stack definition before confirmation
       emit (OdStackDefinition (convertStack cfnStack regionText) True)
 
-      -- Step 1b: Show previous events and contents before confirmation
+      -- Step 1b: Show previous events and contents before confirmation.
+      -- These API calls happen before the user confirms, matching Rust behavior:
+      -- showing stack info helps the user decide whether to proceed.
       events <- fetchStackEvents ctx stackName
       emit (OdStackEvents (buildEventsDisplay stackName 10 events))
       contents <- collectStackContents ctx stackName

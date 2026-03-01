@@ -18,8 +18,6 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import qualified Amazonka
-
 import Iidy.Aws.ClientReqToken (TokenInfo(..))
 import Iidy.Cfn.Context (CfnContext(..))
 import Iidy.Cfn.Operations.Changeset
@@ -30,9 +28,9 @@ import Iidy.Cfn.Operations.Changeset
   , confirmChangesetExecution
   )
 import Iidy.Cfn.Operations.CreateStack (createStack)
-import Iidy.Cfn.Operations.DescribeStack (convertStack)
+import Iidy.Cfn.Operations.DescribeStack (emitStackDefinition)
 import Iidy.Cfn.Operations.UpdateStack (updateStack)
-import Iidy.Cfn.StackOperations (stackExists, getStack)
+import Iidy.Cfn.StackOperations (stackExists)
 import Iidy.Cfn.Types (StackArgs(..), getStackName)
 import Iidy.Output.Types (OutputData(..), ChangeSetInfo(..))
 
@@ -87,13 +85,9 @@ updateWithChangeset
   -> IO (Either Text Int)
 updateWithChangeset ctx args yesFlag argsfilePath env emit = do
   let stackName = getStackName args
-      regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
 
   -- Fetch and emit StackDefinition
-  mStack <- getStack ctx stackName
-  case mStack of
-    Just cfnStack -> emit (OdStackDefinition (convertStack cfnStack regionText) True)
-    Nothing -> pure ()
+  emitStackDefinition ctx stackName emit
 
   -- Generate deterministic changeset name from token
   let tokenPrefix = T.take 8 (tiValue (cfnPrimaryToken ctx))
@@ -135,7 +129,6 @@ createWithChangeset
   -> IO (Either Text Int)
 createWithChangeset ctx args yesFlag argsfilePath env emit = do
   let stackName = getStackName args
-      regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
 
   -- Generate random changeset name (docker-style)
   csName <- generateDashedName
@@ -146,10 +139,7 @@ createWithChangeset ctx args yesFlag argsfilePath env emit = do
     Left err -> pure (Left err)
     Right info -> do
       -- Stack now exists in REVIEW_IN_PROGRESS — fetch and show definition
-      mStack <- getStack ctx stackName
-      case mStack of
-        Just cfnStack -> emit (OdStackDefinition (convertStack cfnStack regionText) True)
-        Nothing -> pure ()
+      emitStackDefinition ctx stackName emit
 
       -- Show changeset result
       let argsfileText = maybe "" T.pack argsfilePath

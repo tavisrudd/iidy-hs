@@ -55,7 +55,7 @@ import Iidy.Cfn.Context
   , changesetTerminalStatuses
   )
 import Iidy.Cfn.RequestBuilder (buildCreateChangeSetRequest)
-import Iidy.Cfn.Operations.DescribeStack (convertStack, buildEventsDisplay, mkStandardPollConfig)
+import Iidy.Cfn.Operations.DescribeStack (buildEventsDisplay, mkStandardPollConfig, emitStackDefinition)
 import Iidy.Cfn.StackOperations
   ( fetchStackEvents
   , getStackId
@@ -182,13 +182,9 @@ executeChangeset ctx stackName csName emit = do
   -- Step 2: Get stack ID for polling
   mStackId <- getStackId ctx stackName
   let stackId = fromMaybe stackName mStackId
-      regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
 
   -- Step 2b: Emit StackDefinition
-  mStack <- getStack ctx stackId
-  case mStack of
-    Just cfnStack -> emit (OdStackDefinition (convertStack cfnStack regionText) True)
-    Nothing -> pure ()
+  emitStackDefinition ctx stackId emit
 
   -- Step 2c: Emit previous events (unique to exec-changeset)
   prevEvents <- fetchStackEvents ctx stackName
@@ -341,7 +337,7 @@ extractRegionFromArn :: Text -> Text
 extractRegionFromArn arn =
   case drop 3 (T.splitOn ":" arn) of
     (region:_) -> region
-    _          -> "us-east-1"
+    _          -> "us-east-1"  -- Fallback matches Rust; ARNs from AWS are always well-formed
 
 ------------------------------------------------------------------------
 -- Shared helpers for changeset flows

@@ -72,9 +72,10 @@ getStack ctx stackName = do
 -- | Check if an Amazonka error indicates the stack does not exist.
 isStackNotFoundError :: Amazonka.Error -> Bool
 isStackNotFoundError (Amazonka.ServiceError se) =
-  case se.message of
-    Just msg -> "does not exist" `T.isInfixOf` Amazonka.fromErrorMessage msg
-    Nothing  -> False
+  se.code == Amazonka.ErrorCode "ValidationError"
+  && case se.message of
+       Just msg -> "does not exist" `T.isInfixOf` Amazonka.fromErrorMessage msg
+       Nothing  -> False
 isStackNotFoundError _ = False
 
 -- | Get stack ID from stack name.
@@ -139,7 +140,10 @@ collectStackContents ctx sName = do
   let changesets = mapMaybe convertChangeSetSummary
                      (concatMap (fromMaybe [] . (.summaries)) csPages)
 
-  -- Fetch exports from this stack (paginated — ListExports capped at 100/page)
+  -- Fetch exports from this stack (paginated — ListExports capped at 100/page).
+  -- NOTE: ListExports has no server-side stack filter, so we must fetch ALL
+  -- account exports and filter client-side by stack ARN. This matches the
+  -- Rust implementation. May be slow for accounts with many exports.
   exportPages <- runResourceT $ runConduit $
     Amazonka.paginate (cfnEnv ctx) LE.newListExports
     .| CL.consume
@@ -276,8 +280,10 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
                     , ociSkipRemainingSections = isDelete && currentStatus == "DELETE_COMPLETE"
                     }
                   pure (PollSuccess currentStatus)
-                else go startTime lastEventTimeRef hasSeenNewEventsRef
-                       (Set.union lastEventSet (Set.fromList (map (.eventId) events)))
+                else
+                  let newEventIds = Set.fromList (map (.eventId) newEvents)
+                  in go startTime lastEventTimeRef hasSeenNewEventsRef
+                        (Set.union lastEventSet newEventIds)
 
     -- | True only for the stack's own status event (logicalResourceId = stackName
     -- AND resourceType = AWS::CloudFormation::Stack). Using AND prevents nested
@@ -304,7 +310,7 @@ convertResource r = StackResourceInfo
   , sriResourceType = r.resourceType
   , sriResourceStatus = CF.fromResourceStatus r.resourceStatus
   , sriResourceStatusReason = r.resourceStatusReason
-  , sriLastUpdated = Nothing
+  , sriLastUpdated = Just r.timestamp.fromTime
   }
 
 convertOutput :: CF.Output -> Maybe StackOutputInfo
@@ -341,6 +347,8 @@ convertChangeSetSummary cs = do
 -- | Percent-encode a text string for use in URL query parameter values.
 -- Encodes everything except unreserved characters (RFC 3986).
 -- Correctly handles Unicode by UTF-8 encoding first.
+-- Lives here (not a Util module) to avoid circular deps: both Changeset
+-- and DescribeStack need it, and both already import StackOperations.
 percentEncode :: Text -> Text
 percentEncode t = T.concat $ map encByte (BS.unpack (TE.encodeUtf8 t))
   where

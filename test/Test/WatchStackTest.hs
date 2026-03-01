@@ -10,7 +10,8 @@ import Data.Time.Clock (UTCTime(..))
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
-import Iidy.Cfn.Operations.WatchStack (formatEvent, allTerminalStatuses)
+import Iidy.Cfn.Context (allTerminalStatuses)
+import Iidy.Cfn.Operations.WatchStack (formatEvent)
 import Iidy.Cfn.StackOperations (stackNameFromId, pollForCompletionWith, PollConfig(..), defaultPollConfig, PollResult(..))
 
 watchStackTests :: [TestTree]

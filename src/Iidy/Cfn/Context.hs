@@ -129,11 +129,15 @@ allTerminalStatuses =
   ]
 
 -- | Terminal statuses for create-stack polling.
+-- Currently identical to updateTerminalStatuses; kept separate for
+-- independent evolution if create/update terminal conditions diverge.
 createTerminalStatuses :: [Text]
 createTerminalStatuses = allTerminalStatuses
   ++ ["DELETE_SKIPPED", "REVIEW_IN_PROGRESS"]
 
 -- | Terminal statuses for update-stack polling.
+-- Currently identical to createTerminalStatuses; kept separate for
+-- independent evolution if create/update terminal conditions diverge.
 updateTerminalStatuses :: [Text]
 updateTerminalStatuses = allTerminalStatuses
   ++ ["DELETE_SKIPPED", "REVIEW_IN_PROGRESS"]

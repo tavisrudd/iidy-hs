@@ -6,7 +6,6 @@
 module Iidy.Cfn.Operations.WatchStack
   ( watchStack
   , formatEvent
-  , allTerminalStatuses
   ) where
 
 import Data.Maybe (fromMaybe)
