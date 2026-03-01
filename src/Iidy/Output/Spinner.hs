@@ -11,6 +11,9 @@ module Iidy.Output.Spinner
   , spinnerIntervalMs
   ) where
 
+import Control.Monad (when)
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -54,7 +57,7 @@ spinnerTick :: Spinner -> IO Text
 spinnerTick sp = do
   frame <- readIORef (spFrameRef sp)
   let frames = spinnerFrames (spStyle sp)
-      current = frames !! (frame `mod` length frames)
+      current = NE.toList frames !! (frame `mod` NE.length frames)
   writeIORef (spFrameRef sp) (frame + 1)
   writeIORef (spActive sp) True
   pure current
@@ -70,7 +73,7 @@ spinnerFrame :: Spinner -> IO Text
 spinnerFrame sp = do
   frame <- readIORef (spFrameRef sp)
   let frames = spinnerFrames (spStyle sp)
-  pure $ frames !! (frame `mod` length frames)
+  pure $ NE.toList frames !! (frame `mod` NE.length frames)
 
 -- | Set the spinner message
 spinnerSetMessage :: Spinner -> Text -> IO ()
@@ -89,13 +92,11 @@ spinnerRender sp colorCode = do
 spinnerFinishAndClear :: Spinner -> IO ()
 spinnerFinishAndClear sp = do
   active <- readIORef (spActive sp)
-  if active
-    then do
-      -- Clear the current line
-      TIO.hPutStr (spHandle sp) "\r\ESC[K"
-      hFlush (spHandle sp)
-      spinnerClear sp
-    else pure ()
+  when active $ do
+    -- Clear the current line
+    TIO.hPutStr (spHandle sp) "\r\ESC[K"
+    hFlush (spHandle sp)
+    spinnerClear sp
 
 -- | Get tick interval in milliseconds for a spinner style
 spinnerIntervalMs :: SpinnerStyle -> Int
@@ -107,10 +108,10 @@ spinnerIntervalMs = \case
   SpinnerPulse  -> 200
 
 -- | Get the frame characters for a spinner style
-spinnerFrames :: SpinnerStyle -> [Text]
+spinnerFrames :: SpinnerStyle -> NonEmpty Text
 spinnerFrames = \case
-  SpinnerDots   -> map T.singleton "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-  SpinnerDots12 -> map T.singleton "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏⠋⠙"
-  SpinnerLine   -> map T.singleton "⠂⠄⠅⠇⡇⣇⣧⣷⣿⣸⣰⣠⣀"
-  SpinnerArrow  -> map T.singleton "←↖↑↗→↘↓↙"
-  SpinnerPulse  -> ["⚫", "⚪"]
+  SpinnerDots   -> "⠋" :| map T.singleton "⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+  SpinnerDots12 -> "⠋" :| map T.singleton "⠙⠹⠸⠼⠴⠦⠧⠇⠏⠋⠙"
+  SpinnerLine   -> "⠂" :| map T.singleton "⠄⠅⠇⡇⣇⣧⣷⣿⣸⣰⣠⣀"
+  SpinnerArrow  -> "←" :| map T.singleton "↖↑↗→↘↓↙"
+  SpinnerPulse  -> "⚫" :| ["⚪"]

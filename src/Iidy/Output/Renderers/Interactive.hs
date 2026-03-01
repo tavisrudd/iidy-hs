@@ -36,8 +36,11 @@ module Iidy.Output.Renderers.Interactive
   ) where
 
 import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
+import Control.Exception (mask_)
+import Control.Monad (when, unless)
 import Data.IORef
 import Data.List (sortBy)
+import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
@@ -178,7 +181,7 @@ rPutStrLnErr r = TIO.hPutStrLn (irStderr r)
 -- | Start a spinner with a message. Creates a background tick thread
 -- and a timing task that updates the spinner message with elapsed time.
 startSpinner :: InteractiveRenderer -> Text -> IO ()
-startSpinner r _msg = do
+startSpinner r msg = do
   -- Only start if spinners are enabled and ANSI is available
   isTty <- hIsTerminalDevice (irStdout r)
   if not (ioEnableSpinners (irOptions r)) || not isTty
@@ -187,7 +190,7 @@ startSpinner r _msg = do
       -- Stop any existing spinner first
       stopSpinner r
       sp <- newSpinner (irStdout r) SpinnerDots12
-      spinnerSetMessage sp ""
+      spinnerSetMessage sp msg
       writeIORef (irSpinner r) (Just sp)
       -- Start background tick thread
       let colorCode = "\ESC[36;1m"  -- cyan bold for Dots/Dots12
@@ -206,7 +209,7 @@ spinnerTickLoop sp colorCode interval = do
 
 -- | Stop and clear the current spinner and timing task
 stopSpinner :: InteractiveRenderer -> IO ()
-stopSpinner r = do
+stopSpinner r = mask_ $ do
   -- Stop timing task first
   stopTimingTask r
   -- Kill tick thread
@@ -268,7 +271,7 @@ timingLoop r sp = do
 
 -- | Stop the timing task.
 stopTimingTask :: InteractiveRenderer -> IO ()
-stopTimingTask r = do
+stopTimingTask r = mask_ $ do
   mTid <- readIORef (irTimingThread r)
   case mTid of
     Just tid -> killThread tid
@@ -335,17 +338,14 @@ th = irTheme
 -- | Format section heading with bold + color
 formatSectionHeading :: InteractiveRenderer -> Text -> Text
 formatSectionHeading r text =
-  let clean = T.stripSuffix ":" text `orElse` text
+  let clean = fromMaybe text (T.stripSuffix ":" text)
   in colorizeBold (th r) (thSectionHeading (th r)) clean <> ":"
-  where
-    orElse Nothing  t = t
-    orElse (Just v) _ = v
 
 -- | Print section heading (without trailing newline)
 printSectionHeading :: InteractiveRenderer -> Text -> IO ()
 printSectionHeading r text = do
   hasContent <- readIORef (irHasRenderedContent r)
-  if hasContent then rPutStrLn r "" else pure ()
+  when hasContent $ rPutStrLn r ""
   rPutStr r (formatSectionHeading r text)
   writeIORef (irHasRenderedContent r) True
   rFlush r
@@ -375,7 +375,7 @@ printSectionEntry r label value = do
 addContentSpacing :: InteractiveRenderer -> IO ()
 addContentSpacing r = do
   hasContent <- readIORef (irHasRenderedContent r)
-  if hasContent then rPutStrLn r "" else pure ()
+  when hasContent $ rPutStrLn r ""
   writeIORef (irHasRenderedContent r) True
 
 -- | Pad text right to given width
@@ -478,14 +478,12 @@ renderCommandMetadata r meta = do
         <> " " <> styleMuted r ("(" <> formatTokenSource (tiSource (cmPrimaryToken meta)) <> ")")
   printSectionEntry r "Client Req Token:" tokenText
   let derived = cmDerivedTokens meta
-  if not (null derived)
-    then do
-      printSectionEntry r "Derived Tokens:" (T.pack (show (length derived)) <> " tokens")
-      mapM_ (\(i, tok) ->
-        printSectionEntry r ("  [" <> T.pack (show i) <> "]")
-          (styleMuted r (tiValue tok) <> " " <> styleMuted r ("(" <> formatTokenSource (tiSource tok) <> ")"))
-        ) (zip [(1::Int)..] derived)
-    else pure ()
+  unless (null derived) $ do
+    printSectionEntry r "Derived Tokens:" (T.pack (show (length derived)) <> " tokens")
+    mapM_ (\(i, tok) ->
+      printSectionEntry r ("  [" <> T.pack (show i) <> "]")
+        (styleMuted r (tiValue tok) <> " " <> styleMuted r ("(" <> formatTokenSource (tiSource tok) <> ")"))
+      ) (zip [(1::Int)..] derived)
 
 renderStackDefinition :: InteractiveRenderer -> StackDefinition -> Bool -> IO ()
 renderStackDefinition r def showTimes = do
@@ -530,15 +528,13 @@ renderStackDefinition r def showTimes = do
         <> if sdTerminationProtection def then " \128274" else ""  -- 🔒
   printSectionEntry r "TerminationProtection:" protText
   -- Times
-  if showTimes
-    then do
-      case sdCreationTime def of
-        Just t -> printSectionEntry r "Creation Time:" (styleMuted r (renderTimestamp t))
-        Nothing -> pure ()
-      case sdLastUpdatedTime def of
-        Just t -> printSectionEntry r "Last Update Time:" (styleMuted r (renderTimestamp t))
-        Nothing -> pure ()
-    else pure ()
+  when showTimes $ do
+    case sdCreationTime def of
+      Just t -> printSectionEntry r "Creation Time:" (styleMuted r (renderTimestamp t))
+      Nothing -> pure ()
+    case sdLastUpdatedTime def of
+      Just t -> printSectionEntry r "Last Update Time:" (styleMuted r (renderTimestamp t))
+      Nothing -> pure ()
   -- Timeout
   case sdTimeoutInMinutes def of
     Just t -> printSectionEntry r "Timeout In Minutes:" (styleMuted r (T.pack (show t)))
@@ -609,18 +605,16 @@ renderSingleStackEvent r statusPad rtypePad ewt = do
 renderStackContents :: InteractiveRenderer -> StackContents -> IO ()
 renderStackContents r contents = do
   -- Resources
-  if not (null (scResources contents))
-    then do
-      printSectionHeadingLn r "Stack Resources"
-      let idPad = calcPadding (scResources contents) sriLogicalResourceId
-          rtypePad = calcPadding (scResources contents) sriResourceType
-      mapM_ (\res ->
-        rPutStrLn r (
-          formatLogicalId r (padRight (idPad + 1) (" " <> sriLogicalResourceId res))
-          <> " " <> styleMuted r (padRight rtypePad (sriResourceType res))
-          <> " " <> styleMuted r (fromMaybe "" (sriPhysicalResourceId res))
-        )) (scResources contents)
-    else pure ()
+  unless (null (scResources contents)) $ do
+    printSectionHeadingLn r "Stack Resources"
+    let idPad = calcPadding (scResources contents) sriLogicalResourceId
+        rtypePad = calcPadding (scResources contents) sriResourceType
+    mapM_ (\res ->
+      rPutStrLn r (
+        formatLogicalId r (padRight (idPad + 1) (" " <> sriLogicalResourceId res))
+        <> " " <> styleMuted r (padRight rtypePad (sriResourceType res))
+        <> " " <> styleMuted r (fromMaybe "" (sriPhysicalResourceId res))
+      )) (scResources contents)
   -- Outputs
   if null (scOutputs contents)
     then do
@@ -635,46 +629,42 @@ renderStackContents r contents = do
           <> " " <> styleMuted r (soiOutputValue out)
         )) (scOutputs contents)
   -- Exports
-  if not (null (scExports contents))
-    then do
-      let hasImports = any (not . null . seiImportingStacks) (scExports contents)
-          isComplex = length (scExports contents) > 1 || hasImports
-      if isComplex
-        then printSectionHeadingLn r "Stack Exports"
-        else printSectionHeading r "Stack Exports"
-      let namePad = calcPadding (scExports contents) seiName
-      mapM_ (\ex -> do
-        rPutStrLn r (
-          formatLogicalId r (padRight (namePad + 1) (" " <> seiName ex))
-          <> " " <> styleMuted r (seiValue ex))
-        mapM_ (\imp -> rPutStrLn r ("  " <> styleMuted r ("imported by " <> imp))) (seiImportingStacks ex)
-        ) (scExports contents)
-    else pure ()
+  unless (null (scExports contents)) $ do
+    let hasImports = any (not . null . seiImportingStacks) (scExports contents)
+        isComplex = length (scExports contents) > 1 || hasImports
+    if isComplex
+      then printSectionHeadingLn r "Stack Exports"
+      else printSectionHeading r "Stack Exports"
+    let namePad = calcPadding (scExports contents) seiName
+    mapM_ (\ex -> do
+      rPutStrLn r (
+        formatLogicalId r (padRight (namePad + 1) (" " <> seiName ex))
+        <> " " <> styleMuted r (seiValue ex))
+      mapM_ (\imp -> rPutStrLn r ("  " <> styleMuted r ("imported by " <> imp))) (seiImportingStacks ex)
+      ) (scExports contents)
   -- Current Status
   printSectionHeading r "Current Stack Status"
   rPutStrLn r (" " <> colorizeResourceStatus (th r) (ssiStatus (scCurrentStatus contents))
     <> " " <> styleMuted r (fromMaybe "" (ssiStatusReason (scCurrentStatus contents))))
   -- Pending changesets
-  if not (null (scPendingChangesets contents))
-    then do
-      printSectionHeadingLn r "Pending Changesets"
-      mapM_ (\cs -> do
-        let ctText = case csiCreationTime cs of
-              Just t  -> formatTimestampText r (renderTimestamp t)
-              Nothing -> "Unknown"
-        printSectionEntry r ctText
-          (colorize (th r) (thPrimary (th r)) (csiChangeSetName cs)
-           <> " " <> csiStatus cs
-           <> " " <> styleMuted r (fromMaybe "" (csiStatusReason cs)))
-        case csiDescription cs of
-          Just desc | not (T.null desc) -> do
-            rPutStrLn r ("  Description: " <> styleMuted r desc)
-            rPutStrLn r ""
-          _ -> pure ()
-        mapM_ (renderChangesetChange r) (csiChanges cs)
-        rPutStrLn r ""
-        ) (scPendingChangesets contents)
-    else pure ()
+  unless (null (scPendingChangesets contents)) $ do
+    printSectionHeadingLn r "Pending Changesets"
+    mapM_ (\cs -> do
+      let ctText = case csiCreationTime cs of
+            Just t  -> formatTimestampText r (renderTimestamp t)
+            Nothing -> "Unknown"
+      printSectionEntry r ctText
+        (colorize (th r) (thPrimary (th r)) (csiChangeSetName cs)
+         <> " " <> csiStatus cs
+         <> " " <> styleMuted r (fromMaybe "" (csiStatusReason cs)))
+      case csiDescription cs of
+        Just desc | not (T.null desc) -> do
+          rPutStrLn r ("  Description: " <> styleMuted r desc)
+          rPutStrLn r ""
+        _ -> pure ()
+      mapM_ (renderChangesetChange r) (csiChanges cs)
+      rPutStrLn r ""
+      ) (scPendingChangesets contents)
 
 renderStatusUpdate :: InteractiveRenderer -> StatusUpdate -> IO ()
 renderStatusUpdate r upd = do
@@ -801,20 +791,18 @@ renderChangesetChange r change = do
             Just "Conditional" -> ("Replace?", thError (th r))
             _                  -> ("Modify", thWarning (th r))
           resInfo = ciResourceType change <> maybe "" (" " <>) (ciPhysicalResourceId change)
-      case ciReplacement change of
-        Nothing -> do
+      let showScope = case ciReplacement change of
+            Just "True"        -> False
+            Just "Conditional" -> False
+            _                  -> True
+      if showScope
+        then do
           let scopeText = maybe "" (T.intercalate ", ") (ciScope change)
           rPutStrLn r ("  " <> colorize (th r) actionColor (padRight actionW actionText)
             <> " " <> padRight logIdW (ciLogicalResourceId change)
             <> " " <> colorize (th r) (thWarning (th r)) scopeText
             <> " " <> styleMuted r resInfo)
-        Just "False" -> do
-          let scopeText = maybe "" (T.intercalate ", ") (ciScope change)
-          rPutStrLn r ("  " <> colorize (th r) actionColor (padRight actionW actionText)
-            <> " " <> padRight logIdW (ciLogicalResourceId change)
-            <> " " <> colorize (th r) (thWarning (th r)) scopeText
-            <> " " <> styleMuted r resInfo)
-        _ ->
+        else
           rPutStrLn r ("  " <> colorize (th r) actionColor (padRight actionW actionText)
             <> " " <> padRight logIdW (ciLogicalResourceId change)
             <> " " <> styleMuted r resInfo)
@@ -874,8 +862,7 @@ renderError r err = do
 
 renderNewStackEvents :: InteractiveRenderer -> [StackEventWithTiming] -> IO ()
 renderNewStackEvents r events = do
-  if null events then pure ()
-  else do
+  unless (null events) $ do
     -- Preserve timing start time across spinner restart
     preservedState <- readIORef (irTimingState r)
     stopSpinner r
@@ -887,9 +874,8 @@ renderNewStackEvents r events = do
     -- Restore preserved start time and update last event time
     case preservedState of
       Just (startTime, _) -> do
-        let mLastEventTime = case events of
-              [] -> Nothing
-              _  -> seTimestamp (sewEvent (last events))
+        let lastEvt = NE.last (NE.fromList events)
+            mLastEventTime = seTimestamp (sewEvent lastEvt)
         writeIORef (irTimingState r) (Just (startTime, mLastEventTime))
       Nothing -> pure ()
 
@@ -925,9 +911,9 @@ renderStackChangeDetails r details = do
     ChangeUpdateNoChanges ->
       rPutStrLn r (" " <> colorize (th r) (thSuccess (th r)) "No changes detected so no stack update needed.")
 
-renderStackAbsentInfo :: InteractiveRenderer -> StackAbsentInfo -> IO ()
-renderStackAbsentInfo r info = do
-  let prefix = colorizeBold (th r) (thSuccess (th r)) "info"
+renderStackAbsent :: InteractiveRenderer -> Text -> DynColor -> StackAbsentInfo -> IO ()
+renderStackAbsent r label labelColor info = do
+  let prefix = colorizeBold (th r) labelColor label
       sn = colorizeBold (th r) (thInfo (th r)) (saiStackName info)
   rPutStrLn r (prefix <> " The stack " <> sn <> " is absent")
   rPutStrLn r ("      env = " <> colorize (th r) (thPrimary (th r)) (saiEnvironment info))
@@ -935,15 +921,11 @@ renderStackAbsentInfo r info = do
   rPutStrLn r ("      account = " <> colorize (th r) (thPrimary (th r)) (saiAccount info))
   rPutStrLn r ("      auth_arn = " <> colorize (th r) (thPrimary (th r)) (saiAuthArn info) <> ".")
 
+renderStackAbsentInfo :: InteractiveRenderer -> StackAbsentInfo -> IO ()
+renderStackAbsentInfo r = renderStackAbsent r "info" (thSuccess (th r))
+
 renderStackAbsentError :: InteractiveRenderer -> StackAbsentInfo -> IO ()
-renderStackAbsentError r ctx = do
-  let prefix = colorizeBold (th r) (thError (th r)) "ERROR"
-      sn = colorizeBold (th r) (thInfo (th r)) (saiStackName ctx)
-  rPutStrLn r (prefix <> " The stack " <> sn <> " is absent")
-  rPutStrLn r ("      env = " <> colorize (th r) (thPrimary (th r)) (saiEnvironment ctx))
-  rPutStrLn r ("      region = " <> colorize (th r) (thPrimary (th r)) (saiRegion ctx))
-  rPutStrLn r ("      account = " <> colorize (th r) (thPrimary (th r)) (saiAccount ctx))
-  rPutStrLn r ("      auth_arn = " <> colorize (th r) (thPrimary (th r)) (saiAuthArn ctx) <> ".")
+renderStackAbsentError r = renderStackAbsent r "ERROR" (thError (th r))
 
 renderCostEstimate :: InteractiveRenderer -> CostEstimate -> IO ()
 renderCostEstimate r est = do
@@ -967,24 +949,17 @@ renderApprovalRequestResult r res = do
 
 renderTemplateValidation :: InteractiveRenderer -> TemplateValidation -> IO ()
 renderTemplateValidation r val = do
-  if not (tvEnabled val)
-    then pure ()
-    else do
-      if not (null (tvErrors val))
-        then do
-          printSectionHeadingLn r "Template Validation Errors"
-          mapM_ (\e -> rPutStrLn r (colorize (th r) (thError (th r)) "\10007"
-            <> " " <> colorize (th r) (thError (th r)) e)) (tvErrors val)
-        else pure ()
-      if not (null (tvWarnings val))
-        then do
-          printSectionHeadingLn r "Template Validation Warnings"
-          mapM_ (\w -> rPutStrLn r (colorize (th r) (thWarning (th r)) "\9888"
-            <> " " <> colorize (th r) (thWarning (th r)) w)) (tvWarnings val)
-        else pure ()
-      if null (tvErrors val) && null (tvWarnings val)
-        then rPutStrLn r (colorize (th r) (thSuccess (th r)) "\10003 Template validation passed")
-        else pure ()
+  when (tvEnabled val) $ do
+    unless (null (tvErrors val)) $ do
+      printSectionHeadingLn r "Template Validation Errors"
+      mapM_ (\e -> rPutStrLn r (colorize (th r) (thError (th r)) "\10007"
+        <> " " <> colorize (th r) (thError (th r)) e)) (tvErrors val)
+    unless (null (tvWarnings val)) $ do
+      printSectionHeadingLn r "Template Validation Warnings"
+      mapM_ (\w -> rPutStrLn r (colorize (th r) (thWarning (th r)) "\9888"
+        <> " " <> colorize (th r) (thWarning (th r)) w)) (tvWarnings val)
+    when (null (tvErrors val) && null (tvWarnings val)) $
+      rPutStrLn r (colorize (th r) (thSuccess (th r)) "\10003 Template validation passed")
 
 renderApprovalStatus :: InteractiveRenderer -> ApprovalStatus -> IO ()
 renderApprovalStatus r st = do
@@ -1023,10 +998,14 @@ renderApprovalResult r res = do
 -- | Detect environment from stack name or tags
 detectEnvironment :: Text -> Map Text Text -> Text
 detectEnvironment stackName tags
-  | T.isInfixOf "production" stackName || Map.lookup "environment" tags == Just "production" = "production"
-  | T.isInfixOf "integration" stackName || Map.lookup "environment" tags == Just "integration" = "integration"
-  | T.isInfixOf "development" stackName || Map.lookup "environment" tags == Just "development" = "development"
+  | T.isInfixOf "production"  stackName || envTagEquals "production"  = "production"
+  | T.isInfixOf "integration" stackName || envTagEquals "integration" = "integration"
+  | T.isInfixOf "development" stackName || envTagEquals "development" = "development"
   | otherwise = ""
+  where
+    envTagEquals val =
+      let envKeys = ["Environment", "environment", "ENVIRONMENT", "env", "ENV"]
+      in any (\k -> fmap T.toLower (Map.lookup k tags) == Just val) envKeys
 
 -- | Simple text wrapping at word boundaries
 wrapText :: Int -> Text -> [Text]
