@@ -94,7 +94,7 @@
 
 | Issue                                   | Why                                                                             |
 |-----------------------------------------|---------------------------------------------------------------------------------|
-| NI-C1: String-based error classification | Could use structured error types instead; needs design work (future session)   |
+| ~~NI-C1: String-based error classification~~ | **FIXED** — `ResolveErrorKind` sum type + smart constructors |
 | CS-C1: Conversion.hs ~900 LOC          | Splitting is a larger refactor, deferred                                        |
 | PC-R1: O(n^2) list ops in OValue       | By design (key order preservation), acceptable for CFN template sizes           |
 
@@ -104,7 +104,7 @@
 
 **Session 2** (2026-02-28): Completed all actionable items from the code review remaining fixes handoff.
 
-**Fixed (6 items)**:
+**Fixed (7 items)**:
 - A: Dead code removal (`resolveResourcesMapping`, `tcInResourcesSection`)
 - B: Dead field removal (`tpiCaretColumn`)
 - C: `T.stripPrefix` cleanup (12 sites)
@@ -112,8 +112,10 @@
 - E: Full CFN tag validation matching Rust (3 deep-validated tags + null-only catch-all + single-element array unpacking)
 - CFN error display: added validation prefixes + help text for 9 new tags
 
-**Remaining (3 items, all low priority)**:
-- NI-C1: String-based error classification → structured types (future session)
+- NI-C1: Replaced string-based error classification with `ResolveErrorKind` sum type (10 variants) + smart constructors. `classifyResolveError` now uses structure, `classifyMessage` only for parse errors.
+- Fix: `classifyImportError` `show` bug (was wrapping msg in constructor name)
+
+**Remaining (2 items, low priority)**:
 - CS-C1: Conversion.hs module split (deferred)
 - PC-R1: O(n^2) OValue ops (by design)
 
