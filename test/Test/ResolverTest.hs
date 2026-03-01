@@ -9,6 +9,7 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
 import Iidy.Yaml.Ast
+import Iidy.Yaml.CustomResources.Params (TemplateInfo(..), ParamDef(..))
 import Iidy.Yaml.Location (zeroPosition)
 import Iidy.Yaml.OValue
 import Iidy.Yaml.Resolution.Context
@@ -96,17 +97,31 @@ assertResolveFailsWith ctx ast substr =
 
 resolverTests :: [TestTree]
 resolverTests =
-  [ testGroup "VarLookup" varLookupTests
-  , testGroup "If" ifTests
-  , testGroup "Let" letTests
-  , testGroup "Map" mapTests
-  , testGroup "Join" joinTests
-  , testGroup "Split" splitTests
-  , testGroup "Merge" mergeTests
-  , testGroup "GroupBy" groupByTests
-  , testGroup "MapListToHash" mapListToHashTests
-  , testGroup "FromPairs" fromPairsTests
-  , testGroup "ExpandBrackets" expandBracketsTests
+  [ testGroup "VarLookup"       varLookupTests
+  , testGroup "If"              ifTests
+  , testGroup "Let"             letTests
+  , testGroup "Map"             mapTests
+  , testGroup "Join"            joinTests
+  , testGroup "Split"           splitTests
+  , testGroup "Merge"           mergeTests
+  , testGroup "GroupBy"         groupByTests
+  , testGroup "MapListToHash"   mapListToHashTests
+  , testGroup "FromPairs"       fromPairsTests
+  , testGroup "ExpandBrackets"  expandBracketsTests
+  , testGroup "Concat"          concatTests
+  , testGroup "ConcatMap"       concatMapTests
+  , testGroup "MergeMap"        mergeMapTests
+  , testGroup "Eq"              eqTests
+  , testGroup "Not"             notTests
+  , testGroup "Escape"          escapeTests
+  , testGroup "ParseYaml"       parseYamlTests
+  , testGroup "ParseJson"       parseJsonTests
+  , testGroup "ToJsonString"    toJsonStringTests
+  , testGroup "ToYamlString"    toYamlStringTests
+  , testGroup "MapValues"       mapValuesTests
+  , testGroup "TemplateString"  templateStringTests
+  , testGroup "Expand"          expandTests
+  , testGroup "CfnValidation"   cfnValidationTests
   ]
 
 ------------------------------------------------------------------------
@@ -563,4 +578,919 @@ expandBracketsTests =
       assertResolveFails
         (ctxWith [("x", OString "[x]")])
         (varLookup "a[x]")
+  ]
+
+------------------------------------------------------------------------
+-- 12. Concat tests
+------------------------------------------------------------------------
+
+concatTests :: [TestTree]
+concatTests =
+  [ testCase "!$concat merges two arrays" $
+      assertResolves
+        emptyContext
+        (ppTag (PpConcat (ConcatTag
+          [ seq_ [num 1, num 2]
+          , seq_ [num 3, num 4]
+          ])))
+        (OArray [ONumber 1, ONumber 2, ONumber 3, ONumber 4])
+
+  , testCase "!$concat merges three arrays" $
+      assertResolves
+        emptyContext
+        (ppTag (PpConcat (ConcatTag
+          [ seq_ [str "a"]
+          , seq_ [str "b"]
+          , seq_ [str "c"]
+          ])))
+        (OArray [OString "a", OString "b", OString "c"])
+
+  , testCase "!$concat with empty array yields empty" $
+      assertResolves
+        emptyContext
+        (ppTag (PpConcat (ConcatTag [])))
+        (OArray [])
+
+  , testCase "!$concat non-array is wrapped as single element" $
+      -- resolveConcat wraps non-array items rather than erroring
+      assertResolves
+        emptyContext
+        (ppTag (PpConcat (ConcatTag
+          [ str "x"
+          , seq_ [str "y"]
+          ])))
+        (OArray [OString "x", OString "y"])
+  ]
+
+------------------------------------------------------------------------
+-- 13. ConcatMap tests
+------------------------------------------------------------------------
+
+concatMapTests :: [TestTree]
+concatMapTests =
+  [ testCase "!$concatMap maps and flattens results" $
+      assertResolves
+        emptyContext
+        (ppTag (PpConcatMap (ConcatMapTag
+          (seq_ [num 1, num 2, num 3])
+          (seq_ [varLookup "item", varLookup "item"])
+          Nothing
+          Nothing)))
+        (OArray [ONumber 1, ONumber 1, ONumber 2, ONumber 2, ONumber 3, ONumber 3])
+
+  , testCase "!$concatMap returns flat array when template returns non-array" $
+      -- non-array items are wrapped as single-element arrays
+      assertResolves
+        emptyContext
+        (ppTag (PpConcatMap (ConcatMapTag
+          (seq_ [str "a", str "b"])
+          (varLookup "item")
+          Nothing
+          Nothing)))
+        (OArray [OString "a", OString "b"])
+
+  , testCase "!$concatMap with filter excludes non-matching items" $
+      assertResolves
+        emptyContext
+        (ppTag (PpConcatMap (ConcatMapTag
+          (seq_ [num 1, num 2, num 3])
+          (seq_ [varLookup "item"])
+          Nothing
+          (Just (ppTag (PpEq (EqTag (varLookup "item") (num 2))))))))
+        (OArray [ONumber 2])
+
+  , testCase "!$concatMap over non-sequence errors" $
+      assertResolveFailsWith
+        emptyContext
+        (ppTag (PpConcatMap (ConcatMapTag
+          (str "notArray")
+          (varLookup "item")
+          Nothing
+          Nothing)))
+        "expected sequence"
+  ]
+
+------------------------------------------------------------------------
+-- 14. MergeMap tests
+------------------------------------------------------------------------
+
+mergeMapTests :: [TestTree]
+mergeMapTests =
+  [ testCase "!$mergeMap maps and merges objects" $
+      assertResolves
+        emptyContext
+        (ppTag (PpMergeMap (MergeMapTag
+          (seq_
+            [ map_ [(str "k", str "a")]
+            , map_ [(str "k", str "b")]
+            ])
+          (varLookup "item")
+          Nothing)))
+        (OObject [("k", OString "b")])
+
+  , testCase "!$mergeMap merges disjoint keys" $
+      assertResolves
+        emptyContext
+        (ppTag (PpMergeMap (MergeMapTag
+          (seq_
+            [ map_ [(str "x", num 1)]
+            , map_ [(str "y", num 2)]
+            ])
+          (varLookup "item")
+          Nothing)))
+        (OObject [("x", ONumber 1), ("y", ONumber 2)])
+
+  , testCase "!$mergeMap over non-sequence errors" $
+      assertResolveFailsWith
+        emptyContext
+        (ppTag (PpMergeMap (MergeMapTag
+          (str "notArray")
+          (varLookup "item")
+          Nothing)))
+        "expected sequence"
+
+  , testCase "!$mergeMap template returning non-object errors" $
+      assertResolveFailsWith
+        emptyContext
+        (ppTag (PpMergeMap (MergeMapTag
+          (seq_ [num 1])
+          (varLookup "item")
+          Nothing)))
+        "expected object"
+  ]
+
+------------------------------------------------------------------------
+-- 15. Eq tests
+------------------------------------------------------------------------
+
+eqTests :: [TestTree]
+eqTests =
+  [ testCase "!$eq equal strings returns true" $
+      assertResolves
+        emptyContext
+        (ppTag (PpEq (EqTag (str "hello") (str "hello"))))
+        (OBool True)
+
+  , testCase "!$eq unequal strings returns false" $
+      assertResolves
+        emptyContext
+        (ppTag (PpEq (EqTag (str "hello") (str "world"))))
+        (OBool False)
+
+  , testCase "!$eq equal numbers returns true" $
+      assertResolves
+        emptyContext
+        (ppTag (PpEq (EqTag (num 42) (num 42))))
+        (OBool True)
+
+  , testCase "!$eq string and number returns false" $
+      assertResolves
+        emptyContext
+        (ppTag (PpEq (EqTag (str "1") (num 1))))
+        (OBool False)
+
+  , testCase "!$eq null equals null" $
+      assertResolves
+        emptyContext
+        (ppTag (PpEq (EqTag astNull astNull)))
+        (OBool True)
+
+  , testCase "!$eq with variable lookup" $
+      assertResolves
+        (ctxWith [("x", OString "foo")])
+        (ppTag (PpEq (EqTag (varLookup "x") (str "foo"))))
+        (OBool True)
+  ]
+
+------------------------------------------------------------------------
+-- 16. Not tests
+------------------------------------------------------------------------
+
+notTests :: [TestTree]
+notTests =
+  [ testCase "!$not negates true to false" $
+      assertResolves
+        emptyContext
+        (ppTag (PpNot (NotTag (bool True))))
+        (OBool False)
+
+  , testCase "!$not negates false to true" $
+      assertResolves
+        emptyContext
+        (ppTag (PpNot (NotTag (bool False))))
+        (OBool True)
+
+  , testCase "!$not negates truthy string to false" $
+      assertResolves
+        emptyContext
+        (ppTag (PpNot (NotTag (str "non-empty"))))
+        (OBool False)
+
+  , testCase "!$not negates empty string to true" $
+      assertResolves
+        emptyContext
+        (ppTag (PpNot (NotTag (str ""))))
+        (OBool True)
+
+  , testCase "!$not negates null to true" $
+      assertResolves
+        emptyContext
+        (ppTag (PpNot (NotTag astNull)))
+        (OBool True)
+
+  , testCase "!$not negates non-empty array to false" $
+      assertResolves
+        emptyContext
+        (ppTag (PpNot (NotTag (seq_ [num 1]))))
+        (OBool False)
+  ]
+
+------------------------------------------------------------------------
+-- 17. Escape tests
+------------------------------------------------------------------------
+
+escapeTests :: [TestTree]
+escapeTests =
+  [ testCase "!$escape passes string through as-is" $
+      assertResolves
+        emptyContext
+        (ppTag (PpEscape (EscapeTag (str "hello"))))
+        (OString "hello")
+
+  , testCase "!$escape passes number through as-is" $
+      assertResolves
+        emptyContext
+        (ppTag (PpEscape (EscapeTag (num 42))))
+        (ONumber 42)
+
+  , testCase "!$escape passes null through as-is" $
+      assertResolves
+        emptyContext
+        (ppTag (PpEscape (EscapeTag astNull)))
+        ONull
+
+  , testCase "!$escape does not resolve inner template string" $
+      -- AstTemplatedString is passed raw, not interpolated
+      assertResolves
+        (ctxWith [("x", OString "world")])
+        (ppTag (PpEscape (EscapeTag (AstTemplatedString "{{x}}" m))))
+        (OString "{{x}}")
+
+  , testCase "!$escape does not resolve inner var lookup" $
+      -- preprocessing tags inside escape are serialised as the literal "!$escaped" string
+      assertResolves
+        (ctxWith [("env", OString "prod")])
+        (ppTag (PpEscape (EscapeTag (varLookup "env"))))
+        (OString "!$escaped")
+  ]
+
+------------------------------------------------------------------------
+-- 18. ParseYaml tests
+------------------------------------------------------------------------
+
+parseYamlTests :: [TestTree]
+parseYamlTests =
+  [ testCase "!$parseYaml parses a scalar string" $
+      assertResolves
+        emptyContext
+        (ppTag (PpParseYaml (ParseYamlTag (str "hello"))))
+        (OString "hello")
+
+  , testCase "!$parseYaml parses a mapping" $
+      assertResolves
+        emptyContext
+        (ppTag (PpParseYaml (ParseYamlTag (str "key: value"))))
+        (OObject [("key", OString "value")])
+
+  , testCase "!$parseYaml parses a sequence" $
+      assertResolves
+        emptyContext
+        (ppTag (PpParseYaml (ParseYamlTag (str "- a\n- b\n"))))
+        (OArray [OString "a", OString "b"])
+
+  , testCase "!$parseYaml parses a number" $
+      assertResolves
+        emptyContext
+        (ppTag (PpParseYaml (ParseYamlTag (str "42"))))
+        (ONumber 42)
+
+  , testCase "!$parseYaml non-string input errors" $
+      assertResolveFailsWith
+        emptyContext
+        (ppTag (PpParseYaml (ParseYamlTag (num 99))))
+        "expected string"
+
+  , testCase "!$parseYaml invalid YAML errors" $
+      assertResolveFailsWith
+        emptyContext
+        (ppTag (PpParseYaml (ParseYamlTag (str "key: [unclosed"))))
+        "!$parseYaml"
+  ]
+
+------------------------------------------------------------------------
+-- 19. ParseJson tests
+------------------------------------------------------------------------
+
+parseJsonTests :: [TestTree]
+parseJsonTests =
+  [ testCase "!$parseJson parses a JSON object" $
+      assertResolves
+        emptyContext
+        (ppTag (PpParseJson (ParseJsonTag (str "{\"a\":1}"))))
+        (OObject [("a", ONumber 1)])
+
+  , testCase "!$parseJson parses a JSON array" $
+      assertResolves
+        emptyContext
+        (ppTag (PpParseJson (ParseJsonTag (str "[1,2,3]"))))
+        (OArray [ONumber 1, ONumber 2, ONumber 3])
+
+  , testCase "!$parseJson parses a JSON string" $
+      assertResolves
+        emptyContext
+        (ppTag (PpParseJson (ParseJsonTag (str "\"hello\""))))
+        (OString "hello")
+
+  , testCase "!$parseJson parses null" $
+      assertResolves
+        emptyContext
+        (ppTag (PpParseJson (ParseJsonTag (str "null"))))
+        ONull
+
+  , testCase "!$parseJson non-string input errors" $
+      assertResolveFailsWith
+        emptyContext
+        (ppTag (PpParseJson (ParseJsonTag (num 42))))
+        "expected string"
+
+  , testCase "!$parseJson invalid JSON errors" $
+      assertResolveFailsWith
+        emptyContext
+        (ppTag (PpParseJson (ParseJsonTag (str "{bad json"))))
+        "!$parseJson"
+  ]
+
+------------------------------------------------------------------------
+-- 20. ToJsonString tests
+------------------------------------------------------------------------
+
+toJsonStringTests :: [TestTree]
+toJsonStringTests =
+  [ testCase "!$toJsonString serialises object to JSON" $
+      assertResolves
+        emptyContext
+        (ppTag (PpToJsonString (ToJsonStringTag
+          (map_ [(str "x", num 1)]))))
+        (OString "{\"x\":1}")
+
+  , testCase "!$toJsonString serialises array to JSON" $
+      assertResolves
+        emptyContext
+        (ppTag (PpToJsonString (ToJsonStringTag
+          (seq_ [num 1, num 2]))))
+        (OString "[1,2]")
+
+  , testCase "!$toJsonString serialises string" $
+      assertResolves
+        emptyContext
+        (ppTag (PpToJsonString (ToJsonStringTag (str "hello"))))
+        (OString "\"hello\"")
+
+  , testCase "!$toJsonString serialises null" $
+      assertResolves
+        emptyContext
+        (ppTag (PpToJsonString (ToJsonStringTag astNull)))
+        (OString "null")
+
+  , testCase "!$toJsonString serialises boolean" $
+      assertResolves
+        emptyContext
+        (ppTag (PpToJsonString (ToJsonStringTag (bool True))))
+        (OString "true")
+  ]
+
+------------------------------------------------------------------------
+-- 21. ToYamlString tests
+------------------------------------------------------------------------
+
+toYamlStringTests :: [TestTree]
+toYamlStringTests =
+  [ testCase "!$toYamlString serialises string" $
+      assertResolves
+        emptyContext
+        (ppTag (PpToYamlString (ToYamlStringTag (str "hello"))))
+        (OString "hello")
+
+  , testCase "!$toYamlString serialises number" $
+      assertResolves
+        emptyContext
+        (ppTag (PpToYamlString (ToYamlStringTag (num 42))))
+        (OString "42")
+
+  , testCase "!$toYamlString serialises boolean" $
+      assertResolves
+        emptyContext
+        (ppTag (PpToYamlString (ToYamlStringTag (bool True))))
+        (OString "true")
+
+  , testCase "!$toYamlString produces non-empty output for object" $ do
+      let result = resolveAst emptyContext
+            (ppTag (PpToYamlString (ToYamlStringTag
+              (map_ [(str "key", str "val")]))))
+      case result of
+        Left (ResolveError _ msg _) -> assertFailure ("resolve failed: " <> T.unpack msg)
+        Right (OString s)           -> assertBool "YAML output should be non-empty" (not (T.null s))
+        Right v                     -> assertFailure ("expected OString, got: " <> show v)
+
+  , testCase "!$toYamlString produces non-empty output for sequence" $ do
+      let result = resolveAst emptyContext
+            (ppTag (PpToYamlString (ToYamlStringTag
+              (seq_ [str "a", str "b"]))))
+      case result of
+        Left (ResolveError _ msg _) -> assertFailure ("resolve failed: " <> T.unpack msg)
+        Right (OString s)           -> assertBool "YAML output should be non-empty" (not (T.null s))
+        Right v                     -> assertFailure ("expected OString, got: " <> show v)
+  ]
+
+------------------------------------------------------------------------
+-- 22. MapValues tests
+------------------------------------------------------------------------
+
+mapValuesTests :: [TestTree]
+mapValuesTests =
+  [ testCase "!$mapValues doubles all values" $
+      assertResolves
+        emptyContext
+        (ppTag (PpMapValues (MapValuesTag
+          (map_ [(str "a", num 1), (str "b", num 2)])
+          (ppTag (PpEq (EqTag (varLookupQ "item" "value") (num 1))))
+          Nothing)))
+        (OObject [("a", OBool True), ("b", OBool False)])
+
+  , testCase "!$mapValues with custom var name" $
+      assertResolves
+        emptyContext
+        (ppTag (PpMapValues (MapValuesTag
+          (map_ [(str "x", str "hello")])
+          (varLookupQ "entry" "value")
+          (Just "entry"))))
+        (OObject [("x", OString "hello")])
+
+  , testCase "!$mapValues preserves key order" $
+      assertResolves
+        emptyContext
+        (ppTag (PpMapValues (MapValuesTag
+          (map_ [(str "c", num 3), (str "a", num 1), (str "b", num 2)])
+          (varLookupQ "item" "key")
+          Nothing)))
+        (OObject [("c", OString "c"), ("a", OString "a"), ("b", OString "b")])
+
+  , testCase "!$mapValues over non-object errors" $
+      assertResolveFailsWith
+        emptyContext
+        (ppTag (PpMapValues (MapValuesTag
+          (str "notObject")
+          (varLookup "item")
+          Nothing)))
+        "expected object"
+  ]
+
+------------------------------------------------------------------------
+-- 23. TemplateString tests
+------------------------------------------------------------------------
+
+templateStringTests :: [TestTree]
+templateStringTests =
+  [ testCase "simple {{var}} interpolation" $
+      assertResolves
+        (ctxWith [("name", OString "World")])
+        (AstTemplatedString "Hello, {{name}}!" m)
+        (OString "Hello, World!")
+
+  , testCase "multiple variables interpolated" $
+      assertResolves
+        (ctxWith [("first", OString "John"), ("last", OString "Doe")])
+        (AstTemplatedString "{{first}} {{last}}" m)
+        (OString "John Doe")
+
+  , testCase "numeric variable interpolated as text" $
+      assertResolves
+        (ctxWith [("count", ONumber 42)])
+        (AstTemplatedString "Count: {{count}}" m)
+        (OString "Count: 42")
+
+  , testCase "undefined variable in template fails" $
+      assertResolveFailsWith
+        emptyContext
+        (AstTemplatedString "Hello, {{missing}}!" m)
+        "Variable not found"
+
+  , testCase "template with no variables passes through" $
+      assertResolves
+        emptyContext
+        (AstTemplatedString "no variables here" m)
+        (OString "no variables here")
+
+  , testCase "nested object property in template" $
+      assertResolves
+        (ctxWith [("cfg", OObject [("env", OString "prod")])])
+        (AstTemplatedString "env={{cfg.env}}" m)
+        (OString "env=prod")
+  ]
+
+------------------------------------------------------------------------
+-- 24. Expand tests
+------------------------------------------------------------------------
+
+-- | A minimal TemplateInfo for testing !$expand.
+mkTemplateInfo :: Text -> [ParamDef] -> TemplateInfo
+mkTemplateInfo body params = TemplateInfo
+  { tiParams   = params
+  , tiRawBody  = body
+  , tiLocation = "<test-template>"
+  }
+
+-- | A ParamDef with a default value and no constraints.
+simpleParamDef :: Text -> OValue -> ParamDef
+simpleParamDef name def = ParamDef
+  { pdName           = name
+  , pdDefault        = Just def
+  , pdType           = Nothing
+  , pdAllowedValues  = Nothing
+  , pdAllowedPattern = Nothing
+  , pdSchema         = Nothing
+  , pdIsGlobal       = False
+  }
+
+-- | Context that includes a named template definition.
+ctxWithTemplate :: Text -> TemplateInfo -> TagContext
+ctxWithTemplate name tmpl = emptyContext
+  { tcCustomTemplateDefs = Map.singleton name tmpl }
+
+expandTests :: [TestTree]
+expandTests =
+  [ testCase "!$expand resolves template with provided params" $
+      -- Template body is plain YAML scalar; params become context variables
+      let tmpl = mkTemplateInfo "hello" []
+          ctx  = ctxWithTemplate "myTmpl" tmpl
+      in assertResolves
+           ctx
+           (ppTag (PpExpand (ExpandTag
+             (str "myTmpl")
+             (map_ []))))
+           (OString "hello")
+
+  , testCase "!$expand uses default param when not provided" $
+      -- Template body references nothing; defaults are set in context
+      let tmpl = mkTemplateInfo "default_output"
+                   [simpleParamDef "color" (OString "blue")]
+          ctx  = ctxWithTemplate "colorTmpl" tmpl
+      in assertResolves
+           ctx
+           (ppTag (PpExpand (ExpandTag
+             (str "colorTmpl")
+             (map_ []))))
+           (OString "default_output")
+
+  , testCase "!$expand provided param overrides default" $
+      -- Params are merged; template body is plain YAML
+      let tmpl = mkTemplateInfo "result"
+                   [simpleParamDef "color" (OString "blue")]
+          ctx  = ctxWithTemplate "colorTmpl" tmpl
+      in assertResolves
+           ctx
+           (ppTag (PpExpand (ExpandTag
+             (str "colorTmpl")
+             (map_ [(str "color", str "red")]))))
+           (OString "result")
+
+  , testCase "!$expand missing template name errors" $
+      assertResolveFailsWith
+        emptyContext
+        (ppTag (PpExpand (ExpandTag
+          (str "noSuchTemplate")
+          (map_ []))))
+        "not found"
+  ]
+
+------------------------------------------------------------------------
+-- 25. CfnValidation tests
+------------------------------------------------------------------------
+
+-- | Wrap a CFN tag AST node and resolve it, for testing CFN validation.
+cfnTag :: CloudFormationTag -> YamlAst
+cfnTag tag = AstCloudFormationTag tag m
+
+cfnValidationTests :: [TestTree]
+cfnValidationTests =
+  [ testGroup "Ref" refValidationTests
+  , testGroup "Sub" subValidationTests
+  , testGroup "GetAtt" getAttValidationTests
+  , testGroup "Join" cfnJoinValidationTests
+  , testGroup "Select" selectValidationTests
+  , testGroup "Split" cfnSplitValidationTests
+  , testGroup "FindInMap" findInMapValidationTests
+  , testGroup "If" cfnIfValidationTests
+  , testGroup "Equals" equalsValidationTests
+  , testGroup "Not" cfnNotValidationTests
+  ]
+
+refValidationTests :: [TestTree]
+refValidationTests =
+  [ testCase "!Ref rejects null value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnRef astNull))
+        "!Ref cannot have null value"
+
+  , testCase "!Ref rejects empty string" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnRef (str "")))
+        "!Ref cannot reference empty string"
+
+  , testCase "!Ref rejects non-string (number)" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnRef (num 42)))
+        "!Ref expects a string"
+
+  , testCase "!Ref accepts valid logical resource name" $
+      assertResolves
+        emptyContext
+        (cfnTag (CfnRef (str "MyBucket")))
+        (OObject [("!Ref", OString "MyBucket")])
+  ]
+
+subValidationTests :: [TestTree]
+subValidationTests =
+  [ testCase "!Sub rejects null value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnSub astNull))
+        "!Sub cannot have null value"
+
+  , testCase "!Sub accepts plain string" $
+      assertResolves
+        emptyContext
+        (cfnTag (CfnSub (str "arn:aws:s3:::${Bucket}")))
+        (OObject [("!Sub", OString "arn:aws:s3:::${Bucket}")])
+
+  , testCase "!Sub accepts [string, object] array form" $
+      assertResolves
+        emptyContext
+        (cfnTag (CfnSub (seq_
+          [ str "Hello ${Name}"
+          , map_ [(str "Name", str "World")]
+          ])))
+        (OObject [("!Sub", OArray [OString "Hello ${Name}", OObject [("Name", OString "World")]])])
+
+  , testCase "!Sub rejects wrong array length (4 elements)" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnSub (seq_ [str "a", str "b", str "c", str "d"])))
+        "exactly 2 elements"
+
+  , testCase "!Sub rejects [string, non-object] array" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnSub (seq_ [str "template", num 42])))
+        "[string, object]"
+
+  , testCase "!Sub rejects non-string-or-array value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnSub (num 1)))
+        "!Sub expects a string or 2-element array"
+  ]
+
+getAttValidationTests :: [TestTree]
+getAttValidationTests =
+  [ testCase "!GetAtt rejects null value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnGetAtt astNull))
+        "!GetAtt cannot have null value"
+
+  , testCase "!GetAtt accepts dotted string" $
+      assertResolves
+        emptyContext
+        (cfnTag (CfnGetAtt (str "MyBucket.Arn")))
+        (OObject [("!GetAtt", OString "MyBucket.Arn")])
+
+  , testCase "!GetAtt rejects non-dotted string" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnGetAtt (str "MyBucketArn")))
+        "dot notation"
+
+  , testCase "!GetAtt accepts [resource, attribute] array" $
+      assertResolves
+        emptyContext
+        (cfnTag (CfnGetAtt (seq_ [str "MyBucket", str "Arn"])))
+        (OObject [("!GetAtt", OArray [OString "MyBucket", OString "Arn"])])
+
+  , testCase "!GetAtt rejects array with wrong element types" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnGetAtt (seq_ [str "MyBucket", num 1])))
+        "[string, string]"
+
+  , testCase "!GetAtt rejects non-string-or-array" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnGetAtt (bool True)))
+        "!GetAtt expects a string or 2-element array"
+  ]
+
+cfnJoinValidationTests :: [TestTree]
+cfnJoinValidationTests =
+  [ testCase "!Join rejects null value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnJoin astNull))
+        "!Join cannot have null value"
+
+  , testCase "!Join accepts [delimiter, array]" $
+      assertResolves
+        emptyContext
+        (cfnTag (CfnJoin (seq_ [str ",", seq_ [str "a", str "b"]])))
+        (OObject [("!Join", OArray [OString ",", OArray [OString "a", OString "b"]])])
+
+  , testCase "!Join rejects wrong element types" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnJoin (seq_ [num 1, seq_ [str "a"]])))
+        "[string, array]"
+
+  , testCase "!Join rejects non-array value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnJoin (str "notArray")))
+        "!Join expects a 2-element array"
+  ]
+
+selectValidationTests :: [TestTree]
+selectValidationTests =
+  [ testCase "!Select rejects null value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnSelect astNull))
+        "!Select cannot have null value"
+
+  , testCase "!Select accepts [number, array]" $
+      assertResolves
+        emptyContext
+        (cfnTag (CfnSelect (seq_ [num 0, seq_ [str "a", str "b"]])))
+        (OObject [("!Select", OArray [ONumber 0, OArray [OString "a", OString "b"]])])
+
+  , testCase "!Select rejects wrong index type" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnSelect (seq_ [str "notNum", seq_ [str "a"]])))
+        "[number, array]"
+
+  , testCase "!Select rejects non-array value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnSelect (str "notArray")))
+        "!Select expects a 2-element array"
+  ]
+
+cfnSplitValidationTests :: [TestTree]
+cfnSplitValidationTests =
+  [ testCase "!Split rejects null value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnSplit astNull))
+        "!Split cannot have null value"
+
+  , testCase "!Split accepts [string, string]" $
+      assertResolves
+        emptyContext
+        (cfnTag (CfnSplit (seq_ [str ",", str "a,b,c"])))
+        (OObject [("!Split", OArray [OString ",", OString "a,b,c"])])
+
+  , testCase "!Split rejects wrong element types" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnSplit (seq_ [num 1, str "a,b"])))
+        "[string, string]"
+
+  , testCase "!Split rejects non-array value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnSplit (num 42)))
+        "!Split expects a 2-element array"
+  ]
+
+findInMapValidationTests :: [TestTree]
+findInMapValidationTests =
+  [ testCase "!FindInMap rejects null value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnFindInMap astNull))
+        "!FindInMap cannot have null value"
+
+  , testCase "!FindInMap accepts 3-element array" $
+      assertResolves
+        emptyContext
+        (cfnTag (CfnFindInMap (seq_ [str "MapName", str "Key1", str "Key2"])))
+        (OObject [("!FindInMap", OArray [OString "MapName", OString "Key1", OString "Key2"])])
+
+  , testCase "!FindInMap rejects 2-element array" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnFindInMap (seq_ [str "MapName", str "Key1"])))
+        "exactly 3 elements"
+
+  , testCase "!FindInMap rejects non-array value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnFindInMap (str "notArray")))
+        "!FindInMap expects a 3-element array"
+  ]
+
+cfnIfValidationTests :: [TestTree]
+cfnIfValidationTests =
+  [ testCase "!If rejects null value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnIf astNull))
+        "!If cannot have null value"
+
+  , testCase "!If accepts 3-element array" $
+      assertResolves
+        emptyContext
+        (cfnTag (CfnIf (seq_ [str "CondName", str "trueVal", str "falseVal"])))
+        (OObject [("!If", OArray [OString "CondName", OString "trueVal", OString "falseVal"])])
+
+  , testCase "!If rejects 2-element array" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnIf (seq_ [str "Cond", str "val"])))
+        "3-element array"
+
+  , testCase "!If rejects non-array value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnIf (str "notArray")))
+        "!If expects a 3-element array"
+  ]
+
+equalsValidationTests :: [TestTree]
+equalsValidationTests =
+  [ testCase "!Equals rejects null value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnEquals astNull))
+        "!Equals cannot have null value"
+
+  , testCase "!Equals accepts 2-element array" $
+      assertResolves
+        emptyContext
+        (cfnTag (CfnEquals (seq_ [str "a", str "b"])))
+        (OObject [("!Equals", OArray [OString "a", OString "b"])])
+
+  , testCase "!Equals rejects 3-element array" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnEquals (seq_ [str "a", str "b", str "c"])))
+        "2-element array"
+
+  , testCase "!Equals rejects non-array value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnEquals (num 1)))
+        "!Equals expects a 2-element array"
+  ]
+
+cfnNotValidationTests :: [TestTree]
+cfnNotValidationTests =
+  [ testCase "!Not rejects null value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnNot astNull))
+        "!Not cannot have null value"
+
+  , testCase "!Not accepts 1-element array" $
+      -- Inner seq_ [x] gets unpacked to x by CFN single-element unpacking,
+      -- so we need a 2-element wrapper: seq_ [seq_ [...]] resolves to
+      -- OArray [OArray [...]], unpacked to OArray [...] which is 1-element
+      assertResolves
+        emptyContext
+        (cfnTag (CfnNot (seq_ [seq_ [str "ConditionName"]])))
+        (OObject [("!Not", OArray [OString "ConditionName"])])
+
+  , testCase "!Not rejects 2-element array" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnNot (seq_ [str "Cond1", str "Cond2"])))
+        "1-element array"
+
+  , testCase "!Not rejects non-array value" $
+      assertResolveFailsWith
+        emptyContext
+        (cfnTag (CfnNot (bool True)))
+        "!Not expects a 1-element array"
   ]
