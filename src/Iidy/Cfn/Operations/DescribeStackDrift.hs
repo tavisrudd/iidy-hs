@@ -115,15 +115,24 @@ checkTimestampStale di now cacheSecs =
 ------------------------------------------------------------------------
 
 -- | Poll DescribeStackDriftDetectionStatus until detection completes.
+-- Times out after 100 iterations (300 seconds / 5 minutes).
 pollDriftDetection :: CfnContext -> Text -> IO ()
-pollDriftDetection ctx detectionId = do
-  let req = DSDDS.newDescribeStackDriftDetectionStatus detectionId
-  resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
-  case resp.detectionStatus of
-    s | s == CF.StackDriftDetectionStatus_DETECTION_IN_PROGRESS -> do
-      threadDelay 3_000_000  -- 3 seconds
-      pollDriftDetection ctx detectionId
-    _ -> pure ()
+pollDriftDetection ctx detectionId = go (0 :: Int)
+  where
+    maxIterations :: Int
+    maxIterations = 100
+
+    go :: Int -> IO ()
+    go iteration
+      | iteration >= maxIterations = pure ()  -- give up silently after 5 minutes
+      | otherwise = do
+          let req = DSDDS.newDescribeStackDriftDetectionStatus detectionId
+          resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
+          case resp.detectionStatus of
+            s | s == CF.StackDriftDetectionStatus_DETECTION_IN_PROGRESS -> do
+              threadDelay 3_000_000  -- 3 seconds
+              go (iteration + 1)
+            _ -> pure ()
 
 ------------------------------------------------------------------------
 -- Drift data collection

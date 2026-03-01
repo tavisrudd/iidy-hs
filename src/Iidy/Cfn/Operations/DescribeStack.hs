@@ -225,7 +225,8 @@ buildConsoleUrl regionText stackArn =
 -- (e.g. watch-stack) should start from this and override as needed.
 mkStandardPollConfig :: CfnContext -> (OutputData -> IO ()) -> PollConfig
 mkStandardPollConfig ctx emit = defaultPollConfig
-  { pcOnNewEvents = \newEvents -> do
+  { pcStartTime = Just (cfnStartTime ctx)
+  , pcOnNewEvents = \newEvents -> do
       let converted = map (convertEventWithDuration (cfnStartTime ctx)) newEvents
       emit (OdNewStackEvents converted)
   , pcOnOperationComplete = \info -> emit (OdOperationComplete info)

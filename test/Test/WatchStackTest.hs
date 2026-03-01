@@ -161,17 +161,10 @@ watchStackTests =
       result @?= PollTimeout
 
   , testCase "pollForCompletionWith - returns PollInactivityTimeout when idle too long" $ do
-      -- Set startTime in the past so inactivity elapsed > timeout.
-      -- pcWaitForStatusChange = False so we don't need to see new events first.
+      -- Return empty events so lastEventTimeRef stays at startTime (120s ago),
+      -- making inactivityElapsed (~120s) > timeout (30s) on the first poll.
       let pastTime = addUTCTime (-120) epoch
-          events = [mkStackEvt "evt-1" CF.ResourceStatus_CREATE_IN_PROGRESS]
-      eventsRef <- newIORef [events, events]  -- same events both times (no new)
-      let fetchEvents = do
-            batches <- readIORef eventsRef
-            case batches of
-              (b:rest) -> writeIORef eventsRef rest >> pure b
-              []       -> pure events
-      result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
+      result <- pollForCompletionWith (pure []) "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
                   allTerminalStatuses
                   (testPollConfig { pcOnNewEvents = const (pure ())
                                  , pcInactivityTimeoutSecs = Just 30

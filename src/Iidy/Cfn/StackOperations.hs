@@ -239,6 +239,7 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
         when (not (null newEvents)) $ do
           writeIORef lastEventTimeRef now
           writeIORef hasSeenNewEventsRef True
+          -- reverse: events arrive most-recent-first; emit oldest-first
           pcOnNewEvents config (reverse newEvents)
         -- Check inactivity timeout (only when we've seen events or not waiting)
         hasSeenNewEvents <- readIORef hasSeenNewEventsRef

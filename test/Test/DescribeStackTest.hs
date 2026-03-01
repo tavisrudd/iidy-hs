@@ -1,6 +1,5 @@
 module Test.DescribeStackTest (describeStackTests) where
 
-import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime(..))
@@ -8,29 +7,12 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
 import Iidy.Cfn.Operations.DescribeStack (calculateEventDurations, buildConsoleUrl)
-import Iidy.Output.Types (StackEvent(..), StackEventWithTiming(..))
+import Iidy.Output.Types (StackEventWithTiming(..))
+import Test.Shared (mkEvent)
 
 ------------------------------------------------------------------------
 -- Helpers
 ------------------------------------------------------------------------
-
-mkEvent :: Text -> Text -> Text -> Text -> Maybe UTCTime -> StackEvent
-mkEvent eid logId rtype status mTs = StackEvent
-  { seEventId              = eid
-  , seStackId              = "arn:stack"
-  , seStackName            = "test-stack"
-  , seLogicalResourceId    = logId
-  , sePhysicalResourceId   = Nothing
-  , seResourceType         = rtype
-  , seTimestamp            = mTs
-  , seResourceStatus       = status
-  , seResourceStatusReason = Nothing
-  , seResourceProperties   = Nothing
-  , seClientRequestToken   = Nothing
-  }
-
-epoch :: UTCTime
-epoch = UTCTime (fromGregorian 2024 1 1) 0
 
 at :: Int -> UTCTime
 at secs = UTCTime (fromGregorian 2024 1 1) (fromIntegral secs)

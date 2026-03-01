@@ -109,6 +109,7 @@ updateStack ctx args argsfilePath env emit = do
 
       -- Step 6: Return exit code based on success/failure
       case pollResult of
+        PollSuccess "DELETE_COMPLETE" -> pure (Right 1)
         PollSuccess finalStatus -> do
           contents <- collectStackContents ctx stackName
           emit (OdStackContents contents)

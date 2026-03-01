@@ -121,29 +121,37 @@ createChangeset ctx args csName stackExists argsfilePath env = do
 -- | Poll DescribeChangeSet every 2s until the changeset reaches a terminal
 -- state (CREATE_COMPLETE or FAILED).  Returns the ChangeSetInfo on completion.
 -- Retries transient errors up to 30 times (60 seconds).
+-- Overall cap of 300 iterations (600 seconds / 10 minutes) to prevent
+-- infinite polling on stuck changesets.
 pollChangesetCompletion :: CfnContext -> Text -> Text -> IO ChangeSetInfo
-pollChangesetCompletion ctx stackName csId = go (0 :: Int)
+pollChangesetCompletion ctx stackName csId = go (0 :: Int) (0 :: Int)
   where
     maxRetries :: Int
     maxRetries = 30
 
-    go :: Int -> IO ChangeSetInfo
-    go errorCount = do
-      threadDelay (2 * 1000000)  -- 2 seconds
-      result <- describeChangeset ctx stackName csId
-      case result of
-        Left err
-          | isNonRetryableError err ->
-              -- Permanent error (not found, access denied) — fail immediately
-              mkFailedInfo (formatAmazonkaError err)
-          | errorCount >= maxRetries ->
-              -- Transient errors exhausted retry budget
-              mkFailedInfo ("Polling failed after " <> T.pack (show maxRetries) <> " retries: " <> formatAmazonkaError err)
-          | otherwise -> go (errorCount + 1)
-        Right info ->
-          if isTerminalCsStatus (csiStatus info)
-            then pure info
-            else go 0  -- reset error count on success
+    maxIterations :: Int
+    maxIterations = 300
+
+    go :: Int -> Int -> IO ChangeSetInfo
+    go errorCount totalIterations
+      | totalIterations >= maxIterations =
+          mkFailedInfo ("Changeset polling timed out after " <> T.pack (show maxIterations) <> " iterations")
+      | otherwise = do
+          threadDelay (2 * 1000000)  -- 2 seconds
+          result <- describeChangeset ctx stackName csId
+          case result of
+            Left err
+              | isNonRetryableError err ->
+                  -- Permanent error (not found, access denied) — fail immediately
+                  mkFailedInfo (formatAmazonkaError err)
+              | errorCount >= maxRetries ->
+                  -- Transient errors exhausted retry budget
+                  mkFailedInfo ("Polling failed after " <> T.pack (show maxRetries) <> " retries: " <> formatAmazonkaError err)
+              | otherwise -> go (errorCount + 1) (totalIterations + 1)
+            Right info ->
+              if isTerminalCsStatus (csiStatus info)
+                then pure info
+                else go 0 (totalIterations + 1)  -- reset error count on success
 
     mkFailedInfo :: Text -> IO ChangeSetInfo
     mkFailedInfo reason = pure ChangeSetInfo
