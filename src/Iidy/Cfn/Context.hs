@@ -13,7 +13,6 @@ module Iidy.Cfn.Context
   , createSuccessStates
   , updateSuccessStates
   , deleteSuccessStates
-  , determineOperationSuccess
     -- * Terminal status helpers
   , allTerminalStatuses
   , createTerminalStatuses
@@ -113,11 +112,6 @@ updateSuccessStates = ["UPDATE_COMPLETE"]
 
 deleteSuccessStates :: [Text]
 deleteSuccessStates = ["DELETE_COMPLETE"]
-
--- | Determine if an operation succeeded based on final status
-determineOperationSuccess :: Text -> [Text] -> Bool
-determineOperationSuccess finalStatus expectedStates =
-  finalStatus `elem` expectedStates
 
 ------------------------------------------------------------------------
 -- Terminal status helpers

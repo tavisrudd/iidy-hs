@@ -18,14 +18,12 @@ import qualified Amazonka.CloudFormation.Types as CF
 
 import Iidy.Aws.Sts (getCallerIdentity)
 import Iidy.Cfn.Context (CfnContext(..), deleteSuccessStates, deleteTerminalStatuses)
-import Iidy.Cfn.Operations.DescribeStack (convertEventWithDuration, convertStack, buildEventsDisplay)
+import Iidy.Cfn.Operations.DescribeStack (convertStack, buildEventsDisplay, mkStandardPollConfig)
 import Iidy.Cfn.RequestBuilder (buildDeleteStackRequest)
 import Iidy.Cfn.StackOperations
   ( collectStackContents
-  , defaultPollConfig
   , fetchStackEvents
   , getStack
-  , PollConfig(..)
   , pollForCompletion
   , PollResult(..)
   )
@@ -99,12 +97,7 @@ deleteStack ctx stackName skipConfirmation env emit = do
 
           -- Step 5: Poll for completion, emitting events through renderer
           emit (OdPollingStarted "Loading live events...")
-          let pollCfg = defaultPollConfig
-                { pcOnNewEvents = \newEvents -> do
-                    let converted = map (convertEventWithDuration (cfnStartTime ctx)) newEvents
-                    emit (OdNewStackEvents converted)
-                , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
-                }
+          let pollCfg = mkStandardPollConfig ctx emit
           pollResult <- pollForCompletion ctx pollTarget deleteTerminalStatuses pollCfg
 
           -- Step 6: Return exit code based on final status

@@ -280,6 +280,7 @@ quoteYamlString s
   where
     needsQuoting t =
       T.any (`elem` (":{}&*?|>!%@`#,[]" :: String)) t
+      || T.any (< ' ') t  -- control characters including \n, \r, \t
       || t == "true" || t == "false" || t == "null"
       || t == "yes" || t == "no"
       || T.isPrefixOf " " t || T.isSuffixOf " " t

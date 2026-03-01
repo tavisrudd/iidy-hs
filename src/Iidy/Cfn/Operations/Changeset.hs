@@ -57,11 +57,9 @@ import Iidy.Cfn.Context
   , changesetTerminalStatuses
   )
 import Iidy.Cfn.RequestBuilder (buildCreateChangeSetRequest)
-import Iidy.Cfn.Operations.DescribeStack (convertEventWithDuration, convertStack, buildEventsDisplay)
+import Iidy.Cfn.Operations.DescribeStack (convertStack, buildEventsDisplay, mkStandardPollConfig)
 import Iidy.Cfn.StackOperations
-  ( defaultPollConfig
-  , PollConfig(..)
-  , fetchStackEvents
+  ( fetchStackEvents
   , getStackId
   , getStack
   , collectStackContents
@@ -201,12 +199,7 @@ executeChangeset ctx stackName csName emit = do
 
   -- Step 3: Poll for completion, emitting events through renderer
   emit (OdPollingStarted "Loading live events...")
-  let pollCfg = defaultPollConfig
-        { pcOnNewEvents = \newEvents -> do
-            let converted = map (convertEventWithDuration (cfnStartTime ctx)) newEvents
-            emit (OdNewStackEvents converted)
-        , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
-        }
+  let pollCfg = mkStandardPollConfig ctx emit
   pollResult <- pollForCompletion ctx stackId changesetTerminalStatuses pollCfg
 
   -- Step 4: Emit StackContents
@@ -410,6 +403,7 @@ findPendingChangeset ctx stackName = do
 
 -- | Generate a random dashed name (docker-style: adjective-noun).
 -- Used as default changeset name when user doesn't provide one.
+-- 20 adjectives x 20 nouns = 400 unique combinations.
 generateDashedName :: IO Text
 generateDashedName = do
   adjIdx <- randomRIO (0, V.length adjectives - 1)
@@ -417,9 +411,19 @@ generateDashedName = do
   pure $ (adjectives V.! adjIdx) <> "-" <> (nouns V.! nounIdx)
   where
     adjectives :: V.Vector Text
-    adjectives = V.fromList ["red", "blue", "green", "happy", "clever", "brave", "swift", "mighty"]
+    adjectives = V.fromList
+      [ "admiring", "adoring", "affectionate", "agitated", "amazing"
+      , "angry", "awesome", "blissful", "bold", "brave"
+      , "clever", "cool", "dazzling", "determined", "dreamy"
+      , "eager", "elastic", "elated", "elegant", "epic"
+      ]
     nouns :: V.Vector Text
-    nouns = V.fromList ["cat", "dog", "bird", "fish", "lion", "eagle", "shark", "tiger"]
+    nouns = V.fromList
+      [ "albattani", "allen", "almeida", "antonelli", "agnesi"
+      , "archimedes", "ardinghelli", "aryabhata", "austin", "babbage"
+      , "banach", "banzai", "bardeen", "bartik", "bassi"
+      , "beaver", "bell", "benz", "bhabha", "bhaskara"
+      ]
 
 -- | Prompt the user to confirm changeset execution.
 -- Returns True if confirmed (or if --yes flag was provided), False otherwise.

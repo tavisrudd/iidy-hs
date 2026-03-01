@@ -11,6 +11,7 @@ module Iidy.Cfn.Operations.DescribeStack
   , convertStack
   , buildEventsDisplay
   , buildConsoleUrl
+  , mkStandardPollConfig
   ) where
 
 import Data.List (sortBy)
@@ -32,6 +33,8 @@ import Iidy.Cfn.StackOperations
   ( getStack
   , fetchStackEvents
   , collectStackContents
+  , PollConfig(..)
+  , defaultPollConfig
   )
 import Iidy.Output.Types
 
@@ -210,3 +213,19 @@ buildConsoleUrl regionText stackArn =
     <> regionText
     <> "#/stacks/stackinfo?stackId="
     <> stackArn
+
+------------------------------------------------------------------------
+-- Standard poll config helper
+------------------------------------------------------------------------
+
+-- | Build a standard PollConfig with event conversion and emission callbacks.
+-- Handles the common pattern of converting events with duration and emitting
+-- OdNewStackEvents / OdOperationComplete.  Operations with extra fields
+-- (e.g. watch-stack) should start from this and override as needed.
+mkStandardPollConfig :: CfnContext -> (OutputData -> IO ()) -> PollConfig
+mkStandardPollConfig ctx emit = defaultPollConfig
+  { pcOnNewEvents = \newEvents -> do
+      let converted = map (convertEventWithDuration (cfnStartTime ctx)) newEvents
+      emit (OdNewStackEvents converted)
+  , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
+  }

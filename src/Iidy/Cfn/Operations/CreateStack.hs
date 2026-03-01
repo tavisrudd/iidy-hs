@@ -16,13 +16,11 @@ import qualified Amazonka
 import qualified Amazonka.CloudFormation.CreateStack as CS
 
 import Iidy.Cfn.Context (CfnContext(..), createSuccessStates, createTerminalStatuses)
-import Iidy.Cfn.Operations.DescribeStack (convertEventWithDuration, convertStack)
+import Iidy.Cfn.Operations.DescribeStack (convertStack, mkStandardPollConfig)
 import Iidy.Cfn.RequestBuilder (buildCreateStackRequest)
 import Iidy.Cfn.StackOperations
   ( collectStackContents
   , getStack
-  , defaultPollConfig
-  , PollConfig(..)
   , pollForCompletion
   , PollResult(..)
   )
@@ -70,12 +68,7 @@ createStack ctx args argsfilePath env emit = do
 
   -- Step 4: Poll for completion, emitting events through renderer
   emit (OdPollingStarted "Loading live events...")
-  let pollCfg = defaultPollConfig
-        { pcOnNewEvents = \newEvents -> do
-            let converted = map (convertEventWithDuration (cfnStartTime ctx)) newEvents
-            emit (OdNewStackEvents converted)
-        , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
-        }
+  let pollCfg = mkStandardPollConfig ctx emit
   pollResult <- pollForCompletion ctx stackId createTerminalStatuses pollCfg
 
   -- Step 5: Handle DELETE_COMPLETE (rollback caused stack deletion)

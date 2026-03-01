@@ -25,6 +25,8 @@ import Control.Concurrent (threadDelay)
 import Control.Exception (try, throwIO)
 import Control.Monad (when)
 import Control.Monad.Trans.Resource (runResourceT)
+import Data.Conduit (runConduit, (.|))
+import qualified Data.Conduit.List as CL
 import Data.IORef
 import Data.Maybe (fromMaybe, mapMaybe)
 import qualified Data.Set as Set
@@ -89,13 +91,16 @@ stackExists ctx sName = do
 -- Events
 ------------------------------------------------------------------------
 
--- | Fetch stack events (most recent first)
+-- | Fetch all stack events across all pages (most recent first per page).
+-- Uses pagination to collect beyond the single-page limit (~1MB per page).
 fetchStackEvents :: CfnContext -> Text -> IO [CF.StackEvent]
 fetchStackEvents ctx sId = do
   let req = DEvents.newDescribeStackEvents
               { DEvents.stackName = Just sId }
-  resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
-  pure $ fromMaybe [] resp.stackEvents
+  pages <- runResourceT $ runConduit $
+    Amazonka.paginate (cfnEnv ctx) req
+    .| CL.consume
+  pure $ concatMap (fromMaybe [] . (.stackEvents)) pages
 
 ------------------------------------------------------------------------
 -- Content collection
@@ -123,14 +128,18 @@ collectStackContents ctx sName = do
           , ssiTimestamp = Nothing
           }
 
-  -- Fetch pending changesets
-  changesetsResp <- runResourceT $ Amazonka.send (cfnEnv ctx) $
-    LCS.newListChangeSets sName
-  let changesets = mapMaybe convertChangeSetSummary (fromMaybe [] changesetsResp.summaries)
+  -- Fetch pending changesets (paginated — ListChangeSets is capped per page)
+  csPages <- runResourceT $ runConduit $
+    Amazonka.paginate (cfnEnv ctx) (LCS.newListChangeSets sName)
+    .| CL.consume
+  let changesets = mapMaybe convertChangeSetSummary
+                     (concatMap (fromMaybe [] . (.summaries)) csPages)
 
-  -- Fetch exports from this stack (filter by exportingStackId matching stack ARN)
-  exportsResp <- runResourceT $ Amazonka.send (cfnEnv ctx) LE.newListExports
-  let allExports = fromMaybe [] exportsResp.exports
+  -- Fetch exports from this stack (paginated — ListExports capped at 100/page)
+  exportPages <- runResourceT $ runConduit $
+    Amazonka.paginate (cfnEnv ctx) LE.newListExports
+    .| CL.consume
+  let allExports = concatMap (fromMaybe [] . (.exports)) exportPages
       stackExports = case mStack of
         Nothing -> []
         Just s  ->
@@ -263,12 +272,15 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
                     }
                   pure (PollSuccess currentStatus)
                 else go startTime lastEventTimeRef hasSeenNewEventsRef
-                       (Set.fromList (map (.eventId) events))
+                       (Set.union lastEventSet (Set.fromList (map (.eventId) events)))
 
+    -- | True only for the stack's own status event (logicalResourceId = stackName
+    -- AND resourceType = AWS::CloudFormation::Stack). Using AND prevents nested
+    -- stack events from being mistaken for the top-level stack's status event.
     isStackEvent :: CF.StackEvent -> Bool
     isStackEvent e =
       e.logicalResourceId == Just (stackNameFromId sId)
-      || e.resourceType == Just "AWS::CloudFormation::Stack"
+      && e.resourceType == Just "AWS::CloudFormation::Stack"
 
 -- | Extract stack name from a stack ID (ARN format: arn:.../stackName/guid)
 stackNameFromId :: Text -> Text

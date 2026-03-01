@@ -3,7 +3,6 @@ module Iidy.Cfn.Types
   , cfnOperationStr
   , isReadOnlyOperation
   , StackChangeType(..)
-  , UpdateResult(..)
   , StackArgs(..)
   , emptyStackArgs
   , getStackName
@@ -67,11 +66,6 @@ data StackChangeType
   = ChangeCreate
   | ChangeUpdateWithChanges !Text  -- ^ stack_id
   | ChangeUpdateNoChanges
-  deriving stock (Show, Eq)
-
-data UpdateResult
-  = UpdateNoChanges
-  | UpdateStackId !Text
   deriving stock (Show, Eq)
 
 -- | Parsed stack-args.yaml configuration

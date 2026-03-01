@@ -34,13 +34,11 @@ import Iidy.Cfn.Operations.Changeset
   , buildChangeSetCreationResult
   , confirmChangesetExecution
   )
-import Iidy.Cfn.Operations.DescribeStack (convertEventWithDuration, convertStack)
+import Iidy.Cfn.Operations.DescribeStack (convertStack, mkStandardPollConfig)
 import Iidy.Cfn.RequestBuilder (buildUpdateStackRequest)
 import Iidy.Cfn.StackOperations
   ( collectStackContents
   , getStack
-  , defaultPollConfig
-  , PollConfig(..)
   , getStackId
   , pollForCompletion
   , PollResult(..)
@@ -96,7 +94,7 @@ updateStack ctx args argsfilePath env emit = do
           -- Re-throw so the error handler displays the ValidationError
           throwIO awsErr
       | otherwise ->
-          pure (Left (T.pack (show awsErr)))
+          throwIO awsErr
 
     Right resp -> do
       -- Step 4: Get stack ID (prefer the response, fall back to DescribeStacks)
@@ -115,12 +113,7 @@ updateStack ctx args argsfilePath env emit = do
 
       -- Step 5: Poll for completion, emitting events through renderer
       emit (OdPollingStarted "Loading live events...")
-      let pollCfg = defaultPollConfig
-            { pcOnNewEvents = \newEvents -> do
-                let converted = map (convertEventWithDuration (cfnStartTime ctx)) newEvents
-                emit (OdNewStackEvents converted)
-            , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
-            }
+      let pollCfg = mkStandardPollConfig ctx emit
       pollResult <- pollForCompletion ctx stackId updateTerminalStatuses pollCfg
 
       -- Step 6: Collect and emit stack contents

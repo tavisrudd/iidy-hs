@@ -15,11 +15,10 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 import qualified Amazonka
-import qualified Amazonka.CloudFormation as CF
 import qualified Amazonka.CloudFormation.Types as CF
 
 import Iidy.Cfn.Context (CfnContext(..), allTerminalStatuses)
-import Iidy.Cfn.Operations.DescribeStack (convertStack, convertEventWithDuration, buildEventsDisplay)
+import Iidy.Cfn.Operations.DescribeStack (convertStack, buildEventsDisplay, mkStandardPollConfig)
 import Iidy.Cfn.StackOperations
   ( getStack
   , getStackId
@@ -27,7 +26,6 @@ import Iidy.Cfn.StackOperations
   , collectStackContents
   , pollForCompletion
   , PollConfig(..)
-  , defaultPollConfig
   , PollResult(..)
   )
 import Iidy.Output.Types (OutputData(..))
@@ -71,17 +69,15 @@ watchStack ctx stackName timeoutSeconds emit = do
 
       -- 5. Poll until terminal status, emitting live events
       emit (OdPollingStarted "Loading live events...")
-      let pollCfg = defaultPollConfig
-            { pcWaitForStatusChange = True
-            , pcInactivityTimeoutSecs = if timeoutSeconds > 0 then Just timeoutSeconds else Nothing
-            , pcOnNewEvents = \newEvents -> do
+      let baseCfg = mkStandardPollConfig ctx emit
+          pollCfg = baseCfg
+            { pcWaitForStatusChange    = True
+            , pcInactivityTimeoutSecs  = if timeoutSeconds > 0 then Just timeoutSeconds else Nothing
+            , pcOnNewEvents            = \newEvents -> do
+                -- Second dedup layer: filter events seen before polling started
                 let fresh = filter (\e -> Set.notMember e.eventId seenIds) newEvents
-                if null fresh then pure ()
-                else do
-                  let converted = map (convertEventWithDuration (cfnStartTime ctx)) fresh
-                  emit (OdNewStackEvents converted)
-            , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
-            , pcOnInactivityTimeout = \info -> emit (OdInactivityTimeout info)
+                pcOnNewEvents baseCfg fresh
+            , pcOnInactivityTimeout    = \info -> emit (OdInactivityTimeout info)
             }
       pollResult <- pollForCompletion ctx sId allTerminalStatuses pollCfg
 
