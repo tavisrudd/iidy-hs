@@ -20,7 +20,7 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@main
 
       - name: Build
-        run: nix develop --command bash -c 'cabal build all -Wall -Wcompat'
+        run: nix develop --command bash -c 'cabal build all --ghc-options="-Wall -Wcompat -Werror"'
 
       - name: Run tests
         run: nix develop --command bash -c 'cabal test all --test-show-details=direct'
