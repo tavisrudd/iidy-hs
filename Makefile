@@ -1,4 +1,4 @@
-.PHONY: build test clean run help
+.PHONY: build test clean run help ci ci-act
 
 build:
 	cabal build
@@ -20,3 +20,12 @@ loc:
 
 modules:
 	@find src -name '*.hs' | wc -l
+
+ci:
+	cabal build all --ghc-options="-Wall -Wcompat -Werror"
+	cabal test all --test-show-details=direct
+	cabal run iidy-hs -- --help
+	cabal run iidy-hs -- --version
+
+ci-act:
+	nix run nixpkgs#act -- -j build
