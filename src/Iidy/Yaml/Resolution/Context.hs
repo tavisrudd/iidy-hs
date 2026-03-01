@@ -5,10 +5,8 @@ module Iidy.Yaml.Resolution.Context
   , emptyContext
   , withBindings
   , withVariable
-  , withInputUri
   , getVariable
   , contextVariableNames
-  , VariableSource(..)
   ) where
 
 import Data.Map.Strict (Map)
@@ -16,15 +14,6 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Iidy.Yaml.CustomResources.Params (TemplateInfo(..), ParamDef(..))
 import Iidy.Yaml.OValue (OValue)
-
--- | Source of a variable binding (for error reporting)
-data VariableSource
-  = SourceLocalDefs
-  | SourceImportedDocument !Text
-  | SourceTagBinding !Text
-  | SourceBuiltIn
-  | SourceExternal
-  deriving stock (Show, Eq)
 
 -- | Context threaded through tag resolution
 data TagContext = TagContext
@@ -47,9 +36,6 @@ withBindings bindings ctx = ctx
 withVariable :: Text -> OValue -> TagContext -> TagContext
 withVariable name val ctx = ctx
   { tcVariables = Map.insert name val (tcVariables ctx) }
-
-withInputUri :: Text -> TagContext -> TagContext
-withInputUri uri ctx = ctx { tcInputUri = Just uri }
 
 getVariable :: Text -> TagContext -> Maybe OValue
 getVariable name = Map.lookup name . tcVariables

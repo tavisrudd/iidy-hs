@@ -343,7 +343,7 @@ validateCfnTag meta name val = case name of
     OString _ -> pure ()
     OArray [OString _, OObject _] -> pure ()
     OArray [OString _, v] -> cfnValidationError meta "!Sub" $ "!Sub array form expects [string, object], found [string, " <> oValueTypeName v <> "]"
-    OArray [v, _] -> cfnValidationError meta "!Sub" $ "!Sub array form expects [string, object], found [" <> oValueTypeName v <> ", " <> oValueTypeName val <> "]"
+    OArray [v, v2] -> cfnValidationError meta "!Sub" $ "!Sub array form expects [string, object], found [" <> oValueTypeName v <> ", " <> oValueTypeName v2 <> "]"
     OArray items -> cfnValidationError meta "!Sub" $ "!Sub with array expects exactly 2 elements [string, variables], found " <> showLen items <> " elements"
     _ -> cfnValidationError meta "!Sub" $ "!Sub expects a string or 2-element array, found " <> oValueTypeName val
 
@@ -360,7 +360,7 @@ validateCfnTag meta name val = case name of
     ONull -> cfnValidationError meta "!Join" "!Join cannot have null value"
     OArray [OString _, OArray _] -> pure ()
     OArray [OString _, v] -> cfnValidationError meta "!Join" $ "!Join expects [delimiter, array], found [string, " <> oValueTypeName v <> "]"
-    OArray [v, _] -> cfnValidationError meta "!Join" $ "!Join expects [string, array], found [" <> oValueTypeName v <> ", " <> oValueTypeName val <> "]"
+    OArray [v, v2] -> cfnValidationError meta "!Join" $ "!Join expects [string, array], found [" <> oValueTypeName v <> ", " <> oValueTypeName v2 <> "]"
     OArray items -> cfnValidationError meta "!Join" $ "!Join expects exactly 2 elements [delimiter, array], found " <> showLen items <> " elements"
     _ -> cfnValidationError meta "!Join" $ "!Join expects a 2-element array, found " <> oValueTypeName val
 
@@ -368,7 +368,7 @@ validateCfnTag meta name val = case name of
     ONull -> cfnValidationError meta "!Select" "!Select cannot have null value"
     OArray [ONumber _, OArray _] -> pure ()
     OArray [ONumber _, v] -> cfnValidationError meta "!Select" $ "!Select expects [index, array], found [number, " <> oValueTypeName v <> "]"
-    OArray [v, _] -> cfnValidationError meta "!Select" $ "!Select expects [number, array], found [" <> oValueTypeName v <> ", " <> oValueTypeName val <> "]"
+    OArray [v, v2] -> cfnValidationError meta "!Select" $ "!Select expects [number, array], found [" <> oValueTypeName v <> ", " <> oValueTypeName v2 <> "]"
     OArray items -> cfnValidationError meta "!Select" $ "!Select expects exactly 2 elements [index, array], found " <> showLen items <> " elements"
     _ -> cfnValidationError meta "!Select" $ "!Select expects a 2-element array, found " <> oValueTypeName val
 
@@ -506,12 +506,12 @@ expandBrackets path ctx = go (10 :: Int) path
 -- | Resolve a dot-path to an OValue (preserving key ordering)
 resolveDotPathO :: Text -> TagContext -> Maybe OValue
 resolveDotPathO path ctx =
-  let segments = T.splitOn "." path
-  in case segments of
-    [] -> Nothing
+  case T.splitOn "." path of
+    -- T.splitOn never returns [], but pattern match for totality
     (root:rest) -> case getVariable root ctx of
       Nothing -> Nothing
       Just val -> traversePathO rest val
+    [] -> Nothing
 
 -- | Traverse a path through an OValue
 traversePathO :: [Text] -> OValue -> Maybe OValue
