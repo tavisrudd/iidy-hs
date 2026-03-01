@@ -171,13 +171,13 @@ Per CLAUDE.md. Use `~/.claude/bin/run-quiet` for noisy output.
 
 ## Progress
 
-- [ ] A: Remove dead code `resolveResourcesMapping` + `tcInResourcesSection`
-- [ ] B: Remove dead field `tpiCaretColumn`
-- [ ] C: `T.length "constant"` → `T.stripPrefix` (12 sites)
-- [ ] D: Thread `allLines` to avoid repeated `T.lines`
-- [ ] E: Add missing CFN tag validation (research Rust first)
+- [x] A: Remove dead code `resolveResourcesMapping` + `tcInResourcesSection`
+- [x] B: Remove dead field `tpiCaretColumn`
+- [x] C: `T.length "constant"` → `T.stripPrefix` (12 sites)
+- [x] D: Thread `allLines` to avoid repeated `T.lines`
+- [x] E: Add missing CFN tag validation (research Rust first)
 - [ ] F: (Deferred) Split Conversion.hs into smaller modules
-- [ ] Final: clean build + all tests pass + update fixes doc
+- [x] Final: clean build + all tests pass + update fixes doc
 
 ## Handoff Notes
 
@@ -204,6 +204,13 @@ Per CLAUDE.md. Use `~/.claude/bin/run-quiet` for noisy output.
 - `src/Iidy/Yaml/Errors/Display.hs` — 2 fixes
 - `test/Main.hs` — 3 test groups added
 - `iidy-hs.cabal` — 3 test modules added
+
+### Session 2 (2026-02-28)
+
+**Completed**: All items A-E. Updated fixes doc with session summary.
+**Commit**: `01a7c4c` — Review cleanup: dead code, T.stripPrefix, allLines threading, CFN validation
+**Notable**: CFN tag validation required adding single-element array unpacking to `resolveCfnTag` (matching Rust behavior). Also added `!Sub`/`!GetAtt`/`!Split` deep validation + null catch-all for all remaining tags.
+**Remaining**: NI-C1 (structured error types — future session), CS-C1 (module split — deferred), PC-R1 (by design).
 
 **Notes for next session**:
 - Conversion.hs was modified by both main agent and TG-C1 sub-agent (export added).
