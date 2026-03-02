@@ -96,6 +96,27 @@ See `Context.hs` for detailed provenance documentation.
 **TODO**: Audit Rust terminal status list against iidy-js to confirm full
 alignment (DELETE_SKIPPED, REVIEW_IN_PROGRESS presence).
 
+## JMESPath: Subset Implementation
+
+**Cause**: Custom subset parser vs full `jmespath` crate in Rust.
+
+The Haskell port implements a ~370 LOC custom JMESPath parser/evaluator covering
+the subset used by iidy templates: field access, indexing, wildcards, projections,
+filters, multi-select, pipes, comparisons, and literals. The Rust port uses the
+full [`jmespath` crate](https://crates.io/crates/jmespath) which implements the
+complete [JMESPath specification](https://jmespath.org/specification.html).
+
+Unsupported features (not used by any iidy template in practice):
+- All 26 built-in functions (`length()`, `keys()`, `sort()`, etc.)
+- Slice expressions (`[0:5]`, `[::2]`)
+- Binary logical operators (`&&`, `||`) — unary `!` IS supported
+- Parenthesized expressions for precedence
+- Quoted identifiers (`"foo bar"`)
+
+If a user writes a JMESPath expression using an unsupported feature, they will
+get a clear error message stating the feature is not supported (not a generic
+parse error). See `notes/jmespath-subset.md` for full details.
+
 ## Live AWS Operations (Untestable Offline)
 
 The following behaviors require live AWS and are verified by code review only:

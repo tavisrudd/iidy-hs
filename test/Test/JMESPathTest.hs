@@ -6,7 +6,8 @@ import qualified Data.Vector as V
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
-import Iidy.Yaml.JMESPath (applyJmesPath)
+import Data.Text (isInfixOf)
+import Iidy.Yaml.JMESPath (applyJmesPath, JMESPathError(..))
 
 jmespathTests :: [TestTree]
 jmespathTests =
@@ -75,4 +76,43 @@ jmespathTests =
             , Array (V.fromList [String "c"])
             ])
       applyJmesPath "[]" input @?= Right (Array (V.fromList [String "a", String "b", String "c"]))
+
+  -- Error messages for unsupported features
+  , testCase "function call gives clear unsupported error" $ do
+      let input = Object (KM.fromList [("items", Array V.empty)])
+      case applyJmesPath "length(@)" input of
+        Left (JMESPathError msg) ->
+          assertBool ("expected 'not supported' in: " <> show msg)
+                     ("not supported" `isInfixOf` msg)
+        Right _ -> assertFailure "expected parse error for function call"
+
+  , testCase "slice expression [0:5] gives clear unsupported error" $ do
+      let input = Array (V.fromList [String "a", String "b"])
+      case applyJmesPath "[0:5]" input of
+        Left (JMESPathError msg) ->
+          assertBool ("expected 'not supported' in: " <> show msg)
+                     ("not supported" `isInfixOf` msg)
+        Right _ -> assertFailure "expected parse error for slice expression"
+
+  , testCase "slice expression [:5] gives clear unsupported error" $ do
+      let input = Array (V.fromList [String "a", String "b"])
+      case applyJmesPath "[:5]" input of
+        Left (JMESPathError msg) ->
+          assertBool ("expected 'not supported' in: " <> show msg)
+                     ("not supported" `isInfixOf` msg)
+        Right _ -> assertFailure "expected parse error for slice expression"
+
+  , testCase "existing valid expressions still work after error improvements" $ do
+      -- Verify that the error detection doesn't break valid expressions
+      let input = Object (KM.fromList
+            [ ("items", Array (V.fromList
+                [ Object (KM.fromList [("name", String "a")])
+                , Object (KM.fromList [("name", String "b")])
+                ]))
+            , ("count", Number 42)
+            ])
+      applyJmesPath "items[0].name" input @?= Right (String "a")
+      applyJmesPath "items[*].name" input @?= Right (Array (V.fromList [String "a", String "b"]))
+      applyJmesPath "count" input @?= Right (Number 42)
+      applyJmesPath "{n: count}" input @?= Right (Object (KM.fromList [("n", Number 42)]))
   ]
