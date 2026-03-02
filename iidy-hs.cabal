@@ -204,6 +204,7 @@ test-suite iidy-hs-test
     Test.ChangesetHelpersTest
     Test.DescribeStackTest
     Test.StackOpsConverterTest
+    Test.TimingTest
   default-language: GHC2021
   default-extensions:
     LambdaCase

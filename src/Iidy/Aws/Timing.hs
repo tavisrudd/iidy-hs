@@ -12,6 +12,11 @@ module Iidy.Aws.Timing
   , systemTimeProvider
   , reliableTimeProvider
   , mockTimeProvider
+    -- * Internal functions exposed for testing
+  , parseNtpResponse
+  , getWord32
+  , ntpRequest
+  , ntpTimeoutMicros
   ) where
 
 import Control.Exception (SomeException, bracket, catch)
