@@ -45,6 +45,7 @@ module Iidy.Output.Renderers.Interactive
   , renderOutputData
   ) where
 
+import qualified Data.Text.IO as TIO
 import Iidy.Output.Renderers.Interactive.Types
 import Iidy.Output.Renderers.Interactive.Sections
 import Iidy.Output.Types
@@ -88,3 +89,4 @@ renderOutputData r od = do
     OdTemplateDiff diff            -> renderTemplateDiff r diff
     OdApprovalResult res           -> renderApprovalResult r res
     OdPollingStarted msg           -> startSpinner r msg
+    OdRawOutput txt                -> TIO.putStr txt

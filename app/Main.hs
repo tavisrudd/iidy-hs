@@ -113,7 +113,9 @@ handleAwsError err = do
 
 runCommand :: Cli -> IO ()
 runCommand cli = case cliCommand cli of
-  CmdRender args        -> runRender args (cliGlobalOpts cli) >>= exitCode
+  CmdRender args        -> do
+      dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+      runRender (renderOutput dispatch) args (cliGlobalOpts cli) >>= exitCode
   CmdExplain codes      -> explainErrors codes
 
   -- CloudFormation operations with stack-args
@@ -217,10 +219,12 @@ runCommand cli = case cliCommand cli of
 
   CmdGetStackTemplate args -> do
       ctx <- createSimpleContext cli OpGetStackTemplate
+      dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+      let emit = renderOutput dispatch
       result <- getStackTemplate ctx (gtaStackname args)
       case result of
         Left err  -> dieTxt err
-        Right tpl -> TIO.putStrLn tpl
+        Right tpl -> emit (OdRawOutput (tpl <> "\n"))
 
   CmdListStacks args -> do
       ctx <- createSimpleContext cli OpListStacks
@@ -235,27 +239,29 @@ runCommand cli = case cliCommand cli of
   -- SSM Parameter commands
   CmdParam pcmd -> do
       (env, _creds) <- createAwsEnvFromSettings (cliToAwsSettings cli)
+      dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+      let emit = renderOutput dispatch
       case pcmd of
         ParamGet args -> do
           result <- paramGet env args
           case result of
             Left err  -> dieTxt err
-            Right val -> TIO.putStrLn val
+            Right val -> emit (OdRawOutput (val <> "\n"))
         ParamSet args -> do
           result <- paramSet env args
           case result of
             Left err -> dieTxt err
-            Right () -> TIO.putStrLn "Parameter set successfully."
+            Right () -> emit (OdRawOutput "Parameter set successfully.\n")
         ParamGetByPath args -> do
           result <- paramGetByPath env args
           case result of
             Left err   -> dieTxt err
-            Right vals -> mapM_ TIO.putStrLn vals
+            Right vals -> mapM_ (\v -> emit (OdRawOutput (v <> "\n"))) vals
         ParamGetHistory args -> do
           result <- paramGetHistory env args
           case result of
             Left err   -> dieTxt err
-            Right vals -> mapM_ TIO.putStrLn vals
+            Right vals -> mapM_ (\v -> emit (OdRawOutput (v <> "\n"))) vals
         ParamReview args -> do
           result <- paramReview env (ppaPath args)
           case result of
@@ -283,7 +289,9 @@ runCommand cli = case cliCommand cli of
       case result of
         Left err -> dieTxt err
         Right rc -> exitCode rc
-  CmdGetImport args      -> runGetImport args >>= exitCode
+  CmdGetImport args      -> do
+      dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+      runGetImport (renderOutput dispatch) args >>= exitCode
   CmdDemo args           -> runDemo (daDemoscript args) (daTimescaling args) (daMaskSecrets args) >>= exitCode
   CmdLintTemplate args   ->
     runCfnWithArgs cli OpLintTemplate (ltaArgsfile args) Nothing

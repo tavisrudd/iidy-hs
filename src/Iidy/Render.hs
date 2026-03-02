@@ -14,6 +14,7 @@ import System.Directory (doesFileExist)
 import System.IO (stderr)
 
 import Iidy.Cli (RenderArgs(..), GlobalOpts(..))
+import Iidy.Output.Types (OutputData(..))
 import Iidy.Types (YamlSpec(..))
 import Iidy.Yaml.Detection (detectYamlSpec, shouldUseYaml11Compatibility)
 import Iidy.Yaml.Emitter (emitYaml)
@@ -33,8 +34,9 @@ import Iidy.Yaml.Parser (parseYaml, ParseError(..))
 ------------------------------------------------------------------------
 
 -- | Run the render command.  Returns 0 on success, 1 on error.
-runRender :: RenderArgs -> GlobalOpts -> IO Int
-runRender args gopts = do
+-- The emitter callback is used to send stdout output through the output pipeline.
+runRender :: (OutputData -> IO ()) -> RenderArgs -> GlobalOpts -> IO Int
+runRender emit args gopts = do
   let templatePath = T.unpack (raTemplate args)
 
   -- Read input: "-" means stdin, otherwise treat as a file path.
@@ -96,7 +98,7 @@ runRender args gopts = do
                   let outPath = T.unpack (raOutfile args)
                   if outPath == "-" || outPath == "stdout"
                     then do
-                      TIO.putStrLn rendered
+                      emit (OdRawOutput (rendered <> "\n"))
                       pure 0
                     else do
                       -- Check overwrite protection

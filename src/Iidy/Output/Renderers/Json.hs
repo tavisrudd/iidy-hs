@@ -128,6 +128,7 @@ renderOutputDataJson r = \case
   OdTemplateDiff diff            -> outputJson r "template_diff" (templateDiffToValue diff)
   OdApprovalResult res           -> outputJson r "approval_result" (approvalResultToValue res)
   OdPollingStarted _             -> pure ()  -- no-op in JSON mode
+  OdRawOutput txt                -> outputJson r "raw_output" (object ["data" .= txt])
 
 ------------------------------------------------------------------------
 -- JSON output helpers

@@ -94,6 +94,7 @@ data OutputData
   | OdTemplateDiff !TemplateDiff
   | OdApprovalResult !ApprovalResult
   | OdPollingStarted !Text                          -- ^ spinner message for polling
+  | OdRawOutput !Text                              -- ^ raw text output for non-CFN commands
   deriving stock (Show, Eq)
 
 ------------------------------------------------------------------------

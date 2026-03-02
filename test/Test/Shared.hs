@@ -36,6 +36,7 @@ module Test.Shared
   , testApprovalStatus
   , testTemplateDiff
   , testApprovalResult
+  , testRawOutput
     -- * All OutputData variants
   , allTestOutputData
   , odConstructorName
@@ -410,6 +411,9 @@ testApprovalResult = ApprovalResult
   , arCleanupCompleted = True
   }
 
+testRawOutput :: Text
+testRawOutput = "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n"
+
 ------------------------------------------------------------------------
 -- All OutputData variants for comprehensive testing
 ------------------------------------------------------------------------
@@ -443,6 +447,7 @@ allTestOutputData =
   , OdTemplateDiff testTemplateDiff
   , OdApprovalResult testApprovalResult
   , OdPollingStarted "Loading live events..."
+  , OdRawOutput testRawOutput
   ]
 
 -- | Extract constructor name from OutputData for sequence testing
@@ -473,3 +478,4 @@ odConstructorName (OdApprovalStatus _)          = "ApprovalStatus"
 odConstructorName (OdTemplateDiff _)            = "TemplateDiff"
 odConstructorName (OdApprovalResult _)          = "ApprovalResult"
 odConstructorName (OdPollingStarted _)          = "PollingStarted"
+odConstructorName (OdRawOutput _)               = "RawOutput"
