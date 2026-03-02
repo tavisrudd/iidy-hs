@@ -9,7 +9,7 @@ preprocesses them through a custom YAML engine with imports, variable
 resolution, handlebars interpolation, and custom tags, then drives
 CloudFormation operations through the AWS API.
 
-The codebase is ~15,500 LOC of Haskell across 80 modules, using GHC 9.10 and
+The codebase is ~17,800 LOC of Haskell across 86 modules, using GHC 9.10 and
 amazonka 2.0. It implements 22 CLI commands covering the full lifecycle:
 stack CRUD, changesets, drift detection, SSM parameter management, template
 approval workflows, and offline utilities (render, lint, explain, demo).
@@ -372,7 +372,7 @@ for each.
 
 ## Testing Strategy
 
-The test suite has 379 tests using the tasty framework (tasty-hunit for unit
+The test suite has 851 tests using the tasty framework (tasty-hunit for unit
 tests, tasty-quickcheck for property tests). All tests run offline with no
 AWS calls.
 

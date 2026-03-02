@@ -12,8 +12,8 @@ Key compatibility metrics:
 
 - **37/37** render snapshot comparisons pass (YAML output, stack events, etc.)
 - **49/49** error snapshot comparisons pass (error codes, messages, formatting)
-- **379** automated tests (unit, property, integration)
-- **80** Haskell modules porting **96** Rust modules (~16,600 Rust LOC)
+- **851** automated tests (unit, property, integration)
+- **86** Haskell modules porting **96** Rust modules (~16,600 Rust LOC)
 
 The two binaries are intended to be drop-in replacements for each other. Any
 behavioral difference not listed in the Known Divergences section below is
@@ -165,7 +165,7 @@ errors, validation errors, and AWS error wrapping.
 
 ### Automated Tests
 
-379 tests cover:
+851 tests cover:
 - Unit tests for all pure functions (YAML processing, template expansion,
   JMESPath evaluation, JSON Schema validation, Handlebars rendering)
 - Property tests (round-tripping, invariants)

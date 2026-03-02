@@ -91,5 +91,5 @@ resolution, `$id`-based scoping, or output formats like
   indicate what is unsupported.
 - **No community review**: Unlike widely-used libraries, these
   implementations have not been battle-tested across many projects.
-  The 379-test suite and snapshot matching provide confidence but are
+  The 851-test suite and snapshot matching provide confidence but are
   not a substitute for broad usage.

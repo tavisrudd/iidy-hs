@@ -2,11 +2,11 @@
 
 ## Overview
 
-iidy-hs has 379 tests covering the full YAML preprocessing engine, CloudFormation
+iidy-hs has 851 tests covering the full YAML preprocessing engine, CloudFormation
 operations, output rendering pipeline, CLI parsing, error handling, and AWS
 integration. All tests run offline with no real AWS credentials required. The
-suite uses the **tasty** framework and lives in a single file: `test/Main.hs`
-(~3000 LOC).
+suite uses the **tasty** framework and is organized across multiple modules under
+`test/Test/` (~7,400 LOC total), with `test/Main.hs` as the entry point.
 
 ## Framework
 
@@ -18,11 +18,12 @@ suite uses the **tasty** framework and lives in a single file: `test/Main.hs`
 | QuickCheck           | Generators and `Arbitrary` instances       |
 
 All tests are registered in `main` via `testGroup` and run through
-`defaultMain`. There are 22 top-level groups organized by feature area.
+`defaultMain`. Tests are organized into groups by feature area across
+multiple test modules in `test/Test/`.
 
 ## Test Categories
 
-The 22 test groups in `main` map to these feature areas:
+The test groups in `main` map to these feature areas:
 
 **YAML Engine** -- Parser (core parsing, anchors, multi-document), Handlebars
 (interpolation, helpers, escaping), JMESPath (expressions, filters, functions),
@@ -106,8 +107,8 @@ test controls exactly what events are returned and in what order.
 
 ## Test Data Builders
 
-Builder functions for all 26 `OutputData` variants live at the bottom of
-`test/Main.hs` (around line 1947). Each follows the naming convention
+Builder functions for all 26 `OutputData` variants live in
+`test/Test/Shared.hs`. Each follows the naming convention
 `test<TypeName>` -- for example, `testCommandMetadata :: CommandMetadata`,
 `testStackDef :: StackDefinition`, `testStackDrift :: StackDrift`. Helper
 constructors like `mkStackEvt` and `mkResourceEvt` build amazonka event types
@@ -144,8 +145,9 @@ bash scripts/error-snapshot-compare.sh
 
 ## Adding New Tests
 
-1. **Where to add**: All tests go in `test/Main.hs`. Find the relevant
-   `*Tests :: [TestTree]` list and append a new `testCase` or `testProperty`.
+1. **Where to add**: Find the relevant test module in `test/Test/` and append
+   a new `testCase` or `testProperty` to the appropriate `*Tests :: [TestTree]`
+   list. Shared fixtures and builders live in `test/Test/Shared.hs`.
 
 2. **Naming convention**: Use descriptive names that state the behavior under
    test. Group name provides context, so the test name can be specific:
@@ -161,12 +163,12 @@ bash scripts/error-snapshot-compare.sh
    `test-fixtures/expected-outputs/errors/`.
 
 5. **New OutputData variants**: If adding a new `OutputData` constructor,
-   create a `test*` builder function, add it to `allTestOutputData`, and
-   add a case to `odConstructorName`. The integration tests will then
-   automatically cover the new variant.
+   create a `test*` builder function in `test/Test/Shared.hs`, add it to
+   `allTestOutputData`, and add a case to `odConstructorName`. The integration
+   tests will then automatically cover the new variant.
 
-6. **Register in main**: If creating a new test group, add it to the
-   `testGroup` list in `main`. Keep the list in logical order.
+6. **Register in main**: If creating a new test module, add its test group
+   to the `testGroup` list in `test/Main.hs`. Keep the list in logical order.
 
 7. **Keep tests offline**: No real AWS calls. Use dependency injection
    (higher-order functions with `IORef`) for anything that would normally

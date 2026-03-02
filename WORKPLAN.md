@@ -94,7 +94,7 @@ Each PRD draws from these sources (agents must read them, not guess):
 | Source              | Location                             |
 |---------------------|--------------------------------------|
 | User docs           | `docs/*.md`                          |
-| Haskell source      | `src/Iidy/` (81 modules)            |
+| Haskell source      | `src/Iidy/` (86 modules)            |
 | Rust source         | `~/src/iidy/src/` (read-only)       |
 | Test fixtures       | `test/fixtures/`, `test/Test/`       |
 | Error fixtures      | `test/fixtures/errors/` (49 files)   |
@@ -169,8 +169,8 @@ Each PRD draws from these sources (agents must read them, not guess):
 #### Session 0 — Workplan Creation (2026-02-25, Session 40)
 
 **Completed**: Created workplan, directory structure, researched full feature surface.
-**Research done**: 3 Explore agents inventoried all features from Haskell source (81 modules,
-400 tests, 26 OutputData types), Rust source (16,615 LOC, 98 snapshots), and ralph loop
+**Research done**: 3 Explore agents inventoried all features from Haskell source (86 modules,
+851 tests, 26 OutputData types), Rust source (16,615 LOC, 98 snapshots), and ralph loop
 workflow patterns (session structure, handoff format, progress tracking).
 
 #### Session 1 — Overview + CLI PRDs (2026-02-25, Session 41)
