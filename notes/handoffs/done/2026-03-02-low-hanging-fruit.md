@@ -262,8 +262,17 @@ tests found any real issues.
 
 ## Progress
 
-_To be filled in by executing agent._
+- [x] Chunk 1: Property tests — 12 properties, all pass, 958→1007 tests (`ceaf749`)
+- [x] Chunk 2: Error content tests — 24 fixtures covered, 1007→1034 tests (`43889ad`)
+- [x] Chunk 3: JMESPath docs + parse errors — subset doc, DIVERGENCES.md, 4 new tests (`44ac257`)
+- [x] Chunk 4: `!$expand` cycle detection — `tcActiveExpansions` in TagContext, 3 tests (`ba5f891`)
+- [x] Chunk 5: OutputFormat enum — `RenderFormat` ADT in Cli.hs, 9 new tests (`a4ab630`)
+- [x] Chunk 6: saResourceTypes research — confirmed port bug, fixed in 3 lines (`7d78361`)
+
+All 6 chunks complete. 958→1049 tests. Zero warnings.
 
 ## Handoff Notes
 
-_To be filled in by executing agent._
+**Session 45.** All chunks executed via parallel worktree sub-agents, cherry-picked to main.
+No bugs found by property tests — all algebraic laws hold. One port bug found and fixed
+(saResourceTypes). Continuation handoff at `notes/handoffs/2026-03-02-continued-improvements.md`.
