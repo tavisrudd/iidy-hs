@@ -5,6 +5,7 @@ module Iidy.Explain
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
+import qualified Data.Map.Strict as Map
 import System.IO (hPutStrLn, stderr)
 
 ------------------------------------------------------------------------
@@ -37,12 +38,12 @@ explainOne code =
 -- Error code lookup
 ------------------------------------------------------------------------
 
+-- | Map from canonical error code to entry, built once from 'allErrors'.
+errorMap :: Map.Map Text ErrorEntry
+errorMap = Map.fromList [(ecCode e, e) | e <- allErrors]
+
 lookupErrorCode :: Text -> Maybe ErrorEntry
-lookupErrorCode raw =
-  let normalised = normaliseCode raw
-  in case filter (\e -> ecCode e == normalised) allErrors of
-       (e:_) -> Just e
-       []    -> Nothing
+lookupErrorCode raw = Map.lookup (normaliseCode raw) errorMap
 
 -- | Normalise user input to the canonical \"ERR_NNNN\" form.
 normaliseCode :: Text -> Text
