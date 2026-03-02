@@ -10,6 +10,7 @@ Autonomous claude driven, Haskell port of iidy (a CloudFormation preprocessor/de
 - Use qualified imports for amazonka, aeson, containers
 - No orphan instances
 - No partial functions (head, tail, fromJust, etc.)
+- Always `import qualified Data.List as List` and use `List.foldl'` — GHC 9.6 doesn't re-export `foldl'` from Prelude (9.10+ does), and an unqualified `import Data.List (foldl')` triggers `-Wunused-imports` on 9.10. The qualified import works on both.
 - Try to keep modules under ~300-500 LOC; split if larger and possible
 
 ## Testing

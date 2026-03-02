@@ -6,6 +6,7 @@ module Iidy.Yaml.Parser
 
 import qualified Data.ByteString.Lazy as BL
 import Data.Char (isDigit)
+import qualified Data.List as List
 import Data.Functor.Identity (Identity(..))
 import Data.Scientific (Scientific)
 import qualified Data.Scientific as Sci
@@ -191,7 +192,7 @@ makeScalarMeta uri pos tag text =
 -- | Compute end position from a list of child node metadata.
 -- Uses the end position of the last child, or falls back to the start position.
 childrenEndPos :: Position -> [SrcMeta] -> Position
-childrenEndPos startP metas = foldl' (\_ x -> smEnd x) startP metas
+childrenEndPos startP metas = List.foldl' (\_ x -> smEnd x) startP metas
 
 parseErrorAt :: SrcMeta -> Text -> Parse a
 parseErrorAt meta msg = Left (ParseError (smStart meta) msg)
