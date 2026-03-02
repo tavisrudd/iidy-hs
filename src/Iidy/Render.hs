@@ -13,7 +13,7 @@ import qualified Data.Text.Lazy.Encoding as TLE
 import System.Directory (doesFileExist)
 import System.IO (stderr)
 
-import Iidy.Cli (RenderArgs(..), GlobalOpts(..))
+import Iidy.Cli (RenderArgs(..), RenderFormat(..), GlobalOpts(..))
 import Iidy.Output.Types (OutputData(..))
 import Iidy.Types (YamlSpec(..))
 import Iidy.Yaml.Detection (detectYamlSpec, shouldUseYaml11Compatibility)
@@ -82,35 +82,29 @@ runRender emit args gopts = do
               TIO.hPutStrLn stderr ("Invalid JMESPath query: " <> query)
               pure 1
             Right outputVal -> do
-              -- Validate format
-              let fmt = T.toLower (raFormat args)
-              case fmt of
-                _ | fmt `notElem` ["json", "yaml", "yml", "yaml-cloudformation"] -> do
-                  TIO.hPutStrLn stderr ("Unsupported format: " <> raFormat args <> ". Use 'yaml' or 'json'")
-                  pure 1
-                _ -> do
-                  -- Format output
-                  let rendered = case fmt of
-                                   "json" -> formatJson outputVal
-                                   _      -> emitYaml outputVal
+              -- Format output (exhaustive match — no wildcard)
+              let rendered = case raFormat args of
+                    RenderJson    -> formatJson outputVal
+                    RenderYaml    -> emitYaml outputVal
+                    RenderCfnYaml -> emitYaml outputVal
 
-                  -- Write output: "-" or "stdout" means stdout, otherwise write to file.
-                  let outPath = T.unpack (raOutfile args)
-                  if outPath == "-" || outPath == "stdout"
+              -- Write output: "-" or "stdout" means stdout, otherwise write to file.
+              let outPath = T.unpack (raOutfile args)
+              if outPath == "-" || outPath == "stdout"
+                then do
+                  emit (OdRawOutput (rendered <> "\n"))
+                  pure 0
+                else do
+                  -- Check overwrite protection
+                  exists <- doesFileExist outPath
+                  if exists && not (raOverwrite args)
                     then do
-                      emit (OdRawOutput (rendered <> "\n"))
-                      pure 0
+                      TIO.hPutStrLn stderr ("Output file '" <> T.pack outPath <> "' exists. Use --overwrite to overwrite it.")
+                      pure 1
                     else do
-                      -- Check overwrite protection
-                      exists <- doesFileExist outPath
-                      if exists && not (raOverwrite args)
-                        then do
-                          TIO.hPutStrLn stderr ("Output file '" <> T.pack outPath <> "' exists. Use --overwrite to overwrite it.")
-                          pure 1
-                        else do
-                          TIO.writeFile outPath rendered
-                          TIO.hPutStrLn stderr ("Template rendered to: " <> T.pack outPath)
-                          pure 0
+                      TIO.writeFile outPath rendered
+                      TIO.hPutStrLn stderr ("Template rendered to: " <> T.pack outPath)
+                      pure 0
 
 ------------------------------------------------------------------------
 -- Output formatting

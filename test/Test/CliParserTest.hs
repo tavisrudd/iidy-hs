@@ -4,7 +4,7 @@ import Options.Applicative (execParserPure, prefs, showHelpOnEmpty, ParserResult
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
-import Iidy.Cli (Cli(..), Commands(..), GlobalOpts(..), AwsOpts(..), DeleteArgs(..), DescribeArgs(..), RenderArgs(..))
+import Iidy.Cli (Cli(..), Commands(..), GlobalOpts(..), AwsOpts(..), DeleteArgs(..), DescribeArgs(..), RenderArgs(..), GetImportArgs(..), RenderFormat(..))
 import Iidy.Cli.Parser (cliParserInfo)
 import Iidy.Types (ColorChoice(..), Theme(..), YamlSpec(..))
 
@@ -42,7 +42,7 @@ cliParserTests =
           CmdRender args -> do
             raTemplate args @?= "template.yaml"
             raOutfile args @?= "stdout"
-            raFormat args @?= "yaml"
+            raFormat args @?= RenderYaml
             raOverwrite args @?= False
             raYamlSpec args @?= YamlAuto
           _ -> assertFailure "Expected CmdRender"
@@ -52,7 +52,7 @@ cliParserTests =
         Left e -> assertFailure e
         Right cli -> case cliCommand cli of
           CmdRender args -> do
-            raFormat args @?= "json"
+            raFormat args @?= RenderJson
             raOverwrite args @?= True
             raYamlSpec args @?= YamlV11
           _ -> assertFailure "Expected CmdRender"
@@ -99,4 +99,55 @@ cliParserTests =
       case parseCli ["describe-stack"] of
         Left _  -> pure ()
         Right _ -> assertFailure "Expected parse failure for missing stackname"
+
+  -- OutputFormat (RenderFormat) parsing tests
+  , testCase "render --format yaml" $ do
+      case parseCli ["render", "t.yaml", "--format", "yaml"] of
+        Left e -> assertFailure e
+        Right cli -> case cliCommand cli of
+          CmdRender args -> raFormat args @?= RenderYaml
+          _ -> assertFailure "Expected CmdRender"
+
+  , testCase "render --format yml" $ do
+      case parseCli ["render", "t.yaml", "--format", "yml"] of
+        Left e -> assertFailure e
+        Right cli -> case cliCommand cli of
+          CmdRender args -> raFormat args @?= RenderYaml
+          _ -> assertFailure "Expected CmdRender"
+
+  , testCase "render --format yaml-cloudformation" $ do
+      case parseCli ["render", "t.yaml", "--format", "yaml-cloudformation"] of
+        Left e -> assertFailure e
+        Right cli -> case cliCommand cli of
+          CmdRender args -> raFormat args @?= RenderCfnYaml
+          _ -> assertFailure "Expected CmdRender"
+
+  , testCase "render --format josn (typo) is rejected" $ do
+      case parseCli ["render", "t.yaml", "--format", "josn"] of
+        Left _  -> pure ()
+        Right _ -> assertFailure "Expected parse failure for typo 'josn'"
+
+  , testCase "render --format '' (empty) is rejected" $ do
+      case parseCli ["render", "t.yaml", "--format", ""] of
+        Left _  -> pure ()
+        Right _ -> assertFailure "Expected parse failure for empty format"
+
+  , testCase "get-import --format json" $ do
+      case parseCli ["get-import", "some-import", "--format", "json"] of
+        Left e -> assertFailure e
+        Right cli -> case cliCommand cli of
+          CmdGetImport args -> giaFormat args @?= RenderJson
+          _ -> assertFailure "Expected CmdGetImport"
+
+  , testCase "get-import --format yaml (default)" $ do
+      case parseCli ["get-import", "some-import"] of
+        Left e -> assertFailure e
+        Right cli -> case cliCommand cli of
+          CmdGetImport args -> giaFormat args @?= RenderYaml
+          _ -> assertFailure "Expected CmdGetImport"
+
+  , testCase "get-import --format yaml-cloudformation is rejected" $ do
+      case parseCli ["get-import", "some-import", "--format", "yaml-cloudformation"] of
+        Left _  -> pure ()
+        Right _ -> assertFailure "Expected parse failure for yaml-cloudformation in get-import"
   ]

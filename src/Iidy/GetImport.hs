@@ -11,7 +11,7 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TLE
 import System.IO (hPutStrLn, stderr)
 
-import Iidy.Cli (GetImportArgs(..))
+import Iidy.Cli (GetImportArgs(..), RenderFormat(..))
 import Iidy.Output.Types (OutputData(..))
 import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher)
@@ -38,17 +38,16 @@ runGetImport emit args = do
       pure 1
     Right importData -> do
       let doc = idDoc importData
-      -- Format output
-      case T.toLower (giaFormat args) of
-        "json" -> do
+      -- Format output (exhaustive match — no wildcard)
+      case giaFormat args of
+        RenderJson -> do
           emit (OdRawOutput (lazyBsToText (Aeson.encode doc) <> "\n"))
           pure 0
-        "yaml" -> do
+        RenderYaml -> do
           emit (OdRawOutput (emitYaml (fromValue doc)))
           pure 0
-        _ -> do
-          -- "raw" or any other format: print raw data
-          emit (OdRawOutput (idRawData importData <> "\n"))
+        RenderCfnYaml -> do
+          emit (OdRawOutput (emitYaml (fromValue doc)))
           pure 0
 
 ------------------------------------------------------------------------

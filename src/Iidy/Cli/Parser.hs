@@ -505,9 +505,9 @@ renderArgsParser = RenderArgs
       <> metavar "FILE"
       <> help "Output file path or 'stdout' for stdout (default: stdout)"
       )
-  <*> option textReader
+  <*> option renderFormatReader
       ( long "format"
-      <> value "yaml"
+      <> value RenderYaml
       <> metavar "FORMAT"
       <> help "Output format: yaml|json|yaml-cloudformation (default: yaml)"
       )
@@ -527,11 +527,11 @@ renderArgsParser = RenderArgs
 getImportArgsParser :: Parser GetImportArgs
 getImportArgsParser = GetImportArgs
   <$> argument textReader (metavar "IMPORT" <> help "Import specifier to retrieve")
-  <*> option textReader
+  <*> option getImportFormatReader
       ( long "format"
-      <> value "yaml"
+      <> value RenderYaml
       <> metavar "FORMAT"
-      <> help "Output format (default: yaml)"
+      <> help "Output format: yaml|json (default: yaml)"
       )
   <*> optional (option textReader
       ( long "query"
@@ -627,6 +627,23 @@ yamlSpecReader = eitherReader $ \s -> case s of
   "1.2"  -> Right YamlV12
   "auto" -> Right YamlAuto
   _      -> Left $ "Unknown yaml-spec: " <> s <> ". Expected: 1.1|1.2|auto"
+
+renderFormatReader :: ReadM RenderFormat
+renderFormatReader = eitherReader $ \s -> case map toLower s of
+  "json"                -> Right RenderJson
+  "yaml"                -> Right RenderYaml
+  "yml"                 -> Right RenderYaml
+  "yaml-cloudformation" -> Right RenderCfnYaml
+  _                     -> Left $ "Unknown output format: " <> s
+                                <> ". Valid formats: json, yaml, yaml-cloudformation"
+
+getImportFormatReader :: ReadM RenderFormat
+getImportFormatReader = eitherReader $ \s -> case map toLower s of
+  "json" -> Right RenderJson
+  "yaml" -> Right RenderYaml
+  "yml"  -> Right RenderYaml
+  _      -> Left $ "Unknown output format: " <> s
+                 <> ". Valid formats: json, yaml"
 
 paramTypeReader :: ReadM ParamType
 paramTypeReader = eitherReader $ \s -> case map toLower s of

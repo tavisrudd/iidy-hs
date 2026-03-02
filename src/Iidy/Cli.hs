@@ -36,6 +36,7 @@ module Iidy.Cli
     -- * Format enums
   , TemplateFormat(..)
   , TemplateStageArg(..)
+  , RenderFormat(..)
   , ParamType(..)
   , ParamFormat(..)
   , ShellType(..)
@@ -130,6 +131,10 @@ data TemplateFormat = FormatJson | FormatYaml | FormatOriginal
   deriving stock (Show, Eq, Ord)
 
 data TemplateStageArg = StageOriginal | StageProcessed
+  deriving stock (Show, Eq, Ord)
+
+-- | Output format for render and get-import commands
+data RenderFormat = RenderJson | RenderYaml | RenderCfnYaml
   deriving stock (Show, Eq, Ord)
 
 -- | SSM parameter type
@@ -264,7 +269,7 @@ data ApprovalReviewArgs = ApprovalReviewArgs
 data RenderArgs = RenderArgs
   { raTemplate  :: !Text
   , raOutfile   :: !Text
-  , raFormat    :: !Text
+  , raFormat    :: !RenderFormat
   , raQuery     :: !(Maybe Text)
   , raOverwrite :: !Bool
   , raYamlSpec  :: !YamlSpec
@@ -272,7 +277,7 @@ data RenderArgs = RenderArgs
 
 data GetImportArgs = GetImportArgs
   { giaImport :: !Text
-  , giaFormat :: !Text
+  , giaFormat :: !RenderFormat
   , giaQuery  :: !(Maybe Text)
   } deriving stock (Show, Eq)
 
