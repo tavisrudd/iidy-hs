@@ -280,7 +280,7 @@ No performance measurement exists. Startup time and preprocessing latency unmeas
 
 | Item | Status    | Commit  | Notes                                                |
 |------|-----------|---------|------------------------------------------------------|
-| 1A   | PENDING   | —       | Large — needs new types, ListTagsForResource, format dispatch. Defer to next session. |
+| 1A   | DONE      | 46cbde7 | Full port: ParamOutput/HistoryOutput types, ListTagsForResource, json/yaml/simple format, 31 new tests. |
 | 1B   | DONE      | e3453c4 | LCS diff algorithm + contextLines wiring. 15 new tests. |
 | 1C   | DONE      | 837536d | getStrListValidated replaces silent-drop getStrList. 6 new tests. |
 | 1D   | PENDING   | —       | Needs user confirmation (behavior change).           |
@@ -296,7 +296,7 @@ No performance measurement exists. Startup time and preprocessing latency unmeas
 | 3C   | PENDING   | —       | requestConfirmation Bool hides exit-code semantics.  |
 | 4A-F | PENDING   | —       | Structural improvements — larger refactoring.        |
 
-**Tests**: 1091 → 1115 (+24, one old test removed in 1G refactor)
+**Tests**: 1091 → 1146 (+55)
 
 ## Handoff Notes
 
@@ -306,6 +306,6 @@ No performance measurement exists. Startup time and preprocessing latency unmeas
 - User guidance on behavior-changing items:
   - **1D/1E/1F**: Confirm with user before implementing (changes non-broken behavior)
   - **1G**: User approved — silent on missing SSM path, warnings for other errors, candidate for removal
-- **1A** is the largest remaining item — needs new data types, AWS ListTagsForResource, JSON/YAML serialization. Even the default format for get-by-path and get-history diverges from Rust. Full session needed.
+- **1A** completed — full port with 6 new types, ListTagsForResource, custom YAML formatter, 31 new tests.
 - **2C** (port 4 missing fixtures) is straightforward research + fixture work
 - **3A** (SomeException at 15+ sites) is medium-high risk, should be done progressively
