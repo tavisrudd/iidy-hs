@@ -25,6 +25,7 @@
         hpkgs.vector
         hpkgs.amazonka
         hpkgs.amazonka-cloudformation
+        hpkgs.amazonka-core
         hpkgs.amazonka-s3
         hpkgs.amazonka-sts
         hpkgs.amazonka-ssm
@@ -43,6 +44,8 @@
         hpkgs.prettyprinter
         hpkgs.stm
         hpkgs.uuid
+        hpkgs.http-client
+        hpkgs.http-client-tls
         hpkgs.http-conduit
         hpkgs.http-types
         hpkgs.process

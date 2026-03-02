@@ -3,6 +3,9 @@
 # Skip tests with: SKIP_TESTS=1 git commit
 set -euo pipefail
 
+# Check cabal deps are in flake.nix
+bash scripts/check-nix-deps.sh
+
 if [ "${SKIP_TESTS:-0}" != "1" ]; then
   echo "pre-commit: build-strict + test..."
   cabal test all --ghc-options="-Wall -Wcompat -Werror" --test-show-details=direct 2>&1 | tail -5
