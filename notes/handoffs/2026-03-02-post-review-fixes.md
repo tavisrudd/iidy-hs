@@ -283,20 +283,20 @@ No performance measurement exists. Startup time and preprocessing latency unmeas
 | 1A   | DONE      | 46cbde7 | Full port: ParamOutput/HistoryOutput types, ListTagsForResource, json/yaml/simple format, 31 new tests. |
 | 1B   | DONE      | e3453c4 | LCS diff algorithm + contextLines wiring. 15 new tests. |
 | 1C   | DONE      | 837536d | getStrListValidated replaces silent-drop getStrList. 6 new tests. |
-| 1D   | PENDING   | —       | Needs user confirmation (behavior change).           |
-| 1E   | PENDING   | —       | Needs user confirmation (behavior change).           |
+| 1D   | DONE      | 870be82 | Unknown-key validation with edit-distance lib + did-you-mean suggestions. 5 new tests. |
+| 1E   | DONE      | 33da957 | saStackName :: !Text, validated at parse time. getStackName removed. 1 new test. |
 | 1F   | PENDING   | —       | Needs user confirmation (behavior change).           |
 | 1G   | DONE      | 33eb121 | Catch Amazonka.Error not SomeException. Silent on empty path, warns on other AWS errors. |
 | 2A   | DONE      | 836e3f5 | isCfnIntrinsic for !Select/!Join/!Split. 2 new fixture expected-outputs. |
 | 2B   | DONE      | 63152be | cfnTypeName returns "array" for OArray in CFN validator context. |
 | 2C   | DONE      | 12b178f | Reverse-engineered 4 fixtures from Rust snapshots (input files missing from Rust too). All pass cabal test + snapshot-compare. |
 | 2D   | DONE      | 65d54de | Expected-output files for config + import-test.      |
-| 3A   | PENDING   | —       | try @SomeException at 15+ AWS boundaries.            |
+| 3A   | DONE      | c972b32 | Narrowed SomeException to specific types across 13 files. |
 | 3B   | PENDING   | —       | Error classification via string matching.            |
 | 3C   | DONE      | 6ca9fb3 | ConfirmResult ADT (Confirmed/Declined), Text not String. 6 call sites updated. |
 | 4A-F | PENDING   | —       | Structural improvements — larger refactoring.        |
 
-**Tests**: 1091 → 1150 (+59)
+**Tests**: 1091 → 1156 (+65)
 
 ## Handoff Notes
 
@@ -326,3 +326,19 @@ No performance measurement exists. Startup time and preprocessing latency unmeas
 - 3B (error classification string matching) needs design thought before code
 - 4A-F are larger structural refactors — only if sections 1-3 fully done
 - `$CLAUDE_SESSION_NUM` and `$CLAUDE_SESSION_ID` env vars now available via SessionStart hook
+
+### Session 2026-03-02--4 (`9f775744-eaf1-459b-aad7-6e04b9d26c30`)
+**Completed**:
+- 3A: Narrowed `SomeException` catches to specific types at 13 AWS boundaries (c972b32)
+- 1D: Unknown top-level key validation with `edit-distance` lib and did-you-mean suggestions (870be82)
+- 1E: Made `saStackName :: !Text` non-optional, validated at parse time, removed `getStackName` (33da957)
+- Rust t-later: unknown-key validation handoff at `~/src/iidy/notes/handoffs/unknown-key-validation.md`
+- Rust t-later: getStackName unwrap-panic handoff at `~/src/iidy/notes/handoffs/getStackName-unwrap-panic.md`
+- Bug t-later: watch-stack exits early on terminal stacks (`notes/handoffs/2026-03-02-bug-watch-stack-timeouts-early.md`)
+- Refactor t-later: constructCommandMetadata takes unnecessary StackArgs (`notes/handoffs/2026-03-02-constructCommandMetadata-refactor.md`)
+**Files modified**: 20+ files across src/, test/, app/, iidy-hs.cabal, test-fixtures/
+**Notes for next session**:
+- 1F (dot-path query returns ONull on miss) still needs user sign-off
+- 3B (error classification string matching) needs design thought
+- 4A-F are larger structural refactors — only if sections 1-3 fully done
+- New dep: `edit-distance` added to cabal for 1D
