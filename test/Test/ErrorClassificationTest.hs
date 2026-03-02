@@ -298,22 +298,6 @@ errorClassificationTests =
           assertEqual "suggestion" (Just "!$ variable_name") (tpiSuggestion info)
         _ -> pure ()
 
-  -- Legacy type mismatch messages (ERR_5001)
-  , testCase "legacy: !$map items must be" $ do
-      assertTypeMismatch (classify "!$map items must be a sequence, found a string")
-
-  , testCase "legacy: !$merge all sources" $ do
-      assertTypeMismatch (classify "!$merge: all sources must be mappings")
-
-  , testCase "legacy: !$split requires string" $ do
-      assertTypeMismatch (classify "!$split requires string input")
-
-  , testCase "legacy: !$join requires" $ do
-      assertTypeMismatch (classify "!$join requires [string, sequence]")
-
-  , testCase "legacy: !$fromPairs requires a sequence" $ do
-      assertTypeMismatch (classify "!$fromPairs requires a sequence of pairs")
-
   -- Fallback / unknown messages
   , testCase "fallback: random message becomes TagSyntaxError" $ do
       let result = classify "some random error message"

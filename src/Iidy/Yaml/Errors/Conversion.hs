@@ -15,8 +15,6 @@ import Iidy.Types (ColorChoice(..))
 import Iidy.Yaml.Engine (PreprocessError(..))
 import Iidy.Yaml.Errors.Conversion.Guidance
   ( cfnHelpText
-  , extractExpected
-  , extractFound
   , extractMustBeGuidance
   , generateTypeConversionHelp
   , guessExampleFromMustBe
@@ -421,29 +419,6 @@ classifyMessage' allLines loc msg
         , tmiLocation = loc
         , tmiContext  = cleanMsg
         , tmiHelp     = generateTypeConversionHelp expected found
-        }
-
-  -- Legacy resolver type mismatch messages (for backwards compat)
-  | ("!$map items must be" `T.isPrefixOf` msg) ||
-    ("!$merge: all sources" `T.isPrefixOf` msg) ||
-    ("!$split requires string" `T.isPrefixOf` msg) ||
-    ("!$join requires" `T.isPrefixOf` msg) ||
-    ("!$mapValues items must" `T.isPrefixOf` msg) ||
-    ("!$groupBy items must" `T.isPrefixOf` msg) ||
-    ("!$fromPairs requires a sequence" `T.isPrefixOf` msg) ||
-    ("!$fromPairs:" `T.isPrefixOf` msg) ||
-    ("!$concatMap:" `T.isPrefixOf` msg) ||
-    ("!$mergeMap:" `T.isPrefixOf` msg) ||
-    ("!$mapListToHash:" `T.isPrefixOf` msg) ||
-    ("!$parseYaml requires" `T.isPrefixOf` msg) ||
-    ("!$parseJson requires" `T.isPrefixOf` msg) =
-      TypeMismatchError TypeMismatchInfo
-        { tmiErrorId  = TypeMismatchInOperation
-        , tmiExpected = extractExpected msg
-        , tmiFound    = extractFound msg
-        , tmiLocation = loc
-        , tmiContext  = msg
-        , tmiHelp     = Nothing
         }
 
   -- JMESPath errors: "Invalid JMESPath expression 'expr': detail. Variable: path"
