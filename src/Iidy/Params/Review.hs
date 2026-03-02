@@ -14,12 +14,15 @@ import Control.Monad.Trans.Resource (runResourceT)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
+import Lens.Micro ((^.))
 
 import Iidy.Confirm (requestConfirmation)
 import Iidy.Params.Client (fetchParam)
 import qualified Amazonka
+import qualified Amazonka.SSM.GetParameter as GP
 import qualified Amazonka.SSM.PutParameter as PP
 import qualified Amazonka.SSM.DeleteParameter as DP
+import qualified Amazonka.SSM.Types.Parameter as SSMP
 import qualified Amazonka.SSM.Types.ParameterType as SSMPT
 
 ------------------------------------------------------------------------
@@ -39,11 +42,13 @@ paramReview :: Amazonka.Env -> Text -> IO (Either Text Int)
 paramReview awsEnv path = do
   let pendingPath = path <> ".pending"
 
-  -- 1. Fetch pending parameter
-  pendingResult <- fetchParam awsEnv pendingPath True
+  -- 1. Fetch pending parameter (full object to preserve type)
+  pendingResult <- fetchParamFull awsEnv pendingPath True
   case pendingResult of
     Left _ -> pure (Left ("No pending parameter found at " <> pendingPath))
-    Right pendingValue -> do
+    Right pendingParam -> do
+      let pendingValue = pendingParam ^. SSMP.parameter_value
+          paramType    = pendingParam ^. SSMP.parameter_type
 
       -- 2. Fetch current parameter
       currentResult <- fetchParam awsEnv path True
@@ -60,8 +65,8 @@ paramReview awsEnv path = do
       confirmed <- requestConfirmation "Would you like to approve these changes?"
       if confirmed
         then do
-          -- 5. Apply: write pending value, delete pending
-          applyResult <- applyPendingChange awsEnv path pendingValue pendingPath
+          -- 5. Apply: write pending value (preserving type), delete pending
+          applyResult <- applyPendingChange awsEnv path pendingValue pendingPath paramType
           case applyResult of
             Left err -> pure (Left err)
             Right () -> do
@@ -75,13 +80,23 @@ paramReview awsEnv path = do
 -- SSM helpers
 ------------------------------------------------------------------------
 
+-- | Fetch the full SSM Parameter object (value + type + metadata).
+fetchParamFull :: Amazonka.Env -> Text -> Bool -> IO (Either Text SSMP.Parameter)
+fetchParamFull awsEnv name withDecryption = do
+  let req = (GP.newGetParameter name) { GP.withDecryption = Just withDecryption }
+  result <- try @SomeException $ runResourceT $ Amazonka.send awsEnv req
+  case result of
+    Left ex    -> pure (Left (T.pack (show ex)))
+    Right resp -> pure (Right resp.parameter)
+
 -- | Apply a pending change: write the value to the main path and delete the pending.
-applyPendingChange :: Amazonka.Env -> Text -> Text -> Text -> IO (Either Text ())
-applyPendingChange awsEnv path pendingValue pendingPath = do
-  -- Write pending value to main parameter
+-- The paramType is taken from the pending parameter to preserve the original type.
+applyPendingChange :: Amazonka.Env -> Text -> Text -> Text -> SSMPT.ParameterType -> IO (Either Text ())
+applyPendingChange awsEnv path pendingValue pendingPath paramType = do
+  -- Write pending value to main parameter, preserving the original parameter type
   let putReq = (PP.newPutParameter path pendingValue)
                 { PP.overwrite = Just True
-                , PP.type' = Just SSMPT.ParameterType_SecureString
+                , PP.type' = Just paramType
                 }
   putResult <- try @SomeException $ runResourceT $ Amazonka.send awsEnv putReq
   case putResult of
