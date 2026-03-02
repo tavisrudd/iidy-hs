@@ -42,6 +42,7 @@ import Test.SecurityControlsTest (securityControlsTests)
 import Test.ParamsClientTest (paramsClientTests)
 import Test.TemplateLoaderTest (templateLoaderTests)
 import Test.GlobalConfigTest (globalConfigTests)
+import Test.PreprocessingPropertyTest (preprocessingPropertyTests)
 
 main :: IO ()
 main = do
@@ -88,4 +89,5 @@ main = do
     , testGroup "ParamsClient"     paramsClientTests
     , testGroup "TemplateLoader"   templateLoaderTests
     , testGroup "GlobalConfig"     globalConfigTests
+    , testGroup "PreprocessingProperties" preprocessingPropertyTests
     ]

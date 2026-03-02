@@ -214,6 +214,7 @@ test-suite iidy-hs-test
     Test.ParamsClientTest
     Test.TemplateLoaderTest
     Test.GlobalConfigTest
+    Test.PreprocessingPropertyTest
   default-language: GHC2021
   default-extensions:
     LambdaCase
