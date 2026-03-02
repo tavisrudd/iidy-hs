@@ -351,7 +351,8 @@ No performance measurement exists. Startup time and preprocessing latency unmeas
 - Added cabal/flake dep sync check to pre-commit hook (96b0f3d)
 - Added 3 transitive deps to flake.nix: amazonka-core, http-client, http-client-tls
 - CLAUDE.md: documented dep sync rule for new Haskell dependencies
-**Files modified**: `src/Iidy/Yaml/Resolution/Resolver.hs`, `src/Iidy/Yaml/Errors/Conversion.hs`, `test/Test/ResolverTest.hs`, `test/Test/ErrorClassificationTest.hs`, `flake.nix`, `CLAUDE.md`, `.githooks/pre-commit`, `scripts/check-nix-deps.sh`
+- Updated all 5 review docs with (RESOLVED) markers and status table notes (2dbaf8b)
+**Files modified**: `src/Iidy/Yaml/Resolution/Resolver.hs`, `src/Iidy/Yaml/Errors/Conversion.hs`, `test/Test/ResolverTest.hs`, `test/Test/ErrorClassificationTest.hs`, `flake.nix`, `CLAUDE.md`, `.githooks/pre-commit`, `scripts/check-nix-deps.sh`, 5 review docs
 **Notes for next session**:
 - Sections 1-3 are now COMPLETE. All 15 findings addressed.
 - 3B full refactor (ParseErrorKind structured types replacing string matching) deferred — file as t-later
