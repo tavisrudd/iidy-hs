@@ -2,7 +2,7 @@ module Test.AwsLoaderTest (awsLoaderTests) where
 
 import qualified Data.Text as T
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (testCase, (@?=), assertBool)
+import Test.Tasty.HUnit (testCase, (@?=), assertBool, assertFailure)
 
 import qualified Amazonka.S3 as S3
 import Iidy.Yaml.Imports.Loaders.S3 (parseS3Uri)
@@ -18,6 +18,11 @@ awsLoaderTests =
   , testGroup "SSM path location parsing" ssmPathTests
   , testGroup "CFN location parsing" cfnTests
   ]
+
+-- | Assert that a parse result is Right and run assertions on the value.
+assertRight :: Show e => Either e a -> (a -> IO ()) -> IO ()
+assertRight (Left err) _ = assertFailure $ "parse failed: " <> show err
+assertRight (Right val) f = f val
 
 ------------------------------------------------------------------------
 -- S3 URI parsing
@@ -59,35 +64,35 @@ s3Tests =
 
 ssmTests :: [TestTree]
 ssmTests =
-  [ testCase "plain parameter path" $ do
-      let Right (name, fmt) = parseSsmLocation "ssm:/app/config/database"
-      name @?= "/app/config/database"
-      fmt @?= Nothing
+  [ testCase "plain parameter path" $
+      assertRight (parseSsmLocation "ssm:/app/config/database") $ \(name, fmt) -> do
+        name @?= "/app/config/database"
+        fmt @?= Nothing
 
-  , testCase "parameter with :json suffix" $ do
-      let Right (name, fmt) = parseSsmLocation "ssm:/app/config/api:json"
-      name @?= "/app/config/api"
-      fmt @?= Just "json"
+  , testCase "parameter with :json suffix" $
+      assertRight (parseSsmLocation "ssm:/app/config/api:json") $ \(name, fmt) -> do
+        name @?= "/app/config/api"
+        fmt @?= Just "json"
 
-  , testCase "parameter with :yaml suffix" $ do
-      let Right (name, fmt) = parseSsmLocation "ssm:/app/config/cache:yaml"
-      name @?= "/app/config/cache"
-      fmt @?= Just "yaml"
+  , testCase "parameter with :yaml suffix" $
+      assertRight (parseSsmLocation "ssm:/app/config/cache:yaml") $ \(name, fmt) -> do
+        name @?= "/app/config/cache"
+        fmt @?= Just "yaml"
 
-  , testCase "parameter with unknown suffix treated as path" $ do
-      let Right (name, fmt) = parseSsmLocation "ssm:/app/config:xml"
-      name @?= "/app/config:xml"
-      fmt @?= Nothing
+  , testCase "parameter with unknown suffix treated as path" $
+      assertRight (parseSsmLocation "ssm:/app/config:xml") $ \(name, fmt) -> do
+        name @?= "/app/config:xml"
+        fmt @?= Nothing
 
-  , testCase "bare parameter name (no slash)" $ do
-      let Right (name, fmt) = parseSsmLocation "ssm:my-param"
-      name @?= "my-param"
-      fmt @?= Nothing
+  , testCase "bare parameter name (no slash)" $
+      assertRight (parseSsmLocation "ssm:my-param") $ \(name, fmt) -> do
+        name @?= "my-param"
+        fmt @?= Nothing
 
-  , testCase "without ssm: prefix works" $ do
-      let Right (name, fmt) = parseSsmLocation "/app/config"
-      name @?= "/app/config"
-      fmt @?= Nothing
+  , testCase "without ssm: prefix works" $
+      assertRight (parseSsmLocation "/app/config") $ \(name, fmt) -> do
+        name @?= "/app/config"
+        fmt @?= Nothing
   ]
 
 ------------------------------------------------------------------------
@@ -96,35 +101,35 @@ ssmTests =
 
 ssmPathTests :: [TestTree]
 ssmPathTests =
-  [ testCase "plain path" $ do
-      let Right (path, fmt) = parseSsmPathLocation "ssm-path:/app/config"
-      path @?= "/app/config"
-      fmt @?= Nothing
+  [ testCase "plain path" $
+      assertRight (parseSsmPathLocation "ssm-path:/app/config") $ \(path, fmt) -> do
+        path @?= "/app/config"
+        fmt @?= Nothing
 
-  , testCase "path with :json suffix" $ do
-      let Right (path, fmt) = parseSsmPathLocation "ssm-path:/app/config:json"
-      path @?= "/app/config"
-      fmt @?= Just "json"
+  , testCase "path with :json suffix" $
+      assertRight (parseSsmPathLocation "ssm-path:/app/config:json") $ \(path, fmt) -> do
+        path @?= "/app/config"
+        fmt @?= Just "json"
 
-  , testCase "path with :yaml suffix" $ do
-      let Right (path, fmt) = parseSsmPathLocation "ssm-path:/app/config:yaml"
-      path @?= "/app/config"
-      fmt @?= Just "yaml"
+  , testCase "path with :yaml suffix" $
+      assertRight (parseSsmPathLocation "ssm-path:/app/config:yaml") $ \(path, fmt) -> do
+        path @?= "/app/config"
+        fmt @?= Just "yaml"
 
-  , testCase "path with unknown suffix treated as path" $ do
-      let Right (path, fmt) = parseSsmPathLocation "ssm-path:/app/config:xml"
-      path @?= "/app/config:xml"
-      fmt @?= Nothing
+  , testCase "path with unknown suffix treated as path" $
+      assertRight (parseSsmPathLocation "ssm-path:/app/config:xml") $ \(path, fmt) -> do
+        path @?= "/app/config:xml"
+        fmt @?= Nothing
 
   , testCase "empty path errors" $
       case parseSsmPathLocation "ssm-path:" of
         Left (ImportError e) -> assertBool "mentions invalid" ("Invalid" `T.isInfixOf` e)
         Right _ -> fail "Expected error for empty path"
 
-  , testCase "without prefix works" $ do
-      let Right (path, fmt) = parseSsmPathLocation "/app/config"
-      path @?= "/app/config"
-      fmt @?= Nothing
+  , testCase "without prefix works" $
+      assertRight (parseSsmPathLocation "/app/config") $ \(path, fmt) -> do
+        path @?= "/app/config"
+        fmt @?= Nothing
   ]
 
 ------------------------------------------------------------------------
@@ -133,40 +138,40 @@ ssmPathTests =
 
 cfnTests :: [TestTree]
 cfnTests =
-  [ testCase "cfn:output:Stack/Key parses correctly" $ do
-      let Right (field, loc) = parseCfnLocation "cfn:output:my-stack/VpcId"
-      show field @?= "CfnOutput"
-      loc @?= "my-stack/VpcId"
+  [ testCase "cfn:output:Stack/Key parses correctly" $
+      assertRight (parseCfnLocation "cfn:output:my-stack/VpcId") $ \(field, loc) -> do
+        show field @?= "CfnOutput"
+        loc @?= "my-stack/VpcId"
 
-  , testCase "cfn:output:Stack (all outputs)" $ do
-      let Right (field, loc) = parseCfnLocation "cfn:output:my-stack"
-      show field @?= "CfnOutput"
-      loc @?= "my-stack"
+  , testCase "cfn:output:Stack (all outputs)" $
+      assertRight (parseCfnLocation "cfn:output:my-stack") $ \(field, loc) -> do
+        show field @?= "CfnOutput"
+        loc @?= "my-stack"
 
-  , testCase "cfn:export:Name parses correctly" $ do
-      let Right (field, loc) = parseCfnLocation "cfn:export:my-export"
-      show field @?= "CfnExport"
-      loc @?= "my-export"
+  , testCase "cfn:export:Name parses correctly" $
+      assertRight (parseCfnLocation "cfn:export:my-export") $ \(field, loc) -> do
+        show field @?= "CfnExport"
+        loc @?= "my-export"
 
-  , testCase "cfn:parameter:Stack/Key parses correctly" $ do
-      let Right (field, loc) = parseCfnLocation "cfn:parameter:my-stack/DbHost"
-      show field @?= "CfnParameter"
-      loc @?= "my-stack/DbHost"
+  , testCase "cfn:parameter:Stack/Key parses correctly" $
+      assertRight (parseCfnLocation "cfn:parameter:my-stack/DbHost") $ \(field, loc) -> do
+        show field @?= "CfnParameter"
+        loc @?= "my-stack/DbHost"
 
-  , testCase "cfn:tag:Stack/Key parses correctly" $ do
-      let Right (field, loc) = parseCfnLocation "cfn:tag:my-stack/Environment"
-      show field @?= "CfnTag"
-      loc @?= "my-stack/Environment"
+  , testCase "cfn:tag:Stack/Key parses correctly" $
+      assertRight (parseCfnLocation "cfn:tag:my-stack/Environment") $ \(field, loc) -> do
+        show field @?= "CfnTag"
+        loc @?= "my-stack/Environment"
 
-  , testCase "cfn:resource:Stack/LogicalId parses correctly" $ do
-      let Right (field, loc) = parseCfnLocation "cfn:resource:my-stack/MyBucket"
-      show field @?= "CfnResource"
-      loc @?= "my-stack/MyBucket"
+  , testCase "cfn:resource:Stack/LogicalId parses correctly" $
+      assertRight (parseCfnLocation "cfn:resource:my-stack/MyBucket") $ \(field, loc) -> do
+        show field @?= "CfnResource"
+        loc @?= "my-stack/MyBucket"
 
-  , testCase "cfn:stack:Stack parses correctly" $ do
-      let Right (field, loc) = parseCfnLocation "cfn:stack:my-stack"
-      show field @?= "CfnStack"
-      loc @?= "my-stack"
+  , testCase "cfn:stack:Stack parses correctly" $
+      assertRight (parseCfnLocation "cfn:stack:my-stack") $ \(field, loc) -> do
+        show field @?= "CfnStack"
+        loc @?= "my-stack"
 
   , testCase "invalid sub-type errors" $
       case parseCfnLocation "cfn:bogus:my-stack" of
@@ -185,28 +190,28 @@ cfnTests =
         Left _ -> pure ()
         Right _ -> fail "Expected error for bare cfn:Stack/Key (no subtype)"
 
-  , testCase "cfn:parameter:Stack (all parameters)" $ do
-      let Right (field, loc) = parseCfnLocation "cfn:parameter:my-stack"
-      field @?= CfnParameter
-      loc @?= "my-stack"
+  , testCase "cfn:parameter:Stack (all parameters)" $
+      assertRight (parseCfnLocation "cfn:parameter:my-stack") $ \(field, loc) -> do
+        field @?= CfnParameter
+        loc @?= "my-stack"
 
-  , testCase "cfn:tag:Stack (all tags)" $ do
-      let Right (field, loc) = parseCfnLocation "cfn:tag:my-stack"
-      field @?= CfnTag
-      loc @?= "my-stack"
+  , testCase "cfn:tag:Stack (all tags)" $
+      assertRight (parseCfnLocation "cfn:tag:my-stack") $ \(field, loc) -> do
+        field @?= CfnTag
+        loc @?= "my-stack"
 
-  , testCase "cfn:resource:Stack (all resources)" $ do
-      let Right (field, loc) = parseCfnLocation "cfn:resource:my-stack"
-      field @?= CfnResource
-      loc @?= "my-stack"
+  , testCase "cfn:resource:Stack (all resources)" $
+      assertRight (parseCfnLocation "cfn:resource:my-stack") $ \(field, loc) -> do
+        field @?= CfnResource
+        loc @?= "my-stack"
 
-  , testCase "cfn:export: parses with empty name" $ do
-      let Right (field, loc) = parseCfnLocation "cfn:export:"
-      field @?= CfnExport
-      loc @?= ""
+  , testCase "cfn:export: parses with empty name" $
+      assertRight (parseCfnLocation "cfn:export:") $ \(field, loc) -> do
+        field @?= CfnExport
+        loc @?= ""
 
-  , testCase "cfn:stack: parses with empty name" $ do
-      let Right (field, loc) = parseCfnLocation "cfn:stack:"
-      field @?= CfnStack
-      loc @?= ""
+  , testCase "cfn:stack: parses with empty name" $
+      assertRight (parseCfnLocation "cfn:stack:") $ \(field, loc) -> do
+        field @?= CfnStack
+        loc @?= ""
   ]
