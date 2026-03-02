@@ -6,11 +6,12 @@ import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.Map.Strict
 import qualified Data.Text as T
+import qualified Data.Vector as V
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
 import Iidy.Aws.CredentialSource (AwsSettings(..))
-import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..), resolveEnvMaps, parseOnFailureText, parseCapabilityText)
+import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..), getStrListValidated, resolveEnvMaps, parseOnFailureText, parseCapabilityText)
 import Iidy.Cfn.Types (CfnOperation(..), Capability(..), OnFailure(..), StackArgs(..))
 import Test.Shared (noAwsSettings)
 
@@ -210,4 +211,46 @@ stackArgsLoaderTests =
       case result of
         Left err -> assertBool "error mentions unrecognized" (T.isInfixOf "unrecognized" err)
         Right _  -> assertFailure "Expected error for unknown Capability value"
+
+    -- getStrListValidated tests (Russell #3: no silent drops)
+  , testCase "getStrListValidated: all strings succeeds" $ do
+      let obj = KM.fromList
+            [ (Key.fromText "Items", Array (V.fromList [String "a", String "b", String "c"]))
+            ]
+      getStrListValidated obj "Items" @?= Right (Just ["a", "b", "c"])
+
+  , testCase "getStrListValidated: absent key returns Nothing" $
+      getStrListValidated KM.empty "Items" @?= Right Nothing
+
+  , testCase "getStrListValidated: null returns Nothing" $ do
+      let obj = KM.fromList [(Key.fromText "Items", Null)]
+      getStrListValidated obj "Items" @?= Right Nothing
+
+  , testCase "getStrListValidated: number element errors" $ do
+      let obj = KM.fromList
+            [ (Key.fromText "NotificationARNs", Array (V.fromList
+                [String "arn:aws:sns:us-east-1:123", Number 42]))
+            ]
+      case getStrListValidated obj "NotificationARNs" of
+        Left err -> do
+          assertBool "mentions field name" (T.isInfixOf "NotificationARNs" err)
+          assertBool "mentions index" (T.isInfixOf "[1]" err)
+          assertBool "mentions integer" (T.isInfixOf "integer" err)
+        Right _ -> assertFailure "Expected error for non-string element"
+
+  , testCase "getStrListValidated: boolean element errors" $ do
+      let obj = KM.fromList
+            [ (Key.fromText "CommandsBefore", Array (V.fromList [Bool True]))
+            ]
+      case getStrListValidated obj "CommandsBefore" of
+        Left err -> do
+          assertBool "mentions field name" (T.isInfixOf "CommandsBefore" err)
+          assertBool "mentions boolean" (T.isInfixOf "boolean" err)
+        Right _ -> assertFailure "Expected error for boolean element"
+
+  , testCase "getStrListValidated: wrong type for key errors" $ do
+      let obj = KM.fromList [(Key.fromText "Items", String "not-a-list")]
+      case getStrListValidated obj "Items" of
+        Left err -> assertBool "mentions expected sequence" (T.isInfixOf "sequence" err)
+        Right _ -> assertFailure "Expected error for non-array value"
   ]

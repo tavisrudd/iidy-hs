@@ -11,6 +11,7 @@ module Iidy.Cfn.StackArgsLoader
   ( loadStackArgs
   , LoadedStackArgs(..)
   -- * Internal (exported for testing)
+  , getStrListValidated
   , getStrMapValidated
   , resolveEnvMaps
   , parseOnFailureText
@@ -18,7 +19,7 @@ module Iidy.Cfn.StackArgsLoader
   ) where
 
 import Control.Applicative ((<|>))
-import Control.Monad (foldM)
+import Control.Monad (foldM, zipWithM)
 import Data.Aeson (Value(..))
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
@@ -231,10 +232,14 @@ mergeAwsSettings cli argsfile = AwsSettings
 -- | Convert a JSON Value (from YAML) to StackArgs
 valueToStackArgs :: Value -> Either Text StackArgs
 valueToStackArgs (Object obj) = do
-  tags   <- getStrMapValidated obj "Tags"
-  params <- getStrMapValidated obj "Parameters"
-  caps   <- parseCapabilities obj
-  onFail <- parseOnFailure obj
+  tags            <- getStrMapValidated obj "Tags"
+  params          <- getStrMapValidated obj "Parameters"
+  caps            <- parseCapabilities obj
+  onFail          <- parseOnFailure obj
+  notifArns       <- getStrListValidated obj "NotificationARNs"
+  resourceTypes   <- getStrListValidated obj "ResourceTypes"
+  usePrevParams   <- getStrListValidated obj "UsePreviousParameterValues"
+  commandsBefore  <- getStrListValidated obj "CommandsBefore"
   pure StackArgs
     { saStackName                   = getStr obj "StackName"
     , saTemplate                    = getStr obj "Template"
@@ -244,7 +249,7 @@ valueToStackArgs (Object obj) = do
     , saCapabilities                = caps
     , saTags                        = tags
     , saParameters                  = params
-    , saNotificationArns            = getStrList obj "NotificationARNs"
+    , saNotificationArns            = notifArns
     , saAssumeRoleArn               = getStr obj "AssumeRoleARN"
     , saServiceRoleArn              = getStr obj "ServiceRoleARN"
     , saRoleArn                     = getStr obj "RoleARN"
@@ -253,17 +258,27 @@ valueToStackArgs (Object obj) = do
     , saDisableRollback             = getBool obj "DisableRollback"
     , saEnableTerminationProtection = getBool obj "EnableTerminationProtection"
     , saStackPolicy                 = KM.lookup (Key.fromText "StackPolicy") obj
-    , saResourceTypes               = getStrList obj "ResourceTypes"
+    , saResourceTypes               = resourceTypes
     , saUsePreviousTemplate         = getBool obj "UsePreviousTemplate"
-    , saUsePreviousParameterValues  = getStrList obj "UsePreviousParameterValues"
-    , saCommandsBefore              = getStrList obj "CommandsBefore"
+    , saUsePreviousParameterValues  = usePrevParams
+    , saCommandsBefore              = commandsBefore
     }
 valueToStackArgs _ = Left "Stack args must be a YAML mapping"
 
-getStrList :: KM.KeyMap Value -> Text -> Maybe [Text]
-getStrList obj key = case KM.lookup (Key.fromText key) obj of
-  Just (Array arr) -> Just [t | String t <- foldr (:) [] arr]
-  _                -> Nothing
+-- | Extract a string list, validating that all elements are strings.
+-- Returns an error if any element has a non-string type (matching Rust/serde behavior).
+getStrListValidated :: KM.KeyMap Value -> Text -> Either Text (Maybe [Text])
+getStrListValidated obj key = case KM.lookup (Key.fromText key) obj of
+  Just (Array arr) -> do
+    texts <- zipWithM validateElem [0 :: Int ..] (foldr (:) [] arr)
+    pure (Just texts)
+  Just Null -> Right Nothing
+  Nothing   -> Right Nothing
+  Just v    -> Left $ "invalid type for " <> key <> ": expected a sequence, got " <> describeType v
+  where
+    validateElem _ (String t) = Right t
+    validateElem i v          = Left $ "invalid type in " <> key <> "[" <> T.pack (show i)
+                                     <> "]: expected a string, got " <> describeValue v
 
 -- | Extract a string map, validating that all values are strings.
 -- Returns an error if any value has a non-string type (matching Rust/serde behavior).
