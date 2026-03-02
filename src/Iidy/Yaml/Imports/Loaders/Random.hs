@@ -40,9 +40,12 @@ mkResult loc val = ImportData
   }
 
 randomElement :: [Text] -> IO Text
+randomElement [] = pure ""
 randomElement xs = do
-  i <- randomRIO (0, Prelude.length xs - 1)
-  pure (xs !! i)
+  i <- randomRIO (0, length xs - 1)
+  case drop i xs of
+    (x:_) -> pure x
+    []    -> pure ""
 
 adjectives :: [Text]
 adjectives =
