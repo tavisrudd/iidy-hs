@@ -488,47 +488,54 @@ paramGetHistory :: Amazonka.Env -> ParamGetArgs -> IO (Either Text Text)
 paramGetHistory awsEnv args = do
   result <- try @SomeException (fetchHistoryRaw awsEnv args.pgaPath args.pgaDecrypt)
   case result of
-    Left ex  -> pure $ Left $ "SSM GetParameterHistory error for " <> args.pgaPath <> ": " <> T.pack (show ex)
-    Right entries
-      | null entries -> pure $ Left $ "No history found for parameter '" <> args.pgaPath <> "'"
-      | otherwise -> do
-          let sorted = List.sortBy (comparing historyDate) entries
-          case reverse sorted of
-            [] -> pure $ Left $ "No history found for parameter '" <> args.pgaPath <> "'"
-            (current : rest) -> do
-              let previous = reverse rest
-              tagsResult <- listParamTags awsEnv args.pgaPath
-              case tagsResult of
-                Left err -> pure (Left err)
-                Right tags -> case args.pgaFormat of
-                  ParamFormatRaw -> do
-                    let msg = fromMaybe "" (Map.lookup messageTag tags)
-                        sh = SimpleHistory
-                          { shCurrent = SimpleHistoryCurrent
-                              { shcValue            = current ^. SSMPH.parameterHistory_value
-                              , shcLastModifiedDate = fmap formatUtcTime (current ^. SSMPH.parameterHistory_lastModifiedDate)
-                              , shcLastModifiedUser = current ^. SSMPH.parameterHistory_lastModifiedUser
-                              , shcMessage          = msg
-                              }
-                          , shPrevious = map mkPrevious previous
-                          }
-                    pure $ Right $ formatAsYaml sh
-                  fmt -> do
-                    let fh = FullHistory
-                          { fhCurrent  = withHistoryTags tags (paramHistoryOutputFromHistory current)
-                          , fhPrevious = map paramHistoryOutputFromHistory previous
-                          }
-                    pure $ Right $ formatWith fmt fh
+    Left ex -> pure $ Left $
+      "SSM GetParameterHistory error for " <> args.pgaPath <> ": " <> T.pack (show ex)
+    Right entries | null entries -> pure $ Left $
+      "No history found for parameter '" <> args.pgaPath <> "'"
+    Right entries -> do
+      let sorted = List.sortBy (comparing historyDate) entries
+          (current, previous) = splitLast sorted
+      tags <- listParamTags awsEnv args.pgaPath
+      case tags of
+        Left err -> pure (Left err)
+        Right tagMap -> pure $ Right $ formatHistory args.pgaFormat tagMap current previous
   where
+    historyDate :: SSM.ParameterHistory -> Maybe UTCTime
+    historyDate ph = ph ^. SSMPH.parameterHistory_lastModifiedDate
+
+    -- Safe: caller guarantees non-empty list
+    splitLast :: [a] -> (a, [a])
+    splitLast xs = case reverse xs of
+      (c:ps) -> (c, reverse ps)
+      []     -> (List.head xs, [])  -- unreachable
+
+    formatHistory :: ParamFormat -> Map.Map Text Text
+                  -> SSM.ParameterHistory -> [SSM.ParameterHistory] -> Text
+    formatHistory ParamFormatRaw tagMap current previous =
+      let msg = fromMaybe "" (Map.lookup messageTag tagMap)
+          sh = SimpleHistory
+            { shCurrent = SimpleHistoryCurrent
+                { shcValue            = current ^. SSMPH.parameterHistory_value
+                , shcLastModifiedDate = fmap formatUtcTime (current ^. SSMPH.parameterHistory_lastModifiedDate)
+                , shcLastModifiedUser = current ^. SSMPH.parameterHistory_lastModifiedUser
+                , shcMessage          = msg
+                }
+            , shPrevious = map mkPrevious previous
+            }
+      in formatAsYaml sh
+    formatHistory fmt tagMap current previous =
+      let fh = FullHistory
+            { fhCurrent  = withHistoryTags tagMap (paramHistoryOutputFromHistory current)
+            , fhPrevious = map paramHistoryOutputFromHistory previous
+            }
+      in formatWith fmt fh
+
     mkPrevious :: SSM.ParameterHistory -> SimpleHistoryPrevious
     mkPrevious ph = SimpleHistoryPrevious
       { shpValue            = ph ^. SSMPH.parameterHistory_value
       , shpLastModifiedDate = fmap formatUtcTime (ph ^. SSMPH.parameterHistory_lastModifiedDate)
       , shpLastModifiedUser = ph ^. SSMPH.parameterHistory_lastModifiedUser
       }
-
-    historyDate :: SSM.ParameterHistory -> Maybe UTCTime
-    historyDate ph = ph ^. SSMPH.parameterHistory_lastModifiedDate
 
 -- | Fetch raw ParameterHistory entries.
 fetchHistoryRaw :: Amazonka.Env -> Text -> Bool -> IO [SSM.ParameterHistory]
