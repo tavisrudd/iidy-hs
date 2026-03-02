@@ -42,7 +42,7 @@ This record complects:
 
 ---
 
-## 2. StackArgs: The 21-Maybe Bag
+## 2. StackArgs: The 21-Maybe Bag (PARTIALLY ADDRESSED)
 
 ```haskell
 data StackArgs = StackArgs
@@ -65,7 +65,7 @@ Worse: `saOnFailure :: Maybe Text` when the actual domain is `DO_NOTHING | ROLLB
 
 ---
 
-## 3. Five Error Handling Strategies, One Codebase
+## 3. Five Error Handling Strategies, One Codebase (PARTIALLY ADDRESSED)
 
 The error story is a braid of five incompatible patterns:
 

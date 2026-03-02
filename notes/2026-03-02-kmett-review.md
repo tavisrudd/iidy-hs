@@ -6,7 +6,7 @@ Kmett's perspective: Haskell's type system and abstraction mechanisms exist to b
 
 ---
 
-## 1. No Typeclasses. Anywhere.
+## 1. No Typeclasses. Anywhere. (WONT FIX)
 
 The entire 85-module, 15k+ LOC codebase defines **zero typeclasses** (beyond stock deriving). No `class`, no `instance` (beyond derived `Show`, `Eq`, `Ord`). No `Functor`, no `Foldable`, no `Traversable` on custom types. No `MonadReader`, no `MonadError`, no `Has` pattern.
 
@@ -41,7 +41,7 @@ Currently, `renderOutputData` is a 27-arm case statement matching `OutputData` c
 
 ---
 
-## 2. No Optics. Manual Record Access Everywhere.
+## 2. No Optics. Manual Record Access Everywhere. (WONT FIX)
 
 The codebase uses `microlens` (it's in the cabal file) but only for amazonka field access. Custom types use raw record selectors:
 
@@ -99,7 +99,7 @@ over tcVariablesL (Map.insert name val) ctx
 
 ---
 
-## 3. The Monad Stack That Isn't
+## 3. The Monad Stack That Isn't (PARTIALLY ADDRESSED)
 
 The resolver returns `Either ResolveError OValue`. The engine returns `IO (Either Text PreprocessResult)`. CFN operations return `IO (Either Text Int)`. The error types are different at every layer.
 

@@ -31,7 +31,7 @@ His core question: **How hard is it for a reasonable person to use this correctl
 
 ---
 
-## 1. mapOnFailure Silently Drops Invalid Values (Rating: -7)
+## 1. mapOnFailure Silently Drops Invalid Values (Rating: -7) (RESOLVED)
 
 ```haskell
 mapOnFailure :: Maybe Text -> Maybe CF.OnFailure
@@ -149,7 +149,7 @@ silent filtering.
 
 ---
 
-## 4. StackArgs: The 21-Maybe Record With No Validation (Rating: -3)
+## 4. StackArgs: The 21-Maybe Record With No Validation (Rating: -3) (PARTIALLY ADDRESSED)
 
 ```haskell
 data StackArgs = StackArgs
@@ -188,7 +188,7 @@ the parsed object's keys against a known set. Second: per-operation validation -
 
 ---
 
-## 5. oIsTruthy: JavaScript-Grade Truthiness in a YAML Preprocessor (Rating: +2)
+## 5. oIsTruthy: JavaScript-Grade Truthiness in a YAML Preprocessor (Rating: +2) (RESOLVED)
 
 ```haskell
 oIsTruthy :: OValue -> Bool
@@ -235,7 +235,7 @@ explicit. (This would be a behavior change from Rust, but it's the right thing.)
 
 ---
 
-## 6. TemplateLoader Uses `fail` for Errors (Rating: -6)
+## 6. TemplateLoader Uses `fail` for Errors (Rating: -6) (RESOLVED)
 
 ```haskell
 loadCfnTemplate (Just tmplSpec) argsfilePath env mAwsEnv
@@ -516,7 +516,7 @@ dot-path case, matching the comma-separated behavior. Both paths should be stric
 
 ---
 
-## 12. Two Incompatible Error Presentation Paths (Rating: +2)
+## 12. Two Incompatible Error Presentation Paths (Rating: +2) (PARTIALLY ADDRESSED)
 
 YAML preprocessing errors go through the enhanced error display pipeline:
 
@@ -658,7 +658,7 @@ desired in the future, add it then with a clear name like `oValuesCoerce`.
 
 ---
 
-## 15. CLI --format Has Three Different Domains (Rating: +3)
+## 15. CLI --format Has Three Different Domains (Rating: +3) (PARTIALLY ADDRESSED)
 
 ```haskell
 data TemplateFormat = FormatJson | FormatYaml | FormatOriginal
@@ -698,7 +698,7 @@ explicit; the latter is more ergonomic.
 
 ---
 
-## 16. Error Classification via String Matching (Rating: -2)
+## 16. Error Classification via String Matching (Rating: -2) (PARTIALLY ADDRESSED)
 
 ```haskell
 classifyMessage' :: [Text] -> SourceLocation -> Text -> EnhancedPreprocessingError

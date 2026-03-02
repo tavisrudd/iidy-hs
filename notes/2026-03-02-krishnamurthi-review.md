@@ -122,7 +122,7 @@ From a PL perspective, this is the most dangerous feature in the language. It ma
 
 ---
 
-## 5. Custom Resources Are a Module System with Type Checking
+## 5. Custom Resources Are a Module System with Type Checking (RESOLVED)
 
 The `$defs` / `!$expand` mechanism is genuinely a parameterized module system:
 
@@ -145,7 +145,7 @@ The `RefRewriting.hs` module implements capture-avoiding substitution for CloudF
 
 ---
 
-## 6. Testing: Specification by Example, Not by Law
+## 6. Testing: Specification by Example, Not by Law (PARTIALLY ADDRESSED)
 
 The test suite has 958 tests. The coverage is impressive. But from a PL testing perspective, the strategy has a characteristic shape:
 
@@ -181,7 +181,7 @@ For a user who writes `!$merge` inside `!$map` inside `!$let`, the question isn'
 
 ---
 
-## 7. The Truthiness Problem
+## 7. The Truthiness Problem (RESOLVED)
 
 The `oIsTruthy` function defines when a value is "truthy":
 
@@ -219,7 +219,7 @@ From a PL perspective, implementing a subset of a specified language without doc
 
 ---
 
-## 9. Error Reporting: Good Infrastructure, Missing Content Tests
+## 9. Error Reporting: Good Infrastructure, Missing Content Tests (PARTIALLY ADDRESSED)
 
 The error display pipeline (`Errors/Display.hs`) produces clang/rustc-style diagnostics:
 
@@ -242,7 +242,7 @@ A PL researcher would say: the error messages are part of the language's user in
 
 ---
 
-## 10. What Would a Language-First Approach Look Like?
+## 10. What Would a Language-First Approach Look Like? (PARTIALLY ADDRESSED)
 
 1. **Write a specification.** Not the informal reference manual — a precise specification of each tag's semantics, ideally in the style of PLT Redex or a denotational semantics. Even a careful English specification would be a major improvement. The specification should cover:
    - Evaluation order (strict, left-to-right, with `!$if` as a special form)
