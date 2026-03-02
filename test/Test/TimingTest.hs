@@ -78,8 +78,9 @@ packetTests =
   , testCase "parseNtpResponse rejects short packet (47 bytes)" $
       parseNtpResponse (BS.replicate 47 0) @?= Nothing
 
-  , testCase "parseNtpResponse accepts 48-byte all-zero packet" $
-      assertBool "returns Just" (parseNtpResponse (BS.replicate 48 0) /= Nothing)
+  , testCase "parseNtpResponse rejects 48-byte all-zero packet (secs < offset)" $
+      -- All-zero means secs=0 which is below ntpToUnixOffset, so returns Nothing
+      parseNtpResponse (BS.replicate 48 0) @?= Nothing
 
   , testCase "parseNtpResponse extracts known timestamp" $ do
       let pkt = buildNtpPacket knownNtpSecs 0
@@ -87,8 +88,27 @@ packetTests =
         Nothing -> fail "Expected Just, got Nothing"
         Just t  -> t @?= knownExpectedTime
 
+  , testCase "parseNtpResponse returns Nothing for pre-epoch secs (underflow guard)" $ do
+      -- NTP seconds below ntpToUnixOffset (2208988800) would underflow
+      -- a Word32 subtraction. The guard should return Nothing.
+      let pkt = buildNtpPacket 100 0  -- secs=100, well below 2208988800
+      parseNtpResponse pkt @?= Nothing
+
+  , testCase "parseNtpResponse returns Nothing for secs == ntpToUnixOffset - 1" $ do
+      -- Edge case: one less than the offset
+      let pkt = buildNtpPacket (ntpUnixOffset - 1) 0
+      parseNtpResponse pkt @?= Nothing
+
+  , testCase "parseNtpResponse accepts secs == ntpToUnixOffset (Unix epoch)" $ do
+      -- Exactly at the Unix epoch boundary (1970-01-01 00:00:00 UTC)
+      let pkt = buildNtpPacket ntpUnixOffset 0
+      case parseNtpResponse pkt of
+        Nothing -> fail "Expected Just for secs == ntpToUnixOffset"
+        Just t  -> t @?= posixSecondsToUTCTime 0
+
   , testCase "parseNtpResponse accepts packet longer than 48 bytes" $
-      assertBool "returns Just" (parseNtpResponse (BS.replicate 64 0) /= Nothing)
+      -- secs must be >= ntpToUnixOffset for Just, use a valid timestamp
+      assertBool "returns Just" (parseNtpResponse (BS.pack (replicate 40 0 ++ toBigEndian knownNtpSecs ++ toBigEndian 0 ++ replicate 16 0)) /= Nothing)
 
   , testCase "getWord32 reads 1 big-endian at offset 0" $
       getWord32 "\x00\x00\x00\x01" 0 @?= (1 :: Word32)

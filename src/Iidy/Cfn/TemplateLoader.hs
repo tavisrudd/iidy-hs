@@ -158,11 +158,14 @@ isAbsolute :: FilePath -> Bool
 isAbsolute ('/':_) = True
 isAbsolute _ = False
 
--- | Load file content as Text
+-- | Load file content as Text. Returns an error via 'fail' if the file
+-- contains invalid UTF-8 bytes.
 loadFileContent :: FilePath -> IO Text
 loadFileContent path = do
   bytes <- BS.readFile path
-  pure (TE.decodeUtf8 bytes)
+  case TE.decodeUtf8' bytes of
+    Right txt -> pure txt
+    Left err  -> fail $ "Invalid UTF-8 in template file " <> path <> ": " <> show err
 
 -- | Check template size limit for inline templates
 checkTemplateSize :: Text -> IO ()

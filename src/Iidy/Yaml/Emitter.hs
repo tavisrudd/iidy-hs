@@ -56,7 +56,7 @@ emitMultilineString s =
   let lns = T.splitOn "\n" s
       hasTrailingNewline = T.isSuffixOf "\n" s
       header = if hasTrailingNewline then "|" else "|-"
-      bodyLines = if hasTrailingNewline then init lns else lns
+      bodyLines = if hasTrailingNewline then safeInit lns else lns
       indented = map (\l -> if T.null l then "" else "  " <> l) bodyLines
   in header <> "\n" <> T.intercalate "\n" indented
 
@@ -212,10 +212,22 @@ emitMultilineStringIndented indent s =
   let lns = T.splitOn "\n" s
       hasTrailingNewline = T.isSuffixOf "\n" s
       header = if hasTrailingNewline then "|" else "|-"
-      bodyLines = if hasTrailingNewline then init lns else lns
+      bodyLines = if hasTrailingNewline then safeInit lns else lns
       indentStr = T.replicate indent " "
       indented = map (\l -> if T.null l then "" else indentStr <> l) bodyLines
   in header <> "\n" <> T.intercalate "\n" indented
+
+------------------------------------------------------------------------
+-- Helpers
+------------------------------------------------------------------------
+
+-- | Safe version of 'init' that returns '[]' on empty input instead of
+-- crashing. Uses reverse + drop + reverse to avoid calling the partial
+-- 'Prelude.init'. T.splitOn never returns an empty list, but we avoid
+-- partial functions as a matter of policy (CLAUDE.md: "No partial functions").
+safeInit :: [a] -> [a]
+safeInit [] = []
+safeInit xs = reverse (drop 1 (reverse xs))
 
 ------------------------------------------------------------------------
 -- CloudFormation tagged values

@@ -202,6 +202,23 @@ failureTests =
               || "Preprocess error" `T.isInfixOf` T.pack (show err)
               )
 
+  , testCase "local file with invalid UTF-8 bytes fails with descriptive error" $
+      withSystemTempDirectory "tpl-loader-utf8" $ \dir -> do
+        let fp = dir </> "bad-utf8.yaml"
+        -- Write bytes that are invalid UTF-8: 0xFF 0xFE are not valid UTF-8 lead bytes
+        BS.writeFile fp (BS.pack [0xFF, 0xFE, 0x00, 0x01])
+        result <- try @IOException $ loadCfnTemplate
+          (Just (T.pack fp))
+          Nothing
+          "dev"
+          Nothing
+        case result of
+          Right _ -> assertFailure "expected IOException for invalid UTF-8 file"
+          Left err -> do
+            let msg = T.pack (show err)
+            assertBool "error mentions 'Invalid UTF-8'"
+              ("Invalid UTF-8" `T.isInfixOf` msg)
+
   , testCase "render: template exceeding size limit fails" $
       withSystemTempDirectory "tpl-loader-huge" $ \dir -> do
         let fp = dir </> "huge.yaml"

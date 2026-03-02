@@ -5,7 +5,8 @@ module Iidy.Yaml.Imports.Loaders.S3
   , parseS3Uri
   ) where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (Exception, SomeException, throwIO, try)
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Aeson (Value(..))
 import qualified Data.Aeson as Aeson
@@ -21,6 +22,7 @@ import qualified Amazonka.S3 as S3
 import qualified Amazonka.S3.GetObject as GO
 import qualified Data.Conduit.List as CL
 
+import Iidy.Constants (httpMaxResponseBytes)
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..), ImportType(..))
 import Iidy.Yaml.Parser (parseYaml)
 import Iidy.Yaml.Resolution.Resolver (astToValueRaw)
@@ -61,13 +63,29 @@ loadS3Import awsEnv location = do
 -- S3 fetch
 ------------------------------------------------------------------------
 
+-- | Thrown when the S3 response body exceeds the maximum allowed size.
+data S3SizeLimitExceeded = S3SizeLimitExceeded Int
+  deriving stock (Show)
+
+instance Exception S3SizeLimitExceeded
+
+-- | Maximum S3 import body size, matching the HTTP loader limit.
+s3MaxResponseBytes :: Int
+s3MaxResponseBytes = httpMaxResponseBytes
+
 -- | Fetch an S3 object and return the raw bytes.
+-- Enforces the same size limit as the HTTP loader ('httpMaxResponseBytes')
+-- by checking accumulated bytes after streaming and throwing
+-- 'S3SizeLimitExceeded' if the limit is exceeded.
 fetchS3Object :: Amazonka.Env -> S3.BucketName -> S3.ObjectKey -> IO BS.ByteString
 fetchS3Object awsEnv bucket key = runResourceT $ do
   let req = GO.newGetObject bucket key
   resp <- Amazonka.send awsEnv req
   chunks <- AmazonkaData.sinkBody resp.body CL.consume
-  pure (BS.concat chunks)
+  let body = BS.concat chunks
+  if BS.length body > s3MaxResponseBytes
+    then liftIO $ throwIO (S3SizeLimitExceeded s3MaxResponseBytes)
+    else pure body
 
 ------------------------------------------------------------------------
 -- Content parsing

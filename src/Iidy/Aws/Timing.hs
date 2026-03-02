@@ -109,16 +109,18 @@ ntpRequest = BS.pack (0x23 : replicate 47 0)
 parseNtpResponse :: ByteString -> Maybe UTCTime
 parseNtpResponse bs
   | BS.length bs < 48 = Nothing
+  | secs < ntpToUnixOffset = Nothing  -- malformed: timestamp before Unix epoch
   | otherwise =
-      let secs = getWord32 bs 40
-          frac = getWord32 bs 44
-          -- NTP epoch offset: seconds between 1900-01-01 and 1970-01-01
-          ntpToUnixOffset :: Word32
-          ntpToUnixOffset = 2208988800
-          unixSecs = fromIntegral (secs - ntpToUnixOffset) :: Double
+      let unixSecs = fromIntegral (secs - ntpToUnixOffset) :: Double
           fracSecs = fromIntegral frac / fromIntegral (maxBound :: Word32) :: Double
           posixTime = realToFrac (unixSecs + fracSecs)
       in Just (posixSecondsToUTCTime posixTime)
+  where
+    secs = getWord32 bs 40
+    frac = getWord32 bs 44
+    -- NTP epoch offset: seconds between 1900-01-01 and 1970-01-01
+    ntpToUnixOffset :: Word32
+    ntpToUnixOffset = 2208988800
 
 -- | Read a big-endian Word32 from a ByteString at the given offset.
 getWord32 :: ByteString -> Int -> Word32
