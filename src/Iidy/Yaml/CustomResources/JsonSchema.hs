@@ -21,6 +21,8 @@ import qualified Data.Text as T
 import qualified Data.Vector as V
 import Text.Regex.TDFA ((=~))
 
+import Iidy.Constants (maxRegexPatternLength)
+
 -- | Validate a JSON value against a JSON Schema.
 -- Returns Left with an error message on validation failure.
 validateSchema :: Value -> Value -> Either Text ()
@@ -160,10 +162,12 @@ validateItems itemSchema items =
   ) (zip [0..] items)
 
 validatePattern :: Text -> Text -> Either Text ()
-validatePattern pat s =
-  if (T.unpack s =~ T.unpack pat :: Bool)
-    then Right ()
-    else Left $ "String does not match pattern: " <> pat
+validatePattern pat s
+  | T.length pat > maxRegexPatternLength =
+      Left $ "Regex pattern exceeds maximum length of "
+        <> T.pack (show maxRegexPatternLength) <> " characters"
+  | (T.unpack s =~ T.unpack pat :: Bool) = Right ()
+  | otherwise = Left $ "String does not match pattern: " <> pat
 
 validateMinimum :: Scientific -> Scientific -> Either Text ()
 validateMinimum minVal n

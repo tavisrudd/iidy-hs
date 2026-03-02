@@ -17,7 +17,7 @@ import qualified Amazonka
 import qualified Amazonka.CloudFormation.Types as CF
 
 import Iidy.Aws.Sts (getCallerIdentity)
-import Iidy.Cfn.Constants (defaultPreviousEventsCount)
+import Iidy.Constants (defaultPreviousEventsCount)
 import Iidy.Cfn.Context (CfnContext(..), deleteSuccessStates, deleteTerminalStatuses)
 import Iidy.Cfn.Operations.DescribeStack (convertStack, buildEventsDisplay, mkStandardPollConfig)
 import Iidy.Cfn.RequestBuilder (buildDeleteStackRequest)

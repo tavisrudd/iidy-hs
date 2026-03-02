@@ -1,15 +1,16 @@
 -- | Full import dispatcher.
 -- Routes all import types to the appropriate loader, with optional AWS env.
+-- Uses 'parseImportType' as a security gate to enforce the trust model
+-- (e.g. remote base templates cannot load local import types).
 module Iidy.Yaml.Imports.Loaders.Dispatch
   ( mkFullDispatcher
   ) where
 
-import qualified Data.Text as T
-
 import qualified Amazonka
 
 import Iidy.Yaml.Engine (LoadImportFn)
-import Iidy.Yaml.Imports.Types (ImportData, ImportError(..))
+import Iidy.Yaml.Imports.Types
+  ( ImportType(..), ImportData, ImportError(..), parseImportType )
 import Iidy.Yaml.Imports.Loaders.File (loadFileImport, loadFilehashImport)
 import Iidy.Yaml.Imports.Loaders.Env (loadEnvImport)
 import Iidy.Yaml.Imports.Loaders.Git (loadGitImport)
@@ -25,35 +26,33 @@ import Iidy.Yaml.Imports.Loaders.Cfn (loadCfnImport)
 ------------------------------------------------------------------------
 
 -- | Create a full import dispatcher.
+-- First classifies the import via 'parseImportType' (enforcing the security
+-- model: remote base templates cannot load local-only import types), then
+-- dispatches to the appropriate loader.
 -- When AWS env is 'Nothing', AWS import types return an error.
--- When AWS env is 'Just env', AWS imports are dispatched to their loaders.
 mkFullDispatcher :: Maybe Amazonka.Env -> LoadImportFn
-mkFullDispatcher mAwsEnv location baseLocation
-  -- Local import types
-  | "filehash-base64:" `T.isPrefixOf` location =
-      loadFilehashImport location baseLocation True
-  | "filehash:" `T.isPrefixOf` location =
-      loadFilehashImport location baseLocation False
-  | "env:" `T.isPrefixOf` location =
-      loadEnvImport location
-  | "git:" `T.isPrefixOf` location =
-      loadGitImport location baseLocation
-  | "random:" `T.isPrefixOf` location =
-      loadRandomImport location
-  | "http://" `T.isPrefixOf` location || "https://" `T.isPrefixOf` location =
-      loadHttpImport location
-  -- AWS import types
-  | "cfn:" `T.isPrefixOf` location =
-      withAwsEnv mAwsEnv $ \env -> loadCfnImport env location
-  | "ssm-path:" `T.isPrefixOf` location =
-      withAwsEnv mAwsEnv $ \env -> loadSsmPathImport env location
-  | "ssm:" `T.isPrefixOf` location =
-      withAwsEnv mAwsEnv $ \env -> loadSsmImport env location
-  | "s3:" `T.isPrefixOf` location =
-      withAwsEnv mAwsEnv $ \env -> loadS3Import env location
-  -- Default: file import
-  | otherwise =
-      loadFileImport location baseLocation
+mkFullDispatcher mAwsEnv location baseLocation =
+  case parseImportType location baseLocation of
+    Left err -> pure (Left err)
+    Right importType -> dispatch mAwsEnv importType location baseLocation
+
+-- | Dispatch a classified import type to its loader.
+dispatch
+  :: Maybe Amazonka.Env
+  -> ImportType
+  -> LoadImportFn
+dispatch mAwsEnv importType location baseLocation = case importType of
+  ImportFile          -> loadFileImport location baseLocation
+  ImportEnv           -> loadEnvImport location
+  ImportGit           -> loadGitImport location baseLocation
+  ImportRandom        -> loadRandomImport location
+  ImportFilehash      -> loadFilehashImport location baseLocation False
+  ImportFilehashBase64 -> loadFilehashImport location baseLocation True
+  ImportHttp          -> loadHttpImport location
+  ImportCfn           -> withAwsEnv mAwsEnv $ \env -> loadCfnImport env location
+  ImportSsm           -> withAwsEnv mAwsEnv $ \env -> loadSsmImport env location
+  ImportSsmPath       -> withAwsEnv mAwsEnv $ \env -> loadSsmPathImport env location
+  ImportS3            -> withAwsEnv mAwsEnv $ \env -> loadS3Import env location
 
 -- | Run an AWS loader if env is available, otherwise return an error.
 withAwsEnv

@@ -49,7 +49,7 @@ import qualified Amazonka.CloudFormation.DescribeChangeSet as DCS
 import Amazonka.CloudFormation.DescribeChangeSet (DescribeChangeSet(stackName))
 import qualified Amazonka.CloudFormation.ListChangeSets as LCS
 
-import Iidy.Cfn.Constants (defaultPreviousEventsCount)
+import Iidy.Constants (defaultPreviousEventsCount)
 import Iidy.Confirm (requestConfirmation)
 import Iidy.Aws.ClientReqToken (TokenInfo(..))
 import Iidy.Cfn.Context

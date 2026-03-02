@@ -15,7 +15,7 @@ import Data.Text (Text)
 import qualified Amazonka
 import qualified Amazonka.CloudFormation.Types as CF
 
-import Iidy.Cfn.Constants (defaultPreviousEventsCount)
+import Iidy.Constants (defaultPreviousEventsCount)
 import Iidy.Cfn.Context (CfnContext(..), allTerminalStatuses)
 import Iidy.Cfn.Operations.DescribeStack (convertStack, buildEventsDisplay, mkStandardPollConfig)
 import Iidy.Cfn.StackOperations

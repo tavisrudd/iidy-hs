@@ -17,6 +17,8 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import Text.Regex.TDFA ((=~))
+
+import Iidy.Constants (maxRegexPatternLength)
 import Iidy.Yaml.CustomResources.JsonSchema (validateSchema)
 import Iidy.Yaml.OValue
 
@@ -107,11 +109,15 @@ validateAllowedValues pd val = case pdAllowedValues pd of
 validateAllowedPattern :: ParamDef -> OValue -> Either Text ()
 validateAllowedPattern pd val = case pdAllowedPattern pd of
   Nothing -> Right ()
-  Just pat -> case val of
-    OString s
-      | (T.unpack s =~ T.unpack pat :: Bool) -> Right ()
-      | otherwise -> Left $ pdName pd <> ": value does not match AllowedPattern: " <> pat
-    _ -> Right ()
+  Just pat
+    | T.length pat > maxRegexPatternLength ->
+        Left $ pdName pd <> ": AllowedPattern exceeds maximum length of "
+          <> T.pack (show maxRegexPatternLength) <> " characters"
+    | otherwise -> case val of
+        OString s
+          | (T.unpack s =~ T.unpack pat :: Bool) -> Right ()
+          | otherwise -> Left $ pdName pd <> ": value does not match AllowedPattern: " <> pat
+        _ -> Right ()
 
 validateType :: ParamDef -> OValue -> Either Text ()
 validateType pd val = case pdType pd of

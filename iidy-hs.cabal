@@ -81,7 +81,7 @@ library
     Iidy.Aws.Sts
     Iidy.Aws.Timing
     Iidy.Cfn.Types
-    Iidy.Cfn.Constants
+    Iidy.Constants
     Iidy.Cfn.Status
     Iidy.Cfn.CommandMetadata
     Iidy.Cfn.Context
@@ -137,6 +137,7 @@ library
     , text
     , time
     , transformers
+    , http-client
     , http-conduit
     , process
     , uuid
