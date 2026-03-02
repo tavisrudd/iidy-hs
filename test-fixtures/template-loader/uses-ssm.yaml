@@ -1,0 +1,4 @@
+$imports:
+  dbPassword: ssm:/my/app/db-password
+AWSTemplateFormatVersion: "2010-09-09"
+Resources: {}

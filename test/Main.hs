@@ -40,6 +40,7 @@ import Test.StackOpsConverterTest (stackOpsConverterTests)
 import Test.TimingTest (timingTests)
 import Test.SecurityControlsTest (securityControlsTests)
 import Test.ParamsClientTest (paramsClientTests)
+import Test.TemplateLoaderTest (templateLoaderTests)
 
 main :: IO ()
 main = do
@@ -84,4 +85,5 @@ main = do
     , testGroup "Timing" timingTests
     , testGroup "SecurityControls" securityControlsTests
     , testGroup "ParamsClient"     paramsClientTests
+    , testGroup "TemplateLoader"   templateLoaderTests
     ]

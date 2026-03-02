@@ -1,0 +1,6 @@
+$defs:
+  foo: bar
+
+AWSTemplateFormatVersion: "2010-09-09"
+Result: !$ foo
+Resources: {}
