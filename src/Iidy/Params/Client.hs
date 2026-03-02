@@ -35,7 +35,7 @@ module Iidy.Params.Client
 import Control.Exception (SomeException, try)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Aeson (ToJSON(..), Value(..), (.=), object)
-import Data.Aeson.Encode.Pretty (encodePretty)
+import Data.Aeson.Encode.Pretty (encodePretty', defConfig, confIndent, Indent(..))
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
 import Data.Conduit (runConduit, (.|))
@@ -44,6 +44,7 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.List as List
 import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes, fromMaybe)
+import Data.Scientific (isInteger, coefficient)
 import Data.Ord (comparing)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -92,16 +93,15 @@ data ParamOutput = ParamOutput
   } deriving stock (Show, Eq)
 
 instance ToJSON ParamOutput where
-  toJSON po = object $ catMaybes
-    [ fmap ("Name" .=) (poName po)
-    , fmap ("Type" .=) (poType po)
-    , fmap ("Value" .=) (poValue po)
-    , fmap ("Version" .=) (poVersion po)
-    , fmap ("LastModifiedDate" .=) (poLastModifiedDate po)
-    , fmap ("ARN" .=) (poArn po)
-    , fmap ("DataType" .=) (poDataType po)
-    , fmap ("Tags" .=) (poTags po)
-    ]
+  toJSON po = object $
+    [ "Name"             .= poName po
+    , "Type"             .= poType po
+    , "Value"            .= poValue po
+    , "Version"          .= poVersion po
+    , "LastModifiedDate" .= poLastModifiedDate po
+    , "ARN"              .= poArn po
+    , "DataType"         .= poDataType po
+    ] ++ catMaybes [ fmap ("Tags" .=) (poTags po) ]
 
 -- | Serializable representation of an SSM parameter history entry.
 data ParamHistoryOutput = ParamHistoryOutput
@@ -118,16 +118,17 @@ data ParamHistoryOutput = ParamHistoryOutput
   } deriving stock (Show, Eq)
 
 instance ToJSON ParamHistoryOutput where
-  toJSON pho = object $ catMaybes
-    [ fmap ("Name" .=) (phoName pho)
-    , fmap ("Type" .=) (phoType pho)
-    , fmap ("KeyId" .=) (phoKeyId pho)
-    , fmap ("LastModifiedDate" .=) (phoLastModifiedDate pho)
-    , fmap ("LastModifiedUser" .=) (phoLastModifiedUser pho)
+  toJSON pho = object $
+    [ "Name"             .= phoName pho
+    , "Type"             .= phoType pho
+    , "LastModifiedDate" .= phoLastModifiedDate pho
+    , "LastModifiedUser" .= phoLastModifiedUser pho
+    , "Value"            .= phoValue pho
+    , "Version"          .= phoVersion pho
+    , "DataType"         .= phoDataType pho
+    ] ++ catMaybes
+    [ fmap ("KeyId" .=) (phoKeyId pho)
     , fmap ("Description" .=) (phoDescription pho)
-    , fmap ("Value" .=) (phoValue pho)
-    , fmap ("Version" .=) (phoVersion pho)
-    , fmap ("DataType" .=) (phoDataType pho)
     , fmap ("Tags" .=) (phoTags pho)
     ]
 
@@ -140,11 +141,11 @@ data SimpleHistoryCurrent = SimpleHistoryCurrent
   } deriving stock (Show, Eq)
 
 instance ToJSON SimpleHistoryCurrent where
-  toJSON shc = object $ catMaybes
-    [ fmap ("Value" .=) (shcValue shc)
-    , fmap ("LastModifiedDate" .=) (shcLastModifiedDate shc)
-    , fmap ("LastModifiedUser" .=) (shcLastModifiedUser shc)
-    , Just ("Message" .= shcMessage shc)
+  toJSON shc = object
+    [ "Value"            .= shcValue shc
+    , "LastModifiedDate" .= shcLastModifiedDate shc
+    , "LastModifiedUser" .= shcLastModifiedUser shc
+    , "Message"          .= shcMessage shc
     ]
 
 data SimpleHistoryPrevious = SimpleHistoryPrevious
@@ -154,10 +155,10 @@ data SimpleHistoryPrevious = SimpleHistoryPrevious
   } deriving stock (Show, Eq)
 
 instance ToJSON SimpleHistoryPrevious where
-  toJSON shp = object $ catMaybes
-    [ fmap ("Value" .=) (shpValue shp)
-    , fmap ("LastModifiedDate" .=) (shpLastModifiedDate shp)
-    , fmap ("LastModifiedUser" .=) (shpLastModifiedUser shp)
+  toJSON shp = object
+    [ "Value"            .= shpValue shp
+    , "LastModifiedDate" .= shpLastModifiedDate shp
+    , "LastModifiedUser" .= shpLastModifiedUser shp
     ]
 
 data SimpleHistory = SimpleHistory
@@ -233,7 +234,7 @@ formatUtcTime = T.pack . iso8601Show
 
 -- | Serialize a value as pretty-printed JSON text.
 formatAsJson :: ToJSON a => a -> Text
-formatAsJson = decodeUtf8 . LBS.toStrict . encodePretty
+formatAsJson = decodeUtf8 . LBS.toStrict . encodePretty' (defConfig { confIndent = Spaces 2 })
 
 -- | Serialize a value as YAML text.
 -- Uses a simple Aeson Value -> YAML conversion since the project
@@ -244,13 +245,15 @@ formatAsYaml = valueToYaml . toJSON
 -- | Convert an Aeson Value to YAML text.
 -- Produces output compatible with serde_yaml (Rust).
 valueToYaml :: Value -> Text
-valueToYaml val = renderYaml 0 val <> "\n"
+valueToYaml val = "---\n" <> renderYaml 0 val <> "\n"
 
 renderYaml :: Int -> Value -> Text
 renderYaml _ Null          = "null"
 renderYaml _ (Bool True)   = "true"
 renderYaml _ (Bool False)  = "false"
-renderYaml _ (Number n)    = T.pack (show n)
+renderYaml _ (Number n)
+  | isInteger n = T.pack (show (coefficient n))
+  | otherwise   = T.pack (show n)
 renderYaml _ (String s)    = yamlQuoteString s
 renderYaml indent (Array arr)
   | null arr  = "[]"
@@ -489,33 +492,33 @@ paramGetHistory awsEnv args = do
     Right entries
       | null entries -> pure $ Left $ "No history found for parameter '" <> args.pgaPath <> "'"
       | otherwise -> do
-          -- Sort by last_modified_date ascending
           let sorted = List.sortBy (comparing historyDate) entries
-              current = last' sorted
-              previous = init' sorted
-          -- Fetch tags for the parameter (current entry)
-          tagsResult <- listParamTags awsEnv args.pgaPath
-          case tagsResult of
-            Left err -> pure (Left err)
-            Right tags -> case args.pgaFormat of
-              ParamFormatRaw -> do
-                let msg = fromMaybe "" (Map.lookup messageTag tags)
-                    sh = SimpleHistory
-                      { shCurrent = SimpleHistoryCurrent
-                          { shcValue            = current ^. SSMPH.parameterHistory_value
-                          , shcLastModifiedDate = fmap formatUtcTime (current ^. SSMPH.parameterHistory_lastModifiedDate)
-                          , shcLastModifiedUser = current ^. SSMPH.parameterHistory_lastModifiedUser
-                          , shcMessage          = msg
+          case reverse sorted of
+            [] -> pure $ Left $ "No history found for parameter '" <> args.pgaPath <> "'"
+            (current : rest) -> do
+              let previous = reverse rest
+              tagsResult <- listParamTags awsEnv args.pgaPath
+              case tagsResult of
+                Left err -> pure (Left err)
+                Right tags -> case args.pgaFormat of
+                  ParamFormatRaw -> do
+                    let msg = fromMaybe "" (Map.lookup messageTag tags)
+                        sh = SimpleHistory
+                          { shCurrent = SimpleHistoryCurrent
+                              { shcValue            = current ^. SSMPH.parameterHistory_value
+                              , shcLastModifiedDate = fmap formatUtcTime (current ^. SSMPH.parameterHistory_lastModifiedDate)
+                              , shcLastModifiedUser = current ^. SSMPH.parameterHistory_lastModifiedUser
+                              , shcMessage          = msg
+                              }
+                          , shPrevious = map mkPrevious previous
                           }
-                      , shPrevious = map mkPrevious previous
-                      }
-                pure $ Right $ formatAsYaml sh
-              fmt -> do
-                let fh = FullHistory
-                      { fhCurrent  = withHistoryTags tags (paramHistoryOutputFromHistory current)
-                      , fhPrevious = map paramHistoryOutputFromHistory previous
-                      }
-                pure $ Right $ formatWith fmt fh
+                    pure $ Right $ formatAsYaml sh
+                  fmt -> do
+                    let fh = FullHistory
+                          { fhCurrent  = withHistoryTags tags (paramHistoryOutputFromHistory current)
+                          , fhPrevious = map paramHistoryOutputFromHistory previous
+                          }
+                    pure $ Right $ formatWith fmt fh
   where
     mkPrevious :: SSM.ParameterHistory -> SimpleHistoryPrevious
     mkPrevious ph = SimpleHistoryPrevious
@@ -568,16 +571,3 @@ formatWith ParamFormatJson x = formatAsJson x
 formatWith ParamFormatYaml x = formatAsYaml x
 formatWith ParamFormatRaw  _ = ""  -- Should not be called with Raw
 
--- | Safe last that returns first element if list is singleton or more.
--- Precondition: list is non-empty.
-last' :: [a] -> a
-last' []     = errorWithoutStackTrace "last': empty list"
-last' [x]    = x
-last' (_:xs) = last' xs
-
--- | Safe init that returns empty list if list is singleton.
--- Precondition: list is non-empty.
-init' :: [a] -> [a]
-init' []     = []
-init' [_]    = []
-init' (x:xs) = x : init' xs
