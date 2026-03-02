@@ -15,15 +15,21 @@
 --   * @\/iidy\/disable-template-approval@ -- if the value is @\"true\"@
 --     (case-insensitive) and 'saApprovedTemplateLocation' is set, clears it.
 --
--- All errors are swallowed silently so that missing IAM permissions do not
--- block normal usage.
+-- SSM errors are handled as follows:
+--
+--   * If no parameters exist under @\/iidy\/@ (the common case), the call
+--     returns an empty list and 'StackArgs' is returned unchanged — no
+--     warning is emitted.
+--   * Other AWS errors (auth, network, throttling, etc.) emit a warning to
+--     stderr but do not fail the operation.
+--   * Async exceptions are never caught.
 module Iidy.Cfn.GlobalConfig
   ( applyGlobalConfiguration
     -- * Pure helpers (exported for testing)
   , applyParams
   ) where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (try)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Conduit (runConduit, (.|))
 import qualified Data.Conduit.List as CL
@@ -46,15 +52,24 @@ import Iidy.Cfn.Types (StackArgs(..))
 -- | Apply global iidy configuration from SSM Parameter Store.
 --
 -- Fetches all parameters under @\/iidy\/@ with decryption enabled and
--- applies recognised ones to the supplied 'StackArgs'.  Any exception
--- (network, permissions, etc.) is caught and silently ignored so that
--- callers without SSM access are not blocked.
+-- applies recognised ones to the supplied 'StackArgs'.
+--
+-- Error handling:
+--
+--   * If no parameters exist under the path, an empty list is returned
+--     and 'StackArgs' passes through unchanged (no warning).
+--   * AWS service errors (auth, throttling, network, etc.) emit a
+--     warning to stderr but do not fail — the original 'StackArgs' is
+--     returned.
+--   * Async exceptions are /not/ caught.
 applyGlobalConfiguration :: Amazonka.Env -> StackArgs -> IO StackArgs
 applyGlobalConfiguration awsEnv stackArgs = do
-  result <- try @SomeException (fetchParametersByPath awsEnv "/iidy/")
+  result <- try @Amazonka.Error (fetchParametersByPath awsEnv "/iidy/")
   case result of
-    Left _ex ->
-      -- Silently continue -- missing permissions or SSM unavailable
+    Left ex -> do
+      hPutStrLn stderr $
+        "Warning: failed to load global config from SSM: "
+        <> formatAwsError ex
       pure stackArgs
     Right params ->
       applyParams stackArgs params
@@ -101,6 +116,15 @@ applyParam sa name value =
 ------------------------------------------------------------------------
 -- Internal helpers
 ------------------------------------------------------------------------
+
+-- | Format an 'Amazonka.Error' for a human-readable warning message.
+formatAwsError :: Amazonka.Error -> String
+formatAwsError (Amazonka.ServiceError se) =
+  let Amazonka.ErrorCode code = se.code
+      msg = maybe "" (\m -> ": " <> T.unpack (Amazonka.fromErrorMessage m))
+                      se.message
+  in  T.unpack code <> msg
+formatAwsError err = show err
 
 -- | Fetch all parameters under the given SSM path (non-recursive, with
 -- decryption).  Paginates through all pages to avoid silent truncation
