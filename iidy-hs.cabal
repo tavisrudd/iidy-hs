@@ -206,6 +206,7 @@ test-suite iidy-hs-test
     Test.StackOpsConverterTest
     Test.TimingTest
     Test.SecurityControlsTest
+    Test.ParamsClientTest
   default-language: GHC2021
   default-extensions:
     LambdaCase
@@ -221,6 +222,8 @@ test-suite iidy-hs-test
     , amazonka-cloudformation
     , amazonka-core
     , amazonka-s3
+    , amazonka-ssm
+    , microlens
     , bytestring
     , http-types
     , containers

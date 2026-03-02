@@ -11,6 +11,10 @@ module Iidy.Params.Client
   , paramSet
   , paramGetByPath
   , paramGetHistory
+    -- * Pure helpers (exported for testing)
+  , textToParameterType
+  , formatParam
+  , formatHistoryEntry
   ) where
 
 import Control.Exception (SomeException, try)

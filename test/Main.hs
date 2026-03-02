@@ -39,6 +39,7 @@ import Test.DescribeStackTest (describeStackTests)
 import Test.StackOpsConverterTest (stackOpsConverterTests)
 import Test.TimingTest (timingTests)
 import Test.SecurityControlsTest (securityControlsTests)
+import Test.ParamsClientTest (paramsClientTests)
 
 main :: IO ()
 main = do
@@ -82,4 +83,5 @@ main = do
     , testGroup "StackOpsConverters" stackOpsConverterTests
     , testGroup "Timing" timingTests
     , testGroup "SecurityControls" securityControlsTests
+    , testGroup "ParamsClient"     paramsClientTests
     ]
