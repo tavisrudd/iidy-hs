@@ -3,6 +3,8 @@ module Test.PropertyTest (propertyTests) where
 
 import Control.Exception (SomeException, evaluate, try)
 import Data.Aeson (Value(..))
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Key as AesonKey
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL
 import Data.Char (isDigit, isLower)
@@ -10,6 +12,7 @@ import Data.List (nubBy, sortBy)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import qualified Data.Vector as V
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.QuickCheck (testProperty)
 import Test.QuickCheck hiding (Failure, Success)
@@ -73,6 +76,25 @@ genNonObjectValue = oneof
   , Number . fromIntegral <$> (arbitrary :: Gen Int)
   , String <$> genSafeText
   ]
+
+-- | Alpha-only key text, valid as a JMESPath identifier (no leading digit)
+genAlphaKey :: Gen T.Text
+genAlphaKey = T.pack <$> listOf1 (elements (['a'..'z'] <> ['A'..'Z']))
+
+-- | Simple scalar Values for JMESPath comparison tests
+genScalarValue :: Gen Value
+genScalarValue = oneof
+  [ pure Null
+  , Bool <$> arbitrary
+  , Number . fromIntegral <$> (arbitrary :: Gen Int)
+  , String <$> genSafeText
+  ]
+
+-- | Non-empty Aeson Array for indexing tests
+genNonEmptyArray :: Gen Value
+genNonEmptyArray = do
+  elems <- listOf1 genScalarValue
+  pure (Array (V.fromList elems))
 
 -- | CFN-like status strings for meaningful coverage
 genCfnLikeText :: Gen T.Text
@@ -173,9 +195,24 @@ propertyTests =
   , testProperty "snakeCase: lowercase + underscores only" prop_snakeCase_format
   , testProperty "kebabCase: lowercase + hyphens only" prop_kebabCase_format
   , testProperty "toLowerCase is idempotent" prop_toLowerCase_idempotent
+  -- Handlebars correctness
+  , testProperty "toUpperCase is idempotent" prop_toUpperCase_idempotent
+  , testProperty "trim is idempotent" prop_trim_idempotent
+  , testProperty "sha256 is deterministic" prop_sha256_deterministic
+  , testProperty "toJson produces parseable JSON" prop_toJson_parseable
+  , testProperty "concat is string concatenation" prop_concat_correctness
+  , testProperty "length of string matches T.length" prop_length_correctness
   -- JMESPath
   , testProperty "JMESPath @ is identity" prop_jmespath_identity
   , testProperty "JMESPath field on non-object returns Null" prop_jmespath_field_nonobject
+  -- JMESPath correctness
+  , testProperty "JMESPath pipe identity: @|@ == @" prop_jmespath_pipe_identity
+  , testProperty "JMESPath field access on object returns value" prop_jmespath_field_on_object
+  , testProperty "JMESPath [0] on non-empty array returns first element" prop_jmespath_index_inbounds
+  , testProperty "JMESPath [999] on small array returns Null" prop_jmespath_index_outofbounds
+  , testProperty "JMESPath [*] on array returns same array" prop_jmespath_wildcard_array
+  , testProperty "JMESPath @==@ returns true for any value" prop_jmespath_comparison_reflexivity
+  , testProperty "JMESPath multi-select hash has expected keys" prop_jmespath_multiselect_keys
   -- JSON Schema
   , testProperty "Bool True schema accepts all values" prop_schema_true_accepts_all
   , testProperty "Bool False schema rejects all values" prop_schema_false_rejects_all
@@ -290,6 +327,50 @@ prop_toLowerCase_idempotent = forAll genSafeText $ \t ->
     Right (String r1) -> callHelper "toLowerCase" [String r1] === Right (String r1)
     other -> counterexample ("Unexpected: " <> show other) (property False)
 
+-- | Applying toUpperCase twice gives the same result as once
+prop_toUpperCase_idempotent :: Property
+prop_toUpperCase_idempotent = forAll genSafeText $ \t ->
+  case callHelper "toUpperCase" [String t] of
+    Right (String r1) -> callHelper "toUpperCase" [String r1] === Right (String r1)
+    other -> counterexample ("Unexpected: " <> show other) (property False)
+
+-- | trim applied twice gives the same result as once
+prop_trim_idempotent :: Property
+prop_trim_idempotent = forAll genSafeText $ \t ->
+  case callHelper "trim" [String t] of
+    Right (String r1) -> callHelper "trim" [String r1] === Right (String r1)
+    other -> counterexample ("Unexpected: " <> show other) (property False)
+
+-- | sha256 is deterministic: same input always produces same output
+prop_sha256_deterministic :: Property
+prop_sha256_deterministic = forAll genSafeText $ \t ->
+  let r1 = callHelper "sha256" [String t]
+      r2 = callHelper "sha256" [String t]
+  in counterexample ("sha256 not deterministic for: " <> T.unpack t) $
+       r1 === r2
+
+-- | toJson always produces valid, parseable JSON
+prop_toJson_parseable :: Property
+prop_toJson_parseable = forAll (resize 3 arbitrary) $ \(v :: Value) ->
+  case callHelper "toJson" [v] of
+    Right (String result) ->
+      counterexample ("toJson produced unparseable JSON: " <> T.unpack result) $
+        case Aeson.decode (BL.fromStrict (TE.encodeUtf8 result)) :: Maybe Value of
+          Just _  -> property True
+          Nothing -> property False
+    other -> counterexample ("Unexpected: " <> show other) (property False)
+
+-- | concat of two strings equals their concatenation
+prop_concat_correctness :: Property
+prop_concat_correctness =
+  forAll ((,) <$> genSafeText <*> genSafeText) $ \(a, b) ->
+    callHelper "concat" [String a, String b] === Right (String (a <> b))
+
+-- | length of a string matches T.length
+prop_length_correctness :: Property
+prop_length_correctness = forAll genSafeText $ \t ->
+  callHelper "length" [String t] === Right (String (T.pack (show (T.length t))))
+
 ------------------------------------------------------------------------
 -- JMESPath properties
 ------------------------------------------------------------------------
@@ -303,6 +384,61 @@ prop_jmespath_identity = forAll (resize 4 arbitrary) $ \(v :: Value) ->
 prop_jmespath_field_nonobject :: Property
 prop_jmespath_field_nonobject = forAll genNonObjectValue $ \v ->
   applyJmesPath "somefield" v === Right Null
+
+-- | Pipe identity: "@|@" evaluates to the same result as "@"
+prop_jmespath_pipe_identity :: Property
+prop_jmespath_pipe_identity = forAll genScalarValue $ \v ->
+  applyJmesPath "@|@" v === applyJmesPath "@" v
+
+-- | Field access on an Object containing that key returns the value
+prop_jmespath_field_on_object :: Property
+prop_jmespath_field_on_object =
+  forAll ((,) <$> genAlphaKey <*> genScalarValue) $ \(k, v) ->
+    let obj = Object (KM.singleton (AesonKey.fromText k) v)
+    in counterexample ("key=" <> T.unpack k <> " val=" <> show v) $
+         applyJmesPath k obj === Right v
+
+-- | [0] on a non-empty array returns the first element
+prop_jmespath_index_inbounds :: Property
+prop_jmespath_index_inbounds = forAll genNonEmptyArray $ \arr ->
+  case arr of
+    Array xs ->
+      let first = xs V.! 0
+      in counterexample ("array=" <> show arr) $
+           applyJmesPath "[0]" arr === Right first
+    _ -> property True  -- should not happen
+
+-- | [999] on a small array always returns Null (out of bounds)
+prop_jmespath_index_outofbounds :: Property
+prop_jmespath_index_outofbounds =
+  forAll (resize 5 genNonEmptyArray) $ \arr ->
+    counterexample ("array=" <> show arr) $
+      applyJmesPath "[999]" arr === Right Null
+
+-- | [*] on an array returns the same array (wildcard projection via identity)
+prop_jmespath_wildcard_array :: Property
+prop_jmespath_wildcard_array = forAll (V.fromList <$> listOf genScalarValue) $ \xs ->
+  applyJmesPath "[*]" (Array xs) === Right (Array xs)
+
+-- | "@==@" always returns Bool True for any value
+prop_jmespath_comparison_reflexivity :: Property
+prop_jmespath_comparison_reflexivity = forAll genScalarValue $ \v ->
+  counterexample ("value=" <> show v) $
+    applyJmesPath "@==@" v === Right (Bool True)
+
+-- | "{a: @, b: @}" result has exactly the keys "a" and "b"
+prop_jmespath_multiselect_keys :: Property
+prop_jmespath_multiselect_keys = forAll genScalarValue $ \v ->
+  case applyJmesPath "{a: @, b: @}" v of
+    Right (Object obj) ->
+      let keys = map AesonKey.toText (KM.keys obj)
+      in counterexample ("keys=" <> show keys) $
+           conjoin
+             [ counterexample "missing key 'a'" $ elem "a" keys === True
+             , counterexample "missing key 'b'" $ elem "b" keys === True
+             , counterexample "extra keys present" $ length keys === 2
+             ]
+    other -> counterexample ("Expected Object, got: " <> show other) (property False)
 
 ------------------------------------------------------------------------
 -- JSON Schema properties
