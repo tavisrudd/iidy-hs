@@ -704,6 +704,199 @@ parser boundary rather than classifying them by message text downstream.
 
 ---
 
+## 17. `try @SomeException` Used Pervasively at AWS Boundaries (Rating: 7/10)
+
+Finding #7 identified this pattern in `GlobalConfig`. But the same `try @SomeException` catch-all
+appears in **15+ call sites** across the codebase:
+
+```haskell
+-- Iidy.Params.Client (4 sites: paramGet, paramSet, paramGetByPath, paramGetHistory)
+result <- try @SomeException $ runResourceT $ ...
+
+-- Iidy.Params.Review (3 sites: fetchPending, putParameter, deleteParameter)
+result <- try @SomeException $ runResourceT $ Amazonka.send awsEnv req
+
+-- Iidy.Cfn.Operations.TemplateApproval (4 sites: s3ObjectExists, uploadToS3, downloadFromS3, deleteFromS3)
+result <- try @SomeException $ runResourceT $ Amazonka.send awsEnv req
+
+-- Iidy.Yaml.Imports.Loaders.* (5 sites: Cfn, Git, Http, Ssm, SsmPath, S3)
+result <- try @SomeException (fetchS3Object awsEnv bucket key)
+```
+
+`SomeException` catches **everything**: `ThreadKilled`, `StackOverflow`, `HeapOverflow`,
+`BlockedIndefinitelyOnMVar`. These are async exceptions that indicate the runtime is in
+trouble. Catching them converts an unrecoverable situation into a misleading error message
+like `"SSM GetParameter error for /path: thread killed"`.
+
+The PRD `08-aws-integration.md` US-08-007 specifies: "AWS service error responses are
+extracted from the SDK exception type." The `try @SomeException` pattern throws away the
+exception type information, making it impossible to extract service error details.
+
+**The problem:** A systemic pattern at every AWS boundary that catches async exceptions,
+converts structured SDK errors into opaque strings, and makes it impossible to distinguish
+between "S3 returned 403" and "the runtime is out of memory."
+
+**Russell rating:** 7 -- "The obvious use is wrong." `try @SomeException` is the obvious
+way to catch AWS errors if you haven't learned about async exception safety. The correct
+thing (`try @Amazonka.Error` or a targeted exception type) is non-obvious.
+
+**Fix:** Replace `try @SomeException` with `try @Amazonka.Error` at all AWS call sites.
+For non-AWS IO (Git subprocess, HTTP client), use `try @IOException`. Never catch
+`SomeException` -- it masks runtime failures that must propagate.
+
+---
+
+## 18. requestConfirmation Returns Bool But Exit Code Semantics Are Caller-Dependent (Rating: 5/10)
+
+```haskell
+-- Iidy.Confirm
+requestConfirmation :: String -> IO Bool
+requestConfirmation prompt = do
+  ...
+  pure $ isConfirmation answer
+```
+
+The shared confirmation module returns a `Bool`. But the **meaning** of `False` differs
+by caller:
+
+| Caller                        | On `False` | Exit Code | Meaning        |
+|-------------------------------|------------|-----------|----------------|
+| `delete-stack`                | Decline    | 130       | User cancelled |
+| `exec-changeset`             | Decline    | 130       | User cancelled |
+| `update-stack --changeset`   | Decline    | 130       | User cancelled |
+| `template-approval review`   | Reject     | 1         | Deliberate rejection |
+| `param review`               | Decline    | 130       | User cancelled |
+
+The PRD `12-cross-cutting.md` US-12-007 specifies exit code 130 for all confirmation
+declines. But `10-template-approval.md` specifies exit code 1 for template-approval
+rejection because "rejection is a deliberate review decision, not a cancellation."
+
+The code confirms this split: `template-approval review` returns `Right 1` on decline.
+Every other caller returns exit 130. A `Bool` return type does not distinguish between
+"user cancelled an operation" and "reviewer made a deliberate rejection decision."
+
+**The problem:** The return type hides a semantic distinction that affects the process
+exit code. A caller reading `requestConfirmation` sees a `Bool` and has no indication
+that some callers treat `False` as exit 130 and others as exit 1.
+
+**Russell rating:** 5 -- "Do it right or it breaks at runtime." The caller must read
+the PRD to know which exit code to use for `False`. The type does not help.
+
+**Fix:** Return a sum type: `data ConfirmResult = Confirmed | Cancelled | Rejected`.
+Or: have `requestConfirmation` take a parameter indicating whether decline is a
+cancellation (130) or a rejection (1), and return the exit code directly. The caller
+should not need to remember the exit code convention.
+
+---
+
+## 19. `param get --format json` Accepted but Silently Ignored (Rating: 8/10)
+
+The CLI parser validates `--format` for `param get`:
+
+```haskell
+paramFormatReader :: ReadM ParamFormat
+paramFormatReader = eitherReader $ \s -> case map toLower s of
+  "simple" -> Right ParamFormatRaw
+  "json"   -> Right ParamFormatJson
+  "yaml"   -> Right ParamFormatYaml
+  _        -> Left ("Unknown format: " ++ s)
+```
+
+This produces a well-typed `ParamFormat` value. But the command implementation ignores it:
+
+```haskell
+paramGet :: Amazonka.Env -> ParamGetArgs -> IO (Either Text Text)
+paramGet awsEnv args = do
+  result <- fetchParam awsEnv args.pgaPath args.pgaDecrypt
+  case result of
+    Left ex  -> pure $ Left $ ...
+    Right val -> pure (Right val)
+```
+
+Every format produces the same raw text output. A CI pipeline that passes
+`--format json` expecting `{"Name":"/app/key","Value":"secret","Type":"SecureString",...}`
+gets the bare string `secret` instead. The pipeline's JSON parser fails. The user sees
+a JSON parse error and blames their tooling, not iidy.
+
+The PRD `09-ssm-params.md` US-09-002 specifies: "`--format json` prints a JSON object
+with PascalCase fields matching the Rust `ParamOutput` struct: `Name`, `Type`, `Value`,
+`Version`, `LastModifiedDate`, `ARN`, `DataType`, `Tags`." The PRD then notes this is a
+"known divergence" -- but the divergence is not visible to the user. The flag is accepted,
+the value is validated, and the behavior is silently wrong.
+
+The same issue applies to `param get-by-path` and `param get-history` non-simple formats.
+
+**The problem:** The CLI parser creates the illusion that a feature works. A flag is
+accepted, validated, and then silently ignored. This is worse than rejecting the flag --
+at least a rejection tells the user it's not supported.
+
+**Russell rating:** 8 -- "The compiler/type system won't let you get it right." The
+type system sees a `ParamFormat` ADT and everything compiles cleanly. The bug is that
+the command handler never inspects the format value. No compile-time signal, no runtime
+warning.
+
+**Fix:** Either implement the structured output formats, or reject `json` and `yaml`
+at the CLI parser level with: `"Format 'json' is not yet supported for param get. Use
+'simple'."` A validated-but-ignored flag is the worst of both worlds.
+
+---
+
+## 20. template-approval --context Flag Accepted but Never Applied (Rating: 6/10)
+
+```haskell
+-- CLI parser accepts --context with default 500
+option auto
+  ( long "context"
+  <> value 500
+  <> ...
+  )
+```
+
+The value is threaded through to the review function and stored in `tdContextLines`:
+
+```haskell
+emit $ OdTemplateDiff TemplateDiff
+  { tdDiffOutput   = diffOutput
+  , tdContextLines = contextLines    -- stored but never used to trim
+  , tdHasChanges   = hasChanges
+  }
+```
+
+But `generateDiff` produces the full diff unconditionally:
+
+```haskell
+generateDiff :: Text -> Text -> Text
+generateDiff old new
+  | old == new = ""
+  | otherwise =
+      let oldLines = T.lines old
+          newLines = T.lines new
+          ...  -- full set-theoretic diff, no context trimming
+```
+
+A reviewer passing `--context 3` to see a focused diff gets the full 500-line template
+diff. The flag is parsed, validated, stored in the output record, serialized to JSON --
+and never used to modify the output.
+
+The PRD `10-template-approval.md` documents this: "the `contextLines` value is stored
+but not used to trim output. Tests for context-line behavior are deferred." But the
+user doesn't read the PRD. They read `--help`, see `--context`, and expect it to work.
+
+**The problem:** A documented feature flag is wired into the CLI, threaded through the
+pipeline, stored in the output type, and serialized to JSON -- but has no effect on
+the actual diff output. The entire pipeline for this flag is plumbing with no payload.
+
+**Russell rating:** 6 -- "The name tells you nothing." `--context 3` tells you "3 lines
+of context." The actual behavior is "all lines of context, always." The flag name actively
+misleads.
+
+**Fix:** Either implement context-line trimming in `generateDiff` (take the `Int`
+parameter and trim the output), or remove the flag from the CLI parser and emit a helpful
+error: `"--context is not yet implemented; full diff is shown."` Accepted-but-ignored
+flags erode user trust.
+
+---
+
 ## Summary
 
 | #  | Finding                                                | Rating | Scale Description                                  |
@@ -713,16 +906,20 @@ parser boundary rather than classifying them by message text downstream.
 | 6  | TemplateLoader uses `fail` for recoverable errors      | 10     | Read the implementation or you'll get it wrong      |
 | 10 | Unknown YAML keys silently ignored                     | 8      | The compiler/type system won't let you get it right |
 | 16 | Error classification via string matching               | 8      | The compiler/type system won't let you get it right |
+| 19 | `param get --format json` accepted but silently ignored| 8      | The compiler/type system won't let you get it right |
 | 1  | mapOnFailure silently drops invalid values             | 7      | The obvious use is wrong                            |
 | 3  | getStrList silently drops non-string elements           | 7      | The obvious use is wrong                            |
 | 7  | GlobalConfig silently swallows all errors               | 7      | The obvious use is wrong                            |
 | 8  | Terminal statuses are stringly typed                    | 7      | The obvious use is wrong                            |
 | 11 | Dot-path query returns ONull on miss                   | 7      | The obvious use is wrong                            |
+| 17 | `try @SomeException` used at 15+ AWS boundaries        | 7      | The obvious use is wrong                            |
 | 5  | oIsTruthy: JavaScript-grade truthiness                 | 6      | The name tells you nothing                          |
 | 9  | PollConfig: 8 callbacks, no contracts                  | 6      | The name tells you nothing                          |
 | 12 | Three incompatible error presentation paths            | 6      | The name tells you nothing                          |
 | 15 | --format has three different value domains              | 6      | The name tells you nothing                          |
+| 20 | template-approval --context accepted but never applied | 6      | The name tells you nothing                          |
 | 13 | --environment defaults to "development"                | 5      | Do it right or it breaks at runtime                 |
+| 18 | requestConfirmation Bool hides exit-code semantics     | 5      | Do it right or it breaks at runtime                 |
 | 14 | oValuesEqual is just (==)                              | 4      | The name tells you how to use it                    |
 
 ---
