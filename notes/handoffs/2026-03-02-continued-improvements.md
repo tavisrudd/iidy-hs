@@ -180,17 +180,23 @@ The decision on whether to proceed with these should be based on:
 
 ## Progress
 
-| Chunk | Status | Commit   | Notes                                                      |
-|-------|--------|----------|------------------------------------------------------------|
-| A     | DONE   | `89a37d5`| 24 error content tests — full 51-fixture coverage          |
-| B     | DONE   | `42fc1f8`| 8 edge-case property tests — found oIsTruthy bug!          |
-| B+    | DONE   | `4ea287e`| Fix: zero should be falsy (n /= 0), matching Rust          |
-| C     | TODO   |          | OnFailure + Capability enums                               |
-| D     | TODO   |          | TemplateLoader fail -> Either                              |
-| E     | TODO   |          | Snapshot test gap audit                                    |
-| F     | TODO   |          | Truthiness table docs (more relevant now after bug fix)    |
+| Chunk | Status | Commit    | Notes                                                      |
+|-------|--------|-----------|------------------------------------------------------------|
+| A     | DONE   | `89a37d5` | 24 error content tests — full 51-fixture coverage          |
+| B     | DONE   | `42fc1f8` | 8 edge-case property tests — found oIsTruthy bug!          |
+| B+    | DONE   | `4ea287e` | Fix: zero should be falsy (n /= 0), matching Rust          |
+| B++   | DONE   | `e84296c` | Cross-reference comments on all 3 truthiness functions     |
+| C     | DONE   | `8afb310` | OnFailure + Capability ADTs, 13 new tests                  |
+| D     | DONE   | `a4d77a5` | TemplateLoader fail → Either, 11 files changed, 2 new tests|
+| E     | DONE   | `a8526a7` | Snapshot gap audit (research) — `notes/2026-03-02-snapshot-gap-audit.md` |
+| F     | DONE   | `cc835d1` | Truthiness rules doc — `notes/truthiness-rules.md`         |
+| —     | DONE   | `a8526a7` | Rusty Russell API review (20 findings, -10 to +10 scale)   |
+| —     | DONE   | `607f658` | Russell review: requirements cross-reference (+4 findings) |
+| —     | DONE   | `aaf4858` | Russell review: corrected to proper -10 to +10 scale       |
+| —     | DONE   | `9c023bc` | Fix RECircularExpansion incomplete pattern match (CI bug)   |
+| —     | DONE   | `835c163` | Mandate cherry-pick --no-commit workflow in CLAUDE.md       |
 
-**Current state**: 1081 tests, zero warnings, all snapshots pass.
+**Current state**: 1091 tests, zero warnings, all snapshots pass.
 
 ## Handoff Notes
 
@@ -199,9 +205,27 @@ The decision on whether to proceed with these should be based on:
   This validates the "more tests before refactoring" strategy.
 - **Error content tests**: All 51 error fixtures now have content assertions. The existing
   27 + new 24 = 51 total. (Handoff said 49 fixtures / 24 covered, but actual count is 51.)
+- **Three separate truthiness functions**: oIsTruthy (iidy, zero falsy), JMESPath.isTruthy
+  (all numbers truthy per spec), Handlebars.Engine.isTruthy (all numbers truthy per spec).
+  Cross-reference comments added at each site.
+- **OnFailure/Capability ADTs**: `saOnFailure :: Maybe Text` → `Maybe OnFailure`,
+  `saCapabilities :: Maybe [Text]` → `Maybe [Capability]`. Parse at YAML boundary with
+  clear errors on unrecognized values. Total functions in RequestBuilder.
+- **TemplateLoader Either**: All 6 `fail` calls replaced with `Either Text`. Propagated
+  through RequestBuilder (3 builders), 6 operation modules, and Main.hs.
+- **Snapshot gap audit findings**: 2 render failures (CFN validator rejects nested intrinsics),
+  1 error wording diff ("sequence" vs "array"), 4 missing fixtures from Rust.
+- **Russell review (20 findings)**: Worst: -8 (`param get --format json` silently ignored),
+  six at -7 (silent drops/ignores). Best: +6 (oValuesEqual). Pure core scores +7 to +9,
+  IO boundaries score -8 to -2.
+- **CI bug**: `RECircularExpansion` incomplete pattern match — slipped through because
+  `git cherry-pick` bypasses pre-commit hooks. Fixed. CLAUDE.md now mandates
+  `cherry-pick --no-commit` + `commit -C CHERRY_PICK_HEAD`.
 - **Pre-existing snapshot failures**: `advanced-cloudformation.yaml` and
-  `string-formatting-demo.yaml` both fail with render errors — not caused by this session.
-  These should be investigated separately.
-- **Chunk F (truthiness docs)** is now more important since we found and fixed a real
-  truthiness divergence. Users should know: null/false/""/{}/[]/0 are falsy, everything
-  else is truthy.
+  `string-formatting-demo.yaml` — CFN validator rejects `!Select [0, !GetAZs ""]`.
+
+## What's Next
+
+Go over the 2026-03-02 review docs (hickey, ousterhout, minsky, krishnamurthi, kmett,
+muratori, russell) and mark off / leave status updates next to all issues addressed by
+this session and prior sessions.
