@@ -27,7 +27,7 @@ Autonomous claude driven, Haskell port of iidy (a CloudFormation preprocessor/de
 - Never reset/restore without backup and user confirmation
 - `git config --local commit.gpgsign false` (YubiKey will hang otherwise)
 - Run `git config --local commit.gpgsign false` if not already set before first commit
-- **Never use bare `git cherry-pick`.** It bypasses pre-commit hooks. Always use `git cherry-pick --no-commit` then `git commit` so hooks run.
+- **Never use bare `git cherry-pick`.** It bypasses pre-commit hooks. Always use `git cherry-pick --no-commit`, then `git commit -C CHERRY_PICK_HEAD` to reuse the original commit message while running hooks.
 
 ## Build
 - `cabal build` for compilation, in nix direnv / dev shell
