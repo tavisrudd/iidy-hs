@@ -3,7 +3,6 @@ module Main (main) where
 
 import Control.Exception (SomeException, IOException, catch, finally, fromException, displayException)
 import qualified Amazonka
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -149,7 +148,7 @@ runCommand cli = case cliCommand cli of
             Just name -> pure name
             Nothing   -> generateDashedName
           -- Check stack state to determine changeset type
-          let stackName = fromMaybe "unnamed-stack" (saStackName sa)
+          let stackName = saStackName sa
           state <- checkStackState ctx stackName
           let exists = case state of { StackNormal -> True; _ -> False }
           csEither <- createChangeset ctx sa csName exists fp env
@@ -366,7 +365,7 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
       -- Apply global SSM configuration (silently ignored on error)
       sa'' <- applyGlobalConfiguration awsEnv sa
       let sa' = case stackNameOverride of
-                  Just sn -> sa'' { saStackName = Just sn }
+                  Just sn -> sa'' { saStackName = sn }
                   Nothing -> sa''
       token <- generateToken cli
       let tp = timeProviderForOperation operation

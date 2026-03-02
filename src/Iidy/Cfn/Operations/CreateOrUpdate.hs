@@ -32,7 +32,7 @@ import Iidy.Cfn.Operations.CreateStack (createStack)
 import Iidy.Cfn.Operations.DescribeStack (emitStackDefinition)
 import Iidy.Cfn.Operations.UpdateStack (updateStack)
 import Iidy.Cfn.StackOperations (stackExists)
-import Iidy.Cfn.Types (StackArgs(..), getStackName)
+import Iidy.Cfn.Types (StackArgs(..))
 import Iidy.Output.Types (OutputData(..), ChangeSetInfo(..))
 
 ------------------------------------------------------------------------
@@ -53,7 +53,7 @@ createOrUpdate
   -> (OutputData -> IO ())  -- ^ output emitter for progress display
   -> IO (Either Text Int)
 createOrUpdate ctx args useChangeset yesFlag argsfilePath env emit = do
-  let stackName = getStackName args
+  let stackName = saStackName args
 
   exists <- stackExists ctx stackName
 
@@ -85,7 +85,7 @@ updateWithChangeset
   -> (OutputData -> IO ())  -- ^ output emitter
   -> IO (Either Text Int)
 updateWithChangeset ctx args yesFlag argsfilePath env emit = do
-  let stackName = getStackName args
+  let stackName = saStackName args
 
   -- Fetch and emit StackDefinition
   emitStackDefinition ctx stackName emit
@@ -129,7 +129,7 @@ createWithChangeset
   -> (OutputData -> IO ())  -- ^ output emitter
   -> IO (Either Text Int)
 createWithChangeset ctx args yesFlag argsfilePath env emit = do
-  let stackName = getStackName args
+  let stackName = saStackName args
 
   -- Generate random changeset name (docker-style)
   csName <- generateDashedName

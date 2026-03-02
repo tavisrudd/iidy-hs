@@ -7,12 +7,10 @@ module Iidy.Cfn.Types
   , Capability(..)
   , StackArgs(..)
   , emptyStackArgs
-  , getStackName
   ) where
 
 import Data.Aeson (Value)
 import Data.Map.Strict (Map)
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 
 data CfnOperation
@@ -80,7 +78,7 @@ data Capability = CapIAM | CapNamedIAM | CapAutoExpand
 
 -- | Parsed stack-args.yaml configuration
 data StackArgs = StackArgs
-  { saStackName                   :: !(Maybe Text)
+  { saStackName                   :: !Text
   , saTemplate                    :: !(Maybe Text)
   , saApprovedTemplateLocation    :: !(Maybe Text)
   , saRegion                      :: !(Maybe Text)
@@ -103,13 +101,9 @@ data StackArgs = StackArgs
   , saCommandsBefore              :: !(Maybe [Text])
   } deriving stock (Show, Eq)
 
--- | Extract the stack name from StackArgs, falling back to "unnamed-stack".
-getStackName :: StackArgs -> Text
-getStackName args = fromMaybe "unnamed-stack" (saStackName args)
-
 emptyStackArgs :: StackArgs
 emptyStackArgs = StackArgs
-  { saStackName                   = Nothing
+  { saStackName                   = ""  -- empty; only used for non-argsfile contexts
   , saTemplate                    = Nothing
   , saApprovedTemplateLocation    = Nothing
   , saRegion                      = Nothing

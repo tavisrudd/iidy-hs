@@ -100,7 +100,7 @@ stackArgsMutationTests =
       sa' @?= emptyStackArgs
 
   , testCase "other parameter names are no-ops" $ do
-      let sa   = emptyStackArgs { saStackName = Just "my-stack" }
+      let sa   = emptyStackArgs { saStackName = "my-stack" }
           -- An unrecognised SSM parameter name should leave StackArgs unchanged
           sa'  = sa  -- no change for unknown param
       sa' @?= sa
@@ -120,7 +120,7 @@ errorHandlingTests =
   [ testCase "empty SSM parameter list leaves StackArgs unchanged (no-params path)" $ do
       -- When no /iidy/ parameters exist in SSM, GetParametersByPath
       -- returns an empty list — no error, no warning, StackArgs unchanged.
-      let sa = emptyStackArgs { saStackName = Just "test-stack" }
+      let sa = emptyStackArgs { saStackName = "test-stack" }
       sa' <- applyParams sa []
       sa' @?= sa
 
@@ -152,7 +152,7 @@ paginationTests =
   , testCase "applyParams ignores >10 unknown params (multi-page simulation)" $ do
       -- Simulate 15 unrecognised SSM parameters that would come from
       -- multiple pages of GetParametersByPath results
-      let sa = emptyStackArgs { saStackName = Just "my-stack" }
+      let sa = emptyStackArgs { saStackName = "my-stack" }
           params = [ ("/iidy/unknown-" <> T.pack (show i), "val-" <> T.pack (show i))
                    | i <- [1..15 :: Int]
                    ]

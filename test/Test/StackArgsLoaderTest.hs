@@ -22,7 +22,7 @@ stackArgsLoaderTests =
       case result of
         Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
         Right (LoadedStackArgs sa _aws _ctx) -> do
-          saStackName sa @?= Just "test-stack"
+          saStackName sa @?= "test-stack"
           saTemplate sa @?= Just "template.yaml"
           saRegion sa @?= Just "us-east-1"
 
@@ -211,6 +211,13 @@ stackArgsLoaderTests =
       case result of
         Left err -> assertBool "error mentions unrecognized" (T.isInfixOf "unrecognized" err)
         Right _  -> assertFailure "Expected error for unknown Capability value"
+
+    -- Missing StackName validation
+  , testCase "load stack args rejects missing StackName" $ do
+      result <- loadStackArgs "test-fixtures/test-stack-args-no-name.yaml" "dev" OpCreateStack noAwsSettings
+      case result of
+        Left err -> assertBool "error mentions StackName is required" (T.isInfixOf "StackName is required" err)
+        Right _  -> assertFailure "Expected error for missing StackName"
 
     -- getStrListValidated tests (Russell #3: no silent drops)
   , testCase "getStrListValidated: all strings succeeds" $ do

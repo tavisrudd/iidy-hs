@@ -53,7 +53,7 @@ estimateCost ctx args argsfilePath env emit = do
       let url = fromMaybe "" resp.url
           costInfo = CostEstimateInfo
             { ceiUrl          = url
-            , ceiStackName    = saStackName args
+            , ceiStackName    = Just (saStackName args)
             , ceiTemplateFile = saTemplate args
             }
       emit (OdCostEstimate (CostEstimate { ceInfo = costInfo }))

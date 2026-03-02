@@ -70,7 +70,7 @@ import Iidy.Cfn.StackOperations
   , percentEncode
   , PollResult(..)
   )
-import Iidy.Cfn.Types (StackArgs(..), getStackName)
+import Iidy.Cfn.Types (StackArgs(..))
 import Iidy.Output.Types
   ( OutputData(..)
   , ChangeSetInfo(..), ChangeInfo(..), ChangeDetail(..)
@@ -105,7 +105,7 @@ createChangeset ctx args csName stackExists' argsfilePath env = do
   let csType = if stackExists'
                  then CF.ChangeSetType_UPDATE
                  else CF.ChangeSetType_CREATE
-      stackName' = getStackName args
+      stackName' = saStackName args
 
   -- Step 1 & 2: Build and send the CreateChangeSet request
   reqResult <- buildCreateChangeSetRequest ctx args csName csType argsfilePath env

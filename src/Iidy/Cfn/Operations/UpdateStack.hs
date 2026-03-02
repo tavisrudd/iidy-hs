@@ -43,7 +43,7 @@ import Iidy.Cfn.StackOperations
   , pollForCompletion
   , PollResult(..)
   )
-import Iidy.Cfn.Types (StackArgs(..), getStackName)
+import Iidy.Cfn.Types (StackArgs(..))
 import Iidy.Output.Types (OutputData(..), ChangeSetInfo(..))
 
 -- | The CloudFormation error message returned when there are no changes to apply.
@@ -73,7 +73,7 @@ updateStack
   -> (OutputData -> IO ()) -- ^ output emitter for progress display
   -> IO (Either Text Int)
 updateStack ctx args argsfilePath env emit = do
-  let stackName = getStackName args
+  let stackName = saStackName args
 
   -- Step 1: Build the UpdateStack request (use primary token)
   reqResult <- buildUpdateStackRequest ctx args True argsfilePath env
@@ -144,7 +144,7 @@ updateStackWithChangeset
   -> (OutputData -> IO ())  -- ^ output emitter for progress display
   -> IO (Either Text Int)
 updateStackWithChangeset ctx args yesFlag argsfilePath env emit = do
-  let stackName = getStackName args
+  let stackName = saStackName args
 
   -- Step 1: Fetch and emit StackDefinition
   emitStackDefinition ctx stackName emit

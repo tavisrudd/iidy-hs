@@ -293,6 +293,9 @@ findSuggestion key =
 valueToStackArgs :: Value -> Either Text StackArgs
 valueToStackArgs (Object obj) = do
   validateNoUnknownKeys obj
+  stackName <- case getStr obj "StackName" of
+    Just name -> Right name
+    Nothing   -> Left "StackName is required in stack-args"
   tags            <- getStrMapValidated obj "Tags"
   params          <- getStrMapValidated obj "Parameters"
   caps            <- parseCapabilities obj
@@ -302,7 +305,7 @@ valueToStackArgs (Object obj) = do
   usePrevParams   <- getStrListValidated obj "UsePreviousParameterValues"
   commandsBefore  <- getStrListValidated obj "CommandsBefore"
   pure StackArgs
-    { saStackName                   = getStr obj "StackName"
+    { saStackName                   = stackName
     , saTemplate                    = getStr obj "Template"
     , saApprovedTemplateLocation    = getStr obj "ApprovedTemplateLocation"
     , saRegion                      = getStr obj "Region"

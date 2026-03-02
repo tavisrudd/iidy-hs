@@ -37,7 +37,7 @@ import qualified Amazonka.CloudFormation.Types.Parameter as Param
 import Iidy.Aws.ClientReqToken (TokenInfo(..))
 import Iidy.Cfn.Context (CfnContext(..), ctxDeriveToken)
 import Iidy.Cfn.TemplateLoader (TemplateResult(..), loadCfnTemplate)
-import Iidy.Cfn.Types (Capability(..), OnFailure(..), StackArgs(..), getStackName)
+import Iidy.Cfn.Types (Capability(..), OnFailure(..), StackArgs(..))
 
 ------------------------------------------------------------------------
 -- Request builders
@@ -53,7 +53,7 @@ buildCreateStackRequest
   -> Text           -- ^ environment name
   -> IO (Either Text (CF.CreateStack, TokenInfo))
 buildCreateStackRequest ctx args usePrimary argsfilePath env = do
-  let sName = getStackName args
+  let sName = saStackName args
   token <- if usePrimary
     then pure (cfnPrimaryToken ctx)
     else ctxDeriveToken ctx "create-stack"
@@ -89,7 +89,7 @@ buildUpdateStackRequest
   -> Text           -- ^ environment name
   -> IO (Either Text (CF.UpdateStack, TokenInfo))
 buildUpdateStackRequest ctx args usePrimary argsfilePath env = do
-  let sName = getStackName args
+  let sName = saStackName args
   token <- if usePrimary
     then pure (cfnPrimaryToken ctx)
     else ctxDeriveToken ctx "update-stack"
@@ -133,7 +133,7 @@ buildCreateChangeSetRequest
   -> Text     -- ^ environment
   -> IO (Either Text (CF.CreateChangeSet, TokenInfo))
 buildCreateChangeSetRequest ctx args csName csType argsfilePath env = do
-  let sName = getStackName args
+  let sName = saStackName args
   token <- ctxDeriveToken ctx "create-changeset"
   tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
   case tmplEither of

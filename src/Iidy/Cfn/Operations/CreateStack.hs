@@ -23,7 +23,7 @@ import Iidy.Cfn.StackOperations
   , pollForCompletion
   , PollResult(..)
   )
-import Iidy.Cfn.Types (StackArgs(..), getStackName)
+import Iidy.Cfn.Types (StackArgs(..))
 import Iidy.Output.Types (OutputData(..))
 
 ------------------------------------------------------------------------
@@ -57,7 +57,7 @@ createStack ctx args argsfilePath env emit = do
       resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
 
       -- Step 3: Extract stack ID from response
-      let stackName = getStackName args
+      let stackName = saStackName args
           stackId = fromMaybe stackName resp.stackId
 
       -- Step 3b: Fetch and emit StackDefinition
