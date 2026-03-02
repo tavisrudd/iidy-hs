@@ -3,6 +3,8 @@ module Iidy.Cfn.Types
   , cfnOperationStr
   , isReadOnlyOperation
   , StackChangeType(..)
+  , OnFailure(..)
+  , Capability(..)
   , StackArgs(..)
   , emptyStackArgs
   , getStackName
@@ -68,6 +70,14 @@ data StackChangeType
   | ChangeUpdateNoChanges
   deriving stock (Show, Eq)
 
+-- | CloudFormation OnFailure action for stack creation.
+data OnFailure = DoNothing | Rollback | Delete
+  deriving stock (Show, Eq)
+
+-- | CloudFormation capability declaration.
+data Capability = CapIAM | CapNamedIAM | CapAutoExpand
+  deriving stock (Show, Eq)
+
 -- | Parsed stack-args.yaml configuration
 data StackArgs = StackArgs
   { saStackName                   :: !(Maybe Text)
@@ -75,7 +85,7 @@ data StackArgs = StackArgs
   , saApprovedTemplateLocation    :: !(Maybe Text)
   , saRegion                      :: !(Maybe Text)
   , saProfile                     :: !(Maybe Text)
-  , saCapabilities                :: !(Maybe [Text])
+  , saCapabilities                :: !(Maybe [Capability])
   , saTags                        :: !(Maybe (Map Text Text))
   , saParameters                  :: !(Maybe (Map Text Text))
   , saNotificationArns            :: !(Maybe [Text])
@@ -83,7 +93,7 @@ data StackArgs = StackArgs
   , saServiceRoleArn              :: !(Maybe Text)
   , saRoleArn                     :: !(Maybe Text)
   , saTimeoutInMinutes            :: !(Maybe Int)
-  , saOnFailure                   :: !(Maybe Text)
+  , saOnFailure                   :: !(Maybe OnFailure)
   , saDisableRollback             :: !(Maybe Bool)
   , saEnableTerminationProtection :: !(Maybe Bool)
   , saStackPolicy                 :: !(Maybe Value)

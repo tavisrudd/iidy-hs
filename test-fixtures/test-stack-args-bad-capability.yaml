@@ -1,0 +1,6 @@
+StackName: test-stack
+Template: template.yaml
+Region: us-east-1
+Capabilities:
+  - CAPABILITY_IAM
+  - INVALID_CAPABILITY

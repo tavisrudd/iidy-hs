@@ -10,20 +10,18 @@ module Iidy.Cfn.RequestBuilder
   , buildDeleteStackRequest
   , buildCreateChangeSetRequest
     -- * Helpers
-  , mapCapability
+  , toAmazonkaCapability
   , mapCapabilities
   , mapParameters
   , mapTags
-  , mapOnFailure
+  , toAmazonkaOnFailure
   , serializeStackPolicy
   ) where
 
 import Control.Applicative ((<|>))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (catMaybes)
 import Data.Text (Text)
-import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TLE
 
@@ -39,7 +37,7 @@ import qualified Amazonka.CloudFormation.Types.Parameter as Param
 import Iidy.Aws.ClientReqToken (TokenInfo(..))
 import Iidy.Cfn.Context (CfnContext(..), ctxDeriveToken)
 import Iidy.Cfn.TemplateLoader (TemplateResult(..), loadCfnTemplate)
-import Iidy.Cfn.Types (StackArgs(..), getStackName)
+import Iidy.Cfn.Types (Capability(..), OnFailure(..), StackArgs(..), getStackName)
 
 ------------------------------------------------------------------------
 -- Request builders
@@ -73,7 +71,7 @@ buildCreateStackRequest ctx args usePrimary argsfilePath env = do
         , CS.timeoutInMinutes = fromIntegral <$> saTimeoutInMinutes args
         , CS.disableRollback = saDisableRollback args
         , CS.enableTerminationProtection = saEnableTerminationProtection args
-        , CS.onFailure = mapOnFailure (saOnFailure args)
+        , CS.onFailure = fmap toAmazonkaOnFailure (saOnFailure args)
         , CS.stackPolicyBody = serializeStackPolicy (saStackPolicy args)
         , CS.resourceTypes = saResourceTypes args
         }
@@ -151,25 +149,17 @@ buildCreateChangeSetRequest ctx args csName csType argsfilePath env = do
 -- Capability mapping
 ------------------------------------------------------------------------
 
-mapCapability :: Text -> Maybe CF.Capability
-mapCapability t = case T.toUpper t of
-  "CAPABILITY_IAM"         -> Just CF.Capability_CAPABILITY_IAM
-  "CAPABILITY_NAMED_IAM"   -> Just CF.Capability_CAPABILITY_NAMED_IAM
-  "CAPABILITY_AUTO_EXPAND" -> Just CF.Capability_CAPABILITY_AUTO_EXPAND
-  _                        -> Nothing
+-- | Convert a Capability ADT value to the corresponding amazonka type.
+toAmazonkaCapability :: Capability -> CF.Capability
+toAmazonkaCapability CapIAM        = CF.Capability_CAPABILITY_IAM
+toAmazonkaCapability CapNamedIAM   = CF.Capability_CAPABILITY_NAMED_IAM
+toAmazonkaCapability CapAutoExpand = CF.Capability_CAPABILITY_AUTO_EXPAND
 
--- | Map a list of capability strings to CloudFormation Capability values.
--- Unrecognised strings are silently dropped: schema validation upstream
--- (stack-args.yaml loading) is expected to reject unknown values before
--- this point.  Any string that survives to here and does not match a
--- known capability was already accepted by the user's stack-args file,
--- so dropping it is the safe fallback (AWS would reject the request
--- anyway).
-mapCapabilities :: Maybe [Text] -> Maybe [CF.Capability]
-mapCapabilities Nothing = Nothing
-mapCapabilities (Just caps) =
-  let mapped = catMaybes (map mapCapability caps)
-  in if null mapped then Nothing else Just mapped
+-- | Map a list of Capability values to CloudFormation Capability values.
+mapCapabilities :: Maybe [Capability] -> Maybe [CF.Capability]
+mapCapabilities Nothing     = Nothing
+mapCapabilities (Just [])   = Nothing
+mapCapabilities (Just caps) = Just (map toAmazonkaCapability caps)
 
 ------------------------------------------------------------------------
 -- Parameter/tag mapping
@@ -203,13 +193,11 @@ mapTags (Just tags')
 -- OnFailure mapping
 ------------------------------------------------------------------------
 
-mapOnFailure :: Maybe Text -> Maybe CF.OnFailure
-mapOnFailure Nothing = Nothing
-mapOnFailure (Just t) = case T.toUpper t of
-  "DELETE"     -> Just CF.OnFailure_DELETE
-  "ROLLBACK"  -> Just CF.OnFailure_ROLLBACK
-  "DO_NOTHING" -> Just CF.OnFailure_DO_NOTHING
-  _            -> Nothing
+-- | Convert an OnFailure ADT value to the corresponding amazonka type.
+toAmazonkaOnFailure :: OnFailure -> CF.OnFailure
+toAmazonkaOnFailure DoNothing = CF.OnFailure_DO_NOTHING
+toAmazonkaOnFailure Rollback  = CF.OnFailure_ROLLBACK
+toAmazonkaOnFailure Delete    = CF.OnFailure_DELETE
 
 ------------------------------------------------------------------------
 -- Stack policy serialization

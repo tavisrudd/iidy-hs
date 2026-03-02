@@ -10,8 +10,8 @@ import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
 import Iidy.Aws.CredentialSource (AwsSettings(..))
-import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..), resolveEnvMaps)
-import Iidy.Cfn.Types (CfnOperation(..), StackArgs(..))
+import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..), resolveEnvMaps, parseOnFailureText, parseCapabilityText)
+import Iidy.Cfn.Types (CfnOperation(..), Capability(..), OnFailure(..), StackArgs(..))
 import Test.Shared (noAwsSettings)
 
 stackArgsLoaderTests :: [TestTree]
@@ -41,7 +41,7 @@ stackArgsLoaderTests =
       case result of
         Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
         Right (LoadedStackArgs sa _aws _ctx) -> do
-          saCapabilities sa @?= Just ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"]
+          saCapabilities sa @?= Just [CapIAM, CapNamedIAM]
 
   , testCase "stack args parameters" $ do
       result <- loadStackArgs "test-fixtures/test-stack-args.yaml" "dev" OpCreateStack noAwsSettings
@@ -153,4 +153,61 @@ stackArgsLoaderTests =
           assertBool "error mentions environment name" $
             T.isInfixOf "staging" err
         Right _ -> assertFailure "Expected error for missing environment in env map"
+
+    -- OnFailure parsing tests
+  , testCase "parseOnFailureText: DO_NOTHING" $
+      parseOnFailureText "DO_NOTHING" @?= Right DoNothing
+
+  , testCase "parseOnFailureText: ROLLBACK" $
+      parseOnFailureText "ROLLBACK" @?= Right Rollback
+
+  , testCase "parseOnFailureText: DELETE" $
+      parseOnFailureText "DELETE" @?= Right Delete
+
+  , testCase "parseOnFailureText: case insensitive" $
+      parseOnFailureText "do_nothing" @?= Right DoNothing
+
+  , testCase "parseOnFailureText: unknown value errors" $
+      case parseOnFailureText "INVALID" of
+        Left err -> assertBool "error mentions INVALID" (T.isInfixOf "INVALID" err)
+        Right _  -> assertFailure "Expected error for unknown OnFailure value"
+
+    -- Capability parsing tests
+  , testCase "parseCapabilityText: CAPABILITY_IAM" $
+      parseCapabilityText "CAPABILITY_IAM" @?= Right CapIAM
+
+  , testCase "parseCapabilityText: CAPABILITY_NAMED_IAM" $
+      parseCapabilityText "CAPABILITY_NAMED_IAM" @?= Right CapNamedIAM
+
+  , testCase "parseCapabilityText: CAPABILITY_AUTO_EXPAND" $
+      parseCapabilityText "CAPABILITY_AUTO_EXPAND" @?= Right CapAutoExpand
+
+  , testCase "parseCapabilityText: case insensitive" $
+      parseCapabilityText "capability_iam" @?= Right CapIAM
+
+  , testCase "parseCapabilityText: unknown value errors" $
+      case parseCapabilityText "INVALID_CAP" of
+        Left err -> assertBool "error mentions INVALID_CAP" (T.isInfixOf "INVALID_CAP" err)
+        Right _  -> assertFailure "Expected error for unknown Capability value"
+
+    -- Stack args loading with OnFailure
+  , testCase "load stack args with OnFailure" $ do
+      result <- loadStackArgs "test-fixtures/test-stack-args-onfailure.yaml" "dev" OpCreateStack noAwsSettings
+      case result of
+        Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
+        Right (LoadedStackArgs sa _aws _ctx) ->
+          saOnFailure sa @?= Just Rollback
+
+    -- Error on unrecognized values
+  , testCase "load stack args rejects unknown OnFailure" $ do
+      result <- loadStackArgs "test-fixtures/test-stack-args-bad-onfailure.yaml" "dev" OpCreateStack noAwsSettings
+      case result of
+        Left err -> assertBool "error mentions unrecognized" (T.isInfixOf "unrecognized" err)
+        Right _  -> assertFailure "Expected error for unknown OnFailure value"
+
+  , testCase "load stack args rejects unknown Capability" $ do
+      result <- loadStackArgs "test-fixtures/test-stack-args-bad-capability.yaml" "dev" OpCreateStack noAwsSettings
+      case result of
+        Left err -> assertBool "error mentions unrecognized" (T.isInfixOf "unrecognized" err)
+        Right _  -> assertFailure "Expected error for unknown Capability value"
   ]

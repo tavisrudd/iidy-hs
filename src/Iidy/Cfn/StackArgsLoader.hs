@@ -13,6 +13,8 @@ module Iidy.Cfn.StackArgsLoader
   -- * Internal (exported for testing)
   , getStrMapValidated
   , resolveEnvMaps
+  , parseOnFailureText
+  , parseCapabilityText
   ) where
 
 import Control.Applicative ((<|>))
@@ -31,7 +33,7 @@ import Iidy.Aws.CredentialSource
   ( AwsSettings(..)
   , CredentialDetectionContext(..)
   )
-import Iidy.Cfn.Types (CfnOperation, StackArgs(..), cfnOperationStr)
+import Iidy.Cfn.Types (CfnOperation, Capability(..), OnFailure(..), StackArgs(..), cfnOperationStr)
 import Iidy.Yaml.Engine
   ( preprocessYaml11
   , PreprocessResult(..)
@@ -231,13 +233,15 @@ valueToStackArgs :: Value -> Either Text StackArgs
 valueToStackArgs (Object obj) = do
   tags   <- getStrMapValidated obj "Tags"
   params <- getStrMapValidated obj "Parameters"
+  caps   <- parseCapabilities obj
+  onFail <- parseOnFailure obj
   pure StackArgs
     { saStackName                   = getStr obj "StackName"
     , saTemplate                    = getStr obj "Template"
     , saApprovedTemplateLocation    = getStr obj "ApprovedTemplateLocation"
     , saRegion                      = getStr obj "Region"
     , saProfile                     = getStr obj "Profile"
-    , saCapabilities                = getStrList obj "Capabilities"
+    , saCapabilities                = caps
     , saTags                        = tags
     , saParameters                  = params
     , saNotificationArns            = getStrList obj "NotificationARNs"
@@ -245,7 +249,7 @@ valueToStackArgs (Object obj) = do
     , saServiceRoleArn              = getStr obj "ServiceRoleARN"
     , saRoleArn                     = getStr obj "RoleARN"
     , saTimeoutInMinutes            = getInt obj "TimeoutInMinutes"
-    , saOnFailure                   = getStr obj "OnFailure"
+    , saOnFailure                   = onFail
     , saDisableRollback             = getBool obj "DisableRollback"
     , saEnableTerminationProtection = getBool obj "EnableTerminationProtection"
     , saStackPolicy                 = KM.lookup (Key.fromText "StackPolicy") obj
@@ -306,3 +310,47 @@ getBool :: KM.KeyMap Value -> Text -> Maybe Bool
 getBool obj key = case KM.lookup (Key.fromText key) obj of
   Just (Bool b) -> Just b
   _             -> Nothing
+
+------------------------------------------------------------------------
+-- OnFailure / Capability parsing
+------------------------------------------------------------------------
+
+-- | Parse a single OnFailure value from text.
+parseOnFailureText :: Text -> Either Text OnFailure
+parseOnFailureText t = case T.toUpper t of
+  "DO_NOTHING" -> Right DoNothing
+  "ROLLBACK"   -> Right Rollback
+  "DELETE"     -> Right Delete
+  _            -> Left $ "unrecognized OnFailure value: " <> t
+                       <> " (expected DO_NOTHING, ROLLBACK, or DELETE)"
+
+-- | Extract and parse OnFailure from a KeyMap.
+parseOnFailure :: KM.KeyMap Value -> Either Text (Maybe OnFailure)
+parseOnFailure obj = case KM.lookup (Key.fromText "OnFailure") obj of
+  Just (String s) -> Just <$> parseOnFailureText s
+  Just Null       -> Right Nothing
+  Nothing         -> Right Nothing
+  Just v          -> Left $ "invalid type for OnFailure: expected a string, got " <> describeType v
+
+-- | Parse a single Capability value from text.
+parseCapabilityText :: Text -> Either Text Capability
+parseCapabilityText t = case T.toUpper t of
+  "CAPABILITY_IAM"         -> Right CapIAM
+  "CAPABILITY_NAMED_IAM"   -> Right CapNamedIAM
+  "CAPABILITY_AUTO_EXPAND" -> Right CapAutoExpand
+  _                        -> Left $ "unrecognized Capability value: " <> t
+                                   <> " (expected CAPABILITY_IAM, CAPABILITY_NAMED_IAM, or CAPABILITY_AUTO_EXPAND)"
+
+-- | Extract and parse Capabilities list from a KeyMap.
+parseCapabilities :: KM.KeyMap Value -> Either Text (Maybe [Capability])
+parseCapabilities obj = case KM.lookup (Key.fromText "Capabilities") obj of
+  Just (Array arr) -> do
+    caps <- mapM parseOneCapEntry (foldr (:) [] arr)
+    pure (Just caps)
+  Just Null -> Right Nothing
+  Nothing   -> Right Nothing
+  Just v    -> Left $ "invalid type for Capabilities: expected a sequence, got " <> describeType v
+  where
+    parseOneCapEntry :: Value -> Either Text Capability
+    parseOneCapEntry (String s) = parseCapabilityText s
+    parseOneCapEntry v = Left $ "invalid Capabilities entry: expected a string, got " <> describeType v

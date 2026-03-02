@@ -1,0 +1,4 @@
+StackName: test-stack
+Template: template.yaml
+Region: us-east-1
+OnFailure: INVALID_VALUE

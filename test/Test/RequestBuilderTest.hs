@@ -11,24 +11,19 @@ import qualified Amazonka.CloudFormation.Types as CF
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
-import Iidy.Cfn.RequestBuilder (mapCapability, mapCapabilities, mapParameters, mapTags, mapOnFailure, serializeStackPolicy)
+import Iidy.Cfn.RequestBuilder (toAmazonkaCapability, mapCapabilities, mapParameters, mapTags, toAmazonkaOnFailure, serializeStackPolicy)
+import Iidy.Cfn.Types (Capability(..), OnFailure(..))
 
 requestBuilderTests :: [TestTree]
 requestBuilderTests =
-  [ testCase "mapCapability: CAPABILITY_IAM" $
-      mapCapability "CAPABILITY_IAM" @?= Just CF.Capability_CAPABILITY_IAM
+  [ testCase "toAmazonkaCapability: CapIAM" $
+      toAmazonkaCapability CapIAM @?= CF.Capability_CAPABILITY_IAM
 
-  , testCase "mapCapability: CAPABILITY_NAMED_IAM" $
-      mapCapability "CAPABILITY_NAMED_IAM" @?= Just CF.Capability_CAPABILITY_NAMED_IAM
+  , testCase "toAmazonkaCapability: CapNamedIAM" $
+      toAmazonkaCapability CapNamedIAM @?= CF.Capability_CAPABILITY_NAMED_IAM
 
-  , testCase "mapCapability: CAPABILITY_AUTO_EXPAND" $
-      mapCapability "CAPABILITY_AUTO_EXPAND" @?= Just CF.Capability_CAPABILITY_AUTO_EXPAND
-
-  , testCase "mapCapability: case insensitive" $
-      mapCapability "capability_iam" @?= Just CF.Capability_CAPABILITY_IAM
-
-  , testCase "mapCapability: unknown returns Nothing" $
-      mapCapability "INVALID_CAP" @?= Nothing
+  , testCase "toAmazonkaCapability: CapAutoExpand" $
+      toAmazonkaCapability CapAutoExpand @?= CF.Capability_CAPABILITY_AUTO_EXPAND
 
   , testCase "mapCapabilities: Nothing -> Nothing" $
       mapCapabilities Nothing @?= Nothing
@@ -36,9 +31,9 @@ requestBuilderTests =
   , testCase "mapCapabilities: empty list -> Nothing" $
       mapCapabilities (Just []) @?= Nothing
 
-  , testCase "mapCapabilities: filters invalid" $
-      mapCapabilities (Just ["CAPABILITY_IAM", "INVALID"])
-        @?= Just [CF.Capability_CAPABILITY_IAM]
+  , testCase "mapCapabilities: maps all values" $
+      mapCapabilities (Just [CapIAM, CapNamedIAM])
+        @?= Just [CF.Capability_CAPABILITY_IAM, CF.Capability_CAPABILITY_NAMED_IAM]
 
   , testCase "mapParameters: Nothing -> Nothing" $
       mapParameters Nothing @?= Nothing
@@ -60,23 +55,14 @@ requestBuilderTests =
       let result = mapTags (Just (Data.Map.Strict.singleton "env" "prod"))
       in assertBool "Just with tags" (result /= Nothing)
 
-  , testCase "mapOnFailure: DELETE" $
-      mapOnFailure (Just "DELETE") @?= Just CF.OnFailure_DELETE
+  , testCase "toAmazonkaOnFailure: Delete" $
+      toAmazonkaOnFailure Delete @?= CF.OnFailure_DELETE
 
-  , testCase "mapOnFailure: ROLLBACK" $
-      mapOnFailure (Just "ROLLBACK") @?= Just CF.OnFailure_ROLLBACK
+  , testCase "toAmazonkaOnFailure: Rollback" $
+      toAmazonkaOnFailure Rollback @?= CF.OnFailure_ROLLBACK
 
-  , testCase "mapOnFailure: DO_NOTHING" $
-      mapOnFailure (Just "DO_NOTHING") @?= Just CF.OnFailure_DO_NOTHING
-
-  , testCase "mapOnFailure: case insensitive" $
-      mapOnFailure (Just "delete") @?= Just CF.OnFailure_DELETE
-
-  , testCase "mapOnFailure: Nothing -> Nothing" $
-      mapOnFailure Nothing @?= Nothing
-
-  , testCase "mapOnFailure: unknown -> Nothing" $
-      mapOnFailure (Just "INVALID") @?= Nothing
+  , testCase "toAmazonkaOnFailure: DoNothing" $
+      toAmazonkaOnFailure DoNothing @?= CF.OnFailure_DO_NOTHING
 
   , testCase "serializeStackPolicy: Nothing -> Nothing" $
       serializeStackPolicy Nothing @?= Nothing
