@@ -558,6 +558,7 @@ traversePathO (seg:rest) val = case val of
 
 
 -- | Like applyDotQueryO but validates that all comma-separated keys exist.
+-- Errors on miss instead of returning ONull (matches Rust behavior).
 applyDotQueryValidated :: SrcMeta -> Text -> Text -> OValue -> Resolve OValue
 applyDotQueryValidated meta varPath q val
   -- Comma-separated key selection: validate all keys exist
@@ -568,13 +569,18 @@ applyDotQueryValidated meta varPath q val
         in case missing of
           (m:_) -> propertyNotFoundError meta m varPath (map fst kvs)
           [] -> pure $ OObject [(k, v) | k <- keys, Just v <- [lookupO k kvs]]
-      _ -> pure ONull
+      _ -> typeMismatchError meta "mapping" val
   -- Single dot-path traversal
   | otherwise =
       let segments = filter (not . T.null) (T.splitOn "." q)
-      in pure $ case traversePathO segments val of
-           Just v  -> v
-           Nothing -> ONull
+      in case traversePathO segments val of
+           Just v  -> pure v
+           Nothing -> propertyNotFoundError meta q varPath (oValueKeys val)
+
+-- | Extract available keys from an OValue (empty list for non-objects).
+oValueKeys :: OValue -> [Text]
+oValueKeys (OObject kvs) = map fst kvs
+oValueKeys _             = []
 
 resolveIf :: TagContext -> SrcMeta -> IfTag -> Resolve OValue
 resolveIf ctx _meta (IfTag test thenVal elseVal) = do

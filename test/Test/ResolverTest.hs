@@ -171,6 +171,24 @@ varLookupTests =
         (varLookupQ "obj" "a, missing")
         "property 'missing' not found"
 
+  , testCase "dot query - single path miss errors instead of ONull" $
+      assertResolveFailsWith
+        (ctxWith [("config", OObject [("db", OString "x")])])
+        (varLookupQ "config" "missing")
+        "property 'missing' not found"
+
+  , testCase "dot query - nested path miss errors instead of ONull" $
+      assertResolveFailsWith
+        (ctxWith [("config", OObject [("db", OObject [("host", OString "x")])])])
+        (varLookupQ "config" "db.missing")
+        "property 'db.missing' not found"
+
+  , testCase "dot query - comma selection on non-object errors" $
+      assertResolveFailsWith
+        (ctxWith [("items", OArray [ONumber 1])])
+        (varLookupQ "items" "a, b")
+        "expected mapping"
+
   , testCase "jmespath query on array" $
       assertResolves
         (ctxWith [("items", OArray [ONumber 1, ONumber 2, ONumber 3])])
