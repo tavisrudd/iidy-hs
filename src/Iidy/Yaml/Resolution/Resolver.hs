@@ -75,6 +75,15 @@ cfnTypeName = \case
   OArray _  -> "array"
   other     -> oValueTypeName other
 
+-- | Returns True if the OValue is a resolved CFN intrinsic function.
+-- After resolution, nested intrinsics like !GetAZs, !FindInMap, !If etc.
+-- are represented as OObject [("!TagName", value)]. These can evaluate to
+-- any type at CloudFormation deploy time, so validators must accept them
+-- wherever a specific type (array, string, etc.) is expected.
+isCfnIntrinsic :: OValue -> Bool
+isCfnIntrinsic (OObject [(k, _)]) = "!" `T.isPrefixOf` k
+isCfnIntrinsic _                  = False
+
 -- | Type mismatch: "expected X, found Y"
 typeMismatchError :: SrcMeta -> Text -> OValue -> Resolve a
 typeMismatchError meta expected val =
@@ -376,6 +385,7 @@ validateCfnTag meta name val = case name of
   "!Join" -> case val of
     ONull -> cfnValidationError meta "!Join" "!Join cannot have null value"
     OArray [OString _, OArray _] -> pure ()
+    OArray [OString _, v] | isCfnIntrinsic v -> pure ()  -- e.g. !FindInMap, !If, !Split
     OArray [OString _, v] -> cfnValidationError meta "!Join" $ "!Join expects [delimiter, array], found [string, " <> cfnTypeName v <> "]"
     OArray [v, v2] -> cfnValidationError meta "!Join" $ "!Join expects [string, array], found [" <> cfnTypeName v <> ", " <> cfnTypeName v2 <> "]"
     OArray items -> cfnValidationError meta "!Join" $ "!Join expects exactly 2 elements [delimiter, array], found " <> showLen items <> " elements"
@@ -384,6 +394,7 @@ validateCfnTag meta name val = case name of
   "!Select" -> case val of
     ONull -> cfnValidationError meta "!Select" "!Select cannot have null value"
     OArray [ONumber _, OArray _] -> pure ()
+    OArray [ONumber _, v] | isCfnIntrinsic v -> pure ()  -- e.g. !GetAZs, !FindInMap, !If
     OArray [ONumber _, v] -> cfnValidationError meta "!Select" $ "!Select expects [index, array], found [number, " <> cfnTypeName v <> "]"
     OArray [v, v2] -> cfnValidationError meta "!Select" $ "!Select expects [number, array], found [" <> cfnTypeName v <> ", " <> cfnTypeName v2 <> "]"
     OArray items -> cfnValidationError meta "!Select" $ "!Select expects exactly 2 elements [index, array], found " <> showLen items <> " elements"
@@ -392,6 +403,7 @@ validateCfnTag meta name val = case name of
   "!Split" -> case val of
     ONull -> cfnValidationError meta "!Split" "!Split cannot have null value"
     OArray [OString _, OString _] -> pure ()
+    OArray [OString _, v] | isCfnIntrinsic v -> pure ()  -- e.g. !Sub, !Ref, !Select
     OArray [v1, v2] -> cfnValidationError meta "!Split" $ "!Split expects [string, string], found [" <> cfnTypeName v1 <> ", " <> cfnTypeName v2 <> "]"
     OArray items -> cfnValidationError meta "!Split" $ "!Split expects exactly 2 elements [delimiter, string], found " <> showLen items <> " elements"
     _ -> cfnValidationError meta "!Split" $ "!Split expects a 2-element array, found " <> cfnTypeName val
