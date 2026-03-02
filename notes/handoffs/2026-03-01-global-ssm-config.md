@@ -127,4 +127,12 @@ Per CLAUDE.md -- `run-quiet` wrapper for `cabal build` and `cabal test`.
 
 ## Handoff Notes
 
-(none yet)
+### Session 41 (2026-03-01)
+**Blocker**: `amazonka-sns` is incompatible with GHC 9.10.3 / base 4.20.
+Cabal cannot resolve the dependency. Implementation exists as untracked
+`src/Iidy/Cfn/GlobalConfig.hs` and in backup patch `~/iidy-hs-all-agent-changes.patch`.
+
+**Options to unblock**:
+1. Use raw `amazonka` to construct SNS.GetTopicAttributes request manually (no amazonka-sns needed)
+2. Find/build a compatible amazonka-sns version
+3. Skip SNS validation — just append the ARN without validating via GetTopicAttributes
