@@ -20,6 +20,7 @@ import qualified Data.Text as T
 
 import Iidy.Aws.ClientReqToken (TokenInfo(..))
 import Iidy.Cfn.Context (CfnContext(..))
+import Iidy.Confirm (ConfirmResult(..))
 import Iidy.Cfn.Operations.Changeset
   ( createChangeset
   , executeChangeset
@@ -107,8 +108,8 @@ updateWithChangeset ctx args yesFlag argsfilePath env emit = do
         then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
         else do
           -- Confirm execution
-          confirmed <- confirmChangesetExecution yesFlag
-          if not confirmed
+          result <- confirmChangesetExecution yesFlag
+          if result == Declined
             then pure (Right 130)
             else executeChangeset ctx stackName csName emit
 
@@ -151,7 +152,7 @@ createWithChangeset ctx args yesFlag argsfilePath env emit = do
         then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
         else do
           -- Confirm execution
-          confirmed <- confirmChangesetExecution yesFlag
-          if not confirmed
+          result <- confirmChangesetExecution yesFlag
+          if result == Declined
             then pure (Right 130)
             else executeChangeset ctx stackName csName emit

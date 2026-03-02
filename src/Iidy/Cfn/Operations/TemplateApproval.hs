@@ -29,7 +29,7 @@ import qualified Amazonka.S3.HeadObject as HO
 import qualified Amazonka.S3.DeleteObject as DO
 import qualified Data.Conduit.List as CL
 
-import Iidy.Confirm (requestConfirmation)
+import Iidy.Confirm (ConfirmResult(..), requestConfirmation)
 import Iidy.Cfn.Context (CfnContext(..))
 import Iidy.Cfn.TemplateHash (generateVersionedLocation, parseS3Url)
 import Iidy.Cfn.TemplateLoader (loadCfnTemplate, TemplateResult(..))
@@ -175,8 +175,8 @@ templateApprovalReview ctx url contextLines emit = do
                           pure (Right 0)
                         else do
                           -- Request confirmation
-                          confirmed <- requestConfirmation "Would you like to approve these changes?"
-                          if confirmed
+                          result <- requestConfirmation "Would you like to approve these changes?"
+                          if result == Confirmed
                             then do
                               -- Approve: copy pending to approved and latest, delete pending
                               uploadApproved <- uploadToS3 (cfnEnv ctx) bucket approvedKey pending

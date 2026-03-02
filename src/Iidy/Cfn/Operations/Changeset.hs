@@ -50,7 +50,7 @@ import Amazonka.CloudFormation.DescribeChangeSet (DescribeChangeSet(stackName))
 import qualified Amazonka.CloudFormation.ListChangeSets as LCS
 
 import Iidy.Constants (defaultPreviousEventsCount)
-import Iidy.Confirm (requestConfirmation)
+import Iidy.Confirm (ConfirmResult(..), requestConfirmation)
 import Iidy.Aws.ClientReqToken (TokenInfo(..))
 import Iidy.Cfn.Context
   ( CfnContext(..)
@@ -442,8 +442,8 @@ generateDashedName = do
       ]
 
 -- | Prompt the user to confirm changeset execution.
--- Returns True if confirmed (or if --yes flag was provided), False otherwise.
-confirmChangesetExecution :: Bool -> IO Bool
+-- Returns Confirmed if the user approves (or if --yes flag was provided).
+confirmChangesetExecution :: Bool -> IO ConfirmResult
 confirmChangesetExecution yesFlag
-  | yesFlag   = pure True
+  | yesFlag   = pure Confirmed
   | otherwise = requestConfirmation "Do you want to execute this changeset now?"

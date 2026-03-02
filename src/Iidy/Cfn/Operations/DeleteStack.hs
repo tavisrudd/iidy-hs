@@ -9,7 +9,6 @@ module Iidy.Cfn.Operations.DeleteStack
 
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
-import qualified Data.Text as T
 
 import Control.Monad.Trans.Resource (runResourceT)
 
@@ -28,7 +27,7 @@ import Iidy.Cfn.StackOperations
   , pollForCompletion
   , PollResult(..)
   )
-import Iidy.Confirm (requestConfirmation)
+import Iidy.Confirm (ConfirmResult(..), requestConfirmation)
 import Iidy.Output.Types (OutputData(..), StackAbsentInfo(..))
 
 ------------------------------------------------------------------------
@@ -82,11 +81,11 @@ deleteStack ctx stackName skipConfirmation env emit = do
       emit (OdStackContents contents)
 
       -- Step 1c: Prompt for confirmation unless --yes
-      confirmed <- if skipConfirmation
-        then pure True
+      result <- if skipConfirmation
+        then pure Confirmed
         else requestConfirmation
-               ("Are you sure you want to DELETE the stack " <> T.unpack stackName <> "?")
-      if not confirmed
+               ("Are you sure you want to DELETE the stack " <> stackName <> "?")
+      if result == Declined
         then pure (Right 130)  -- Exit code 130 = user cancelled
         else do
           -- Step 2: Use stack ID/ARN from the already-fetched stack for reliable post-delete polling

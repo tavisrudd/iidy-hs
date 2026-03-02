@@ -28,6 +28,7 @@ import qualified Amazonka.CloudFormation.UpdateStack as US
 
 import Iidy.Aws.ClientReqToken (TokenInfo(..))
 import Iidy.Cfn.Context (CfnContext(..), updateSuccessStates, updateTerminalStatuses)
+import Iidy.Confirm (ConfirmResult(..))
 import Iidy.Cfn.Operations.Changeset
   ( createChangeset
   , executeChangeset
@@ -167,8 +168,8 @@ updateStackWithChangeset ctx args yesFlag argsfilePath env emit = do
         then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
         else do
           -- Step 6: Confirm execution
-          confirmed <- confirmChangesetExecution yesFlag
-          if not confirmed
+          result <- confirmChangesetExecution yesFlag
+          if result == Declined
             then pure (Right 130)  -- user cancelled
             else do
               -- Step 7: Execute changeset and watch

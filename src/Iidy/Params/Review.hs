@@ -16,7 +16,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Lens.Micro ((^.))
 
-import Iidy.Confirm (requestConfirmation)
+import Iidy.Confirm (ConfirmResult(..), requestConfirmation)
 import Iidy.Params.Client (fetchParam)
 import qualified Amazonka
 import qualified Amazonka.SSM.GetParameter as GP
@@ -62,8 +62,8 @@ paramReview awsEnv path = do
       TIO.putStrLn ""
 
       -- 4. Prompt for confirmation
-      confirmed <- requestConfirmation "Would you like to approve these changes?"
-      if confirmed
+      result <- requestConfirmation "Would you like to approve these changes?"
+      if result == Confirmed
         then do
           -- 5. Apply: write pending value (preserving type), delete pending
           applyResult <- applyPendingChange awsEnv path pendingValue pendingPath paramType
