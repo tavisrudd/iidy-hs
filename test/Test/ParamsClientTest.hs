@@ -11,56 +11,33 @@ import qualified Amazonka.SSM.Types.Parameter as SSMP
 import qualified Amazonka.SSM.Types.ParameterHistory as SSMPH
 import qualified Amazonka.SSM.Types.ParameterType as SSMPT
 
-import Iidy.Params.Client (formatHistoryEntry, formatParam, textToParameterType)
+import Iidy.Cli (ParamType(..))
+import Iidy.Params.Client (formatHistoryEntry, formatParam, paramTypeToSsm)
 
 paramsClientTests :: [TestTree]
 paramsClientTests =
-  [ testGroup "textToParameterType" textToParameterTypeTests
-  , testGroup "formatHistoryEntry"  formatHistoryEntryTests
-  , testGroup "formatParam"         formatParamTests
+  [ testGroup "paramTypeToSsm"     paramTypeToSsmTests
+  , testGroup "formatHistoryEntry" formatHistoryEntryTests
+  , testGroup "formatParam"        formatParamTests
   ]
 
 ------------------------------------------------------------------------
--- textToParameterType
+-- paramTypeToSsm
 ------------------------------------------------------------------------
 
-textToParameterTypeTests :: [TestTree]
-textToParameterTypeTests =
-  [ testCase "securestring (lower) -> SecureString" $
-      textToParameterType "securestring"
-        @?= Just SSMPT.ParameterType_SecureString
+paramTypeToSsmTests :: [TestTree]
+paramTypeToSsmTests =
+  [ testCase "ParamString -> ParameterType_String" $
+      paramTypeToSsm ParamString
+        @?= SSMPT.ParameterType_String
 
-  , testCase "SecureString (mixed case) -> SecureString" $
-      textToParameterType "SecureString"
-        @?= Just SSMPT.ParameterType_SecureString
+  , testCase "ParamSecureString -> ParameterType_SecureString" $
+      paramTypeToSsm ParamSecureString
+        @?= SSMPT.ParameterType_SecureString
 
-  , testCase "SECURESTRING (upper) -> SecureString" $
-      textToParameterType "SECURESTRING"
-        @?= Just SSMPT.ParameterType_SecureString
-
-  , testCase "stringlist -> StringList" $
-      textToParameterType "stringlist"
-        @?= Just SSMPT.ParameterType_StringList
-
-  , testCase "StringList (mixed case) -> StringList" $
-      textToParameterType "StringList"
-        @?= Just SSMPT.ParameterType_StringList
-
-  , testCase "string -> String" $
-      textToParameterType "string"
-        @?= Just SSMPT.ParameterType_String
-
-  , testCase "String (mixed case) -> String" $
-      textToParameterType "String"
-        @?= Just SSMPT.ParameterType_String
-
-  , testCase "unknown value defaults to String" $
-      textToParameterType "unknown"
-        @?= Just SSMPT.ParameterType_String
-
-  , testCase "empty string defaults to String" $
-      textToParameterType ""
-        @?= Just SSMPT.ParameterType_String
+  , testCase "ParamStringList -> ParameterType_StringList" $
+      paramTypeToSsm ParamStringList
+        @?= SSMPT.ParameterType_StringList
   ]
 
 ------------------------------------------------------------------------

@@ -36,6 +36,9 @@ module Iidy.Cli
     -- * Format enums
   , TemplateFormat(..)
   , TemplateStageArg(..)
+  , ParamType(..)
+  , ParamFormat(..)
+  , ShellType(..)
   ) where
 
 import Data.Text (Text)
@@ -102,7 +105,7 @@ data Commands
   | CmdLintTemplate !LintTemplateArgs
   | CmdConvertStackToIidy !ConvertArgs
   | CmdInitStackArgs !InitStackArgs
-  | CmdCompletion !(Maybe Text)           -- ^ shell name
+  | CmdCompletion !(Maybe ShellType)      -- ^ shell name
   | CmdExplain ![Text]                    -- ^ error codes
   deriving stock (Show, Eq)
 
@@ -128,6 +131,18 @@ data TemplateFormat = FormatJson | FormatYaml | FormatOriginal
 
 data TemplateStageArg = StageOriginal | StageProcessed
   deriving stock (Show, Eq, Ord)
+
+-- | SSM parameter type
+data ParamType = ParamString | ParamSecureString | ParamStringList
+  deriving stock (Show, Eq)
+
+-- | Parameter output format
+data ParamFormat = ParamFormatRaw | ParamFormatJson | ParamFormatYaml
+  deriving stock (Show, Eq)
+
+-- | Shell type for completion generation
+data ShellType = ShellBash | ShellZsh | ShellFish
+  deriving stock (Show, Eq)
 
 ------------------------------------------------------------------------
 -- Arg types
@@ -216,7 +231,7 @@ data ParamSetArgs = ParamSetArgs
   , psaMessage      :: !(Maybe Text)
   , psaOverwrite    :: !Bool
   , psaWithApproval :: !Bool
-  , psaType         :: !Text
+  , psaType         :: !ParamType
   } deriving stock (Show, Eq)
 
 newtype ParamPathArg = ParamPathArg
@@ -226,13 +241,13 @@ newtype ParamPathArg = ParamPathArg
 data ParamGetArgs = ParamGetArgs
   { pgaPath    :: !Text
   , pgaDecrypt :: !Bool
-  , pgaFormat  :: !Text
+  , pgaFormat  :: !ParamFormat
   } deriving stock (Show, Eq)
 
 data ParamGetByPathArgs = ParamGetByPathArgs
   { gpbPath      :: !Text
   , gpbDecrypt   :: !Bool
-  , gpbFormat    :: !Text
+  , gpbFormat    :: !ParamFormat
   , gpbRecursive :: !Bool
   } deriving stock (Show, Eq)
 

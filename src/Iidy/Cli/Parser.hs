@@ -4,6 +4,7 @@ module Iidy.Cli.Parser
   ) where
 
 import Control.Monad (when)
+import Data.Char (toLower)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Version (showVersion)
@@ -210,9 +211,9 @@ visibleCommands = subparser
       (info (CmdInitStackArgs <$> initStackArgsParser <**> helper)
             (progDesc "initialize stack-args.yaml and cfn-template.yaml"))
   <> command "completion"
-      (info (CmdCompletion <$> optional (argument textReader
+      (info (CmdCompletion <$> optional (argument shellTypeReader
             ( metavar "SHELL"
-            <> help "Shell name (bash|zsh|fish|powershell)")) <**> helper)
+            <> help "Shell name (bash|zsh|fish)")) <**> helper)
             (progDesc "generate shell completion script"))
   <> command "explain"
       (info (CmdExplain <$> many (argument textReader (metavar "CODE...")) <**> helper)
@@ -443,9 +444,9 @@ paramSetArgsParser = ParamSetArgs
       ))
   <*> switch (long "overwrite" <> help "Overwrite existing parameter")
   <*> switch (long "with-approval" <> help "Require approval before setting")
-  <*> option textReader
+  <*> option paramTypeReader
       ( long "type"
-      <> value "SecureString"
+      <> value ParamSecureString
       <> metavar "TYPE"
       <> help "Parameter type: String|StringList|SecureString (default: SecureString)"
       )
@@ -458,22 +459,22 @@ paramGetArgsParser :: Parser ParamGetArgs
 paramGetArgsParser = ParamGetArgs
   <$> argument textReader (metavar "PATH" <> help "SSM parameter path")
   <*> flag True False (long "no-decrypt" <> help "Don't decrypt SecureString values")
-  <*> option textReader
+  <*> option paramFormatReader
       ( long "format"
-      <> value "simple"
+      <> value ParamFormatRaw
       <> metavar "FORMAT"
-      <> help "Output format (default: simple)"
+      <> help "Output format: raw|json|yaml (default: raw)"
       )
 
 paramGetByPathArgsParser :: Parser ParamGetByPathArgs
 paramGetByPathArgsParser = ParamGetByPathArgs
   <$> argument textReader (metavar "PATH" <> help "SSM parameter path prefix")
   <*> flag True False (long "no-decrypt" <> help "Don't decrypt SecureString values")
-  <*> option textReader
+  <*> option paramFormatReader
       ( long "format"
-      <> value "simple"
+      <> value ParamFormatRaw
       <> metavar "FORMAT"
-      <> help "Output format (default: simple)"
+      <> help "Output format: raw|json|yaml (default: raw)"
       )
   <*> switch (long "recursive" <> help "Recursively list parameters under path")
 
@@ -626,3 +627,25 @@ yamlSpecReader = eitherReader $ \s -> case s of
   "1.2"  -> Right YamlV12
   "auto" -> Right YamlAuto
   _      -> Left $ "Unknown yaml-spec: " <> s <> ". Expected: 1.1|1.2|auto"
+
+paramTypeReader :: ReadM ParamType
+paramTypeReader = eitherReader $ \s -> case map toLower s of
+  "string"       -> Right ParamString
+  "securestring" -> Right ParamSecureString
+  "stringlist"   -> Right ParamStringList
+  _              -> Left $ "Unknown parameter type: " <> s <> ". Expected: String|SecureString|StringList"
+
+paramFormatReader :: ReadM ParamFormat
+paramFormatReader = eitherReader $ \s -> case map toLower s of
+  "raw"    -> Right ParamFormatRaw
+  "json"   -> Right ParamFormatJson
+  "yaml"   -> Right ParamFormatYaml
+  "simple" -> Right ParamFormatRaw
+  _        -> Left $ "Unknown format: " <> s <> ". Expected: raw|json|yaml"
+
+shellTypeReader :: ReadM ShellType
+shellTypeReader = eitherReader $ \s -> case map toLower s of
+  "bash" -> Right ShellBash
+  "zsh"  -> Right ShellZsh
+  "fish" -> Right ShellFish
+  _      -> Left $ "Unknown shell: " <> s <> ". Expected: bash|zsh|fish"

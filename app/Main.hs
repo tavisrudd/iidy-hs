@@ -312,18 +312,17 @@ runCommand cli = case cliCommand cli of
         Right rc -> exitCode rc
   CmdInitStackArgs args  -> runInitStackArgs args >>= exitCode
   CmdCompletion mShell   -> do
-      shellName <- case mShell of
-        Just s  -> pure (T.unpack s)
+      shellType <- case mShell of
+        Just st -> pure st
         Nothing -> do
           mEnv <- lookupEnv "SHELL"
           pure $ case mEnv of
-            Just s  -> reverse $ takeWhile (/= '/') (reverse s)
-            Nothing -> "bash"
-      case shellName of
-        "bash" -> putStrLn bashCompletionScript
-        "zsh"  -> putStrLn zshCompletionScript
-        "fish" -> putStrLn fishCompletionScript
-        other  -> hPutStrLn stderr $ "Unsupported shell: " <> other <> ". Use bash, zsh, or fish."
+            Just s  -> detectShellType (reverse $ takeWhile (/= '/') (reverse s))
+            Nothing -> ShellBash
+      case shellType of
+        ShellBash -> putStrLn bashCompletionScript
+        ShellZsh  -> putStrLn zshCompletionScript
+        ShellFish -> putStrLn fishCompletionScript
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -439,6 +438,13 @@ handleEither (Right rc) = pure rc
 exitCode :: Int -> IO ()
 exitCode 0 = exitWith ExitSuccess
 exitCode n = exitWith (ExitFailure n)
+
+-- | Detect shell type from a shell name string.
+-- Falls back to ShellBash for unknown values.
+detectShellType :: String -> ShellType
+detectShellType "zsh"  = ShellZsh
+detectShellType "fish" = ShellFish
+detectShellType _      = ShellBash
 
 -- | Print error to stderr and exit with code 1
 dieTxt :: Text -> IO a

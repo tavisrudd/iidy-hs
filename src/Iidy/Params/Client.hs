@@ -12,7 +12,7 @@ module Iidy.Params.Client
   , paramGetByPath
   , paramGetHistory
     -- * Pure helpers (exported for testing)
-  , textToParameterType
+  , paramTypeToSsm
   , formatParam
   , formatHistoryEntry
   ) where
@@ -36,7 +36,7 @@ import qualified Amazonka.SSM.Types.Parameter as SSMP
 import qualified Amazonka.SSM.Types.ParameterHistory as SSMPH
 import qualified Amazonka.SSM.Types.ParameterType as SSMPT
 
-import Iidy.Cli (ParamGetArgs(..), ParamSetArgs(..), ParamGetByPathArgs(..))
+import Iidy.Cli (ParamGetArgs(..), ParamSetArgs(..), ParamGetByPathArgs(..), ParamType(..))
 
 ------------------------------------------------------------------------
 -- paramGet
@@ -81,23 +81,19 @@ paramSet awsEnv args = do
 
 putParam :: Amazonka.Env -> ParamSetArgs -> IO ()
 putParam awsEnv args = runResourceT $ do
-  let paramType = textToParameterType args.psaType
-      req = (PP.newPutParameter args.psaPath args.psaValue)
-              { PP.overwrite = Just args.psaOverwrite
-              , PP.type'     = paramType
+  let req = (PP.newPutParameter args.psaPath args.psaValue)
+              { PP.overwrite   = Just args.psaOverwrite
+              , PP.type'       = Just (paramTypeToSsm args.psaType)
               , PP.description = args.psaMessage
               }
   _ <- Amazonka.send awsEnv req
   pure ()
 
--- | Convert a text type name to an SSM ParameterType.
--- Defaults to String for unknown values.
-textToParameterType :: Text -> Maybe SSM.ParameterType
-textToParameterType t = case T.toLower t of
-  "securestring" -> Just SSMPT.ParameterType_SecureString
-  "stringlist"   -> Just SSMPT.ParameterType_StringList
-  "string"       -> Just SSMPT.ParameterType_String
-  _              -> Just SSMPT.ParameterType_String
+-- | Convert a ParamType to the corresponding SSM ParameterType.
+paramTypeToSsm :: ParamType -> SSM.ParameterType
+paramTypeToSsm ParamString       = SSMPT.ParameterType_String
+paramTypeToSsm ParamSecureString = SSMPT.ParameterType_SecureString
+paramTypeToSsm ParamStringList   = SSMPT.ParameterType_StringList
 
 ------------------------------------------------------------------------
 -- paramGetByPath
