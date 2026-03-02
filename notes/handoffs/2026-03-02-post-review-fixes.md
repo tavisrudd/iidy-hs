@@ -12,7 +12,7 @@ Session 46 produced 7 architecture reviews, a Russell API review (20 findings), 
 snapshot gap audit. Many findings overlap across reviews. This handoff consolidates ALL
 open work into one document, grouped by theme.
 
-**Current state**: 1091 tests, zero warnings.
+**Current state**: 1150 tests, zero warnings.
 
 **Reviews**: hickey, kmett, krishnamurthi, minsky, muratori, ousterhout, russell
 **Audit**: `notes/2026-03-02-snapshot-gap-audit.md`
@@ -289,14 +289,14 @@ No performance measurement exists. Startup time and preprocessing latency unmeas
 | 1G   | DONE      | 33eb121 | Catch Amazonka.Error not SomeException. Silent on empty path, warns on other AWS errors. |
 | 2A   | DONE      | 836e3f5 | isCfnIntrinsic for !Select/!Join/!Split. 2 new fixture expected-outputs. |
 | 2B   | DONE      | 63152be | cfnTypeName returns "array" for OArray in CFN validator context. |
-| 2C   | PENDING   | —       | Port 4 missing yaml-iidy-syntax fixtures from Rust.  |
+| 2C   | DONE      | 12b178f | Reverse-engineered 4 fixtures from Rust snapshots (input files missing from Rust too). All pass cabal test + snapshot-compare. |
 | 2D   | DONE      | 65d54de | Expected-output files for config + import-test.      |
 | 3A   | PENDING   | —       | try @SomeException at 15+ AWS boundaries.            |
 | 3B   | PENDING   | —       | Error classification via string matching.            |
-| 3C   | PENDING   | —       | requestConfirmation Bool hides exit-code semantics.  |
+| 3C   | DONE      | 6ca9fb3 | ConfirmResult ADT (Confirmed/Declined), Text not String. 6 call sites updated. |
 | 4A-F | PENDING   | —       | Structural improvements — larger refactoring.        |
 
-**Tests**: 1091 → 1146 (+55)
+**Tests**: 1091 → 1150 (+59)
 
 ## Handoff Notes
 
@@ -309,3 +309,20 @@ No performance measurement exists. Startup time and preprocessing latency unmeas
 - **1A** completed — full port with 6 new types, ListTagsForResource, custom YAML formatter, 31 new tests.
 - **2C** (port 4 missing fixtures) is straightforward research + fixture work
 - **3A** (SomeException at 15+ sites) is medium-high risk, should be done progressively
+
+### Session 2026-03-02--3 (`91ca49f6-a009-46e0-a321-aed048a27002`)
+**Completed**:
+- Fixed -Wx-partial warning: `List.head` → `error` in unreachable branch (e8ceaaa)
+- Ported 4 missing yaml-iidy-syntax fixtures from Rust snapshots (12b178f) — 2C
+- Updated CLAUDE.md: session numbering format, sub-agent git rules (42881fb)
+- Replaced requestConfirmation Bool → ConfirmResult ADT (6ca9fb3) — 3C
+- Memory audit: MEMORY.md trimmed 78→14 lines, stale files deleted
+- Created t-later skill, updated t-handoff/t-done with session numbering
+- SessionStart hook now assigns per-project YYYY-MM-DD--N session numbers
+**Files modified**: `src/Iidy/Confirm.hs`, `src/Iidy/Cfn/Operations/{DeleteStack,Changeset,UpdateStack,CreateOrUpdate,TemplateApproval}.hs`, `src/Iidy/Params/Review.hs`, `CLAUDE.md`, 8 fixture files
+**Notes for next session**:
+- 1D/1E/1F still need user sign-off before implementing (behavior changes)
+- 3A (SomeException at 15+ sites) is the next substantive code item — do progressively
+- 3B (error classification string matching) needs design thought before code
+- 4A-F are larger structural refactors — only if sections 1-3 fully done
+- `$CLAUDE_SESSION_NUM` and `$CLAUDE_SESSION_ID` env vars now available via SessionStart hook
