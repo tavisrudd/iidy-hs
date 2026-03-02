@@ -114,6 +114,16 @@ preprocessingPropertyTests =
     , testProperty "CFN Sub tag passes through unchanged" prop_cfn_sub_passthrough
     , testProperty "CFN GetAtt tag passes through unchanged" prop_cfn_getatt_passthrough
     ]
+  , testGroup "Edge case properties"
+    [ testProperty "map over empty list returns empty array" prop_map_empty_list
+    , testProperty "concat identity: concat([[], xs]) == xs" prop_concat_identity_left
+    , testProperty "concat identity: concat([xs, []]) == xs" prop_concat_identity_right
+    , testProperty "let with unused bindings doesn't error" prop_let_unused_binding
+    , testProperty "if with null condition takes else branch" prop_if_null_takes_else
+    , testProperty "if with empty string takes else branch" prop_if_empty_string_takes_else
+    , testProperty "if with zero takes then branch (0 is truthy)" prop_if_zero_takes_then
+    , testProperty "nested map-let-merge preserves structure" prop_nested_map_let_merge
+    ]
   ]
 
 ------------------------------------------------------------------------
@@ -323,3 +333,126 @@ prop_cfn_getatt_passthrough =
         ast = cfnTag (CfnGetAtt (str dotNotation))
         result = resolveAst emptyContext ast
     in result === Right (OObject [("!GetAtt", OString dotNotation)])
+
+------------------------------------------------------------------------
+-- 9. Edge case: map over empty list
+------------------------------------------------------------------------
+
+-- | map(identity, []) should return [].
+prop_map_empty_list :: Property
+prop_map_empty_list = once $
+    let emptyList = seq_ []
+        templateAst = ppTag (PpVarLookup (VarLookupTag "item" Nothing Nothing))
+        mapAst = ppTag (PpMap (MapTag emptyList templateAst Nothing Nothing))
+        result = resolveAst emptyContext mapAst
+    in result === Right (OArray [])
+
+------------------------------------------------------------------------
+-- 10. Edge case: concat identity with empty arrays
+------------------------------------------------------------------------
+
+-- | concat([[], xs]) == xs
+prop_concat_identity_left :: Property
+prop_concat_identity_left =
+  forAll genOArray $ \xs ->
+    let emptyArr = OArray []
+        ast = ppTag (PpConcat (ConcatTag [oValueToAst emptyArr, oValueToAst xs]))
+        result = resolveAst emptyContext ast
+    in result === Right xs
+
+-- | concat([xs, []]) == xs
+prop_concat_identity_right :: Property
+prop_concat_identity_right =
+  forAll genOArray $ \xs ->
+    let emptyArr = OArray []
+        ast = ppTag (PpConcat (ConcatTag [oValueToAst xs, oValueToAst emptyArr]))
+        result = resolveAst emptyContext ast
+    in result === Right xs
+
+------------------------------------------------------------------------
+-- 11. Edge case: let with unused bindings
+------------------------------------------------------------------------
+
+-- | Binding a variable that's never referenced shouldn't error.
+prop_let_unused_binding :: Property
+prop_let_unused_binding =
+  forAll ((,) <$> genScalarOValue <*> genScalarOValue) $ \(unused, used) ->
+    let ast = ppTag (PpLet (LetTag
+          [("unused_var", oValueToAst unused), ("y", oValueToAst used)]
+          (ppTag (PpVarLookup (VarLookupTag "y" Nothing Nothing)))))
+        result = resolveAst emptyContext ast
+    in counterexample ("unused=" <> show unused <> " used=" <> show used
+                        <> " result=" <> show result) $
+       result === Right used
+
+------------------------------------------------------------------------
+-- 12. Edge case: if with null/empty-string/zero conditions
+------------------------------------------------------------------------
+
+-- | null is falsy — should take else branch.
+prop_if_null_takes_else :: Property
+prop_if_null_takes_else =
+  forAll ((,) <$> genSafeText <*> genSafeText) $ \(thenText, elseText) ->
+    let ifAst = ppTag (PpIf (IfTag
+          astNull
+          (str thenText)
+          (Just (str elseText))))
+        result = resolveAst emptyContext ifAst
+    in result === Right (OString elseText)
+
+-- | Empty string is falsy — should take else branch.
+prop_if_empty_string_takes_else :: Property
+prop_if_empty_string_takes_else =
+  forAll ((,) <$> genSafeText <*> genSafeText) $ \(thenText, elseText) ->
+    let ifAst = ppTag (PpIf (IfTag
+          (str "")
+          (str thenText)
+          (Just (str elseText))))
+        result = resolveAst emptyContext ifAst
+    in result === Right (OString elseText)
+
+-- | Zero is truthy in iidy (all numbers are truthy) — should take then branch.
+prop_if_zero_takes_then :: Property
+prop_if_zero_takes_then =
+  forAll ((,) <$> genSafeText <*> genSafeText) $ \(thenText, elseText) ->
+    let ifAst = ppTag (PpIf (IfTag
+          (AstNumber 0 m)
+          (str thenText)
+          (Just (str elseText))))
+        result = resolveAst emptyContext ifAst
+    in result === Right (OString thenText)
+
+------------------------------------------------------------------------
+-- 13. Nested composition: map + let + merge
+------------------------------------------------------------------------
+
+-- | For each item in a list, let x = item, then merge [{val: x}, {tag: "fixed"}].
+-- Tests variable scoping through nested preprocessing tags.
+prop_nested_map_let_merge :: Property
+prop_nested_map_let_merge =
+  forAll (resize 5 (listOf genScalarOValue)) $ \items ->
+    let varRef = ppTag (PpVarLookup (VarLookupTag "item" Nothing Nothing))
+        letBody = ppTag (PpMerge (MergeTag
+          [ AstMapping [(str "val", ppTag (PpVarLookup (VarLookupTag "x" Nothing Nothing)))] m
+          , AstMapping [(str "tag", str "fixed")] m
+          ]))
+        template = ppTag (PpLet (LetTag [("x", varRef)] letBody))
+        mapAst = ppTag (PpMap (MapTag (seq_ (map oValueToAst items)) template Nothing Nothing))
+        result = resolveAst emptyContext mapAst
+    in counterexample ("items=" <> show items <> " result=" <> show result) $
+       case result of
+         Right (OArray results) ->
+           conjoin
+             [ counterexample "length preserved" $
+                 length results === length items
+             , counterexample "all have tag=fixed" $
+                 property (all hasTag results)
+             ]
+         Right other ->
+           counterexample ("Expected OArray, got: " <> show other) (property False)
+         Left err ->
+           counterexample ("Resolve failed: " <> show err) (property False)
+  where
+    hasTag :: OValue -> Bool
+    hasTag (OObject kvs) = lookupO "tag" kvs == Just (OString "fixed")
+    hasTag _ = False
