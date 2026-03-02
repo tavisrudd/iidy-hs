@@ -68,6 +68,13 @@ oValueTypeName = \case
   OArray _   -> "sequence"
   OObject _  -> "object"
 
+-- | Describe an OValue's type for CloudFormation validation error messages.
+-- Uses "array" instead of "sequence" to match Rust's CFN validator output.
+cfnTypeName :: OValue -> Text
+cfnTypeName = \case
+  OArray _  -> "array"
+  other     -> oValueTypeName other
+
 -- | Type mismatch: "expected X, found Y"
 typeMismatchError :: SrcMeta -> Text -> OValue -> Resolve a
 typeMismatchError meta expected val =
@@ -346,72 +353,72 @@ validateCfnTag meta name val = case name of
     ONull -> cfnValidationError meta "!Ref" "!Ref cannot have null value"
     OString t | T.null t -> cfnValidationError meta "!Ref" "!Ref cannot reference empty string"
     OString _ -> pure ()
-    _ -> cfnValidationError meta "!Ref" $ "!Ref expects a string (resource or parameter name), found " <> oValueTypeName val
+    _ -> cfnValidationError meta "!Ref" $ "!Ref expects a string (resource or parameter name), found " <> cfnTypeName val
 
   "!Sub" -> case val of
     ONull -> cfnValidationError meta "!Sub" "!Sub cannot have null value"
     OString _ -> pure ()
     OArray [OString _, OObject _] -> pure ()
-    OArray [OString _, v] -> cfnValidationError meta "!Sub" $ "!Sub array form expects [string, object], found [string, " <> oValueTypeName v <> "]"
-    OArray [v, v2] -> cfnValidationError meta "!Sub" $ "!Sub array form expects [string, object], found [" <> oValueTypeName v <> ", " <> oValueTypeName v2 <> "]"
+    OArray [OString _, v] -> cfnValidationError meta "!Sub" $ "!Sub array form expects [string, object], found [string, " <> cfnTypeName v <> "]"
+    OArray [v, v2] -> cfnValidationError meta "!Sub" $ "!Sub array form expects [string, object], found [" <> cfnTypeName v <> ", " <> cfnTypeName v2 <> "]"
     OArray items -> cfnValidationError meta "!Sub" $ "!Sub with array expects exactly 2 elements [string, variables], found " <> showLen items <> " elements"
-    _ -> cfnValidationError meta "!Sub" $ "!Sub expects a string or 2-element array, found " <> oValueTypeName val
+    _ -> cfnValidationError meta "!Sub" $ "!Sub expects a string or 2-element array, found " <> cfnTypeName val
 
   "!GetAtt" -> case val of
     ONull -> cfnValidationError meta "!GetAtt" "!GetAtt cannot have null value"
     OString t | "." `T.isInfixOf` t -> pure ()
     OString _ -> cfnValidationError meta "!GetAtt" "!GetAtt string format requires dot notation: 'ResourceName.AttributeName'"
     OArray [OString _, OString _] -> pure ()
-    OArray [v1, v2] -> cfnValidationError meta "!GetAtt" $ "!GetAtt array form expects [string, string], found [" <> oValueTypeName v1 <> ", " <> oValueTypeName v2 <> "]"
+    OArray [v1, v2] -> cfnValidationError meta "!GetAtt" $ "!GetAtt array form expects [string, string], found [" <> cfnTypeName v1 <> ", " <> cfnTypeName v2 <> "]"
     OArray items -> cfnValidationError meta "!GetAtt" $ "!GetAtt expects exactly 2 elements [resource, attribute], found " <> showLen items <> " elements"
-    _ -> cfnValidationError meta "!GetAtt" $ "!GetAtt expects a string or 2-element array, found " <> oValueTypeName val
+    _ -> cfnValidationError meta "!GetAtt" $ "!GetAtt expects a string or 2-element array, found " <> cfnTypeName val
 
   "!Join" -> case val of
     ONull -> cfnValidationError meta "!Join" "!Join cannot have null value"
     OArray [OString _, OArray _] -> pure ()
-    OArray [OString _, v] -> cfnValidationError meta "!Join" $ "!Join expects [delimiter, array], found [string, " <> oValueTypeName v <> "]"
-    OArray [v, v2] -> cfnValidationError meta "!Join" $ "!Join expects [string, array], found [" <> oValueTypeName v <> ", " <> oValueTypeName v2 <> "]"
+    OArray [OString _, v] -> cfnValidationError meta "!Join" $ "!Join expects [delimiter, array], found [string, " <> cfnTypeName v <> "]"
+    OArray [v, v2] -> cfnValidationError meta "!Join" $ "!Join expects [string, array], found [" <> cfnTypeName v <> ", " <> cfnTypeName v2 <> "]"
     OArray items -> cfnValidationError meta "!Join" $ "!Join expects exactly 2 elements [delimiter, array], found " <> showLen items <> " elements"
-    _ -> cfnValidationError meta "!Join" $ "!Join expects a 2-element array, found " <> oValueTypeName val
+    _ -> cfnValidationError meta "!Join" $ "!Join expects a 2-element array, found " <> cfnTypeName val
 
   "!Select" -> case val of
     ONull -> cfnValidationError meta "!Select" "!Select cannot have null value"
     OArray [ONumber _, OArray _] -> pure ()
-    OArray [ONumber _, v] -> cfnValidationError meta "!Select" $ "!Select expects [index, array], found [number, " <> oValueTypeName v <> "]"
-    OArray [v, v2] -> cfnValidationError meta "!Select" $ "!Select expects [number, array], found [" <> oValueTypeName v <> ", " <> oValueTypeName v2 <> "]"
+    OArray [ONumber _, v] -> cfnValidationError meta "!Select" $ "!Select expects [index, array], found [number, " <> cfnTypeName v <> "]"
+    OArray [v, v2] -> cfnValidationError meta "!Select" $ "!Select expects [number, array], found [" <> cfnTypeName v <> ", " <> cfnTypeName v2 <> "]"
     OArray items -> cfnValidationError meta "!Select" $ "!Select expects exactly 2 elements [index, array], found " <> showLen items <> " elements"
-    _ -> cfnValidationError meta "!Select" $ "!Select expects a 2-element array, found " <> oValueTypeName val
+    _ -> cfnValidationError meta "!Select" $ "!Select expects a 2-element array, found " <> cfnTypeName val
 
   "!Split" -> case val of
     ONull -> cfnValidationError meta "!Split" "!Split cannot have null value"
     OArray [OString _, OString _] -> pure ()
-    OArray [v1, v2] -> cfnValidationError meta "!Split" $ "!Split expects [string, string], found [" <> oValueTypeName v1 <> ", " <> oValueTypeName v2 <> "]"
+    OArray [v1, v2] -> cfnValidationError meta "!Split" $ "!Split expects [string, string], found [" <> cfnTypeName v1 <> ", " <> cfnTypeName v2 <> "]"
     OArray items -> cfnValidationError meta "!Split" $ "!Split expects exactly 2 elements [delimiter, string], found " <> showLen items <> " elements"
-    _ -> cfnValidationError meta "!Split" $ "!Split expects a 2-element array, found " <> oValueTypeName val
+    _ -> cfnValidationError meta "!Split" $ "!Split expects a 2-element array, found " <> cfnTypeName val
 
   "!FindInMap" -> case val of
     ONull -> cfnValidationError meta "!FindInMap" "!FindInMap cannot have null value"
     OArray items | length items == 3 -> pure ()
     OArray items -> cfnValidationError meta "!FindInMap" $ "!FindInMap expects exactly 3 elements [map_name, key1, key2], found " <> showLen items <> " elements"
-    _ -> cfnValidationError meta "!FindInMap" $ "!FindInMap expects a 3-element array, found " <> oValueTypeName val
+    _ -> cfnValidationError meta "!FindInMap" $ "!FindInMap expects a 3-element array, found " <> cfnTypeName val
 
   "!If" -> case val of
     ONull -> cfnValidationError meta "!If" "!If cannot have null value"
     OArray items | length items == 3 -> pure ()
     OArray items -> cfnValidationError meta "!If" $ "!If expects a 3-element array [condition, true_value, false_value], found " <> showLen items <> " elements"
-    _ -> cfnValidationError meta "!If" $ "!If expects a 3-element array, found " <> oValueTypeName val
+    _ -> cfnValidationError meta "!If" $ "!If expects a 3-element array, found " <> cfnTypeName val
 
   "!Equals" -> case val of
     ONull -> cfnValidationError meta "!Equals" "!Equals cannot have null value"
     OArray items | length items == 2 -> pure ()
     OArray items -> cfnValidationError meta "!Equals" $ "!Equals expects a 2-element array, found " <> showLen items <> " elements"
-    _ -> cfnValidationError meta "!Equals" $ "!Equals expects a 2-element array, found " <> oValueTypeName val
+    _ -> cfnValidationError meta "!Equals" $ "!Equals expects a 2-element array, found " <> cfnTypeName val
 
   "!Not" -> case val of
     ONull -> cfnValidationError meta "!Not" "!Not cannot have null value"
     OArray items | length items == 1 -> pure ()
     OArray items -> cfnValidationError meta "!Not" $ "!Not expects a 1-element array, found " <> showLen items <> " elements"
-    _ -> cfnValidationError meta "!Not" $ "!Not expects a 1-element array, found " <> oValueTypeName val
+    _ -> cfnValidationError meta "!Not" $ "!Not expects a 1-element array, found " <> cfnTypeName val
 
   -- Null-only validation for remaining tags (matches Rust catch-all)
   _ -> case val of
