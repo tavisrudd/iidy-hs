@@ -19,10 +19,14 @@
 -- block normal usage.
 module Iidy.Cfn.GlobalConfig
   ( applyGlobalConfiguration
+    -- * Pure helpers (exported for testing)
+  , applyParams
   ) where
 
 import Control.Exception (SomeException, try)
 import Control.Monad.Trans.Resource (runResourceT)
+import Data.Conduit (runConduit, (.|))
+import qualified Data.Conduit.List as CL
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -99,13 +103,15 @@ applyParam sa name value =
 ------------------------------------------------------------------------
 
 -- | Fetch all parameters under the given SSM path (non-recursive, with
--- decryption).  Returns a list of (name, value) pairs.
+-- decryption).  Paginates through all pages to avoid silent truncation
+-- at the default SSM page size (max 10 results per page).
+-- Returns a list of (name, value) pairs.
 fetchParametersByPath :: Amazonka.Env -> Text -> IO [(Text, Text)]
 fetchParametersByPath awsEnv path = runResourceT $ do
   let req = (GBP.newGetParametersByPath path)
               { GBP.withDecryption = Just True }
-  resp <- Amazonka.send awsEnv req
-  let params = fromMaybe [] resp.parameters
+  pages <- runConduit $ Amazonka.paginate awsEnv req .| CL.consume
+  let params = concatMap (fromMaybe [] . (.parameters)) pages
   pure [ (p ^. SSMP.parameter_name, p ^. SSMP.parameter_value)
        | p <- params
        ]

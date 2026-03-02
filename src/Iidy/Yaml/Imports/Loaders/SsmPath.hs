@@ -4,6 +4,9 @@
 module Iidy.Yaml.Imports.Loaders.SsmPath
   ( loadSsmPathImport
   , parseSsmPathLocation
+    -- * Pure helpers (exported for testing)
+  , buildResultObject
+  , stripPathPrefix
   ) where
 
 import Control.Exception (SomeException, try)
@@ -13,6 +16,8 @@ import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL
+import Data.Conduit (runConduit, (.|))
+import qualified Data.Conduit.List as CL
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -59,14 +64,16 @@ loadSsmPathImport awsEnv location = do
 
 -- | Fetch all parameters under a path recursively.
 -- Uses withDecryption=True and recursive=True.
+-- Paginates through all pages to avoid silent truncation at the
+-- default SSM page size (max 10 results per page).
 fetchParametersByPath :: Amazonka.Env -> Text -> IO [(Text, Text)]
 fetchParametersByPath awsEnv paramPath = runResourceT $ do
   let req = (GBP.newGetParametersByPath paramPath)
               { GBP.recursive = Just True
               , GBP.withDecryption = Just True
               }
-  resp <- Amazonka.send awsEnv req
-  let params = fromMaybe [] resp.parameters
+  pages <- runConduit $ Amazonka.paginate awsEnv req .| CL.consume
+  let params = concatMap (fromMaybe [] . (.parameters)) pages
   pure [ (p ^. SSMP.parameter_name, p ^. SSMP.parameter_value)
        | p <- params
        ]

@@ -1,5 +1,8 @@
 module Test.AwsLoaderTest (awsLoaderTests) where
 
+import Data.Aeson (Value(..))
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KM
 import qualified Data.Text as T
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=), assertBool, assertFailure)
@@ -7,7 +10,7 @@ import Test.Tasty.HUnit (testCase, (@?=), assertBool, assertFailure)
 import qualified Amazonka.S3 as S3
 import Iidy.Yaml.Imports.Loaders.S3 (parseS3Uri)
 import Iidy.Yaml.Imports.Loaders.Ssm (parseSsmLocation)
-import Iidy.Yaml.Imports.Loaders.SsmPath (parseSsmPathLocation)
+import Iidy.Yaml.Imports.Loaders.SsmPath (parseSsmPathLocation, buildResultObject, stripPathPrefix)
 import Iidy.Yaml.Imports.Loaders.Cfn (parseCfnLocation, CfnField(..))
 import Iidy.Yaml.Imports.Types (ImportError(..))
 
@@ -16,6 +19,7 @@ awsLoaderTests =
   [ testGroup "S3 URI parsing" s3Tests
   , testGroup "SSM location parsing" ssmTests
   , testGroup "SSM path location parsing" ssmPathTests
+  , testGroup "SSM path result building" ssmPathResultTests
   , testGroup "CFN location parsing" cfnTests
   ]
 
@@ -130,6 +134,95 @@ ssmPathTests =
       assertRight (parseSsmPathLocation "/app/config") $ \(path, fmt) -> do
         path @?= "/app/config"
         fmt @?= Nothing
+  ]
+
+------------------------------------------------------------------------
+-- SSM path result building (pagination correctness)
+--
+-- These test the pure functions that process parameter lists, verifying
+-- they work correctly with >10 parameters -- the number that would be
+-- returned from a single SSM API page. Prior to the pagination fix,
+-- fetchParametersByPath used Amazonka.send (single page, max 10 results)
+-- instead of Amazonka.paginate, silently truncating results.
+------------------------------------------------------------------------
+
+ssmPathResultTests :: [TestTree]
+ssmPathResultTests =
+  [ testCase "stripPathPrefix removes base path" $
+      stripPathPrefix "/app/config" "/app/config/database/host"
+        @?= "database/host"
+
+  , testCase "stripPathPrefix with trailing slash" $
+      stripPathPrefix "/app/config/" "/app/config/key"
+        @?= "key"
+
+  , testCase "stripPathPrefix non-matching strips leading slash" $
+      -- When the prefix doesn't match, the name is kept but leading / is still stripped
+      stripPathPrefix "/other" "/app/config/key"
+        @?= "app/config/key"
+
+  , testCase "buildResultObject with empty params" $ do
+      let result = buildResultObject "/app/" Nothing []
+      result @?= Object KM.empty
+
+  , testCase "buildResultObject with single param" $ do
+      let result = buildResultObject "/app" Nothing [("/app/key", "val")]
+      result @?= Object (KM.fromList [(Key.fromText "key", String "val")])
+
+  , testCase "buildResultObject with >10 params (multi-page simulation)" $ do
+      -- Simulate 15 params that would result from paginating 2 pages
+      let basePath = "/app/config"
+          params = [ ("/app/config/param-" <> T.pack (show i),
+                      "value-" <> T.pack (show i))
+                   | i <- [1..15 :: Int]
+                   ]
+          result = buildResultObject basePath Nothing params
+      case result of
+        Object km -> do
+          -- All 15 keys should be present
+          KM.size km @?= 15
+          -- Verify first and last keys
+          KM.lookup (Key.fromText "param-1") km
+            @?= Just (String "value-1")
+          KM.lookup (Key.fromText "param-15") km
+            @?= Just (String "value-15")
+        _ -> assertFailure "Expected Object"
+
+  , testCase "buildResultObject with 25 params (3-page simulation)" $ do
+      -- Simulate 25 params that would span 3 pages (10+10+5)
+      let basePath = "/prod/settings"
+          params = [ ("/prod/settings/s" <> T.pack (show i),
+                      "v" <> T.pack (show i))
+                   | i <- [1..25 :: Int]
+                   ]
+          result = buildResultObject basePath Nothing params
+      case result of
+        Object km -> do
+          KM.size km @?= 25
+          -- Verify a sampling across all pages
+          KM.lookup (Key.fromText "s1") km @?= Just (String "v1")
+          KM.lookup (Key.fromText "s10") km @?= Just (String "v10")
+          KM.lookup (Key.fromText "s11") km @?= Just (String "v11")
+          KM.lookup (Key.fromText "s20") km @?= Just (String "v20")
+          KM.lookup (Key.fromText "s25") km @?= Just (String "v25")
+        _ -> assertFailure "Expected Object"
+
+  , testCase "buildResultObject with :json format and >10 params" $ do
+      let basePath = "/app"
+          params = [ ("/app/json-" <> T.pack (show i),
+                      "{\"n\":" <> T.pack (show i) <> "}")
+                   | i <- [1..12 :: Int]
+                   ]
+          result = buildResultObject basePath (Just "json") params
+      case result of
+        Object km -> do
+          KM.size km @?= 12
+          -- Each value should be parsed as JSON object, not string
+          case KM.lookup (Key.fromText "json-1") km of
+            Just (Object inner) ->
+              KM.lookup (Key.fromText "n") inner @?= Just (Number 1)
+            other -> assertFailure $ "Expected parsed JSON object, got: " <> show other
+        _ -> assertFailure "Expected Object"
   ]
 
 ------------------------------------------------------------------------
