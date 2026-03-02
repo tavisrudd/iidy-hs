@@ -149,6 +149,7 @@ library
     , process
     , vector
     , aeson-pretty
+    , edit-distance
 
 executable iidy-hs
   import:           warnings

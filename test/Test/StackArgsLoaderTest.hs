@@ -11,7 +11,7 @@ import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
 import Iidy.Aws.CredentialSource (AwsSettings(..))
-import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..), getStrListValidated, resolveEnvMaps, parseOnFailureText, parseCapabilityText)
+import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..), getStrListValidated, resolveEnvMaps, parseOnFailureText, parseCapabilityText, validateNoUnknownKeys)
 import Iidy.Cfn.Types (CfnOperation(..), Capability(..), OnFailure(..), StackArgs(..))
 import Test.Shared (noAwsSettings)
 
@@ -253,4 +253,51 @@ stackArgsLoaderTests =
       case getStrListValidated obj "Items" of
         Left err -> assertBool "mentions expected sequence" (T.isInfixOf "sequence" err)
         Right _ -> assertFailure "Expected error for non-array value"
+
+    -- Unknown key validation tests (1D)
+  , testCase "validateNoUnknownKeys: typo Paramters suggests Parameters" $ do
+      let obj = KM.fromList
+            [ (Key.fromText "StackName", String "test")
+            , (Key.fromText "Paramters", Object KM.empty)
+            ]
+      case validateNoUnknownKeys obj of
+        Left err -> do
+          assertBool "error mentions Paramters" (T.isInfixOf "Paramters" err)
+          assertBool "error suggests Parameters" (T.isInfixOf "did you mean Parameters?" err)
+        Right _ -> assertFailure "Expected error for unknown key Paramters"
+
+  , testCase "validateNoUnknownKeys: far-off key has no suggestion" $ do
+      let obj = KM.fromList
+            [ (Key.fromText "StackName", String "test")
+            , (Key.fromText "FooBarBazQux", String "whatever")
+            ]
+      case validateNoUnknownKeys obj of
+        Left err -> do
+          assertBool "error mentions FooBarBazQux" (T.isInfixOf "FooBarBazQux" err)
+          assertBool "no suggestion" (not (T.isInfixOf "did you mean" err))
+        Right _ -> assertFailure "Expected error for unknown key FooBarBazQux"
+
+  , testCase "validateNoUnknownKeys: all valid keys pass" $ do
+      let obj = KM.fromList
+            [ (Key.fromText "StackName", String "test")
+            , (Key.fromText "Template", String "t.yaml")
+            , (Key.fromText "Parameters", Object KM.empty)
+            , (Key.fromText "Tags", Object KM.empty)
+            ]
+      validateNoUnknownKeys obj @?= Right ()
+
+  , testCase "validateNoUnknownKeys: $envValues is not flagged" $ do
+      let obj = KM.fromList
+            [ (Key.fromText "StackName", String "test")
+            , (Key.fromText "$envValues", Object KM.empty)
+            ]
+      validateNoUnknownKeys obj @?= Right ()
+
+  , testCase "loadStackArgs: unknown key fixture errors with suggestion" $ do
+      result <- loadStackArgs "test-fixtures/test-stack-args-unknown-key.yaml" "dev" OpCreateStack noAwsSettings
+      case result of
+        Left err -> do
+          assertBool "error mentions Paramters" (T.isInfixOf "Paramters" err)
+          assertBool "error suggests Parameters" (T.isInfixOf "Parameters" err)
+        Right _ -> assertFailure "Expected error for unknown key in fixture"
   ]

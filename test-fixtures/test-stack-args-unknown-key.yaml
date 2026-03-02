@@ -1,0 +1,5 @@
+StackName: test-stack
+Template: template.yaml
+Region: us-east-1
+Paramters:
+  Env: dev

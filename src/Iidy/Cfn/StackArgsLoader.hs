@@ -16,6 +16,7 @@ module Iidy.Cfn.StackArgsLoader
   , resolveEnvMaps
   , parseOnFailureText
   , parseCapabilityText
+  , validateNoUnknownKeys
   ) where
 
 import Control.Applicative ((<|>))
@@ -24,11 +25,15 @@ import Data.Aeson (Value(..))
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.List as List
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
+import Text.EditDistance (levenshteinDistance, defaultEditCosts)
 
 import Iidy.Aws.CredentialSource
   ( AwsSettings(..)
@@ -226,12 +231,68 @@ mergeAwsSettings cli argsfile = AwsSettings
   }
 
 ------------------------------------------------------------------------
+-- Unknown key validation
+------------------------------------------------------------------------
+
+-- | Set of all valid top-level keys in stack-args YAML.
+validTopLevelKeys :: Set Text
+validTopLevelKeys = Set.fromList
+  [ "StackName", "Template", "ApprovedTemplateLocation"
+  , "Region", "Profile", "AssumeRoleARN", "ServiceRoleARN", "RoleARN"
+  , "Capabilities", "Tags", "Parameters", "NotificationARNs"
+  , "TimeoutInMinutes", "OnFailure", "DisableRollback"
+  , "EnableTerminationProtection", "StackPolicy", "ResourceTypes"
+  , "UsePreviousTemplate", "UsePreviousParameterValues"
+  , "CommandsBefore", "$envValues"
+  ]
+
+-- | Validate that a KeyMap contains no unknown top-level keys.
+-- Returns Left with an error listing unknown keys (with "did you mean?" suggestions)
+-- if any are found.
+validateNoUnknownKeys :: KM.KeyMap Value -> Either Text ()
+validateNoUnknownKeys obj =
+  let allKeys = map Key.toText (KM.keys obj)
+      unknownKeys = filter (\k -> not (Set.member k validTopLevelKeys)) allKeys
+  in case unknownKeys of
+       [] -> Right ()
+       _  -> Left $ "Unknown keys in stack-args: "
+                  <> T.intercalate ", " (map formatUnknownKey unknownKeys)
+
+-- | Format an unknown key with an optional "did you mean?" suggestion.
+formatUnknownKey :: Text -> Text
+formatUnknownKey key =
+  case findSuggestion key of
+    Nothing         -> key
+    Just suggestion -> key <> " (did you mean " <> suggestion <> "?)"
+
+-- | Find the closest valid key by edit distance.
+-- Only suggests if distance <= min(3, len/2 + 1) and distance > 0.
+-- Never suggests $envValues (internal key).
+findSuggestion :: Text -> Maybe Text
+findSuggestion key =
+  let keyStr = T.unpack key
+      keyLen = T.length key
+      maxDist = min 3 (keyLen `div` 2 + 1)
+      -- Exclude $envValues from suggestions (internal key)
+      suggestableKeys = Set.toList (Set.delete "$envValues" validTopLevelKeys)
+      scored = [ (dist, candidate)
+               | candidate <- suggestableKeys
+               , let dist = levenshteinDistance defaultEditCosts keyStr (T.unpack candidate)
+               , dist > 0
+               , dist <= maxDist
+               ]
+  in case scored of
+       [] -> Nothing
+       _  -> Just $ snd $ List.minimumBy (\a b -> compare (fst a) (fst b)) scored
+
+------------------------------------------------------------------------
 -- Value to StackArgs conversion
 ------------------------------------------------------------------------
 
 -- | Convert a JSON Value (from YAML) to StackArgs
 valueToStackArgs :: Value -> Either Text StackArgs
 valueToStackArgs (Object obj) = do
+  validateNoUnknownKeys obj
   tags            <- getStrMapValidated obj "Tags"
   params          <- getStrMapValidated obj "Parameters"
   caps            <- parseCapabilities obj
