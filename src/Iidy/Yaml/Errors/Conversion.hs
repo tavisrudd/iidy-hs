@@ -199,6 +199,16 @@ classifyResolveError filePath source (ResolveError pos msg kind) =
         , ysiExample      = Nothing
         }
 
+    RECircularExpansion _templateName ->
+      YamlSyntaxError YamlSyntaxInfo
+        { ysiErrorId      = ImportCircularDependency
+        , ysiShortMessage = msg
+        , ysiGuidance     = "circular template expansion detected"
+        , ysiLocation     = adjustedLoc
+        , ysiFixHint      = Just "break the cycle by removing one of the circular !$expand references"
+        , ysiExample      = Nothing
+        }
+
     REParseSyntax ->
       YamlSyntaxError YamlSyntaxInfo
         { ysiErrorId      = InvalidYamlSyntax
