@@ -351,3 +351,20 @@ For a port of a Rust codebase where behavioral equivalence is the primary goal, 
 But if this codebase outlives the port — if it becomes the maintained implementation, not just a translation — then the abstractions Kmett would reach for start to pay off. The import loader pattern wants a typeclass. The OValue tree walks want recursion schemes. The error handling wants `ExceptT`. The CFN operations want a free monad (or at minimum, a `ReaderT CfnEnv IO`).
 
 The codebase has earned the right to graduate from "port" to "native Haskell." Whether it should is a question of maintenance trajectory, not engineering quality.
+
+---
+
+## Post-Review Status Updates (Session 46, 2026-03-02)
+
+_These annotations were added after the review to track which findings have been addressed._
+
+| #   | Finding                                       | Status              | Notes                                                                                                                                                             |
+| --- | --------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | No typeclasses anywhere                        | WONT FIX            | By design for the port phase. Explicit parameter passing and records-of-functions are deliberate choices to maintain structural correspondence with Rust for differential testing. May revisit if codebase transitions from "port" to "native Haskell." |
+| 2   | No optics / manual record access               | WONT FIX            | Same rationale as #1. microlens used only for amazonka access. Manual record selectors kept for readability and Rust structural correspondence.                   |
+| 3   | The monad stack that isn't (5 error patterns)  | PARTIALLY ADDRESSED | TemplateLoader's `fail` calls (one of the 5 patterns) replaced with `Either Text` returns. Remaining patterns (`try @SomeException`, `catch` + stderr, `throwIO`) unchanged. Full `ExceptT`/`MonadError` unification deferred. |
+| 4   | OValue wants to be a recursive scheme          | OPEN                | No changes to OValue representation. Manual catamorphisms remain in rewriteRefs, collectGlobalRefs, emitYaml, toValue, fromValue.                                |
+| 5   | YamlAst / OValue / Value triangle              | OPEN                | No changes to the three-representation pipeline or conversion boundaries. Phantom type indexing not pursued.                                                      |
+| 6   | OutputData callback is a free monad in disguise | OPEN                | No structural changes to the callback-driven output model. Acknowledged as a future direction if the codebase moves beyond port status.                           |
+| 7   | Missing abstractions for import loaders        | OPEN                | No typeclass or shared abstraction added for the 10 import loaders. Each still reimplements the fetch/parse/wrap pattern independently.                           |
+| 8   | Status strings want a prism                    | OPEN                | Stack statuses remain as `Text`. No ADT, prisms, or structured status phase/outcome decomposition added.                                                         |

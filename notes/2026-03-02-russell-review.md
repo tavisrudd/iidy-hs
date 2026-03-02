@@ -1003,3 +1003,34 @@ The pattern: the pure core (resolver, CLI types, tag validation) is +7 to +9 on 
 scale. The IO boundaries (StackArgsLoader, TemplateLoader, GlobalConfig, RequestBuilder)
 are -8 to -2. The quality of the API design drops sharply when you cross from pure
 code to effectful code. That's the systemic issue. Fix the boundaries.
+
+---
+
+## Post-Review Status Updates (Session 46, 2026-03-02)
+
+_These annotations were added after the review to track which findings have been addressed._
+
+| #  | Finding                                                 | Status               | Notes                                                                                                              |
+|----|---------------------------------------------------------|----------------------|--------------------------------------------------------------------------------------------------------------------|
+| 1  | mapOnFailure silently drops invalid values              | FIXED                | OnFailure ADT (`Maybe OnFailure` with DoNothing/Rollback/Delete) + Capability ADT (`Maybe [Capability]`). Parse at YAML boundary, clear errors on unrecognized values. |
+| 2  | getStackName falls back to "unnamed-stack"              | OPEN                 |                                                                                                                    |
+| 3  | getStrList silently drops non-string elements           | OPEN                 |                                                                                                                    |
+| 4  | StackArgs: 21-Maybe bag, no validation                  | PARTIALLY ADDRESSED  | OnFailure and Capability ADTs replace 2 stringly-typed fields. Broader issue (required-field validation, unknown-key rejection) remains open. |
+| 5  | oIsTruthy: JavaScript-grade truthiness                  | FIXED                | Zero-is-falsy bug fixed (`ONumber n -> n /= 0`). Three truthiness functions cross-referenced with comments. Truthiness rules documented in `notes/truthiness-rules.md`. |
+| 6  | TemplateLoader uses `fail` for errors                   | FIXED                | All 6 `fail` calls replaced with `Either Text` returns. Propagated through RequestBuilder, operations, Main.hs. Template errors no longer surface as IOExceptions with misleading "check CloudFormation console" message. |
+| 7  | GlobalConfig silently swallows all errors               | OPEN                 |                                                                                                                    |
+| 8  | Terminal statuses are stringly typed                     | OPEN                 |                                                                                                                    |
+| 9  | PollConfig: 8 callbacks, no contracts                   | OPEN                 |                                                                                                                    |
+| 10 | Unknown YAML keys silently ignored                      | OPEN                 |                                                                                                                    |
+| 11 | Dot-path query returns ONull on miss                    | OPEN                 |                                                                                                                    |
+| 12 | Three incompatible error presentation paths             | PARTIALLY ADDRESSED  | TemplateLoader fail->Either fix eliminates the `fail`/IOError path. Two paths remain (enhanced display vs. AWS error handler). |
+| 13 | --environment defaults to "development"                 | OPEN                 |                                                                                                                    |
+| 14 | oValuesEqual is just (==)                               | OPEN                 |                                                                                                                    |
+| 15 | --format has three different value domains               | PARTIALLY ADDRESSED  | RenderFormat ADT validates at parse time, rejects typos like `--format josn`. Per-command value domain variation remains by design. |
+| 16 | Error classification via string matching                | PARTIALLY ADDRESSED  | RECircularExpansion incomplete pattern fixed. 24 error content tests added (51-fixture coverage). Systemic string-matching approach remains. |
+| 17 | `try @SomeException` at 15+ AWS boundaries              | OPEN                 |                                                                                                                    |
+| 18 | requestConfirmation Bool hides exit-code semantics      | OPEN                 |                                                                                                                    |
+| 19 | `param get --format json` accepted but silently ignored | OPEN                 |                                                                                                                    |
+| 20 | template-approval --context accepted but never applied  | OPEN                 |                                                                                                                    |
+
+**Summary:** 3 FIXED, 4 PARTIALLY ADDRESSED, 13 OPEN. The fixes focused on the highest-impact type-safety improvements (ADTs replacing stringly-typed enums, `fail` elimination) and the truthiness correctness bug. The systemic IO-boundary issues (findings 7, 8, 10, 11, 17) remain the largest open cluster.

@@ -246,3 +246,21 @@ Credit where due. Several things are genuinely unbraided:
 The pure core is well-isolated. The complecting happens at the boundaries — where configuration meets execution, where domain types meet serialization, where output threading meets operation logic.
 
 As Hickey would say: the simple parts are genuinely simple. The complected parts aren't _complex_ in the "hard to build" sense — they're complex in the "hard to change independently" sense. And that's exactly the kind of complexity that compounds over time.
+
+---
+
+## Post-Review Status Updates (Session 46, 2026-03-02)
+
+_These annotations were added after the review to track which findings have been addressed._
+
+| #   | Finding                                    | Status              | Notes                                                                                                                                                      |
+| --- | ------------------------------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | CfnContext: seven concerns braided         | OPEN                | No changes to CfnContext structure. Architectural observation acknowledged but refactoring deferred.                                                        |
+| 2   | StackArgs: 21-Maybe bag, stringly typed    | PARTIALLY ADDRESSED | `saOnFailure` converted from `Maybe Text` to `Maybe OnFailure` ADT (DoNothing/Rollback/Delete). `saCapabilities` converted to `Maybe [Capability]` ADT. The broader 21-Maybe bag structure and per-operation field subset issue remain unchanged. |
+| 3   | Five error handling strategies             | PARTIALLY ADDRESSED | All 6 `fail` calls in TemplateLoader replaced with `Either Text` returns, propagated through RequestBuilder, operations, and Main.hs. Other patterns (`try @SomeException`, `catch` + stderr, `throwIO`) remain. Reduced from 5 strategies to 4. |
+| 4   | OValue/Value parallel universe             | OPEN                | No changes to the dual value representation or conversion boundaries. Architectural observation acknowledged.                                               |
+| 5   | Emit callback threading                    | OPEN                | No structural changes to the callback threading pattern. `OdRawOutput` (added in Session 42) was noted here as a concern — it remains as an escape hatch.  |
+| 6   | StackArgsLoader: YAML is the domain        | OPEN                | No changes to the Value-based transform pipeline in StackArgsLoader.                                                                                       |
+| 7   | Terminal statuses: stringly typed           | OPEN                | Stack statuses remain as `Text` throughout. Amazonka's `StackStatus` sum type still converted to Text at the boundary.                                     |
+| 8   | InteractiveRenderer: god record            | OPEN                | No structural changes to the renderer record.                                                                                                              |
+| 9   | runCfnWithArgs: 50-line sequence           | OPEN                | No decomposition of the monolithic orchestration function.                                                                                                 |
