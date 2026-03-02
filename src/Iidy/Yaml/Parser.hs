@@ -52,10 +52,14 @@ yamlLoader uri = Y.Loader
   { Y.yScalar = \tag style text pos -> pure $
       resolveScalar uri pos tag style text
   , Y.ySequence = \tag items pos -> pure $
-      let meta = makeSrcMeta uri pos
+      let startP = convertPos pos
+          endP = childrenEndPos startP (map astMeta items)
+          meta = SrcMeta uri startP endP
       in applyTag meta tag (AstSequence items meta)
   , Y.yMapping = \tag kvs pos -> pure $
-      let meta = makeSrcMeta uri pos
+      let startP = convertPos pos
+          endP = childrenEndPos startP (map (astMeta . snd) kvs)
+          meta = SrcMeta uri startP endP
       in applyTag meta tag (AstMapping kvs meta)
   , Y.yAlias = \_ _ node _ -> pure $ Right node
   , Y.yAnchor = \_ node _ -> pure $ Right node
@@ -67,7 +71,7 @@ yamlLoader uri = Y.Loader
 
 resolveScalar :: Text -> Y.Pos -> Tag -> ScalarStyle -> Text -> Either (Y.Pos, String) YamlAst
 resolveScalar uri pos tag style text =
-  let meta = makeSrcMeta uri pos
+  let meta = makeScalarMeta uri pos tag text
   in case tagToText tag of
     Just t | "!" `T.isPrefixOf` t ->
       -- Local tag on scalar: resolve the scalar type first, then apply tag
@@ -170,8 +174,24 @@ unconvertPos p = Y.Pos
 emptyMeta :: Text -> SrcMeta
 emptyMeta uri = SrcMeta uri zeroPosition zeroPosition
 
-makeSrcMeta :: Text -> Y.Pos -> SrcMeta
-makeSrcMeta uri pos = SrcMeta uri (convertPos pos) (convertPos pos)
+-- | Create SrcMeta for a scalar value with end position computed from text length.
+-- The end position accounts for the tag prefix (e.g., "!Ref ") if present.
+makeScalarMeta :: Text -> Y.Pos -> Tag -> Text -> SrcMeta
+makeScalarMeta uri pos tag text =
+  let startP = convertPos pos
+      tagLen = case tagToText tag of
+        Just t | "!" `T.isPrefixOf` t -> T.length t + 1  -- tag + space
+        _ -> 0
+      textLen = T.length text
+      endP = startP { posColumn = posColumn startP + tagLen + textLen
+                     , posOffset = posOffset startP + tagLen + textLen
+                     }
+  in SrcMeta uri startP endP
+
+-- | Compute end position from a list of child node metadata.
+-- Uses the end position of the last child, or falls back to the start position.
+childrenEndPos :: Position -> [SrcMeta] -> Position
+childrenEndPos startP metas = foldl' (\_ x -> smEnd x) startP metas
 
 parseErrorAt :: SrcMeta -> Text -> Parse a
 parseErrorAt meta msg = Left (ParseError (smStart meta) msg)
