@@ -5,7 +5,7 @@ module Iidy.Cfn.Operations.LintTemplate
   ( lintTemplate
   ) where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (try)
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -54,9 +54,9 @@ lintTemplate ctx args argsfilePath env emit = do
             let req = VT.newValidateTemplate
                         { VT.templateBody = Just body
                         }
-            result <- try $ runResourceT $ Amazonka.send (cfnEnv ctx) req
+            result <- try @Amazonka.Error $ runResourceT $ Amazonka.send (cfnEnv ctx) req
             case result of
-              Left (e :: SomeException) ->
+              Left e ->
                 pure TemplateValidation
                   { tvEnabled  = True
                   , tvErrors   = ["Template validation failed: " <> T.pack (show e)]

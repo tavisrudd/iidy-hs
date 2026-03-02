@@ -26,7 +26,7 @@ module Iidy.Aws.Timing
   , ntpTimeoutMicros
   ) where
 
-import Control.Exception (SomeException, bracket, catch)
+import Control.Exception (IOException, bracket, catch)
 import Data.Bits (shiftL)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -81,7 +81,7 @@ tryNtp =
   (timeout ntpTimeoutMicros queryNtp >>= \case
     Just (Just t) -> pure (Just t)
     _             -> pure Nothing
-  ) `catch` \(_ :: SomeException) -> pure Nothing
+  ) `catch` \(_ :: IOException) -> pure Nothing
 
 ntpTimeoutMicros :: Int
 ntpTimeoutMicros = 2_000_000  -- 2 seconds

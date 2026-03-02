@@ -7,7 +7,7 @@ module Iidy.Aws.Sts
   ( getCallerIdentity
   ) where
 
-import Control.Exception (SomeException, catch)
+import Control.Exception (catch)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import System.IO (hPutStrLn, stderr)
@@ -25,6 +25,6 @@ getCallerIdentity env = do
       let account = fromMaybe "unknown" resp.account
           arn     = fromMaybe "unknown" resp.arn
       pure (account, arn)
-    ) `catch` \(e :: SomeException) -> do
+    ) `catch` \(e :: Amazonka.Error) -> do
       hPutStrLn stderr $ "Warning: STS GetCallerIdentity failed: " <> show e
       pure ("unknown", "unknown")

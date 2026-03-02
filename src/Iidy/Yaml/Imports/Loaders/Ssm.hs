@@ -5,7 +5,7 @@ module Iidy.Yaml.Imports.Loaders.Ssm
   , parseSsmLocation
   ) where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (try)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Aeson (Value(..))
 import qualified Data.Aeson as Aeson
@@ -35,7 +35,7 @@ loadSsmImport awsEnv location = do
   case parseSsmLocation location of
     Left err -> pure (Left err)
     Right (paramName, formatSuffix) -> do
-      result <- try @SomeException (fetchSsmParam awsEnv paramName)
+      result <- try @Amazonka.Error (fetchSsmParam awsEnv paramName)
       case result of
         Left ex -> pure $ Left $ ImportError $
           "SSM fetch error for " <> paramName <> ": " <> T.pack (show ex)

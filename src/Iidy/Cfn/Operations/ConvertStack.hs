@@ -18,7 +18,7 @@ module Iidy.Cfn.Operations.ConvertStack
   , quoteYamlString
   ) where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (try)
 import Data.Aeson (Value(..))
 import Data.Char (isDigit)
 import Numeric (showHex)
@@ -434,9 +434,9 @@ convertStackToIidy
 convertStackToIidy ctx stackName outputDir moveParamsToSsm sortkeys mProject = do
   -- 1. Fetch original template
   let gtReq = GT.newGetTemplate { GT.stackName = Just stackName }
-  gtResult <- try $ runResourceT $ Amazonka.send (cfnEnv ctx) gtReq
+  gtResult <- try @Amazonka.Error $ runResourceT $ Amazonka.send (cfnEnv ctx) gtReq
   case gtResult of
-    Left (e :: SomeException) ->
+    Left e ->
       pure (Left ("Failed to get template: " <> T.pack (show e)))
     Right gtResp -> do
       let templateBody = fromMaybe "" gtResp.templateBody
@@ -445,9 +445,9 @@ convertStackToIidy ctx stackName outputDir moveParamsToSsm sortkeys mProject = d
 
       -- 2. Describe stack
       let dsReq = DStacks.newDescribeStacks { DStacks.stackName = Just stackName }
-      dsResult <- try $ runResourceT $ Amazonka.send (cfnEnv ctx) dsReq
+      dsResult <- try @Amazonka.Error $ runResourceT $ Amazonka.send (cfnEnv ctx) dsReq
       case dsResult of
-        Left (e :: SomeException) ->
+        Left e ->
           pure (Left ("Failed to describe stack: " <> T.pack (show e)))
         Right dsResp -> do
           let stacks = fromMaybe [] dsResp.stacks
@@ -465,9 +465,9 @@ processStack ctx stack stackName templateBody originalExt
              outputDir moveParamsToSsm sortkeys mProject = do
   -- 3. Get stack policy
   let gspReq = GSP.newGetStackPolicy stackName
-  policyResult <- try $ runResourceT $ Amazonka.send (cfnEnv ctx) gspReq
+  policyResult <- try @Amazonka.Error $ runResourceT $ Amazonka.send (cfnEnv ctx) gspReq
   let policyBody = case policyResult of
-        Left (_ :: SomeException) -> defaultStackPolicy
+        Left (_ :: Amazonka.Error) -> defaultStackPolicy
         Right gspResp -> fromMaybe defaultStackPolicy gspResp.stackPolicyBody
 
   -- Pretty-print the policy JSON if valid
@@ -580,7 +580,7 @@ moveParamsToSSM ctx params currentEnv project = do
                 { PP.overwrite = Just True
                 , PP.type' = Just SSMPT.ParameterType_SecureString
                 }
-    result <- try (runResourceT $ Amazonka.send (cfnEnv ctx) req) :: IO (Either SomeException PP.PutParameterResponse)
+    result <- try @Amazonka.Error (runResourceT $ Amazonka.send (cfnEnv ctx) req)
     case result of
       Left e -> do
         hPutStrLn stderr $ "WARNING: Failed to write SSM parameter "

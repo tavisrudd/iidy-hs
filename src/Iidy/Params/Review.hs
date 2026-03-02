@@ -9,7 +9,7 @@ module Iidy.Params.Review
   ( paramReview
   ) where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (try)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -84,7 +84,7 @@ paramReview awsEnv path = do
 fetchParamFull :: Amazonka.Env -> Text -> Bool -> IO (Either Text SSMP.Parameter)
 fetchParamFull awsEnv name withDecryption = do
   let req = (GP.newGetParameter name) { GP.withDecryption = Just withDecryption }
-  result <- try @SomeException $ runResourceT $ Amazonka.send awsEnv req
+  result <- try @Amazonka.Error $ runResourceT $ Amazonka.send awsEnv req
   case result of
     Left ex    -> pure (Left (T.pack (show ex)))
     Right resp -> pure (Right resp.parameter)
@@ -98,13 +98,13 @@ applyPendingChange awsEnv path pendingValue pendingPath paramType = do
                 { PP.overwrite = Just True
                 , PP.type' = Just paramType
                 }
-  putResult <- try @SomeException $ runResourceT $ Amazonka.send awsEnv putReq
+  putResult <- try @Amazonka.Error $ runResourceT $ Amazonka.send awsEnv putReq
   case putResult of
     Left ex -> pure (Left ("Failed to update parameter: " <> T.pack (show ex)))
     Right _ -> do
       -- Delete pending parameter
       let delReq = DP.newDeleteParameter pendingPath
-      delResult <- try @SomeException $ runResourceT $ Amazonka.send awsEnv delReq
+      delResult <- try @Amazonka.Error $ runResourceT $ Amazonka.send awsEnv delReq
       case delResult of
         Left ex -> pure (Left ("Parameter updated but failed to delete pending: " <> T.pack (show ex)))
         Right _ -> pure (Right ())

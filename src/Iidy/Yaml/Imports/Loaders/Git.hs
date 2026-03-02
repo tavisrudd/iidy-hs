@@ -9,7 +9,7 @@ module Iidy.Yaml.Imports.Loaders.Git
   ( loadGitImport
   ) where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (IOException, try)
 import Data.Aeson (Value(..))
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -53,7 +53,7 @@ gitCommand cmd = case cmd of
 -- | Run a git sub-process and return its trimmed stdout as an import.
 runGit :: Text -> String -> [String] -> IO (Either ImportError ImportData)
 runGit location prog args = do
-  result <- try @SomeException (readProcessWithExitCode prog args "")
+  result <- try @IOException (readProcessWithExitCode prog args "")
   case result of
     Left ex ->
       pure $ Left $ ImportError $

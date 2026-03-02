@@ -32,7 +32,7 @@ module Iidy.Params.Client
   , messageTag
   ) where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (try)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Aeson (ToJSON(..), Value(..), (.=), object)
 import Data.Aeson.Encode.Pretty (encodePretty', defConfig, confIndent, Indent(..))
@@ -326,7 +326,7 @@ yamlQuoteString s
 -- | Fetch tags for an SSM parameter as a Map.
 listParamTags :: Amazonka.Env -> Text -> IO (Either Text (Map.Map Text Text))
 listParamTags awsEnv paramName = do
-  result <- try @SomeException $ runResourceT $ do
+  result <- try @Amazonka.Error $ runResourceT $ do
     let req = LTR.newListTagsForResource
                 RTT.ResourceTypeForTagging_Parameter
                 paramName
@@ -347,7 +347,7 @@ listParamTags awsEnv paramName = do
 -- Exported for use in other modules (e.g. Review).
 fetchParam :: Amazonka.Env -> Text -> Bool -> IO (Either Text Text)
 fetchParam awsEnv paramName withDecryption = do
-  result <- try @SomeException $ runResourceT $ do
+  result <- try @Amazonka.Error $ runResourceT $ do
     let req = (GP.newGetParameter paramName)
                 { GP.withDecryption = Just withDecryption }
     resp <- Amazonka.send awsEnv req
@@ -359,7 +359,7 @@ fetchParam awsEnv paramName withDecryption = do
 -- | Fetch a single SSM parameter (full Parameter object).
 fetchParameter :: Amazonka.Env -> Text -> Bool -> IO (Either Text SSM.Parameter)
 fetchParameter awsEnv paramName withDecryption = do
-  result <- try @SomeException $ runResourceT $ do
+  result <- try @Amazonka.Error $ runResourceT $ do
     let req = (GP.newGetParameter paramName)
                 { GP.withDecryption = Just withDecryption }
     resp <- Amazonka.send awsEnv req
@@ -398,7 +398,7 @@ paramGet awsEnv args = case args.pgaFormat of
 -- The type field maps to SSM ParameterType (String, SecureString, StringList).
 paramSet :: Amazonka.Env -> ParamSetArgs -> IO (Either Text ())
 paramSet awsEnv args = do
-  result <- try @SomeException (putParam awsEnv args)
+  result <- try @Amazonka.Error (putParam awsEnv args)
   case result of
     Left ex -> pure $ Left $ "SSM PutParameter error for " <> args.psaPath <> ": " <> T.pack (show ex)
     Right _  -> pure (Right ())
@@ -433,7 +433,7 @@ data GetByPathResult
 -- or Left on error.
 paramGetByPath :: Amazonka.Env -> ParamGetByPathArgs -> IO (Either Text GetByPathResult)
 paramGetByPath awsEnv args = do
-  result <- try @SomeException (fetchByPathRaw awsEnv args)
+  result <- try @Amazonka.Error (fetchByPathRaw awsEnv args)
   case result of
     Left ex  -> pure $ Left $ "SSM GetParametersByPath error for " <> args.gpbPath <> ": " <> T.pack (show ex)
     Right params
@@ -486,7 +486,7 @@ buildTaggedMap awsEnv params = go params Map.empty
 -- For json/yaml: FullHistory with current getting tags.
 paramGetHistory :: Amazonka.Env -> ParamGetArgs -> IO (Either Text Text)
 paramGetHistory awsEnv args = do
-  result <- try @SomeException (fetchHistoryRaw awsEnv args.pgaPath args.pgaDecrypt)
+  result <- try @Amazonka.Error (fetchHistoryRaw awsEnv args.pgaPath args.pgaDecrypt)
   case result of
     Left ex -> pure $ Left $
       "SSM GetParameterHistory error for " <> args.pgaPath <> ": " <> T.pack (show ex)

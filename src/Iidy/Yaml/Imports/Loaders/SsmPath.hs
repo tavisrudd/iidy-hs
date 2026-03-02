@@ -9,7 +9,7 @@ module Iidy.Yaml.Imports.Loaders.SsmPath
   , stripPathPrefix
   ) where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (try)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Aeson (Value(..))
 import qualified Data.Aeson as Aeson
@@ -44,7 +44,7 @@ loadSsmPathImport awsEnv location = do
   case parseSsmPathLocation location of
     Left err -> pure (Left err)
     Right (paramPath, formatSuffix) -> do
-      result <- try @SomeException (fetchParametersByPath awsEnv paramPath)
+      result <- try @Amazonka.Error (fetchParametersByPath awsEnv paramPath)
       case result of
         Left ex -> pure $ Left $ ImportError $
           "SSM path fetch error for " <> paramPath <> ": " <> T.pack (show ex)

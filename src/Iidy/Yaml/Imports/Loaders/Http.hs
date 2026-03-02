@@ -4,7 +4,7 @@ module Iidy.Yaml.Imports.Loaders.Http
   , urlPath
   ) where
 
-import Control.Exception (Exception, SomeException, throwIO, try)
+import Control.Exception (Exception, Handler(..), catches, throwIO)
 import Data.Aeson (Value(..))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
@@ -15,6 +15,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Network.HTTP.Client
   ( BodyReader
+  , HttpException
   , Manager
   , brRead
   , responseBody
@@ -67,14 +68,12 @@ globalManagerRef = unsafePerformIO (newTlsManager >>= newIORef)
 loadHttpImport :: Text -> IO (Either ImportError ImportData)
 loadHttpImport location = do
   mgr    <- readIORef globalManagerRef
-  result <- try @SomeException (fetchHttpStreaming mgr location)
-  case result of
-    Left ex ->
-      pure $ Left $ ImportError $
-        "HTTP fetch error for " <> location <> ": " <> T.pack (show ex)
-    Right (status, body)
-      | status >= 200 && status < 300 ->
-          case TE.decodeUtf8' body of
+  let mkError :: Text -> IO (Either ImportError ImportData)
+      mkError msg = pure $ Left $ ImportError $
+        "HTTP fetch error for " <> location <> ": " <> msg
+  (do (status, body) <- fetchHttpStreaming mgr location
+      if status >= 200 && status < 300
+        then case TE.decodeUtf8' body of
             Left ex ->
               pure $ Left $ ImportError $
                 "UTF-8 decode error for " <> location <> ": " <> T.pack (show ex)
@@ -87,9 +86,12 @@ loadHttpImport location = do
                     , idRawData  = content
                     , idDoc      = doc
                     }
-      | otherwise ->
-          pure $ Left $ ImportError $
+        else pure $ Left $ ImportError $
             "HTTP error " <> T.pack (show status) <> " for " <> location
+    ) `catches`
+      [ Handler $ \(e :: HttpException) -> mkError (T.pack (show e))
+      , Handler $ \(e :: HttpSizeLimitExceeded) -> mkError (T.pack (show e))
+      ]
 
 ------------------------------------------------------------------------
 -- HTTP fetch (streaming with size limit)

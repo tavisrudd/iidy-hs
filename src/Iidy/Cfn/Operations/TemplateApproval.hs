@@ -11,7 +11,7 @@ module Iidy.Cfn.Operations.TemplateApproval
   , generateDiff
   ) where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (try)
 import Control.Monad.Trans.Resource (runResourceT)
 import qualified Data.Array as Array
 import qualified Data.ByteString as BS
@@ -215,7 +215,7 @@ templateApprovalReview ctx url contextLines emit = do
 s3ObjectExists :: Amazonka.Env -> Text -> Text -> IO Bool
 s3ObjectExists awsEnv bucket key = do
   let req = HO.newHeadObject (S3.BucketName bucket) (S3.ObjectKey key)
-  result <- try @SomeException $ runResourceT $ Amazonka.send awsEnv req
+  result <- try @Amazonka.Error $ runResourceT $ Amazonka.send awsEnv req
   case result of
     Right _ -> pure True
     Left _  -> pure False
@@ -225,7 +225,7 @@ uploadToS3 :: Amazonka.Env -> Text -> Text -> Text -> IO (Either Text ())
 uploadToS3 awsEnv bucket key content = do
   let body = Amazonka.toBody (TE.encodeUtf8 content)
       req = (PO.newPutObject (S3.BucketName bucket) (S3.ObjectKey key) body)
-  result <- try @SomeException $ runResourceT $ Amazonka.send awsEnv req
+  result <- try @Amazonka.Error $ runResourceT $ Amazonka.send awsEnv req
   case result of
     Left ex  -> pure (Left (T.pack (show ex)))
     Right _  -> pure (Right ())
@@ -234,7 +234,7 @@ uploadToS3 awsEnv bucket key content = do
 downloadFromS3 :: Amazonka.Env -> Text -> Text -> IO (Either Text Text)
 downloadFromS3 awsEnv bucket key = do
   let req = GO.newGetObject (S3.BucketName bucket) (S3.ObjectKey key)
-  result <- try @SomeException $ runResourceT $ do
+  result <- try @Amazonka.Error $ runResourceT $ do
     resp <- Amazonka.send awsEnv req
     chunks <- AmazonkaData.sinkBody resp.body CL.consume
     pure (BS.concat chunks)
@@ -248,7 +248,7 @@ downloadFromS3 awsEnv bucket key = do
 deleteFromS3 :: Amazonka.Env -> Text -> Text -> IO (Either Text ())
 deleteFromS3 awsEnv bucket key = do
   let req = DO.newDeleteObject (S3.BucketName bucket) (S3.ObjectKey key)
-  result <- try @SomeException $ runResourceT $ Amazonka.send awsEnv req
+  result <- try @Amazonka.Error $ runResourceT $ Amazonka.send awsEnv req
   case result of
     Left ex  -> pure (Left (T.pack (show ex)))
     Right _  -> pure (Right ())

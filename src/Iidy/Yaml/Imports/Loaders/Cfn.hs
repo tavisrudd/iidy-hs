@@ -8,7 +8,7 @@ module Iidy.Yaml.Imports.Loaders.Cfn
   , CfnField(..)
   ) where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (try)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Aeson (Value(..))
 import qualified Data.Aeson.Key as Key
@@ -134,7 +134,7 @@ loadCfnExport awsEnv location exportName = do
   if T.null exportName
     then pure $ Left $ ImportError $ "Empty export name in: " <> location
     else do
-      result <- try @SomeException (fetchExports awsEnv)
+      result <- try @Amazonka.Error (fetchExports awsEnv)
       case result of
         Left ex -> pure $ Left $ ImportError $
           "CFN ListExports error: " <> T.pack (show ex)
@@ -206,7 +206,7 @@ loadCfnResource awsEnv location resolvedLoc = do
   if T.null stackName
     then pure $ Left $ ImportError $ "Empty stack name in: " <> location
     else do
-      result <- try @SomeException (fetchResources awsEnv stackName)
+      result <- try @Amazonka.Error (fetchResources awsEnv stackName)
       case result of
         Left ex -> pure $ Left $ ImportError $
           "CFN DescribeStackResources error for " <> stackName <> ": " <> T.pack (show ex)
@@ -309,7 +309,7 @@ withStack awsEnv location stackName handler = do
   if T.null stackName
     then pure $ Left $ ImportError $ "Empty stack name in: " <> location
     else do
-      result <- try @SomeException (fetchStack awsEnv stackName)
+      result <- try @Amazonka.Error (fetchStack awsEnv stackName)
       case result of
         Left ex -> pure $ Left $ ImportError $
           "CFN fetch error for " <> stackName <> ": " <> T.pack (show ex)

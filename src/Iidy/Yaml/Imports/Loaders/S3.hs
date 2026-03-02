@@ -5,7 +5,7 @@ module Iidy.Yaml.Imports.Loaders.S3
   , parseS3Uri
   ) where
 
-import Control.Exception (Exception, SomeException, throwIO, try)
+import Control.Exception (Exception, catches, throwIO, Handler(..))
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Aeson (Value(..))
@@ -40,24 +40,28 @@ loadS3Import awsEnv location = do
   case parseS3Uri uri of
     Left err -> pure (Left err)
     Right (bucket, key) -> do
-      result <- try @SomeException (fetchS3Object awsEnv bucket key)
-      case result of
-        Left ex -> pure $ Left $ ImportError $
-          "S3 fetch error for " <> uri <> ": " <> T.pack (show ex)
-        Right bs -> case TE.decodeUtf8' bs of
-          Left ex -> pure $ Left $ ImportError $
-            "UTF-8 decode error for " <> uri <> ": " <> T.pack (show ex)
-          Right content ->
-            let S3.ObjectKey keyText = key
-                ext = T.unpack (extractExtension keyText)
-            in case parseByExtension ext content bs of
-                 Left err -> pure (Left err)
-                 Right doc -> pure $ Right $ ImportData
-                   { idType     = ImportS3
-                   , idLocation = location
-                   , idRawData  = content
-                   , idDoc      = doc
-                   }
+      let mkError :: Text -> IO (Either ImportError ImportData)
+          mkError msg = pure $ Left $ ImportError $
+            "S3 fetch error for " <> uri <> ": " <> msg
+      (do bs <- fetchS3Object awsEnv bucket key
+          case TE.decodeUtf8' bs of
+            Left ex -> pure $ Left $ ImportError $
+              "UTF-8 decode error for " <> uri <> ": " <> T.pack (show ex)
+            Right content ->
+              let S3.ObjectKey keyText = key
+                  ext = T.unpack (extractExtension keyText)
+              in case parseByExtension ext content bs of
+                   Left err -> pure (Left err)
+                   Right doc -> pure $ Right $ ImportData
+                     { idType     = ImportS3
+                     , idLocation = location
+                     , idRawData  = content
+                     , idDoc      = doc
+                     }
+        ) `catches`
+          [ Handler $ \(e :: Amazonka.Error) -> mkError (T.pack (show e))
+          , Handler $ \(e :: S3SizeLimitExceeded) -> mkError (T.pack (show e))
+          ]
 
 ------------------------------------------------------------------------
 -- S3 fetch
