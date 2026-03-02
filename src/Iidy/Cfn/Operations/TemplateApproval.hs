@@ -145,51 +145,62 @@ templateApprovalReview ctx url contextLines emit = do
                   pendingTemplate <- downloadFromS3 (cfnEnv ctx) bucket pendingKey
                   latestTemplate <- downloadFromS3 (cfnEnv ctx) bucket latestKey
 
-                  let pending = either (const "") id pendingTemplate
-                      latest = either (const "") id latestTemplate
+                  case pendingTemplate of
+                    Left err -> pure (Left ("Failed to download pending template: " <> err))
+                    Right pending -> do
+                      let latest = either (const "") id latestTemplate
 
-                  -- Generate and emit diff
-                  let diffOutput = generateDiff latest pending
-                      hasChanges = not (T.null diffOutput)
-                  emit $ OdTemplateDiff TemplateDiff
-                    { tdDiffOutput   = diffOutput
-                    , tdContextLines = contextLines
-                    , tdHasChanges   = hasChanges
-                    }
-
-                  if not hasChanges
-                    then do
-                      emit $ OdApprovalResult ApprovalResult
-                        { arApproved         = True
-                        , arApprovedLocation = Just approvedLoc
-                        , arLatestLocation   = Just ("s3://" <> bucket <> "/" <> latestKey)
-                        , arCleanupCompleted = False
+                      -- Generate and emit diff
+                      let diffOutput = generateDiff latest pending
+                          hasChanges = not (T.null diffOutput)
+                      emit $ OdTemplateDiff TemplateDiff
+                        { tdDiffOutput   = diffOutput
+                        , tdContextLines = contextLines
+                        , tdHasChanges   = hasChanges
                         }
-                      pure (Right 0)
-                    else do
-                      -- Request confirmation
-                      confirmed <- requestConfirmation "Would you like to approve these changes?"
-                      if confirmed
+
+                      if not hasChanges
                         then do
-                          -- Approve: copy pending to approved and latest, delete pending
-                          _ <- uploadToS3 (cfnEnv ctx) bucket approvedKey pending
-                          _ <- uploadToS3 (cfnEnv ctx) bucket latestKey pending
-                          _ <- deleteFromS3 (cfnEnv ctx) bucket pendingKey
                           emit $ OdApprovalResult ApprovalResult
                             { arApproved         = True
                             , arApprovedLocation = Just approvedLoc
                             , arLatestLocation   = Just ("s3://" <> bucket <> "/" <> latestKey)
-                            , arCleanupCompleted = True
+                            , arCleanupCompleted = False
                             }
                           pure (Right 0)
                         else do
-                          emit $ OdApprovalResult ApprovalResult
-                            { arApproved         = False
-                            , arApprovedLocation = Nothing
-                            , arLatestLocation   = Nothing
-                            , arCleanupCompleted = False
-                            }
-                          pure (Right 1)
+                          -- Request confirmation
+                          confirmed <- requestConfirmation "Would you like to approve these changes?"
+                          if confirmed
+                            then do
+                              -- Approve: copy pending to approved and latest, delete pending
+                              uploadApproved <- uploadToS3 (cfnEnv ctx) bucket approvedKey pending
+                              case uploadApproved of
+                                Left err -> pure (Left ("Failed to upload approved template: " <> err))
+                                Right () -> do
+                                  uploadLatest <- uploadToS3 (cfnEnv ctx) bucket latestKey pending
+                                  case uploadLatest of
+                                    Left err -> pure (Left ("Failed to upload latest template: " <> err))
+                                    Right () -> do
+                                      deleteResult <- deleteFromS3 (cfnEnv ctx) bucket pendingKey
+                                      case deleteResult of
+                                        Left err -> pure (Left ("Failed to delete pending template: " <> err))
+                                        Right () -> do
+                                          emit $ OdApprovalResult ApprovalResult
+                                            { arApproved         = True
+                                            , arApprovedLocation = Just approvedLoc
+                                            , arLatestLocation   = Just ("s3://" <> bucket <> "/" <> latestKey)
+                                            , arCleanupCompleted = True
+                                            }
+                                          pure (Right 0)
+                            else do
+                              emit $ OdApprovalResult ApprovalResult
+                                { arApproved         = False
+                                , arApprovedLocation = Nothing
+                                , arLatestLocation   = Nothing
+                                , arCleanupCompleted = False
+                                }
+                              pure (Right 1)
 
 ------------------------------------------------------------------------
 -- S3 helpers
