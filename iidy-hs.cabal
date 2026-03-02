@@ -142,6 +142,7 @@ library
     , time
     , transformers
     , http-client
+    , http-client-tls
     , http-conduit
     , http-types
     , process

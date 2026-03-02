@@ -8,6 +8,8 @@ import Control.Exception (Exception, SomeException, throwIO, try)
 import Data.Aeson (Value(..))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BL
+import Data.IORef (IORef, newIORef, readIORef)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -15,19 +17,21 @@ import Network.HTTP.Client
   ( BodyReader
   , Manager
   , brRead
-  , defaultManagerSettings
-  , newManager
   , responseBody
   , responseStatus
   , responseTimeoutMicro
   , withResponse
   )
+import Network.HTTP.Client.TLS (newTlsManager)
 import Network.HTTP.Simple (parseRequest, setRequestResponseTimeout)
 import Network.HTTP.Types.Status (statusCode)
 import System.FilePath (takeExtension)
+import System.IO.Unsafe (unsafePerformIO)
 
 import Iidy.Constants (httpMaxResponseBytes, httpTimeoutSeconds)
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..), ImportType(..))
+import Iidy.Yaml.Parser (parseYaml)
+import Iidy.Yaml.Resolution.Resolver (astToValueRaw)
 
 ------------------------------------------------------------------------
 -- Exception type
@@ -38,6 +42,17 @@ data HttpSizeLimitExceeded = HttpSizeLimitExceeded Int
   deriving stock (Show)
 
 instance Exception HttpSizeLimitExceeded
+
+------------------------------------------------------------------------
+-- Shared TLS Manager (created once, reused across all HTTP imports)
+------------------------------------------------------------------------
+
+-- | Global TLS-capable HTTP manager, created on first use.
+-- Using a module-level IORef with NOINLINE ensures we create exactly one
+-- connection pool for the lifetime of the process, and it supports HTTPS.
+globalManagerRef :: IORef Manager
+globalManagerRef = unsafePerformIO (newTlsManager >>= newIORef)
+{-# NOINLINE globalManagerRef #-}
 
 ------------------------------------------------------------------------
 -- Entry point
@@ -51,7 +66,7 @@ instance Exception HttpSizeLimitExceeded
 -- Returns the response body as UTF-8 text on success, or an error message.
 loadHttpImport :: Text -> IO (Either ImportError ImportData)
 loadHttpImport location = do
-  mgr    <- newManager defaultManagerSettings
+  mgr    <- readIORef globalManagerRef
   result <- try @SomeException (fetchHttpStreaming mgr location)
   case result of
     Left ex ->
@@ -116,11 +131,20 @@ readWithLimit br maxBytes = go 0 []
 ------------------------------------------------------------------------
 
 -- | Parse response body based on URL path extension.
+-- YAML/YML files are parsed with the YAML parser (matching the File loader),
+-- JSON files use the JSON parser, and everything else is a plain string.
 parseByExtension :: String -> Text -> BS.ByteString -> Value
 parseByExtension ext content rawBytes
-  | ext `elem` [".yaml", ".yml"] = parseJsonOrString rawBytes content
+  | ext `elem` [".yaml", ".yml"] = parseYamlToValue content
   | ext == ".json"                = parseJsonOrString rawBytes content
   | otherwise                     = String content
+
+-- | Parse YAML text to a Value, falling back to a plain string on error.
+parseYamlToValue :: Text -> Value
+parseYamlToValue content =
+  case parseYaml (BL.fromStrict (TE.encodeUtf8 content)) "<http-import>" of
+    Right ast -> astToValueRaw ast
+    Left _    -> String content
 
 -- | Attempt JSON parse; fall back to plain string.
 parseJsonOrString :: BS.ByteString -> Text -> Value
