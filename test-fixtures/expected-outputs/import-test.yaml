@@ -1,0 +1,9 @@
+name: import-demo-dev
+database:
+  host: db.example.com
+  port: 5432
+  name: myapp_db
+api_config:
+  version: v1
+  timeout: 30
+monitoring_enabled: true
