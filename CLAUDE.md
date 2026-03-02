@@ -43,9 +43,10 @@ Autonomous claude driven, Haskell port of iidy (a CloudFormation preprocessor/de
 - Read-only access to ~/src/iidy/
 
 ## Progress Logging
-- After completing each workplan chunk (2.1, 2.2, etc.), append a timestamped line to `progress.log`
-- Format: `YYYY-MM-DD HH:MM — Chunk X.Y: <brief description of what was done>`
-- Also log gate pass/fail results
+- Append a timestamped line to `progress.log` after completing work
+- Format: `YYYY-MM-DD HH:MM — $CLAUDE_SESSION_NUM ($CLAUDE_SESSION_ID): <brief description>`
+- Session number format: `YYYY-MM-DD--N` (daily counter, e.g. `2026-03-02--3`)
+- Both env vars set by SessionStart hook. UUID is canonical, number is shorthand.
 - APPEND lines only (use Edit tool to add at end) — never rewrite/recreate the file
 - This file is for `tail -f` monitoring — keep entries single-line
 
@@ -86,6 +87,12 @@ Before wrapping up, verify ALL of these:
 - Use sub-agents (Task tool) for research, exploration, and parallel work to keep main context clean.
 - Delegate to Sonnet sub-agents for straightforward implementation after Opus designs the interface.
 - Use Explore agents for codebase searches rather than flooding main context with grep results.
+
+## Sub-Agent Git Rules
+- **Main agent owns the commit sequence.** Only the main agent does cherry-picks, merges, rebases, pushes.
+- Sub-agents in worktrees: may only `git add` + `git commit` within their worktree. Must commit before finishing.
+- Sub-agents on main (research or direct coding): NO git write operations at all.
+- Use worktree isolation when >2 parallel code-changing sub-agents might have file collisions.
 
 ## Ralph?
 If you are running in headless -p mode read @RALPH.md and check ./.msgs/ frequently.
