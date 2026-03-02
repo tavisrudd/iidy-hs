@@ -19,20 +19,7 @@ buildErrorTests :: IO [TestTree]
 buildErrorTests = do
   files <- sort <$> listDirectory errorFixtureDir
   let yamlFiles = filter (\f -> takeExtension f == ".yaml" || takeExtension f == ".yml") files
-      skipped = [ "cloudformation-empty-arrays"
-                , "cloudformation-null-value"
-                , "cloudformation-wrong-element-count"
-                , "jmespath-query-and-jmespath-exclusive"
-                , "join-wrong-array-item-type"
-                , "query-missing-key"
-                , "tag-if-unknown-field"
-                , "tag-mapvalues-unknown-field"
-                , "unknown-tag-typo-flow"
-                , "unknown-tag-typo"
-                , "variable-not-found"
-                ]
-      active = filter (\f -> takeBaseName f `notElem` skipped) yamlFiles
-  return $ map buildOneErrorTest active
+  return $ map buildOneErrorTest yamlFiles
 
 buildOneErrorTest :: FilePath -> TestTree
 buildOneErrorTest fname = testCase (takeBaseName fname) $ do
