@@ -12,9 +12,11 @@ module Iidy.Cfn.StackArgsLoader
   , LoadedStackArgs(..)
   -- * Internal (exported for testing)
   , getStrMapValidated
+  , resolveEnvMaps
   ) where
 
 import Control.Applicative ((<|>))
+import Control.Monad (foldM)
 import Data.Aeson (Value(..))
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
@@ -80,31 +82,34 @@ loadStackArgs argsfile environment operation cliAws = do
 
         Right (PreprocessResult val _manifest) -> do
           let jsonVal = toValue val
-          -- Resolve environment maps and inject $envValues
-          let resolved = resolveEnvMaps jsonVal environment
-              withEnvTag = ensureEnvironmentTag resolved environment
-              withEnvValues = injectEnvValues withEnvTag environment operation cliAws
-
-          -- Extract AWS settings from argsfile
-          let argsfileAws = extractAwsSettings withEnvValues
-              mergedAws = mergeAwsSettings cliAws argsfileAws
-              detectionCtx = CredentialDetectionContext
-                { cdcCliProfile = awsProfile cliAws
-                , cdcStackArgsProfile = awsProfile argsfileAws
-                , cdcCliAssumeRoleArn = awsAssumeRoleArn cliAws
-                , cdcStackArgsAssumeRoleArn = awsAssumeRoleArn argsfileAws
-                }
-
-          -- Deserialize to StackArgs
-          case valueToStackArgs withEnvValues of
+          -- Resolve environment maps (can fail if env not found in map)
+          case resolveEnvMaps jsonVal environment of
             Left err ->
-              pure $ Left $ "Failed to parse stack args from " <> baseLocation <> ": " <> err
-            Right stackArgs ->
-              pure $ Right $ LoadedStackArgs
-                { lsaStackArgs = stackArgs
-                , lsaMergedAws = mergedAws
-                , lsaDetectionCtx = detectionCtx
-                }
+              pure $ Left $ "Environment map error in " <> baseLocation <> ": " <> err
+            Right resolved -> do
+              let withEnvTag = ensureEnvironmentTag resolved environment
+                  withEnvValues = injectEnvValues withEnvTag environment operation cliAws
+
+              -- Extract AWS settings from argsfile
+              let argsfileAws = extractAwsSettings withEnvValues
+                  mergedAws = mergeAwsSettings cliAws argsfileAws
+                  detectionCtx = CredentialDetectionContext
+                    { cdcCliProfile = awsProfile cliAws
+                    , cdcStackArgsProfile = awsProfile argsfileAws
+                    , cdcCliAssumeRoleArn = awsAssumeRoleArn cliAws
+                    , cdcStackArgsAssumeRoleArn = awsAssumeRoleArn argsfileAws
+                    }
+
+              -- Deserialize to StackArgs
+              case valueToStackArgs withEnvValues of
+                Left err ->
+                  pure $ Left $ "Failed to parse stack args from " <> baseLocation <> ": " <> err
+                Right stackArgs ->
+                  pure $ Right $ LoadedStackArgs
+                    { lsaStackArgs = stackArgs
+                    , lsaMergedAws = mergedAws
+                    , lsaDetectionCtx = detectionCtx
+                    }
 
 ------------------------------------------------------------------------
 -- Environment map resolution
@@ -112,20 +117,29 @@ loadStackArgs argsfile environment operation cliAws = do
 
 -- | Resolve environment maps for Profile, Region, AssumeRoleARN.
 -- These fields can be either a string or a mapping of environment -> string.
-resolveEnvMaps :: Value -> Text -> Value
-resolveEnvMaps (Object obj) env = Object $
-  foldr (\key acc -> resolveEnvMapField acc key env) obj
+-- Returns Left with an error if an env map doesn't contain the current environment
+-- or if the resolved value is not a string (matching Rust behavior).
+resolveEnvMaps :: Value -> Text -> Either Text Value
+resolveEnvMaps (Object obj) env =
+  fmap Object $ foldM (\acc key -> resolveEnvMapField acc key env) obj
     ["Profile", "AssumeRoleARN", "Region"]
-resolveEnvMaps v _ = v
+resolveEnvMaps v _ = Right v
 
-resolveEnvMapField :: KM.KeyMap Value -> Text -> Text -> KM.KeyMap Value
+resolveEnvMapField :: KM.KeyMap Value -> Text -> Text -> Either Text (KM.KeyMap Value)
 resolveEnvMapField obj key env =
   case KM.lookup (Key.fromText key) obj of
     Just (Object envMap) ->
       case KM.lookup (Key.fromText env) envMap of
-        Just val -> KM.insert (Key.fromText key) val obj
-        Nothing  -> obj  -- env not found, leave as-is
-    _ -> obj  -- already a scalar or absent
+        Just (String s) -> Right $ KM.insert (Key.fromText key) (String s) obj
+        Just _nonString -> Left $
+          "The " <> key <> " setting in stack-args.yaml must map environments to strings"
+        Nothing -> Left $
+          "environment '" <> env <> "' not found in " <> key <> " map"
+    Just (String _) -> Right obj  -- already a scalar string
+    Just Null       -> Right obj  -- null is fine
+    Nothing         -> Right obj  -- absent is fine
+    Just _          -> Left $
+      "The " <> key <> " setting in stack-args.yaml must be a string or an environment map"
 
 ------------------------------------------------------------------------
 -- Environment tag
@@ -167,7 +181,7 @@ injectEnvValues v _ _ _ = v
 -- | Build $envValues matching iidy-js structure
 buildEnvValues :: Text -> CfnOperation -> AwsSettings -> Value
 buildEnvValues env operation aws =
-  let region = fromMaybe "us-east-1" (awsRegion aws)
+  let region = fromMaybe "" (awsRegion aws)
       iidyBase = KM.fromList
         [ (Key.fromText "command", String (cfnOperationStr operation))
         , (Key.fromText "environment", String env)

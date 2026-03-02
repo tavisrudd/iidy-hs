@@ -1,13 +1,16 @@
 module Test.StackArgsLoaderTest (stackArgsLoaderTests) where
 
 import Control.Exception (try, SomeException)
+import Data.Aeson (Value(..))
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KM
 import qualified Data.Map.Strict
 import qualified Data.Text as T
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
 import Iidy.Aws.CredentialSource (AwsSettings(..))
-import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..))
+import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..), resolveEnvMaps)
 import Iidy.Cfn.Types (CfnOperation(..), StackArgs(..))
 import Test.Shared (noAwsSettings)
 
@@ -82,4 +85,72 @@ stackArgsLoaderTests =
       case result of
         Left _ex  -> pure ()
         Right _   -> assertFailure "Expected exception for missing file"
+
+    -- H-1: resolveEnvMaps error tests (matching Rust behavior)
+  , testCase "env map: missing env errors" $ do
+      -- Region has a map but "staging" isn't in it
+      let val = Object $ KM.fromList
+            [ (Key.fromText "Region", Object $ KM.fromList
+                [ (Key.fromText "dev", String "us-east-1")
+                , (Key.fromText "prod", String "us-west-2")
+                ])
+            ]
+      case resolveEnvMaps val "staging" of
+        Left err -> do
+          assertBool "error mentions environment name" $
+            T.isInfixOf "staging" err
+          assertBool "error mentions Region" $
+            T.isInfixOf "Region" err
+        Right _ -> assertFailure "Expected error for missing environment in map"
+
+  , testCase "env map: non-string value errors" $ do
+      -- Region map has the env but value is a number, not a string
+      let val = Object $ KM.fromList
+            [ (Key.fromText "Region", Object $ KM.fromList
+                [ (Key.fromText "dev", Number 42)
+                ])
+            ]
+      case resolveEnvMaps val "dev" of
+        Left err ->
+          assertBool "error mentions must map to strings" $
+            T.isInfixOf "must map environments to strings" err
+        Right _ -> assertFailure "Expected error for non-string value in env map"
+
+  , testCase "env map: invalid type errors" $ do
+      -- Region is an array, not a string or map
+      let val = Object $ KM.fromList
+            [ (Key.fromText "Region", Array mempty)
+            ]
+      case resolveEnvMaps val "dev" of
+        Left err ->
+          assertBool "error mentions must be string or environment map" $
+            T.isInfixOf "must be a string or an environment map" err
+        Right _ -> assertFailure "Expected error for invalid type"
+
+  , testCase "env map: string value passes through" $ do
+      let val = Object $ KM.fromList
+            [ (Key.fromText "Region", String "us-east-1")
+            ]
+      case resolveEnvMaps val "dev" of
+        Left err -> assertFailure $ "Unexpected error: " <> T.unpack err
+        Right (Object obj) ->
+          KM.lookup (Key.fromText "Region") obj @?= Just (String "us-east-1")
+        Right _ -> assertFailure "Expected Object result"
+
+  , testCase "env map: absent field passes through" $ do
+      let val = Object $ KM.fromList
+            [ (Key.fromText "StackName", String "my-stack")
+            ]
+      case resolveEnvMaps val "dev" of
+        Left err -> assertFailure $ "Unexpected error: " <> T.unpack err
+        Right _ -> pure ()  -- no error for absent env map fields
+
+  , testCase "env map: missing env via loadStackArgs" $ do
+      -- Use existing envmap fixture with an environment not in the map
+      result <- loadStackArgs "test-fixtures/test-stack-args-envmap.yaml" "staging" OpCreateStack noAwsSettings
+      case result of
+        Left err ->
+          assertBool "error mentions environment name" $
+            T.isInfixOf "staging" err
+        Right _ -> assertFailure "Expected error for missing environment in env map"
   ]
