@@ -285,18 +285,18 @@ No performance measurement exists. Startup time and preprocessing latency unmeas
 | 1C   | DONE      | 837536d | getStrListValidated replaces silent-drop getStrList. 6 new tests. |
 | 1D   | DONE      | 870be82 | Unknown-key validation with edit-distance lib + did-you-mean suggestions. 5 new tests. |
 | 1E   | DONE      | 33da957 | saStackName :: !Text, validated at parse time. getStackName removed. 1 new test. |
-| 1F   | PENDING   | —       | Needs user confirmation (behavior change).           |
+| 1F   | DONE      | fe99283 | Error on dot-path query miss (matches Rust). 3 new tests. |
 | 1G   | DONE      | 33eb121 | Catch Amazonka.Error not SomeException. Silent on empty path, warns on other AWS errors. |
 | 2A   | DONE      | 836e3f5 | isCfnIntrinsic for !Select/!Join/!Split. 2 new fixture expected-outputs. |
 | 2B   | DONE      | 63152be | cfnTypeName returns "array" for OArray in CFN validator context. |
 | 2C   | DONE      | 12b178f | Reverse-engineered 4 fixtures from Rust snapshots (input files missing from Rust too). All pass cabal test + snapshot-compare. |
 | 2D   | DONE      | 65d54de | Expected-output files for config + import-test.      |
 | 3A   | DONE      | c972b32 | Narrowed SomeException to specific types across 13 files. |
-| 3B   | PENDING   | —       | Error classification via string matching.            |
+| 3B   | DONE      | 452e30b | Removed 13 dead legacy patterns + 5 dead tests. ParseErrorKind refactor deferred. |
 | 3C   | DONE      | 6ca9fb3 | ConfirmResult ADT (Confirmed/Declined), Text not String. 6 call sites updated. |
 | 4A-F | PENDING   | —       | Structural improvements — larger refactoring.        |
 
-**Tests**: 1091 → 1156 (+65)
+**Tests**: 1091 → 1154 (+63, net after removing 5 dead legacy tests)
 
 ## Handoff Notes
 
@@ -342,3 +342,18 @@ No performance measurement exists. Startup time and preprocessing latency unmeas
 - 3B (error classification string matching) needs design thought
 - 4A-F are larger structural refactors — only if sections 1-3 fully done
 - New dep: `edit-distance` added to cabal for 1D
+
+### Session 2026-03-02--6 (`8dbbdc50-fc42-40b0-a5d7-451747aa5e92`)
+**Completed**:
+- 1F: Error on dot-path query miss instead of ONull — matches Rust (fe99283). 3 new tests.
+- 3B: Removed 13 dead legacy string-match patterns from classifyMessage' (452e30b). 5 dead tests removed.
+- Fixed missing `edit-distance` in flake.nix from prior session (fb383c9)
+- Added cabal/flake dep sync check to pre-commit hook (96b0f3d)
+- Added 3 transitive deps to flake.nix: amazonka-core, http-client, http-client-tls
+- CLAUDE.md: documented dep sync rule for new Haskell dependencies
+**Files modified**: `src/Iidy/Yaml/Resolution/Resolver.hs`, `src/Iidy/Yaml/Errors/Conversion.hs`, `test/Test/ResolverTest.hs`, `test/Test/ErrorClassificationTest.hs`, `flake.nix`, `CLAUDE.md`, `.githooks/pre-commit`, `scripts/check-nix-deps.sh`
+**Notes for next session**:
+- Sections 1-3 are now COMPLETE. All 15 findings addressed.
+- 3B full refactor (ParseErrorKind structured types replacing string matching) deferred — file as t-later
+- 4A-F are larger structural refactors — each is a session unto itself
+- Pre-commit now validates cabal↔flake dep sync
