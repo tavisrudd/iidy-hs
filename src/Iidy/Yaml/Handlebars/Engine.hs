@@ -371,6 +371,9 @@ valueToString = \case
   Null -> ""
   other -> T.pack (show other)
 
+-- | Handlebars truthiness per the Handlebars spec: all numbers are truthy.
+-- This differs from OValue.oIsTruthy where zero is falsy (iidy semantics).
+-- See also: JMESPath.isTruthy (same as this, per JMESPath spec).
 isTruthy :: Value -> Bool
 isTruthy = \case
   Null     -> False

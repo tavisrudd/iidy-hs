@@ -75,6 +75,10 @@ oObject = OObject
 -- Predicates
 ------------------------------------------------------------------------
 
+-- | iidy preprocessing truthiness, used by !$if, !$not, !$map filter, etc.
+-- Note: zero is FALSY here (matching Rust iidy's is_truthy: n != 0.0).
+-- This differs from JMESPath.isTruthy and Handlebars.Engine.isTruthy which
+-- both treat all numbers as truthy per their respective specs.
 oIsTruthy :: OValue -> Bool
 oIsTruthy = \case
   ONull     -> False

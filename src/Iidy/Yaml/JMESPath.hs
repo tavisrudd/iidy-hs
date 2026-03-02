@@ -368,6 +368,9 @@ numCompare :: (Scientific -> Scientific -> Bool) -> Value -> Value -> Bool
 numCompare f (Number a) (Number b) = f a b
 numCompare _ _ _ = False
 
+-- | JMESPath truthiness per the JMESPath spec: all numbers are truthy.
+-- This differs from OValue.oIsTruthy where zero is falsy (iidy semantics).
+-- See also: Handlebars.Engine.isTruthy (same as this, per Handlebars spec).
 isTruthy :: Value -> Bool
 isTruthy = \case
   Null     -> False
