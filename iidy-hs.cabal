@@ -109,6 +109,7 @@ library
   build-depends:
       base >= 4.17 && < 5
     , aeson
+    , async
     , ansi-terminal
     , terminal-size
     , amazonka

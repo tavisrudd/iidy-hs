@@ -1,14 +1,16 @@
 -- | List CloudFormation stacks with optional tag filtering.
 --
--- Fetches all stacks via DescribeStacks (single call, no pagination),
--- applies optional key=value tag filters, sorts by creation time,
--- and returns a StackListDisplay for rendering.
+-- Fetches all stacks via DescribeStacks (paginated to handle accounts
+-- with >100 stacks), applies optional key=value tag filters, sorts by
+-- creation time, and returns a StackListDisplay for rendering.
 {-# LANGUAGE OverloadedRecordDot #-}
 module Iidy.Cfn.Operations.ListStacks
   ( listStacks
   ) where
 
 import Control.Monad.Trans.Resource (runResourceT)
+import Data.Conduit (runConduit, (.|))
+import qualified Data.Conduit.List as CL
 import Data.List (sortBy)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -47,8 +49,9 @@ listStacks
   -> IO (Either Text [OutputData])
 listStacks ctx mTagFilters showTags queryMode = do
   let req = DStacks.newDescribeStacks
-  resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
-  let stacks = fromMaybe [] resp.stacks
+  pages <- runResourceT $ runConduit $
+    Amazonka.paginate (cfnEnv ctx) req .| CL.consume
+  let stacks = concatMap (fromMaybe [] . (.stacks)) pages
       filters = fromMaybe [] mTagFilters
       parsed  = map parseTagFilter filters
       matched = filter (stackMatchesFilters parsed) stacks

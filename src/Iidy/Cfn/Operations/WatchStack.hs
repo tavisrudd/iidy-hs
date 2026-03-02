@@ -15,11 +15,12 @@ import Data.Text (Text)
 import qualified Amazonka
 import qualified Amazonka.CloudFormation.Types as CF
 
+import Iidy.Cfn.Constants (defaultPreviousEventsCount)
 import Iidy.Cfn.Context (CfnContext(..), allTerminalStatuses)
 import Iidy.Cfn.Operations.DescribeStack (convertStack, buildEventsDisplay, mkStandardPollConfig)
 import Iidy.Cfn.StackOperations
   ( getStack
-  , fetchStackEvents
+  , fetchRecentStackEvents
   , collectStackContents
   , pollForCompletion
   , PollConfig(..)
@@ -58,8 +59,8 @@ watchStack ctx stackName timeoutSeconds emit = do
       let sId = fromMaybe stackName cfnStack.stackId
 
       -- 4. Fetch and emit previous events
-      initialEvents <- fetchStackEvents ctx sId
-      let prevEventsDisplay = buildEventsDisplay 10 initialEvents
+      initialEvents <- fetchRecentStackEvents ctx sId
+      let prevEventsDisplay = buildEventsDisplay defaultPreviousEventsCount initialEvents
       emit (OdStackEvents prevEventsDisplay)
       let seenIds = Set.fromList (map (.eventId) initialEvents)
 

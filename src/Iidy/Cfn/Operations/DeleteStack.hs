@@ -17,12 +17,13 @@ import qualified Amazonka
 import qualified Amazonka.CloudFormation.Types as CF
 
 import Iidy.Aws.Sts (getCallerIdentity)
+import Iidy.Cfn.Constants (defaultPreviousEventsCount)
 import Iidy.Cfn.Context (CfnContext(..), deleteSuccessStates, deleteTerminalStatuses)
 import Iidy.Cfn.Operations.DescribeStack (convertStack, buildEventsDisplay, mkStandardPollConfig)
 import Iidy.Cfn.RequestBuilder (buildDeleteStackRequest)
 import Iidy.Cfn.StackOperations
-  ( collectStackContents
-  , fetchStackEvents
+  ( collectStackContentsWithStack
+  , fetchRecentStackEvents
   , getStack
   , pollForCompletion
   , PollResult(..)
@@ -75,9 +76,9 @@ deleteStack ctx stackName skipConfirmation env emit = do
       -- Step 1b: Show previous events and contents before confirmation.
       -- These API calls happen before the user confirms, matching Rust behavior:
       -- showing stack info helps the user decide whether to proceed.
-      events <- fetchStackEvents ctx stackName
-      emit (OdStackEvents (buildEventsDisplay 10 events))
-      contents <- collectStackContents ctx stackName
+      events <- fetchRecentStackEvents ctx stackName
+      emit (OdStackEvents (buildEventsDisplay defaultPreviousEventsCount events))
+      contents <- collectStackContentsWithStack ctx stackName (Just cfnStack)
       emit (OdStackContents contents)
 
       -- Step 1c: Prompt for confirmation unless --yes

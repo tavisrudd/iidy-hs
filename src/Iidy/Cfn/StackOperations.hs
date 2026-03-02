@@ -9,8 +9,10 @@ module Iidy.Cfn.StackOperations
   , stackExists
     -- * Events
   , fetchStackEvents
+  , fetchRecentStackEvents
     -- * Content collection
   , collectStackContents
+  , collectStackContentsWithStack
     -- * Event polling
   , pollForCompletion
   , pollForCompletionWith
@@ -29,6 +31,7 @@ module Iidy.Cfn.StackOperations
   ) where
 
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (concurrently)
 import Control.Exception (try, throwIO)
 import Control.Monad (when)
 import Control.Monad.Trans.Resource (runResourceT)
@@ -51,7 +54,6 @@ import qualified Amazonka.CloudFormation.DescribeStacks as DStacks
 import qualified Amazonka.CloudFormation.DescribeStackEvents as DEvents
 import qualified Amazonka.CloudFormation.DescribeStackResources as DRes
 import qualified Amazonka.CloudFormation.ListChangeSets as LCS
-import qualified Amazonka.CloudFormation.ListExports as LE
 
 import Iidy.Cfn.Context (CfnContext(..))
 import Iidy.Output.Types
@@ -103,6 +105,7 @@ stackExists ctx sName = do
 
 -- | Fetch all stack events across all pages (most recent first per page).
 -- Uses pagination to collect beyond the single-page limit (~1MB per page).
+-- Prefer 'fetchRecentStackEvents' for polling and display (single page).
 fetchStackEvents :: CfnContext -> Text -> IO [CF.StackEvent]
 fetchStackEvents ctx sId = do
   let req = DEvents.newDescribeStackEvents
@@ -112,21 +115,44 @@ fetchStackEvents ctx sId = do
     .| CL.consume
   pure $ concatMap (fromMaybe [] . (.stackEvents)) pages
 
+-- | Fetch a single page of stack events (most recent first, up to ~100).
+-- Sufficient for polling (new events appear on first page) and most
+-- event displays. Avoids paginating entire event history.
+fetchRecentStackEvents :: CfnContext -> Text -> IO [CF.StackEvent]
+fetchRecentStackEvents ctx sId = do
+  let req = DEvents.newDescribeStackEvents
+              { DEvents.stackName = Just sId }
+  resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
+  pure $ fromMaybe [] resp.stackEvents
+
 ------------------------------------------------------------------------
 -- Content collection
 ------------------------------------------------------------------------
 
--- | Collect full stack contents (resources, outputs, exports, status, changesets)
+-- | Collect full stack contents (resources, outputs, exports, status, changesets).
+-- Fetches the stack via DescribeStacks. Prefer 'collectStackContentsWithStack'
+-- when the caller already has the stack object.
 collectStackContents :: CfnContext -> Text -> IO StackContents
 collectStackContents ctx sName = do
-  -- Fetch resources
-  let resReq = DRes.newDescribeStackResources
-                 { DRes.stackName = Just sName }
-  resourcesResp <- runResourceT $ Amazonka.send (cfnEnv ctx) resReq
-  let resources = map convertResource (fromMaybe [] resourcesResp.stackResources)
-
-  -- Fetch stack for outputs and status
   mStack <- getStack ctx sName
+  collectStackContentsWithStack ctx sName mStack
+
+-- | Like 'collectStackContents' but accepts an already-fetched stack,
+-- avoiding a redundant DescribeStacks call. Runs DescribeStackResources
+-- and ListChangeSets concurrently for lower latency.
+collectStackContentsWithStack :: CfnContext -> Text -> Maybe CF.Stack -> IO StackContents
+collectStackContentsWithStack ctx sName mStack = do
+  -- Run DescribeStackResources and ListChangeSets concurrently
+  (resourcesResp, csPages) <- concurrently
+    (runResourceT $ Amazonka.send (cfnEnv ctx) resReq)
+    (runResourceT $ runConduit $
+       Amazonka.paginate (cfnEnv ctx) (LCS.newListChangeSets sName)
+       .| CL.consume)
+
+  let resources = map convertResource (fromMaybe [] resourcesResp.stackResources)
+      changesets = mapMaybe convertChangeSetSummary
+                     (concatMap (fromMaybe [] . (.summaries)) csPages)
+
   let outputs = case mStack of
         Nothing -> []
         Just s  -> mapMaybe convertOutput (fromMaybe [] s.outputs)
@@ -138,34 +164,21 @@ collectStackContents ctx sName = do
           , ssiTimestamp = Nothing
           }
 
-  -- Fetch pending changesets (paginated — ListChangeSets is capped per page)
-  csPages <- runResourceT $ runConduit $
-    Amazonka.paginate (cfnEnv ctx) (LCS.newListChangeSets sName)
-    .| CL.consume
-  let changesets = mapMaybe convertChangeSetSummary
-                     (concatMap (fromMaybe [] . (.summaries)) csPages)
-
-  -- Fetch exports from this stack (paginated — ListExports capped at 100/page).
-  -- NOTE: ListExports has no server-side stack filter, so we must fetch ALL
-  -- account exports and filter client-side by stack ARN. This matches the
-  -- Rust implementation. May be slow for accounts with many exports.
-  exportPages <- runResourceT $ runConduit $
-    Amazonka.paginate (cfnEnv ctx) LE.newListExports
-    .| CL.consume
-  let allExports = concatMap (fromMaybe [] . (.exports)) exportPages
-      stackExports = case mStack of
+  -- Derive exports from stack outputs (only those with an export name).
+  -- Matches Rust: convert_outputs_to_exports() in aws_conversion.rs.
+  let stackExports = case mStack of
         Nothing -> []
         Just s  ->
-          [ StackExportInfo
-              { seiName             = fromMaybe "" e.name
-              , seiValue            = fromMaybe "" e.value
-              , seiExportingStackId = fromMaybe "" e.exportingStackId
-              , seiImportingStacks  = []
-              }
-          | e <- allExports
-          , Just sArn <- [s.stackId]
-          , e.exportingStackId == Just sArn
-          ]
+          let sArn = fromMaybe "" s.stackId
+          in  [ StackExportInfo
+                  { seiName             = eName
+                  , seiValue            = soiOutputValue o
+                  , seiExportingStackId = sArn
+                  , seiImportingStacks  = []
+                  }
+              | o <- outputs
+              , Just eName <- [soiExportName o]
+              ]
 
   pure StackContents
     { scResources = resources
@@ -174,6 +187,9 @@ collectStackContents ctx sName = do
     , scCurrentStatus = statusInfo
     , scPendingChangesets = changesets
     }
+  where
+    resReq = DRes.newDescribeStackResources
+               { DRes.stackName = Just sName }
 
 ------------------------------------------------------------------------
 -- Event polling
@@ -219,7 +235,7 @@ pollForCompletion
   -> [Text]        -- ^ terminal status strings
   -> PollConfig
   -> IO PollResult
-pollForCompletion ctx sId = pollForCompletionWith (fetchStackEvents ctx sId) sId
+pollForCompletion ctx sId = pollForCompletionWith (fetchRecentStackEvents ctx sId) sId
 
 -- | Testable polling loop — takes an event-fetching action instead of CfnContext.
 pollForCompletionWith

@@ -49,6 +49,7 @@ import qualified Amazonka.CloudFormation.DescribeChangeSet as DCS
 import Amazonka.CloudFormation.DescribeChangeSet (DescribeChangeSet(stackName))
 import qualified Amazonka.CloudFormation.ListChangeSets as LCS
 
+import Iidy.Cfn.Constants (defaultPreviousEventsCount)
 import Iidy.Confirm (requestConfirmation)
 import Iidy.Aws.ClientReqToken (TokenInfo(..))
 import Iidy.Cfn.Context
@@ -61,7 +62,7 @@ import Iidy.Cfn.Context
 import Iidy.Cfn.RequestBuilder (buildCreateChangeSetRequest)
 import Iidy.Cfn.Operations.DescribeStack (buildEventsDisplay, mkStandardPollConfig, emitStackDefinition)
 import Iidy.Cfn.StackOperations
-  ( fetchStackEvents
+  ( fetchRecentStackEvents
   , getStackId
   , getStack
   , collectStackContents
@@ -204,8 +205,8 @@ executeChangeset ctx stackName csName emit = do
   emitStackDefinition ctx stackId emit
 
   -- Step 2c: Emit previous events (unique to exec-changeset)
-  prevEvents <- fetchStackEvents ctx stackName
-  let eventsDisplay = buildEventsDisplay 10 prevEvents
+  prevEvents <- fetchRecentStackEvents ctx stackName
+  let eventsDisplay = buildEventsDisplay defaultPreviousEventsCount prevEvents
   emit (OdStackEvents eventsDisplay)
 
   -- Step 3: Poll for completion, emitting events through renderer
