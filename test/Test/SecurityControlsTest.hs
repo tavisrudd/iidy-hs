@@ -82,10 +82,26 @@ parseImportTypeTests =
       parseImportType "ssm:/p" "https://example.com"
         @?= Right ImportSsm
 
-  , testCase "unknown prefix is treated as file path (falls through to ImportFile)" $
-      -- parseTypePrefix only returns a prefix when it is in knownTypes.
-      -- An unrecognised prefix like "bogus" is treated as a plain file path.
-      parseImportType "bogus:x" "."
+  , testCase "unknown prefix 'bogus' is rejected with ImportError" $ do
+      let result = parseImportType "bogus:x" "."
+      case result of
+        Left (ImportError e) ->
+          assertBool "mentions 'bogus'" ("bogus" `T.isInfixOf` e)
+        Right _ -> fail "Expected Left for unknown import prefix 'bogus'"
+
+  , testCase "unknown prefix 'unknown' is rejected with ImportError" $ do
+      let result = parseImportType "unknown:foo" "."
+      case result of
+        Left (ImportError e) ->
+          assertBool "mentions 'unknown'" ("unknown" `T.isInfixOf` e)
+        Right _ -> fail "Expected Left for unknown import prefix 'unknown'"
+
+  , testCase "plain file path with no colon is still ImportFile" $
+      parseImportType "plainfile.yaml" "."
+        @?= Right ImportFile
+
+  , testCase "relative path with colon in filename is still ImportFile" $
+      parseImportType "./has:colon" "."
         @?= Right ImportFile
   ]
 

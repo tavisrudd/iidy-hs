@@ -54,39 +54,43 @@ class ImportLoader m where
 ------------------------------------------------------------------------
 
 parseImportType :: Text -> Text -> Either ImportError ImportType
-parseImportType location baseLocation =
-  let (typeStr, _rest) = parseTypePrefix location
-      importType = case typeStr of
-        "file"            -> Right ImportFile
-        "env"             -> Right ImportEnv
-        "git"             -> Right ImportGit
-        "random"          -> Right ImportRandom
-        "filehash"        -> Right ImportFilehash
-        "filehash-base64" -> Right ImportFilehashBase64
-        "cfn"             -> Right ImportCfn
-        "ssm"             -> Right ImportSsm
-        "ssm-path"        -> Right ImportSsmPath
-        "s3"              -> Right ImportS3
-        "http"            -> Right ImportHttp
-        "https"           -> Right ImportHttp
-        ""                -> Right ImportFile  -- default
-        other             -> Left $ ImportError $ "Unknown import type: " <> other
-  in case importType of
-       Left e -> Left e
-       Right it
-         | isRemoteBase baseLocation && isLocalOnly it ->
-             Left $ ImportError $
-               "Import type " <> typeStr <> " is not allowed from remote templates"
-         | otherwise -> Right it
+parseImportType location baseLocation = do
+  (typeStr, _rest) <- parseTypePrefix location
+  importType <- case typeStr of
+    "file"            -> Right ImportFile
+    "env"             -> Right ImportEnv
+    "git"             -> Right ImportGit
+    "random"          -> Right ImportRandom
+    "filehash"        -> Right ImportFilehash
+    "filehash-base64" -> Right ImportFilehashBase64
+    "cfn"             -> Right ImportCfn
+    "ssm"             -> Right ImportSsm
+    "ssm-path"        -> Right ImportSsmPath
+    "s3"              -> Right ImportS3
+    "http"            -> Right ImportHttp
+    "https"           -> Right ImportHttp
+    ""                -> Right ImportFile  -- default: plain file path
+    other             -> Left $ ImportError $ "Unknown import type: " <> other
+  if isRemoteBase baseLocation && isLocalOnly importType
+    then Left $ ImportError $
+           "Import type " <> typeStr <> " is not allowed from remote templates"
+    else Right importType
 
-parseTypePrefix :: Text -> (Text, Text)
+-- | Parse an import type prefix from a location string.
+-- Returns @Right ("", loc)@ for plain file paths (no colon or relative/absolute paths).
+-- Returns @Right (prefix, rest)@ for known prefixes.
+-- Returns @Left ImportError@ for unknown prefixes (e.g. "bogus:x").
+parseTypePrefix :: Text -> Either ImportError (Text, Text)
 parseTypePrefix loc
-  | T.isPrefixOf "./" loc || T.isPrefixOf "../" loc || T.isPrefixOf "/" loc = ("file", loc)
+  | T.isPrefixOf "./" loc || T.isPrefixOf "../" loc || T.isPrefixOf "/" loc =
+      Right ("file", loc)
   | otherwise = case T.breakOn ":" loc of
       (prefix, rest)
-        | T.null rest -> ("", loc)
-        | prefix `elem` knownTypes -> (prefix, T.drop 1 rest)
-        | otherwise -> ("", loc)  -- treat as file path
+        | T.null rest -> Right ("", loc)
+        | prefix `elem` knownTypes -> Right (prefix, T.drop 1 rest)
+        | otherwise ->
+            Left $ ImportError $
+              "Unknown import type '" <> prefix <> "' in " <> loc
   where
     knownTypes :: [Text]
     knownTypes = ["file", "env", "git", "random", "filehash", "filehash-base64",
