@@ -59,7 +59,7 @@ buildCreateStackRequest ctx args usePrimary argsfilePath env = do
   token <- if usePrimary
     then pure (cfnPrimaryToken ctx)
     else ctxDeriveToken ctx "create-stack"
-  tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env
+  tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
   let baseReq = CS.newCreateStack sName
       req = baseReq
         { CS.templateBody = trTemplateBody tmplResult
@@ -91,7 +91,7 @@ buildUpdateStackRequest ctx args usePrimary argsfilePath env = do
   token <- if usePrimary
     then pure (cfnPrimaryToken ctx)
     else ctxDeriveToken ctx "update-stack"
-  tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env
+  tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
   let baseReq = US.newUpdateStack sName
       req = baseReq
         { US.templateBody = trTemplateBody tmplResult
@@ -129,7 +129,7 @@ buildCreateChangeSetRequest
 buildCreateChangeSetRequest ctx args csName csType argsfilePath env = do
   let sName = getStackName args
   token <- ctxDeriveToken ctx "create-changeset"
-  tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env
+  tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
   let baseReq = CCS.newCreateChangeSet sName csName
       req = baseReq
         { CCS.templateBody = trTemplateBody tmplResult

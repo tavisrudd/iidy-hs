@@ -36,7 +36,7 @@ estimateCost
   -> IO (Either Text Int)
 estimateCost ctx args argsfilePath env emit = do
   -- Step 1: Load the template
-  tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env
+  tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
 
   -- Step 2: Build the EstimateTemplateCost request
   let req = ETC.newEstimateTemplateCost

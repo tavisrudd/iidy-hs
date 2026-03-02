@@ -55,7 +55,7 @@ templateApprovalRequest ctx sa _lintTmpl argsfilePath env emit = do
         Nothing -> pure (Left "Template is required in stack-args.yaml")
         Just _tmplSpec -> do
           -- Load template
-          tmplResult <- loadCfnTemplate (saTemplate sa) (fmap id argsfilePath) env
+          tmplResult <- loadCfnTemplate (saTemplate sa) (fmap id argsfilePath) env (Just (cfnEnv ctx))
           case trTemplateBody tmplResult of
             Nothing -> pure (Left "Failed to load template body")
             Just body -> do

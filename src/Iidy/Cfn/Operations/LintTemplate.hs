@@ -36,7 +36,7 @@ lintTemplate
   -> IO (Either Text Int)
 lintTemplate ctx args argsfilePath env emit = do
   -- Load the template
-  tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env
+  tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
 
   case trTemplateBody tmplResult of
     Nothing -> pure (Left "Failed to load template body")
