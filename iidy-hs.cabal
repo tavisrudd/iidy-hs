@@ -30,6 +30,9 @@ library
     Iidy.Yaml.Errors.Enhanced
     Iidy.Yaml.Errors.Display
     Iidy.Yaml.Errors.Conversion
+    Iidy.Yaml.Errors.Conversion.LineSearch
+    Iidy.Yaml.Errors.Conversion.Location
+    Iidy.Yaml.Errors.Conversion.Guidance
     Iidy.Yaml.Resolution.Context
     Iidy.Yaml.Resolution.Resolver
     Iidy.Yaml.Handlebars.Engine
