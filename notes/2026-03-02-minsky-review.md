@@ -405,3 +405,21 @@ The YAML pipeline got this right. The CFN pipeline didn't. The difference is pro
 In Minsky's framework, this codebase has a **typed core surrounded by a stringly-typed shell**. The YAML engine, template resolution, handlebars, JMESPath, and schema validation all use proper types with meaningful constraints. But the CloudFormation operations layer — the part that talks to AWS, handles stack statuses, processes stack-args, and manages errors — uses `Text` where it should use enums, `Maybe` where it should use required fields, and `Either Text` where it should use typed errors.
 
 The fix isn't massive: introduce domain enums for statuses and capabilities, split `StackArgs` into per-operation types, replace `Either Text` with `Either IidyError` in the CFN layer. Each change is local and mechanical. The payoff is that the compiler catches the bugs that runtime currently must.
+
+---
+
+## Post-Review Status Updates (Session 46, 2026-03-02)
+
+_These annotations were added after the review to track which findings have been addressed._
+
+| #  | Finding                                                   | Status               | Notes                                                                                                              |
+|----|-----------------------------------------------------------|----------------------|--------------------------------------------------------------------------------------------------------------------|
+| 1  | StackArgs contradictory field combinations                | PARTIALLY ADDRESSED  | `saOnFailure` converted to `Maybe OnFailure` ADT (DoNothing/Rollback/Delete); `saCapabilities` converted to `Maybe [Capability]` ADT (CapIAM/CapNamedIAM/CapAutoExpand). Both parse at YAML boundary with clear errors. Per-operation config types (CreateStackConfig etc.) remain OPEN. |
+| 2  | Stack statuses stringly typed                             | OPEN                 | Status is still `Text` throughout. Amazonka `StackStatus` still converted to Text immediately.                     |
+| 3  | OdRawOutput escape hatch in structured pipeline           | OPEN                 | `OdRawOutput` was added in Session 42 as an intentional design choice for non-CFN commands. Structured per-command output types not yet introduced. |
+| 4  | Mutable CfnContext passed to read-only operations         | OPEN                 | CfnContext still has IORef for all consumers. Read/write context split not implemented.                            |
+| 5  | PollConfig timeout/handler coupling                       | OPEN                 | PollConfig still has independent timeout and callback fields. InactivityPolicy ADT not implemented.                |
+| 6  | Error types as Text everywhere                            | PARTIALLY ADDRESSED  | TemplateLoader converted from `fail` to `Either Text` returns (6 call sites). Propagated through RequestBuilder, operations, Main.hs. But the broader `Either Text` → `Either IidyError` conversion across the CFN layer remains OPEN. |
+| 7  | unsafePerformIO global HTTP manager                       | OPEN                 | Global mutable singleton still in Http.hs. Manager not passed explicitly.                                          |
+| 8  | TimeProvider incomplete (startTime invariant not in type) | OPEN                 | TimeProvider structure unchanged.                                                                                  |
+| 9  | Format strings at runtime (silent fallback on typos)      | FIXED                | `RenderFormat` ADT introduced. `--format` validated at parse time via optparse-applicative. Typos like `--format josn` rejected immediately. No wildcard fallback. |

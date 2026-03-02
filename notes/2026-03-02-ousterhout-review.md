@@ -227,3 +227,28 @@ The codebase has **strong strategic bones** in the YAML pipeline and output arch
 The tactical debt is concentrated at the **boundaries**: Main.hs dispatch, CfnContext, StackArgs, error handling, and the `emit` callback threading. These are the places where "make it work for this operation" accumulated into "pass everything everywhere."
 
 Ousterhout would say: the problem isn't that the code is wrong — it's that the interfaces carry too much information. Narrower interfaces at the operation boundary would make the deep modules even deeper and the shallow wiring even thinner.
+
+---
+
+## Post-Review Status Updates (Session 46, 2026-03-02)
+
+_These annotations were added after the review to track which findings have been addressed._
+
+Ousterhout's review focuses on module depth, information leakage, and interface design. Most findings are structural concerns about the CFN boundary layer. The session 45-46 fixes address some specific type-safety issues but not the broader architectural patterns.
+
+| #  | Finding                                                         | Status              | Notes                                                                                                             |
+|----|-----------------------------------------------------------------|---------------------|-------------------------------------------------------------------------------------------------------------------|
+| 1a | Shallow module: CfnContext (exports everything, no hiding)      | OPEN                | CfnContext still exports all fields. No encapsulation change.                                                     |
+| 1b | Shallow module: CfnStatus (lookup table, no transitions)        | OPEN                | Status still Text-based. No state machine encoding.                                                               |
+| 2a | Information leakage: CfnContext(..) exports all fields          | OPEN                | No change to CfnContext export list or abstraction boundary.                                                      |
+| 2b | Information leakage: StackArgs(..) — all 21 fields exposed      | PARTIALLY ADDRESSED | `saOnFailure` now `Maybe OnFailure` (ADT) and `saCapabilities` now `Maybe [Capability]` (ADT) — these parse at the YAML boundary with clear errors. But StackArgs still exports all fields; per-operation config types not introduced. |
+| 2c | Information leakage: StackArgsLoader internals exported for test | OPEN                | Still exports `getStrMapValidated` and `resolveEnvMaps` as testing internals.                                     |
+| 3a | Pass-through: emit callback threaded through 3-4 layers         | OPEN                | Emit callback threading unchanged. No operation pipeline abstraction.                                             |
+| 3b | Pass-through: argsfilePath threaded through 3 functions          | OPEN                | argsfilePath pass-through unchanged.                                                                              |
+| 3c | Pass-through: env (environment name) carried uselessly           | OPEN                | env parameter threading unchanged.                                                                                |
+| 4a | Tactical: runCfnWithArgs is scripted accumulation                | OPEN                | runCfnWithArgs not refactored. No CfnOperationRunner abstraction.                                                |
+| 4b | Tactical: error handling — 5 patterns, no unified algebra        | PARTIALLY ADDRESSED | TemplateLoader converted from `fail` to `Either Text` (6 sites). This removes one of the 5 error patterns. Broader `IidyError` sum type not introduced. |
+| 5  | Complexity budget: StackArgsLoader doing logic via aeson Value   | OPEN                | StackArgsLoader still manipulates aeson Value directly.                                                           |
+| 6a | Interface smell: createStack takes 5 params at 4 abstraction levels | OPEN             | Function signatures unchanged. No parameter consolidation.                                                        |
+| 6b | Interface smell: emptyStackArgs with 21 Nothing fields           | PARTIALLY ADDRESSED | Two fields now use ADTs instead of Text (OnFailure, Capability), providing type-level guidance. But still 21 Maybe fields with no per-operation distinction. |
+| 7  | Strategic redesign: operation-specific argument types             | PARTIALLY ADDRESSED | OnFailure ADT and Capability ADT are the first steps toward per-operation types with validated fields. Full CreateStackConfig / DeleteStackConfig not yet introduced. |

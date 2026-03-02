@@ -226,3 +226,21 @@ This codebase is over-architected relative to its problem domain but correctly-a
 Muratori would say: the problem was over-engineered in Rust, and then the over-engineering was faithfully ported to Haskell. The six-representation data pipeline, the 27-variant output type, the themed renderer — these are solutions looking for problems. But they're the same solutions the Rust implementation chose, and the port's job was to match, not redesign.
 
 The path forward, if you want to _reduce_ complexity: question the feature requirements themselves, not the implementation. Does the JSON output mode get used? Does anyone use the custom resource system? Are the 22 preprocessing tags all necessary, or do users use 5 of them? Trimming features reduces code more than trimming abstractions ever will.
+
+---
+
+## Post-Review Status Updates (Session 46, 2026-03-02)
+
+_These annotations were added after the review to track which findings have been addressed._
+
+Muratori's review is largely philosophical/structural critique rather than specific bug reports. Most findings question the overall engineering approach (faithful port of a complex tool) rather than identifying fixable issues. The session 45-46 fixes are mapped where relevant.
+
+| #  | Finding                                                     | Status              | Notes                                                                                                              |
+|----|-------------------------------------------------------------|---------------------|--------------------------------------------------------------------------------------------------------------------|
+| 1  | 85 modules for a simple problem                             | WONT FIX            | By design — faithful port of 96-module Rust codebase. Module count is a consequence of the "complete port" requirement, not an accident. |
+| 2  | Abstraction tax / 6 representations for data                | WONT FIX            | Each representation serves a purpose: key-order preservation (OValue), source locations (YamlAst), ecosystem compat (aeson Value). Reducing representations would sacrifice features. |
+| 3  | Module count disease (11 mergeable modules identified)      | OPEN                | Valid observation. Modules like Constants, TemplateHash, Location could be folded into neighbors. Not addressed in sessions 45-46. Note: Conversion.hs was *split* (not merged) per Gemini review in session 42, going in the opposite direction. |
+| 4  | Custom implementations (JMESPath, Handlebars, etc.)         | WONT FIX            | Each custom impl has documented justification (abandoned packages, missing features, spec compliance). Session 45-46 added 8 property tests for JMESPath and Handlebars correctness, strengthening confidence in the custom impls. |
+| 5  | Output pipeline over-engineered                             | WONT FIX            | Required for JSON output mode, testability, and Rust behavioral equivalence. `OdRawOutput` escape hatch was added intentionally in session 42 for non-CFN commands. |
+| 6  | No performance measurement / benchmarks                     | OPEN                | No benchmarks were added. Valid critique — startup time and preprocessing latency remain unmeasured. |
+| 7  | Test suite impressive but expensive (maintenance cost)      | PARTIALLY ADDRESSED | Session 45-46 added 24 error content tests (full 51-fixture coverage) and 8 edge-case property tests. These increase coverage but also increase the maintenance surface Muratori flags. Snapshot gap audit documented. |
