@@ -507,7 +507,7 @@ paramGetHistory awsEnv args = do
     splitLast :: [a] -> (a, [a])
     splitLast xs = case reverse xs of
       (c:ps) -> (c, reverse ps)
-      []     -> (List.head xs, [])  -- unreachable
+      []     -> error "splitLast: empty list (unreachable)"
 
     formatHistory :: ParamFormat -> Map.Map Text Text
                   -> SSM.ParameterHistory -> [SSM.ParameterHistory] -> Text
