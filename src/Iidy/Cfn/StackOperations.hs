@@ -40,6 +40,7 @@ import Control.Monad.Trans.Resource (runResourceT)
 import Data.Conduit (runConduit, (.|))
 import qualified Data.Conduit.List as CL
 import Data.IORef
+import Data.Function ((&))
 import Data.Maybe (fromMaybe, mapMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -57,6 +58,7 @@ import qualified Amazonka.CloudFormation.DescribeStackEvents as DEvents
 import qualified Amazonka.CloudFormation.DescribeStackResources as DRes
 import qualified Amazonka.CloudFormation.ListChangeSets as LCS
 
+import Lens.Micro ((.~))
 import Iidy.Cfn.Context (CfnContext(..))
 import Iidy.Output.Types
 
@@ -142,16 +144,22 @@ fetchStackEventsUpTo ctx sId maxEvents = go Nothing []
     go mToken acc
       | length acc >= target = pure acc
       | otherwise = do
-          let req = DEvents.newDescribeStackEvents
-                      { DEvents.stackName = Just sId
-                      , DEvents.nextToken = mToken
-                      }
+          let req = mkDescribeStackEvents sId mToken
           resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
           let events = fromMaybe [] resp.stackEvents
               acc'   = acc <> events
           case resp.nextToken of
             Nothing -> pure acc'
             Just tk -> go (Just tk) acc'
+
+-- | Build a DescribeStackEvents request. Uses the amazonka lens to avoid
+-- the DuplicateRecordFields ambiguity on @nextToken@ (shared by request
+-- and response types).
+mkDescribeStackEvents :: Text -> Maybe Text -> DEvents.DescribeStackEvents
+mkDescribeStackEvents sId mToken =
+  DEvents.newDescribeStackEvents
+    { DEvents.stackName = Just sId
+    } & DEvents.describeStackEvents_nextToken .~ mToken
 
 ------------------------------------------------------------------------
 -- Content collection
