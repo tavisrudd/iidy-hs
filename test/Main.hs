@@ -38,6 +38,7 @@ import Test.ChangesetHelpersTest (changesetHelpersTests)
 import Test.DescribeStackTest (describeStackTests)
 import Test.StackOpsConverterTest (stackOpsConverterTests)
 import Test.TimingTest (timingTests)
+import Test.SecurityControlsTest (securityControlsTests)
 
 main :: IO ()
 main = do
@@ -80,4 +81,5 @@ main = do
     , testGroup "DescribeStack" describeStackTests
     , testGroup "StackOpsConverters" stackOpsConverterTests
     , testGroup "Timing" timingTests
+    , testGroup "SecurityControls" securityControlsTests
     ]
