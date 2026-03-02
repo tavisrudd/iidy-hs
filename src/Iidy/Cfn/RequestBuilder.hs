@@ -75,6 +75,7 @@ buildCreateStackRequest ctx args usePrimary argsfilePath env = do
         , CS.enableTerminationProtection = saEnableTerminationProtection args
         , CS.onFailure = mapOnFailure (saOnFailure args)
         , CS.stackPolicyBody = serializeStackPolicy (saStackPolicy args)
+        , CS.resourceTypes = saResourceTypes args
         }
   pure (req, token)
 
@@ -103,6 +104,7 @@ buildUpdateStackRequest ctx args usePrimary argsfilePath env = do
         , US.clientRequestToken = Just (tiValue token)
         , US.notificationARNs = saNotificationArns args
         , US.stackPolicyBody = serializeStackPolicy (saStackPolicy args)
+        , US.resourceTypes = saResourceTypes args
         }
   pure (req, token)
 
@@ -141,6 +143,7 @@ buildCreateChangeSetRequest ctx args csName csType argsfilePath env = do
         , CCS.clientToken = Just (tiValue token)
         , CCS.changeSetType = Just csType
         , CCS.notificationARNs = saNotificationArns args
+        , CCS.resourceTypes = saResourceTypes args
         }
   pure (req, token)
 
