@@ -278,8 +278,34 @@ No performance measurement exists. Startup time and preprocessing latency unmeas
 
 ## Progress
 
-_To be filled in by executing agent._
+| Item | Status    | Commit  | Notes                                                |
+|------|-----------|---------|------------------------------------------------------|
+| 1A   | PENDING   | —       | Large — needs new types, ListTagsForResource, format dispatch. Defer to next session. |
+| 1B   | DONE      | e3453c4 | LCS diff algorithm + contextLines wiring. 15 new tests. |
+| 1C   | DONE      | 837536d | getStrListValidated replaces silent-drop getStrList. 6 new tests. |
+| 1D   | PENDING   | —       | Needs user confirmation (behavior change).           |
+| 1E   | PENDING   | —       | Needs user confirmation (behavior change).           |
+| 1F   | PENDING   | —       | Needs user confirmation (behavior change).           |
+| 1G   | DONE      | 33eb121 | Catch Amazonka.Error not SomeException. Silent on empty path, warns on other AWS errors. |
+| 2A   | DONE      | 836e3f5 | isCfnIntrinsic for !Select/!Join/!Split. 2 new fixture expected-outputs. |
+| 2B   | DONE      | 63152be | cfnTypeName returns "array" for OArray in CFN validator context. |
+| 2C   | PENDING   | —       | Port 4 missing yaml-iidy-syntax fixtures from Rust.  |
+| 2D   | DONE      | 65d54de | Expected-output files for config + import-test.      |
+| 3A   | PENDING   | —       | try @SomeException at 15+ AWS boundaries.            |
+| 3B   | PENDING   | —       | Error classification via string matching.            |
+| 3C   | PENDING   | —       | requestConfirmation Bool hides exit-code semantics.  |
+| 4A-F | PENDING   | —       | Structural improvements — larger refactoring.        |
+
+**Tests**: 1091 → 1115 (+24, one old test removed in 1G refactor)
 
 ## Handoff Notes
 
-_To be filled in by executing agent._
+### Session 47 (2026-03-02)
+- Completed 5 items from sections 1 and 2 (1B, 1C, 2A, 2B, 2D)
+- 1G in-flight via sub-agent
+- User guidance on behavior-changing items:
+  - **1D/1E/1F**: Confirm with user before implementing (changes non-broken behavior)
+  - **1G**: User approved — silent on missing SSM path, warnings for other errors, candidate for removal
+- **1A** is the largest remaining item — needs new data types, AWS ListTagsForResource, JSON/YAML serialization. Even the default format for get-by-path and get-history diverges from Rust. Full session needed.
+- **2C** (port 4 missing fixtures) is straightforward research + fixture work
+- **3A** (SomeException at 15+ sites) is medium-high risk, should be done progressively
