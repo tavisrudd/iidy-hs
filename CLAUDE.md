@@ -33,6 +33,7 @@ Autonomous claude driven, Haskell port of iidy (a CloudFormation preprocessor/de
 - `cabal build` for compilation, in nix direnv / dev shell
 - `cabal jobs: 4`, `-O0` for dev builds
 - Use `~/.claude/bin/run-quiet` wrapper for builds to avoid flooding context
+- **When adding a new Haskell dependency**: add it to BOTH `iidy-hs.cabal` (build-depends) AND `flake.nix` (haskellDeps list). Missing either causes build failures in different environments.
 
 ## Anti-patterns
 - No duplicate code — extract shared logic

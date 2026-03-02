@@ -15,6 +15,7 @@
         hpkgs.bytestring
         hpkgs.containers
         hpkgs.directory
+        hpkgs.edit-distance
         hpkgs.filepath
         hpkgs.HsYAML
         hpkgs.random
