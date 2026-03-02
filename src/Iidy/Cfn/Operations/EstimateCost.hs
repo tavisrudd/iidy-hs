@@ -36,23 +36,25 @@ estimateCost
   -> IO (Either Text Int)
 estimateCost ctx args argsfilePath env emit = do
   -- Step 1: Load the template
-  tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
+  tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
+  case tmplEither of
+    Left err -> pure (Left err)
+    Right tmplResult -> do
+      -- Step 2: Build the EstimateTemplateCost request
+      let req = ETC.newEstimateTemplateCost
+                  { ETC.templateBody = trTemplateBody tmplResult
+                  , ETC.templateURL  = trTemplateUrl tmplResult
+                  }
 
-  -- Step 2: Build the EstimateTemplateCost request
-  let req = ETC.newEstimateTemplateCost
-              { ETC.templateBody = trTemplateBody tmplResult
-              , ETC.templateURL  = trTemplateUrl tmplResult
-              }
+      -- Step 3: Send the request
+      resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
 
-  -- Step 3: Send the request
-  resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
-
-  -- Step 4: Emit CostEstimate via output pipeline
-  let url = fromMaybe "" resp.url
-      costInfo = CostEstimateInfo
-        { ceiUrl          = url
-        , ceiStackName    = saStackName args
-        , ceiTemplateFile = saTemplate args
-        }
-  emit (OdCostEstimate (CostEstimate { ceInfo = costInfo }))
-  pure $ Right 0
+      -- Step 4: Emit CostEstimate via output pipeline
+      let url = fromMaybe "" resp.url
+          costInfo = CostEstimateInfo
+            { ceiUrl          = url
+            , ceiStackName    = saStackName args
+            , ceiTemplateFile = saTemplate args
+            }
+      emit (OdCostEstimate (CostEstimate { ceInfo = costInfo }))
+      pure $ Right 0

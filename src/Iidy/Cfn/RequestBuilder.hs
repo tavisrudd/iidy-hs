@@ -44,38 +44,41 @@ import Iidy.Cfn.Types (Capability(..), OnFailure(..), StackArgs(..), getStackNam
 ------------------------------------------------------------------------
 
 -- | Build a CreateStack request from StackArgs.
--- Returns the request and the token used.
+-- Returns the request and the token used, or a descriptive error.
 buildCreateStackRequest
   :: CfnContext
   -> StackArgs
   -> Bool           -- ^ use primary token (vs derived)
   -> Maybe FilePath -- ^ argsfile path for template resolution
   -> Text           -- ^ environment name
-  -> IO (CF.CreateStack, TokenInfo)
+  -> IO (Either Text (CF.CreateStack, TokenInfo))
 buildCreateStackRequest ctx args usePrimary argsfilePath env = do
   let sName = getStackName args
   token <- if usePrimary
     then pure (cfnPrimaryToken ctx)
     else ctxDeriveToken ctx "create-stack"
-  tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
-  let baseReq = CS.newCreateStack sName
-      req = baseReq
-        { CS.templateBody = trTemplateBody tmplResult
-        , CS.templateURL = trTemplateUrl tmplResult
-        , CS.capabilities = mapCapabilities (saCapabilities args)
-        , CS.parameters = mapParameters (saParameters args)
-        , CS.tags = mapTags (saTags args)
-        , CS.roleARN = saServiceRoleArn args <|> saRoleArn args
-        , CS.clientRequestToken = Just (tiValue token)
-        , CS.notificationARNs = saNotificationArns args
-        , CS.timeoutInMinutes = fromIntegral <$> saTimeoutInMinutes args
-        , CS.disableRollback = saDisableRollback args
-        , CS.enableTerminationProtection = saEnableTerminationProtection args
-        , CS.onFailure = fmap toAmazonkaOnFailure (saOnFailure args)
-        , CS.stackPolicyBody = serializeStackPolicy (saStackPolicy args)
-        , CS.resourceTypes = saResourceTypes args
-        }
-  pure (req, token)
+  tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
+  case tmplEither of
+    Left err -> pure (Left err)
+    Right tmplResult -> do
+      let baseReq = CS.newCreateStack sName
+          req = baseReq
+            { CS.templateBody = trTemplateBody tmplResult
+            , CS.templateURL = trTemplateUrl tmplResult
+            , CS.capabilities = mapCapabilities (saCapabilities args)
+            , CS.parameters = mapParameters (saParameters args)
+            , CS.tags = mapTags (saTags args)
+            , CS.roleARN = saServiceRoleArn args <|> saRoleArn args
+            , CS.clientRequestToken = Just (tiValue token)
+            , CS.notificationARNs = saNotificationArns args
+            , CS.timeoutInMinutes = fromIntegral <$> saTimeoutInMinutes args
+            , CS.disableRollback = saDisableRollback args
+            , CS.enableTerminationProtection = saEnableTerminationProtection args
+            , CS.onFailure = fmap toAmazonkaOnFailure (saOnFailure args)
+            , CS.stackPolicyBody = serializeStackPolicy (saStackPolicy args)
+            , CS.resourceTypes = saResourceTypes args
+            }
+      pure (Right (req, token))
 
 -- | Build an UpdateStack request from StackArgs.
 buildUpdateStackRequest
@@ -84,27 +87,30 @@ buildUpdateStackRequest
   -> Bool           -- ^ use primary token
   -> Maybe FilePath -- ^ argsfile path
   -> Text           -- ^ environment name
-  -> IO (CF.UpdateStack, TokenInfo)
+  -> IO (Either Text (CF.UpdateStack, TokenInfo))
 buildUpdateStackRequest ctx args usePrimary argsfilePath env = do
   let sName = getStackName args
   token <- if usePrimary
     then pure (cfnPrimaryToken ctx)
     else ctxDeriveToken ctx "update-stack"
-  tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
-  let baseReq = US.newUpdateStack sName
-      req = baseReq
-        { US.templateBody = trTemplateBody tmplResult
-        , US.templateURL = trTemplateUrl tmplResult
-        , US.capabilities = mapCapabilities (saCapabilities args)
-        , US.parameters = mapParameters (saParameters args)
-        , US.tags = mapTags (saTags args)
-        , US.roleARN = saServiceRoleArn args <|> saRoleArn args
-        , US.clientRequestToken = Just (tiValue token)
-        , US.notificationARNs = saNotificationArns args
-        , US.stackPolicyBody = serializeStackPolicy (saStackPolicy args)
-        , US.resourceTypes = saResourceTypes args
-        }
-  pure (req, token)
+  tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
+  case tmplEither of
+    Left err -> pure (Left err)
+    Right tmplResult -> do
+      let baseReq = US.newUpdateStack sName
+          req = baseReq
+            { US.templateBody = trTemplateBody tmplResult
+            , US.templateURL = trTemplateUrl tmplResult
+            , US.capabilities = mapCapabilities (saCapabilities args)
+            , US.parameters = mapParameters (saParameters args)
+            , US.tags = mapTags (saTags args)
+            , US.roleARN = saServiceRoleArn args <|> saRoleArn args
+            , US.clientRequestToken = Just (tiValue token)
+            , US.notificationARNs = saNotificationArns args
+            , US.stackPolicyBody = serializeStackPolicy (saStackPolicy args)
+            , US.resourceTypes = saResourceTypes args
+            }
+      pure (Right (req, token))
 
 -- | Build a DeleteStack request.
 -- Uses the primary token (not derived), matching Rust behavior.
@@ -125,25 +131,28 @@ buildCreateChangeSetRequest
   -> CF.ChangeSetType  -- ^ CREATE or UPDATE
   -> Maybe FilePath
   -> Text     -- ^ environment
-  -> IO (CF.CreateChangeSet, TokenInfo)
+  -> IO (Either Text (CF.CreateChangeSet, TokenInfo))
 buildCreateChangeSetRequest ctx args csName csType argsfilePath env = do
   let sName = getStackName args
   token <- ctxDeriveToken ctx "create-changeset"
-  tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
-  let baseReq = CCS.newCreateChangeSet sName csName
-      req = baseReq
-        { CCS.templateBody = trTemplateBody tmplResult
-        , CCS.templateURL = trTemplateUrl tmplResult
-        , CCS.capabilities = mapCapabilities (saCapabilities args)
-        , CCS.parameters = mapParameters (saParameters args)
-        , CCS.tags = mapTags (saTags args)
-        , CCS.roleARN = saServiceRoleArn args <|> saRoleArn args
-        , CCS.clientToken = Just (tiValue token)
-        , CCS.changeSetType = Just csType
-        , CCS.notificationARNs = saNotificationArns args
-        , CCS.resourceTypes = saResourceTypes args
-        }
-  pure (req, token)
+  tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
+  case tmplEither of
+    Left err -> pure (Left err)
+    Right tmplResult -> do
+      let baseReq = CCS.newCreateChangeSet sName csName
+          req = baseReq
+            { CCS.templateBody = trTemplateBody tmplResult
+            , CCS.templateURL = trTemplateUrl tmplResult
+            , CCS.capabilities = mapCapabilities (saCapabilities args)
+            , CCS.parameters = mapParameters (saParameters args)
+            , CCS.tags = mapTags (saTags args)
+            , CCS.roleARN = saServiceRoleArn args <|> saRoleArn args
+            , CCS.clientToken = Just (tiValue token)
+            , CCS.changeSetType = Just csType
+            , CCS.notificationARNs = saNotificationArns args
+            , CCS.resourceTypes = saResourceTypes args
+            }
+      pure (Right (req, token))
 
 ------------------------------------------------------------------------
 -- Capability mapping

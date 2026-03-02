@@ -2,10 +2,9 @@
 --
 -- Tests the loadCfnTemplate function across its main dispatch paths:
 -- S3/HTTP URL passthrough, render: preprocessing, local file loading,
--- and error conditions.
+-- and error conditions (returned as Left values).
 module Test.TemplateLoaderTest (templateLoaderTests) where
 
-import Control.Exception (IOException, try)
 import qualified Data.ByteString as BS
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -40,28 +39,43 @@ urlTests :: [TestTree]
 urlTests =
   [ testCase "s3:// URL returned as trTemplateUrl" $ do
       result <- loadCfnTemplate (Just "s3://my-bucket/cfn/template.yaml") Nothing "" Nothing
-      trTemplateUrl  result @?= Just "s3://my-bucket/cfn/template.yaml"
-      trTemplateBody result @?= Nothing
+      case result of
+        Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
+        Right tr -> do
+          trTemplateUrl  tr @?= Just "s3://my-bucket/cfn/template.yaml"
+          trTemplateBody tr @?= Nothing
 
   , testCase "https://s3... URL returned as trTemplateUrl" $ do
       result <- loadCfnTemplate (Just "https://s3.amazonaws.com/bucket/key.yaml") Nothing "" Nothing
-      trTemplateUrl  result @?= Just "https://s3.amazonaws.com/bucket/key.yaml"
-      trTemplateBody result @?= Nothing
+      case result of
+        Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
+        Right tr -> do
+          trTemplateUrl  tr @?= Just "https://s3.amazonaws.com/bucket/key.yaml"
+          trTemplateBody tr @?= Nothing
 
   , testCase "https:// URL returned as trTemplateUrl" $ do
       result <- loadCfnTemplate (Just "https://example.com/template.yaml") Nothing "" Nothing
-      trTemplateUrl  result @?= Just "https://example.com/template.yaml"
-      trTemplateBody result @?= Nothing
+      case result of
+        Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
+        Right tr -> do
+          trTemplateUrl  tr @?= Just "https://example.com/template.yaml"
+          trTemplateBody tr @?= Nothing
 
   , testCase "http:// URL returned as trTemplateUrl" $ do
       result <- loadCfnTemplate (Just "http://example.com/template.yaml") Nothing "" Nothing
-      trTemplateUrl  result @?= Just "http://example.com/template.yaml"
-      trTemplateBody result @?= Nothing
+      case result of
+        Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
+        Right tr -> do
+          trTemplateUrl  tr @?= Just "http://example.com/template.yaml"
+          trTemplateBody tr @?= Nothing
 
   , testCase "Nothing input returns empty result" $ do
       result <- loadCfnTemplate Nothing Nothing "" Nothing
-      trTemplateUrl  result @?= Nothing
-      trTemplateBody result @?= Nothing
+      case result of
+        Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
+        Right tr -> do
+          trTemplateUrl  tr @?= Nothing
+          trTemplateBody tr @?= Nothing
   ]
 
 ------------------------------------------------------------------------
@@ -85,8 +99,11 @@ renderSuccessTests =
         (Just argsfileInFixtureDir)
         "dev"
         Nothing
-      assertBodyPresent result
-      assertNoTemplateUrl result
+      case result of
+        Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
+        Right tr -> do
+          assertBodyPresent tr
+          assertNoTemplateUrl tr
 
   , testCase "render: body does not contain $defs: or $imports: keys" $ do
       result <- loadCfnTemplate
@@ -94,9 +111,12 @@ renderSuccessTests =
         (Just argsfileInFixtureDir)
         "dev"
         Nothing
-      let body = extractBody result
-      assertBool "no $defs: in output"    (not ("$defs:"    `T.isInfixOf` body))
-      assertBool "no $imports: in output" (not ("$imports:" `T.isInfixOf` body))
+      case result of
+        Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
+        Right tr -> do
+          let body = extractBody tr
+          assertBool "no $defs: in output"    (not ("$defs:"    `T.isInfixOf` body))
+          assertBool "no $imports: in output" (not ("$imports:" `T.isInfixOf` body))
 
   , testCase "render: with $defs resolves variable references" $ do
       result <- loadCfnTemplate
@@ -104,9 +124,12 @@ renderSuccessTests =
         (Just argsfileInFixtureDir)
         "dev"
         Nothing
-      let body = extractBody result
-      assertBool "$defs variable resolved to 'bar'" ("bar" `T.isInfixOf` body)
-      assertBool "$defs key filtered from output"   (not ("$defs:" `T.isInfixOf` body))
+      case result of
+        Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
+        Right tr -> do
+          let body = extractBody tr
+          assertBool "$defs variable resolved to 'bar'" ("bar" `T.isInfixOf` body)
+          assertBool "$defs key filtered from output"   (not ("$defs:" `T.isInfixOf` body))
 
   , testCase "render: env name injected as $envValues (filtered from output)" $ do
       -- $envValues is injected into the AST and filtered from output by the resolver.
@@ -118,9 +141,12 @@ renderSuccessTests =
         (Just argsfileInFixtureDir)
         "staging"
         Nothing
-      assertBodyPresent result
-      let body = extractBody result
-      assertBool "$envValues filtered from output" (not ("$envValues" `T.isInfixOf` body))
+      case result of
+        Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
+        Right tr -> do
+          assertBodyPresent tr
+          let body = extractBody tr
+          assertBool "$envValues filtered from output" (not ("$envValues" `T.isInfixOf` body))
   ]
 
 ------------------------------------------------------------------------
@@ -135,8 +161,11 @@ localFileTests =
         Nothing
         "dev"
         Nothing
-      assertBodyPresent result
-      assertNoTemplateUrl result
+      case result of
+        Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
+        Right tr -> do
+          assertBodyPresent tr
+          assertNoTemplateUrl tr
 
   , testCase "local file body contains AWSTemplateFormatVersion" $ do
       result <- loadCfnTemplate
@@ -144,8 +173,11 @@ localFileTests =
         Nothing
         "dev"
         Nothing
-      let body = extractBody result
-      assertBool "body has version key" ("AWSTemplateFormatVersion" `T.isInfixOf` body)
+      case result of
+        Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
+        Right tr -> do
+          let body = extractBody tr
+          assertBool "body has version key" ("AWSTemplateFormatVersion" `T.isInfixOf` body)
   ]
 
 ------------------------------------------------------------------------
@@ -154,72 +186,70 @@ localFileTests =
 
 failureTests :: [TestTree]
 failureTests =
-  [ testCase "render: with malformed YAML fails with parse error message" $
+  [ testCase "render: with malformed YAML returns Left with parse error" $
       withSystemTempDirectory "tpl-loader-malformed" $ \dir -> do
         let fp = dir </> "malformed.yaml"
         BS.writeFile fp "key: [\n  unclosed: bracket"
-        result <- try @IOException $ loadCfnTemplate
+        result <- loadCfnTemplate
           (Just (T.pack ("render:" <> fp)))
           Nothing
           "dev"
           Nothing
         case result of
-          Right _ -> assertFailure "expected IOException for malformed YAML"
+          Right _ -> assertFailure "expected Left for malformed YAML"
           Left err ->
             assertBool "error mentions 'Parse error'"
-              ("Parse error" `T.isInfixOf` T.pack (show err))
+              ("Parse error" `T.isInfixOf` err)
 
-  , testCase "local file with $imports: but no render: prefix fails" $
+  , testCase "local file with $imports: but no render: prefix returns Left" $
       withSystemTempDirectory "tpl-loader-imports" $ \dir -> do
         let fp = dir </> "has-imports.yaml"
         BS.writeFile fp "$imports:\n  x: env:HOME\nResources: {}\n"
-        result <- try @IOException $ loadCfnTemplate
+        result <- loadCfnTemplate
           (Just (T.pack fp))
           Nothing
           "dev"
           Nothing
         case result of
-          Right _ -> assertFailure "expected IOException for $imports: without render:"
-          Left err -> do
-            let msg = T.pack (show err)
+          Right _ -> assertFailure "expected Left for $imports: without render:"
+          Left err ->
             assertBool "error mentions 'render:'"
-              ("render:" `T.isInfixOf` msg)
+              ("render:" `T.isInfixOf` err)
 
-  , testCase "render: with AWS import but no AWS env fails with credentials error" $
+  , testCase "render: with AWS import but no AWS env returns Left" $
       withSystemTempDirectory "tpl-loader-ssm" $ \dir -> do
         let fp = dir </> "uses-ssm.yaml"
         BS.writeFile fp "$imports:\n  dbPass: ssm:/my/param\nAWSTemplateFormatVersion: \"2010-09-09\"\nResources: {}\n"
-        result <- try @IOException $ loadCfnTemplate
+        result <- loadCfnTemplate
           (Just (T.pack ("render:" <> fp)))
           Nothing
           "dev"
           Nothing
         case result of
-          Right _ -> assertFailure "expected IOException for AWS import without credentials"
+          Right _ -> assertFailure "expected Left for AWS import without credentials"
           Left err ->
-            assertBool "error mentions AWS credentials"
-              (  "AWS import type requires credentials" `T.isInfixOf` T.pack (show err)
-              || "Preprocess error" `T.isInfixOf` T.pack (show err)
+            assertBool "error mentions AWS credentials or Preprocess error"
+              (  "AWS import type requires credentials" `T.isInfixOf` err
+              || "Preprocess error" `T.isInfixOf` err
               )
 
-  , testCase "local file with invalid UTF-8 bytes fails with descriptive error" $
+  , testCase "local file with invalid UTF-8 bytes returns Left" $
       withSystemTempDirectory "tpl-loader-utf8" $ \dir -> do
         let fp = dir </> "bad-utf8.yaml"
         -- Write bytes that are invalid UTF-8: 0xFF 0xFE are not valid UTF-8 lead bytes
         BS.writeFile fp (BS.pack [0xFF, 0xFE, 0x00, 0x01])
-        result <- try @IOException $ loadCfnTemplate
+        result <- loadCfnTemplate
           (Just (T.pack fp))
           Nothing
           "dev"
           Nothing
         case result of
-          Right _ -> assertFailure "expected IOException for invalid UTF-8 file"
-          Left err -> do
-            let msg = T.pack (show err)
+          Right _ -> assertFailure "expected Left for invalid UTF-8 file"
+          Left err ->
             assertBool "error mentions 'Invalid UTF-8'"
-              ("Invalid UTF-8" `T.isInfixOf` msg)
+              ("Invalid UTF-8" `T.isInfixOf` err)
 
-  , testCase "render: template exceeding size limit fails" $
+  , testCase "render: template exceeding size limit returns Left" $
       withSystemTempDirectory "tpl-loader-huge" $ \dir -> do
         let fp = dir </> "huge.yaml"
         -- Build a YAML template whose rendered output exceeds templateMaxBytes.
@@ -234,16 +264,41 @@ failureTests =
               , "Resources: {}"
               ]
         BS.writeFile fp (TE.encodeUtf8 content)
-        result <- try @IOException $ loadCfnTemplate
+        result <- loadCfnTemplate
           (Just (T.pack ("render:" <> fp)))
           Nothing
           "dev"
           Nothing
         case result of
-          Right _ -> assertFailure "expected IOException for oversized template"
+          Right _ -> assertFailure "expected Left for oversized template"
           Left err ->
             assertBool "error mentions size limit"
-              ("exceeds maximum size" `T.isInfixOf` T.pack (show err))
+              ("exceeds maximum size" `T.isInfixOf` err)
+
+  , testCase "inline content with $imports: returns Left" $ do
+      result <- loadCfnTemplate
+        (Just "$imports:\n  x: env:HOME\nResources: {}")
+        Nothing
+        "dev"
+        Nothing
+      case result of
+        Right _ -> assertFailure "expected Left for inline $imports: without render:"
+        Left err ->
+          assertBool "error mentions 'render:'"
+            ("render:" `T.isInfixOf` err)
+
+  , testCase "missing file treated as inline content (not an error)" $ do
+      -- A non-existent file path that doesn't contain $imports: is treated as
+      -- inline template content, not as a missing-file error.
+      result <- loadCfnTemplate
+        (Just "nonexistent-file-as-inline-content")
+        Nothing
+        "dev"
+        Nothing
+      case result of
+        Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
+        Right tr ->
+          trTemplateBody tr @?= Just "nonexistent-file-as-inline-content"
   ]
 
 ------------------------------------------------------------------------
@@ -252,21 +307,21 @@ failureTests =
 
 -- | Assert that trTemplateBody is present.
 assertBodyPresent :: TemplateResult -> IO ()
-assertBodyPresent result =
-  case trTemplateBody result of
+assertBodyPresent tr =
+  case trTemplateBody tr of
     Nothing -> assertFailure "expected trTemplateBody to be Just, got Nothing"
     Just body -> assertBool "body is non-empty" (not (T.null body))
 
 -- | Assert that trTemplateUrl is Nothing.
 assertNoTemplateUrl :: TemplateResult -> IO ()
-assertNoTemplateUrl result =
-  case trTemplateUrl result of
+assertNoTemplateUrl tr =
+  case trTemplateUrl tr of
     Nothing -> pure ()
     Just url -> assertFailure $ "expected trTemplateUrl = Nothing, got: " <> T.unpack url
 
 -- | Extract the body from a TemplateResult; fail if absent.
 extractBody :: TemplateResult -> T.Text
-extractBody result =
-  case trTemplateBody result of
+extractBody tr =
+  case trTemplateBody tr of
     Just body -> body
     Nothing   -> error "extractBody: trTemplateBody is Nothing (test setup error)"

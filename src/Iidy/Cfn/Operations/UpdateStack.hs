@@ -75,48 +75,50 @@ updateStack ctx args argsfilePath env emit = do
   let stackName = getStackName args
 
   -- Step 1: Build the UpdateStack request (use primary token)
-  (req, _token) <- buildUpdateStackRequest ctx args True argsfilePath env
+  reqResult <- buildUpdateStackRequest ctx args True argsfilePath env
+  case reqResult of
+    Left err -> pure (Left err)
+    Right (req, _token) -> do
+      -- Step 2 & 3: Send the request, catching the "No updates" case
+      sendResult <- try (runResourceT $ Amazonka.send (cfnEnv ctx) req)
+        :: IO (Either Amazonka.Error US.UpdateStackResponse)
 
-  -- Step 2 & 3: Send the request, catching the "No updates" case
-  sendResult <- try (runResourceT $ Amazonka.send (cfnEnv ctx) req)
-    :: IO (Either Amazonka.Error US.UpdateStackResponse)
+      case sendResult of
+        Left awsErr
+          | isNoUpdatesError awsErr -> do
+              -- Show Stack Details before re-throwing, matching Rust behavior
+              emitStackDefinition ctx stackName emit
+              -- Re-throw so the error handler displays the ValidationError
+              throwIO awsErr
+          | otherwise ->
+              throwIO awsErr
 
-  case sendResult of
-    Left awsErr
-      | isNoUpdatesError awsErr -> do
-          -- Show Stack Details before re-throwing, matching Rust behavior
-          emitStackDefinition ctx stackName emit
-          -- Re-throw so the error handler displays the ValidationError
-          throwIO awsErr
-      | otherwise ->
-          throwIO awsErr
+        Right resp -> do
+          -- Step 4: Get stack ID (prefer the response, fall back to DescribeStacks)
+          mStackId <- case resp.stackId of
+            Just sid -> pure (Just sid)
+            Nothing  -> getStackId ctx stackName
 
-    Right resp -> do
-      -- Step 4: Get stack ID (prefer the response, fall back to DescribeStacks)
-      mStackId <- case resp.stackId of
-        Just sid -> pure (Just sid)
-        Nothing  -> getStackId ctx stackName
+          let stackId = fromMaybe stackName mStackId
 
-      let stackId = fromMaybe stackName mStackId
+          -- Step 4b: Fetch and emit StackDefinition
+          emitStackDefinition ctx stackId emit
 
-      -- Step 4b: Fetch and emit StackDefinition
-      emitStackDefinition ctx stackId emit
+          -- Step 5: Poll for completion, emitting events through renderer
+          emit (OdPollingStarted "Loading live events...")
+          let pollCfg = mkStandardPollConfig ctx emit
+          pollResult <- pollForCompletion ctx stackId updateTerminalStatuses pollCfg
 
-      -- Step 5: Poll for completion, emitting events through renderer
-      emit (OdPollingStarted "Loading live events...")
-      let pollCfg = mkStandardPollConfig ctx emit
-      pollResult <- pollForCompletion ctx stackId updateTerminalStatuses pollCfg
-
-      -- Step 6: Return exit code based on success/failure
-      case pollResult of
-        PollSuccess "DELETE_COMPLETE" -> pure (Right 1)
-        PollSuccess finalStatus -> do
-          contents <- collectStackContents ctx stackName
-          emit (OdStackContents contents)
-          if finalStatus `elem` updateSuccessStates
-            then pure (Right 0)
-            else pure (Right 1)
-        _ -> pure (Right 1)  -- timeout = failure; skip collectStackContents (stack may be transitioning)
+          -- Step 6: Return exit code based on success/failure
+          case pollResult of
+            PollSuccess "DELETE_COMPLETE" -> pure (Right 1)
+            PollSuccess finalStatus -> do
+              contents <- collectStackContents ctx stackName
+              emit (OdStackContents contents)
+              if finalStatus `elem` updateSuccessStates
+                then pure (Right 0)
+                else pure (Right 1)
+            _ -> pure (Right 1)  -- timeout = failure; skip collectStackContents (stack may be transitioning)
 
 ------------------------------------------------------------------------
 -- Update stack via changeset (--changeset path)
@@ -151,24 +153,26 @@ updateStackWithChangeset ctx args yesFlag argsfilePath env emit = do
       csName = "iidy-update-" <> tokenPrefix
 
   -- Step 3: Create the UPDATE changeset
-  info <- createChangeset ctx args csName True argsfilePath env
+  csResult' <- createChangeset ctx args csName True argsfilePath env
+  case csResult' of
+    Left err -> pure (Left err)
+    Right info -> do
+      -- Step 4: Emit ChangeSetResult
+      let argsfileText = maybe "" T.pack argsfilePath
+          csResult = buildChangeSetCreationResult info True argsfileText
+      emit (OdChangeSetResult csResult)
 
-  -- Step 4: Emit ChangeSetResult
-  let argsfileText = maybe "" T.pack argsfilePath
-      csResult = buildChangeSetCreationResult info True argsfileText
-  emit (OdChangeSetResult csResult)
-
-  -- Step 5: Check if changeset failed (e.g. invalid parameters)
-  if csiStatus info == "FAILED"
-    then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
-    else do
-      -- Step 6: Confirm execution
-      confirmed <- confirmChangesetExecution yesFlag
-      if not confirmed
-        then pure (Right 130)  -- user cancelled
+      -- Step 5: Check if changeset failed (e.g. invalid parameters)
+      if csiStatus info == "FAILED"
+        then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
         else do
-          -- Step 7: Execute changeset and watch
-          executeChangeset ctx stackName csName emit
+          -- Step 6: Confirm execution
+          confirmed <- confirmChangesetExecution yesFlag
+          if not confirmed
+            then pure (Right 130)  -- user cancelled
+            else do
+              -- Step 7: Execute changeset and watch
+              executeChangeset ctx stackName csName emit
 
 ------------------------------------------------------------------------
 -- Helpers

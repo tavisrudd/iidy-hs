@@ -49,33 +49,35 @@ createStack
   -> IO (Either Text Int)
 createStack ctx args argsfilePath env emit = do
   -- Step 1: Build the request (use primary token for create)
-  (req, _token) <- buildCreateStackRequest ctx args True argsfilePath env
+  reqResult <- buildCreateStackRequest ctx args True argsfilePath env
+  case reqResult of
+    Left err -> pure (Left err)
+    Right (req, _token) -> do
+      -- Step 2: Send the CreateStack request
+      resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
 
-  -- Step 2: Send the CreateStack request
-  resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
+      -- Step 3: Extract stack ID from response
+      let stackName = getStackName args
+          stackId = fromMaybe stackName resp.stackId
 
-  -- Step 3: Extract stack ID from response
-  let stackName = getStackName args
-      stackId = fromMaybe stackName resp.stackId
+      -- Step 3b: Fetch and emit StackDefinition
+      emitStackDefinition ctx stackId emit
 
-  -- Step 3b: Fetch and emit StackDefinition
-  emitStackDefinition ctx stackId emit
+      -- Step 4: Poll for completion, emitting events through renderer
+      emit (OdPollingStarted "Loading live events...")
+      let pollCfg = mkStandardPollConfig ctx emit
+      pollResult <- pollForCompletion ctx stackId createTerminalStatuses pollCfg
 
-  -- Step 4: Poll for completion, emitting events through renderer
-  emit (OdPollingStarted "Loading live events...")
-  let pollCfg = mkStandardPollConfig ctx emit
-  pollResult <- pollForCompletion ctx stackId createTerminalStatuses pollCfg
+      -- Step 5: Handle DELETE_COMPLETE (rollback caused stack deletion)
+      case pollResult of
+        PollSuccess "DELETE_COMPLETE" -> pure (Right 1)
+        PollSuccess finalStatus -> do
+          -- Step 6: Collect and emit stack contents
+          contents <- collectStackContents ctx stackName
+          emit (OdStackContents contents)
 
-  -- Step 5: Handle DELETE_COMPLETE (rollback caused stack deletion)
-  case pollResult of
-    PollSuccess "DELETE_COMPLETE" -> pure (Right 1)
-    PollSuccess finalStatus -> do
-      -- Step 6: Collect and emit stack contents
-      contents <- collectStackContents ctx stackName
-      emit (OdStackContents contents)
-
-      -- Step 7: Return exit code based on success/failure
-      if finalStatus `elem` createSuccessStates
-        then pure (Right 0)
-        else pure (Right 1)
-    _ -> pure (Right 1)  -- timeout = failure; skip collectStackContents (stack may be partial)
+          -- Step 7: Return exit code based on success/failure
+          if finalStatus `elem` createSuccessStates
+            then pure (Right 0)
+            else pure (Right 1)
+        _ -> pure (Right 1)  -- timeout = failure; skip collectStackContents (stack may be partial)

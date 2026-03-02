@@ -152,10 +152,15 @@ runCommand cli = case cliCommand cli of
           let stackName = fromMaybe "unnamed-stack" (saStackName sa)
           state <- checkStackState ctx stackName
           let exists = case state of { StackNormal -> True; _ -> False }
-          info <- createChangeset ctx sa csName exists fp env
-          let csResult = buildChangeSetCreationResult info exists (ccsArgsfile args)
-          emit (OdChangeSetResult csResult)
-          pure 0
+          csEither <- createChangeset ctx sa csName exists fp env
+          case csEither of
+            Left err -> do
+              emit (OdRawOutput err)
+              pure 1
+            Right info -> do
+              let csResult = buildChangeSetCreationResult info exists (ccsArgsfile args)
+              emit (OdChangeSetResult csResult)
+              pure 0
 
   CmdExecChangeset args -> do
       let stackName = maybe "" id (ecsStackName args)

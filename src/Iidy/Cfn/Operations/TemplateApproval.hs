@@ -55,42 +55,44 @@ templateApprovalRequest ctx sa _lintTmpl argsfilePath env emit = do
         Nothing -> pure (Left "Template is required in stack-args.yaml")
         Just _tmplSpec -> do
           -- Load template
-          tmplResult <- loadCfnTemplate (saTemplate sa) (fmap id argsfilePath) env (Just (cfnEnv ctx))
-          case trTemplateBody tmplResult of
-            Nothing -> pure (Left "Failed to load template body")
-            Just body -> do
-              -- Generate versioned location
-              let tmplPath = maybe "template.yaml" T.unpack (saTemplate sa)
-              case generateVersionedLocation baseLocation body (T.pack tmplPath) of
-                Left err -> pure (Left err)
-                Right (bucket, key) -> do
-                  let s3Loc = "s3://" <> bucket <> "/" <> key
-                  -- Check if already approved
-                  alreadyApproved <- s3ObjectExists (cfnEnv ctx) bucket key
-                  if alreadyApproved
-                    then do
-                      emit $ OdApprovalRequestResult ApprovalRequestResult
-                        { arrTemplateLocation = s3Loc
-                        , arrPendingLocation  = s3Loc
-                        , arrAlreadyApproved  = True
-                        , arrNextSteps        = ["Template has already been approved"]
-                        }
-                      pure (Right 0)
-                    else do
-                      -- Upload pending template
-                      let pendingKey = key <> ".pending"
-                          pendingLoc = "s3://" <> bucket <> "/" <> pendingKey
-                      uploadResult <- uploadToS3 (cfnEnv ctx) bucket pendingKey body
-                      case uploadResult of
-                        Left err -> pure (Left ("Failed to upload pending template: " <> err))
-                        Right () -> do
-                          emit $ OdApprovalRequestResult ApprovalRequestResult
-                            { arrTemplateLocation = s3Loc
-                            , arrPendingLocation  = pendingLoc
-                            , arrAlreadyApproved  = False
-                            , arrNextSteps        = ["Review with: iidy-hs template-approval review " <> pendingLoc]
-                            }
-                          pure (Right 0)
+          tmplEither <- loadCfnTemplate (saTemplate sa) (fmap id argsfilePath) env (Just (cfnEnv ctx))
+          case tmplEither of
+            Left err -> pure (Left err)
+            Right tmplResult -> case trTemplateBody tmplResult of
+              Nothing -> pure (Left "Failed to load template body")
+              Just body -> do
+                -- Generate versioned location
+                let tmplPath = maybe "template.yaml" T.unpack (saTemplate sa)
+                case generateVersionedLocation baseLocation body (T.pack tmplPath) of
+                  Left err' -> pure (Left err')
+                  Right (bucket, key) -> do
+                    let s3Loc = "s3://" <> bucket <> "/" <> key
+                    -- Check if already approved
+                    alreadyApproved <- s3ObjectExists (cfnEnv ctx) bucket key
+                    if alreadyApproved
+                      then do
+                        emit $ OdApprovalRequestResult ApprovalRequestResult
+                          { arrTemplateLocation = s3Loc
+                          , arrPendingLocation  = s3Loc
+                          , arrAlreadyApproved  = True
+                          , arrNextSteps        = ["Template has already been approved"]
+                          }
+                        pure (Right 0)
+                      else do
+                        -- Upload pending template
+                        let pendingKey = key <> ".pending"
+                            pendingLoc = "s3://" <> bucket <> "/" <> pendingKey
+                        uploadResult <- uploadToS3 (cfnEnv ctx) bucket pendingKey body
+                        case uploadResult of
+                          Left uploadErr -> pure (Left ("Failed to upload pending template: " <> uploadErr))
+                          Right () -> do
+                            emit $ OdApprovalRequestResult ApprovalRequestResult
+                              { arrTemplateLocation = s3Loc
+                              , arrPendingLocation  = pendingLoc
+                              , arrAlreadyApproved  = False
+                              , arrNextSteps        = ["Review with: iidy-hs template-approval review " <> pendingLoc]
+                              }
+                            pure (Right 0)
 
 ------------------------------------------------------------------------
 -- Template Approval Review

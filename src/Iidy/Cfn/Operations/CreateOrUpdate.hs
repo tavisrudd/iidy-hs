@@ -94,20 +94,23 @@ updateWithChangeset ctx args yesFlag argsfilePath env emit = do
       csName = "iidy-create-or-update-" <> tokenPrefix
 
   -- Create UPDATE changeset
-  info <- createChangeset ctx args csName True argsfilePath env
-  let argsfileText = maybe "" T.pack argsfilePath
-      csResult = buildChangeSetCreationResult info True argsfileText
-  emit (OdChangeSetResult csResult)
+  csResult' <- createChangeset ctx args csName True argsfilePath env
+  case csResult' of
+    Left err -> pure (Left err)
+    Right info -> do
+      let argsfileText = maybe "" T.pack argsfilePath
+          csResult = buildChangeSetCreationResult info True argsfileText
+      emit (OdChangeSetResult csResult)
 
-  -- Check if changeset failed (e.g. invalid parameters)
-  if csiStatus info == "FAILED"
-    then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
-    else do
-      -- Confirm execution
-      confirmed <- confirmChangesetExecution yesFlag
-      if not confirmed
-        then pure (Right 130)
-        else executeChangeset ctx stackName csName emit
+      -- Check if changeset failed (e.g. invalid parameters)
+      if csiStatus info == "FAILED"
+        then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
+        else do
+          -- Confirm execution
+          confirmed <- confirmChangesetExecution yesFlag
+          if not confirmed
+            then pure (Right 130)
+            else executeChangeset ctx stackName csName emit
 
 ------------------------------------------------------------------------
 -- Changeset path: create new stack
@@ -131,22 +134,24 @@ createWithChangeset ctx args yesFlag argsfilePath env emit = do
   csName <- generateDashedName
 
   -- Create CREATE changeset (stack doesn't exist yet)
-  info <- createChangeset ctx args csName False argsfilePath env
+  csResult' <- createChangeset ctx args csName False argsfilePath env
+  case csResult' of
+    Left err -> pure (Left err)
+    Right info -> do
+      -- Stack now exists in REVIEW_IN_PROGRESS — fetch and show definition
+      emitStackDefinition ctx stackName emit
 
-  -- Stack now exists in REVIEW_IN_PROGRESS — fetch and show definition
-  emitStackDefinition ctx stackName emit
+      -- Show changeset result
+      let argsfileText = maybe "" T.pack argsfilePath
+          csResult = buildChangeSetCreationResult info False argsfileText
+      emit (OdChangeSetResult csResult)
 
-  -- Show changeset result
-  let argsfileText = maybe "" T.pack argsfilePath
-      csResult = buildChangeSetCreationResult info False argsfileText
-  emit (OdChangeSetResult csResult)
-
-  -- Check if changeset failed (e.g. invalid parameters)
-  if csiStatus info == "FAILED"
-    then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
-    else do
-      -- Confirm execution
-      confirmed <- confirmChangesetExecution yesFlag
-      if not confirmed
-        then pure (Right 130)
-        else executeChangeset ctx stackName csName emit
+      -- Check if changeset failed (e.g. invalid parameters)
+      if csiStatus info == "FAILED"
+        then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
+        else do
+          -- Confirm execution
+          confirmed <- confirmChangesetExecution yesFlag
+          if not confirmed
+            then pure (Right 130)
+            else executeChangeset ctx stackName csName emit

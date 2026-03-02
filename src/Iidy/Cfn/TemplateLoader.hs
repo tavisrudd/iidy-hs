@@ -11,7 +11,6 @@ module Iidy.Cfn.TemplateLoader
   ) where
 
 import qualified Amazonka
-import Control.Monad (when)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import Data.Text (Text)
@@ -59,13 +58,16 @@ data TemplateResult = TemplateResult
 -- Handles: file paths, S3 URLs, HTTP URLs, render: prefix, inline content.
 -- The 'Maybe Amazonka.Env' is used by the render: path to resolve AWS
 -- import types ($imports with ssm:, cfn:, s3: schemes).
-loadCfnTemplate :: Maybe Text -> Maybe FilePath -> Text -> Maybe Amazonka.Env -> IO TemplateResult
-loadCfnTemplate Nothing _ _ _ = pure (TemplateResult Nothing Nothing)
+--
+-- Returns 'Left' with a descriptive error message on failure, instead of
+-- throwing via 'fail'.
+loadCfnTemplate :: Maybe Text -> Maybe FilePath -> Text -> Maybe Amazonka.Env -> IO (Either Text TemplateResult)
+loadCfnTemplate Nothing _ _ _ = pure (Right (TemplateResult Nothing Nothing))
 loadCfnTemplate (Just tmplSpec) argsfilePath env mAwsEnv
   -- S3 URL - use as template URL
-  | isS3Url tmplSpec = pure (TemplateResult Nothing (Just tmplSpec))
+  | isS3Url tmplSpec = pure (Right (TemplateResult Nothing (Just tmplSpec)))
   -- HTTP(S) URL - use as template URL
-  | isHttpUrl tmplSpec = pure (TemplateResult Nothing (Just tmplSpec))
+  | isHttpUrl tmplSpec = pure (Right (TemplateResult Nothing (Just tmplSpec)))
   -- render: prefix - preprocess YAML through full pipeline
   | Just renderPath <- T.stripPrefix "render:" tmplSpec = do
       let resolvedPath = resolveTemplatePath (T.unpack renderPath) argsfilePath
@@ -73,39 +75,44 @@ loadCfnTemplate (Just tmplSpec) argsfilePath env mAwsEnv
       rawContent <- BL.readFile resolvedPath
       case parseYaml rawContent baseLocation of
         Left (ParseError _pos msg) ->
-          fail $ "Parse error in rendered template " <> T.unpack baseLocation <> ": " <> T.unpack msg
+          pure (Left ("Parse error in rendered template " <> baseLocation <> ": " <> msg))
         Right ast -> do
           -- Inject $envValues before preprocessing (matches Rust template_loader.rs:117-131)
           let astWithEnv = injectEnvValuesIntoAst ast env
           result <- preprocessYaml11 (mkFullDispatcher mAwsEnv) astWithEnv baseLocation
           case result of
             Left err ->
-              fail $ "Preprocess error in rendered template " <> T.unpack baseLocation <> ": " <> show err
+              pure (Left ("Preprocess error in rendered template " <> baseLocation <> ": " <> T.pack (show err)))
             Right (PreprocessResult val _manifest) -> do
               let rendered = emitYaml val
-              checkTemplateSize rendered
-              pure (TemplateResult (Just rendered) Nothing)
+              case checkTemplateSize rendered of
+                Left sizeErr -> pure (Left sizeErr)
+                Right ()     -> pure (Right (TemplateResult (Just rendered) Nothing))
   -- Local file path
   | otherwise = do
       let resolvedPath = resolveTemplatePath (T.unpack tmplSpec) argsfilePath
       exists <- doesFileExist resolvedPath
       if exists
         then do
-          body <- loadFileContent resolvedPath
-          -- Error if template uses $imports: without render: prefix
-          when (hasImportsKey body) $
-            fail $ "Your cloudformation Template from " <> resolvedPath
-                <> " appears to use iidy's yaml pre-processor syntax.\n"
-                <> "You need to prefix the template location with \"render:\".\n"
-                <> "e.g.   Template: \"render:" <> T.unpack tmplSpec <> "\""
-          checkTemplateSize body
-          pure (TemplateResult (Just body) Nothing)
+          bodyResult <- loadFileContent resolvedPath
+          case bodyResult of
+            Left utf8Err -> pure (Left utf8Err)
+            Right body ->
+              -- Error if template uses $imports: without render: prefix
+              if hasImportsKey body
+                then pure (Left ("Your cloudformation Template from " <> T.pack resolvedPath
+                    <> " appears to use iidy's yaml pre-processor syntax.\n"
+                    <> "You need to prefix the template location with \"render:\".\n"
+                    <> "e.g.   Template: \"render:" <> tmplSpec <> "\""))
+                else case checkTemplateSize body of
+                  Left sizeErr -> pure (Left sizeErr)
+                  Right ()     -> pure (Right (TemplateResult (Just body) Nothing))
         else
           -- Might be inline content; check for $imports: in inline too
           if hasImportsKey tmplSpec
-            then fail "Your inline cloudformation Template appears to use iidy's yaml pre-processor syntax.\n\
-                      \You need to prefix the template with \"render:\"."
-            else pure (TemplateResult (Just tmplSpec) Nothing)
+            then pure (Left "Your inline cloudformation Template appears to use iidy's yaml pre-processor syntax.\n\
+                      \You need to prefix the template with \"render:\".")
+            else pure (Right (TemplateResult (Just tmplSpec) Nothing))
 
 ------------------------------------------------------------------------
 -- $envValues injection into AST
@@ -158,24 +165,25 @@ isAbsolute :: FilePath -> Bool
 isAbsolute ('/':_) = True
 isAbsolute _ = False
 
--- | Load file content as Text. Returns an error via 'fail' if the file
--- contains invalid UTF-8 bytes.
-loadFileContent :: FilePath -> IO Text
+-- | Read a file and decode its content as UTF-8.
+-- Returns 'Left' with a descriptive error on invalid UTF-8.
+loadFileContent :: FilePath -> IO (Either Text Text)
 loadFileContent path = do
   bytes <- BS.readFile path
   case TE.decodeUtf8' bytes of
-    Right txt -> pure txt
-    Left err  -> fail $ "Invalid UTF-8 in template file " <> path <> ": " <> show err
+    Right txt -> pure (Right txt)
+    Left err  -> pure (Left ("Invalid UTF-8 in template file " <> T.pack path <> ": " <> T.pack (show err)))
 
--- | Check template size limit for inline templates
-checkTemplateSize :: Text -> IO ()
-checkTemplateSize body = do
+-- | Check template size limit for inline templates.
+-- Returns 'Left' with a descriptive message if the body exceeds the limit.
+checkTemplateSize :: Text -> Either Text ()
+checkTemplateSize body =
   let size = BS.length (TE.encodeUtf8 body)
-  if size > templateMaxBytes
-    then fail $ "Template body exceeds maximum size of "
-             <> show templateMaxBytes <> " bytes (got " <> show size <> " bytes). "
-             <> "Upload to S3 and use the S3 URL instead."
-    else pure ()
+  in if size > templateMaxBytes
+       then Left ("Template body exceeds maximum size of "
+                <> T.pack (show templateMaxBytes) <> " bytes (got " <> T.pack (show size) <> " bytes). "
+                <> "Upload to S3 and use the S3 URL instead.")
+       else Right ()
 
 -- | Check if text contains $imports: key (suggesting preprocessing is needed)
 hasImportsKey :: Text -> Bool

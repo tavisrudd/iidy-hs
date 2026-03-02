@@ -36,36 +36,37 @@ lintTemplate
   -> IO (Either Text Int)
 lintTemplate ctx args argsfilePath env emit = do
   -- Load the template
-  tmplResult <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
-
-  case trTemplateBody tmplResult of
-    Nothing -> pure (Left "Failed to load template body")
-    Just body -> do
-      validation <- if T.length body > templateMaxBytes
-        then
-          -- Template too large for inline validation
-          pure TemplateValidation
-            { tvEnabled  = True
-            , tvErrors   = []
-            , tvWarnings = ["Template exceeds 51200 bytes; skipping CFN validation (will be validated on deploy)"]
-            }
-        else do
-          let req = VT.newValidateTemplate
-                      { VT.templateBody = Just body
-                      }
-          result <- try $ runResourceT $ Amazonka.send (cfnEnv ctx) req
-          case result of
-            Left (e :: SomeException) ->
-              pure TemplateValidation
-                { tvEnabled  = True
-                , tvErrors   = ["Template validation failed: " <> T.pack (show e)]
-                , tvWarnings = []
-                }
-            Right _resp ->
-              pure TemplateValidation
-                { tvEnabled  = True
-                , tvErrors   = []
-                , tvWarnings = []
-                }
-      emit (OdTemplateValidation validation)
-      pure $ Right $ if null (tvErrors validation) then 0 else 1
+  tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
+  case tmplEither of
+    Left err -> pure (Left err)
+    Right tmplResult -> case trTemplateBody tmplResult of
+      Nothing -> pure (Left "Failed to load template body")
+      Just body -> do
+        validation <- if T.length body > templateMaxBytes
+          then
+            -- Template too large for inline validation
+            pure TemplateValidation
+              { tvEnabled  = True
+              , tvErrors   = []
+              , tvWarnings = ["Template exceeds 51200 bytes; skipping CFN validation (will be validated on deploy)"]
+              }
+          else do
+            let req = VT.newValidateTemplate
+                        { VT.templateBody = Just body
+                        }
+            result <- try $ runResourceT $ Amazonka.send (cfnEnv ctx) req
+            case result of
+              Left (e :: SomeException) ->
+                pure TemplateValidation
+                  { tvEnabled  = True
+                  , tvErrors   = ["Template validation failed: " <> T.pack (show e)]
+                  , tvWarnings = []
+                  }
+              Right _resp ->
+                pure TemplateValidation
+                  { tvEnabled  = True
+                  , tvErrors   = []
+                  , tvWarnings = []
+                  }
+        emit (OdTemplateValidation validation)
+        pure $ Right $ if null (tvErrors validation) then 0 else 1

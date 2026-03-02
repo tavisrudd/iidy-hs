@@ -100,22 +100,25 @@ createChangeset
   -> Bool            -- ^ stack exists? (True => UPDATE, False => CREATE type)
   -> Maybe FilePath  -- ^ argsfile path for template resolution
   -> Text            -- ^ environment name
-  -> IO ChangeSetInfo
-createChangeset ctx args csName stackExists argsfilePath env = do
-  let csType = if stackExists
+  -> IO (Either Text ChangeSetInfo)
+createChangeset ctx args csName stackExists' argsfilePath env = do
+  let csType = if stackExists'
                  then CF.ChangeSetType_UPDATE
                  else CF.ChangeSetType_CREATE
-      stackName = getStackName args
+      stackName' = getStackName args
 
   -- Step 1 & 2: Build and send the CreateChangeSet request
-  (req, _token) <- buildCreateChangeSetRequest ctx args csName csType argsfilePath env
-  resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
+  reqResult <- buildCreateChangeSetRequest ctx args csName csType argsfilePath env
+  case reqResult of
+    Left err -> pure (Left err)
+    Right (req, _token) -> do
+      resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
 
-  -- Step 3: Extract the changeset ARN/ID (fall back to name for polling).
-  let csId = fromMaybe csName resp.id
+      -- Step 3: Extract the changeset ARN/ID (fall back to name for polling).
+      let csId = fromMaybe csName resp.id
 
-  -- Step 4: Poll until CREATE_COMPLETE or FAILED
-  pollChangesetCompletion ctx stackName csId
+      -- Step 4: Poll until CREATE_COMPLETE or FAILED
+      Right <$> pollChangesetCompletion ctx stackName' csId
 
 -- | Poll DescribeChangeSet every 2s until the changeset reaches a terminal
 -- state (CREATE_COMPLETE or FAILED).  Returns the ChangeSetInfo on completion.
