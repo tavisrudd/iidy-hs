@@ -38,6 +38,7 @@ import Iidy.Cfn.Operations.ListStacks (listStacks)
 import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateApprovalReview)
 import Iidy.Cfn.Operations.UpdateStack (updateStack, updateStackWithChangeset)
 import Iidy.Cfn.Operations.WatchStack (watchStack)
+import Iidy.Cfn.GlobalConfig (applyGlobalConfiguration)
 import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..))
 import Iidy.Cfn.Types (CfnOperation(..), StackArgs(..), emptyStackArgs, isReadOnlyOperation)
 import Iidy.Cli
@@ -350,11 +351,13 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
   case result of
     Left err -> dieTxt err
     Right (LoadedStackArgs sa mergedAws detectionCtx) -> do
-      let sa' = case stackNameOverride of
-                  Just sn -> sa { saStackName = Just sn }
-                  Nothing -> sa
       -- Create AWS env with merged settings
       (awsEnv, credStack) <- createAwsEnv detectionCtx mergedAws
+      -- Apply global SSM configuration (silently ignored on error)
+      sa'' <- applyGlobalConfiguration awsEnv sa
+      let sa' = case stackNameOverride of
+                  Just sn -> sa'' { saStackName = Just sn }
+                  Nothing -> sa''
       token <- generateToken cli
       let tp = timeProviderForOperation operation
       ctx <- createContextFromEnv awsEnv credStack operation tp token

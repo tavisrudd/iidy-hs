@@ -92,6 +92,7 @@ library
     Iidy.Cfn.TemplateHash
     Iidy.Cfn.TemplateLoader
     Iidy.Cfn.StackOperations
+    Iidy.Cfn.GlobalConfig
     Iidy.Cfn.StackArgsLoader
     Iidy.Cfn.Operations.Changeset
     Iidy.Cfn.Operations.ConvertStack
@@ -211,6 +212,7 @@ test-suite iidy-hs-test
     Test.SecurityControlsTest
     Test.ParamsClientTest
     Test.TemplateLoaderTest
+    Test.GlobalConfigTest
   default-language: GHC2021
   default-extensions:
     LambdaCase

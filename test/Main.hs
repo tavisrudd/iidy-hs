@@ -41,6 +41,7 @@ import Test.TimingTest (timingTests)
 import Test.SecurityControlsTest (securityControlsTests)
 import Test.ParamsClientTest (paramsClientTests)
 import Test.TemplateLoaderTest (templateLoaderTests)
+import Test.GlobalConfigTest (globalConfigTests)
 
 main :: IO ()
 main = do
@@ -86,4 +87,5 @@ main = do
     , testGroup "SecurityControls" securityControlsTests
     , testGroup "ParamsClient"     paramsClientTests
     , testGroup "TemplateLoader"   templateLoaderTests
+    , testGroup "GlobalConfig"     globalConfigTests
     ]
