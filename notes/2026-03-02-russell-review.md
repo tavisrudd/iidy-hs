@@ -2,12 +2,36 @@
 
 _"Good APIs don't just prevent mistakes -- they make the right thing the only thing." -- Rusty Russell_
 
-Russell's scale rates APIs from 1 (impossible to get wrong) to 10 (read the implementation).
+Russell's scale rates APIs from **+10** (impossible to get wrong) to **-10** (impossible to get right).
+Positive means "you can get it right with effort X." Negative means "the API actively misleads you."
 His core question: **How hard is it for a reasonable person to use this correctly?**
+
+| Rating | Meaning                                                  |
+|--------|----------------------------------------------------------|
+|   +10  | Impossible to get wrong                                  |
+|    +9  | Compiler/linker won't let you get it wrong               |
+|    +8  | Compiler will warn if you get it wrong                   |
+|    +7  | Obvious use is (probably) correct                        |
+|    +6  | Name tells you how to use it                             |
+|    +5  | Do it right or it will always break at runtime            |
+|    +4  | Follow common convention and you'll get it right         |
+|    +3  | Read the documentation and you'll get it right           |
+|    +2  | Read the implementation and you'll get it right          |
+|    +1  | Read the correct mailing list thread and you'll get it right |
+|    -1  | Read the mailing list thread and you'll get it wrong     |
+|    -2  | Read the implementation and you'll get it wrong          |
+|    -3  | Read the documentation and you'll get it wrong           |
+|    -4  | Follow common convention and you'll get it wrong         |
+|    -5  | Do it right and it will sometimes break at runtime       |
+|    -6  | Name tells you how NOT to use it                         |
+|    -7  | Obvious use is wrong                                     |
+|    -8  | Compiler will warn if you get it right                   |
+|    -9  | Compiler/linker won't let you get it right               |
+|   -10  | Impossible to get right                                  |
 
 ---
 
-## 1. mapOnFailure Silently Drops Invalid Values (Rating: 7/10)
+## 1. mapOnFailure Silently Drops Invalid Values (Rating: -7)
 
 ```haskell
 mapOnFailure :: Maybe Text -> Maybe CF.OnFailure
@@ -39,7 +63,7 @@ user *thought* they'd provided it.
 **The problem:** Invalid enum values vanish without trace. The user's explicit intent is silently
 discarded, replaced by a system default they may not know about.
 
-**Russell rating:** 7 -- "The obvious use is wrong." The obvious thing is to pass what the
+**Russell rating:** -7 -- "Obvious use is wrong." The obvious thing is to pass what the
 user wrote. The actual behavior is to quietly ignore what doesn't parse. A reasonable person
 would assume their configuration is being applied.
 
@@ -50,7 +74,7 @@ from ever entering the pipeline.
 
 ---
 
-## 2. getStackName Falls Back to "unnamed-stack" (Rating: 9/10)
+## 2. getStackName Falls Back to "unnamed-stack" (Rating: -7)
 
 ```haskell
 getStackName :: StackArgs -> Text
@@ -76,9 +100,10 @@ multiple times, they get updates to the same accidental stack.
 **The problem:** A missing required field silently gets a default value that is never correct.
 No user in the history of CloudFormation has wanted a stack named "unnamed-stack".
 
-**Russell rating:** 9 -- "Read the manual or you'll get it wrong." Actually worse: reading
-the manual won't save you if you make a typo in the YAML key name. `Stack_Name:` doesn't
-match `StackName:`, so `saStackName` is `Nothing`, and off we go to unnamed-stack land.
+**Russell rating:** -7 -- "Obvious use is wrong." The obvious expectation is that a missing
+stack name is an error. Instead, the system silently creates a stack named "unnamed-stack."
+Reading the manual won't save you from a typo: `Stack_Name:` doesn't match `StackName:`,
+so `saStackName` is `Nothing`, and off we go to unnamed-stack land.
 
 **Fix:** `getStackName` should not exist. `saStackName` should be validated as non-empty in
 `StackArgsLoader` before any operation proceeds. For operations that require a stack name
@@ -87,7 +112,7 @@ an error, not a default.
 
 ---
 
-## 3. getStrList Silently Drops Non-String Array Elements (Rating: 7/10)
+## 3. getStrList Silently Drops Non-String Array Elements (Rating: -7)
 
 ```haskell
 getStrList :: KM.KeyMap Value -> Text -> Maybe [Text]
@@ -115,7 +140,7 @@ which effectively means "no notification ARNs." The user specified one and got z
 **The problem:** Type coercion failure in a list is silent. A mixed-type array is common
 when YAML 1.1 auto-resolves `true` to a boolean or `012` to an octal number.
 
-**Russell rating:** 7 -- "The obvious use is wrong." A user writing items in a YAML list
+**Russell rating:** -7 -- "Obvious use is wrong." A user writing items in a YAML list
 naturally expects all items to be included. The filtering behavior is invisible.
 
 **Fix:** Validate each element and error on non-strings. Or coerce non-strings to their
@@ -124,7 +149,7 @@ silent filtering.
 
 ---
 
-## 4. StackArgs: The 21-Maybe Record With No Validation (Rating: 9/10)
+## 4. StackArgs: The 21-Maybe Record With No Validation (Rating: -3)
 
 ```haskell
 data StackArgs = StackArgs
@@ -152,8 +177,9 @@ the stack gets created as "unnamed-stack" because the user made a one-character 
 validates that the combination makes sense for the operation at hand. Unknown keys are
 never flagged.
 
-**Russell rating:** 9 -- "Read the manual or you'll get it wrong." But even reading the
-manual doesn't help with typos. The system must validate, and it doesn't.
+**Russell rating:** -3 -- "Read the documentation and you'll get it wrong." Even reading the
+docs and following the schema won't protect you: a typo in a key name silently passes through
+because the parser ignores unknown keys. The documentation can't prevent what the parser permits.
 
 **Fix:** Two changes. First: reject unknown keys in `valueToStackArgs` by comparing
 the parsed object's keys against a known set. Second: per-operation validation --
@@ -162,7 +188,7 @@ the parsed object's keys against a known set. Second: per-operation validation -
 
 ---
 
-## 5. oIsTruthy: JavaScript-Grade Truthiness in a YAML Preprocessor (Rating: 6/10)
+## 5. oIsTruthy: JavaScript-Grade Truthiness in a YAML Preprocessor (Rating: +2)
 
 ```haskell
 oIsTruthy :: OValue -> Bool
@@ -198,9 +224,10 @@ YAML bareword `no` is falsy (YAML 1.1 resolves it to `OBool False`).
 type resolution. The behavior of `!$if` depends on which YAML spec version is active
 and whether the user quoted their value.
 
-**Russell rating:** 6 -- "The name tells you nothing." `oIsTruthy` operates on all
-six value types. The user must understand both YAML's type resolution rules AND the
-truthiness table to predict what `!$if` will do with their value.
+**Russell rating:** +2 -- "Read the implementation and you'll get it right." `oIsTruthy`
+does what it says and the implementation is straightforward. But the user must understand
+both YAML's type resolution rules AND the truthiness table to predict what `!$if` will do
+with their value. The API isn't misleading -- it's just complex enough to require reading code.
 
 **Fix:** At minimum, document the truthiness table prominently. Better: restrict
 `!$if test:` to boolean values and error on non-booleans, forcing the user to be
@@ -208,7 +235,7 @@ explicit. (This would be a behavior change from Rust, but it's the right thing.)
 
 ---
 
-## 6. TemplateLoader Uses `fail` for Errors (Rating: 10/10)
+## 6. TemplateLoader Uses `fail` for Errors (Rating: -6)
 
 ```haskell
 loadCfnTemplate (Just tmplSpec) argsfilePath env mAwsEnv
@@ -248,9 +275,10 @@ mechanisms, two user experiences for the same kind of mistake.
 **The problem:** `fail` throws an exception type that the top-level handler cannot
 distinguish from an actual IO failure. The error message given to the user is wrong.
 
-**Russell rating:** 10 -- "Read the implementation or you'll get it wrong." You'd have
-to trace the exception through three modules (TemplateLoader -> Main.handleUncaughtException)
-to understand why a YAML parse error suggests checking the CloudFormation console.
+**Russell rating:** -6 -- "Name tells you how NOT to use it." The error message actively
+directs the user to the wrong place: "Check the AWS CloudFormation console" for a YAML
+parse error that never reached CloudFormation. The API doesn't just fail to help -- it
+sends you on a wild goose chase.
 
 **Fix:** `loadCfnTemplate` should return `Either Text TemplateResult`, matching
 `loadStackArgs`. The caller in `RequestBuilder` should propagate the error. The top-level
@@ -258,7 +286,7 @@ handler in Main.hs should never see template loading errors as IOExceptions.
 
 ---
 
-## 7. GlobalConfig Silently Swallows All Errors (Rating: 7/10)
+## 7. GlobalConfig Silently Swallows All Errors (Rating: -7)
 
 ```haskell
 applyGlobalConfiguration :: Amazonka.Env -> StackArgs -> IO StackArgs
@@ -286,9 +314,9 @@ a code bug, that's also silently swallowed. If `fetchParametersByPath` encounter
 doesn't apply and the user's stack creation fails for lack of notification ARNs, the
 actual cause (SSM permission error) is invisible.
 
-**Russell rating:** 7 -- "The obvious use is wrong." A user who configures
+**Russell rating:** -7 -- "Obvious use is wrong." A user who configures
 `/iidy/default-notification-arn` in SSM reasonably expects it to be applied. When it
-silently isn't, they debug the wrong thing.
+silently isn't, they debug the wrong thing. The API actively hides the failure.
 
 **Fix:** Narrow the catch to `Amazonka.Error`. Log a warning to stderr when SSM is
 unreachable ("Warning: could not load global config from SSM: <reason>"). Never catch
@@ -297,7 +325,7 @@ which must propagate.
 
 ---
 
-## 8. Terminal Statuses Are Stringly Typed (Rating: 7/10)
+## 8. Terminal Statuses Are Stringly Typed (Rating: +2)
 
 ```haskell
 allTerminalStatuses :: [Text]
@@ -329,9 +357,11 @@ that hangs forever.
 sets. The domain's state machine is implicit in scattered `elem` checks against hand-typed
 string literals.
 
-**Russell rating:** 7 -- "The obvious use is wrong." The obvious thing to do when
-Amazonka gives you a `StackStatus` sum type is to keep it as a sum type. Converting to
-`Text` immediately throws away the type safety that the library provides.
+**Russell rating:** +2 -- "Read the implementation and you'll get it right." The code
+works correctly if you read it and maintain the string lists carefully. It's not actively
+misleading -- it's just fragile. The obvious *improvement* (keeping the sum type) is clear,
+but the current code doesn't trick you into doing the wrong thing. A typo in a status
+string is a maintenance hazard, not an API deception.
 
 **Fix:** Keep `CF.StackStatus` (or a project-local mirror type) throughout the pipeline.
 Pattern match instead of `elem`. The compiler enforces exhaustiveness. Every status list
@@ -339,7 +369,7 @@ change becomes a compile error, not a runtime hang.
 
 ---
 
-## 9. PollConfig: Eight Callbacks, No Types (Rating: 6/10)
+## 9. PollConfig: Eight Callbacks, No Types (Rating: +2)
 
 ```haskell
 data PollConfig = PollConfig
@@ -388,9 +418,11 @@ semantic coupling that the types don't capture.
 **The problem:** The record of callbacks has no contract about which ones matter. The
 boolean flag alters timeout semantics in a way only the implementation reveals.
 
-**Russell rating:** 6 -- "The name tells you nothing." `pcWaitForStatusChange` tells you
-vaguely what it does but not how it changes timeout behavior. You have to read the polling
-loop to know that it suppresses inactivity timeout until at least one event has been seen.
+**Russell rating:** +2 -- "Read the implementation and you'll get it right." The defaults
+are safe (no-ops), and the record update syntax makes overriding clear. The API doesn't
+mislead -- it just requires reading the polling loop to understand the interaction between
+`pcWaitForStatusChange` and inactivity timeout. A maintainer who reads the code can use
+it correctly.
 
 **Fix:** Split PollConfig into a "configuration" half (intervals, timeouts) and a
 "handler" half (callbacks). Make the handler a proper interface (record of functions or
@@ -400,7 +432,7 @@ instead have two constructors: `WatchPollConfig` (waits for events) and
 
 ---
 
-## 10. Unknown YAML Keys in stack-args.yaml Are Silently Ignored (Rating: 8/10)
+## 10. Unknown YAML Keys in stack-args.yaml Are Silently Ignored (Rating: -7)
 
 ```haskell
 valueToStackArgs :: Value -> Either Text StackArgs
@@ -436,9 +468,10 @@ the wrong thing.
 **The problem:** The parser is permissive in a context where strictness prevents errors.
 YAML keys are identifiers. Identifiers that don't match anything should be flagged.
 
-**Russell rating:** 8 -- "The compiler/type system won't let you get it right." Actually
-the compiler is fine -- the *parser* won't let you get it right. It accepts anything and
-silently ignores what it doesn't understand.
+**Russell rating:** -7 -- "Obvious use is wrong." A user writing YAML keys naturally
+expects typos to be caught. The parser silently accepts anything and ignores what it
+doesn't recognize. Combined with #2 and #4, a single typo cascades into silent wrong
+behavior. The API actively misleads by appearing to accept the input.
 
 **Fix:** Collect the known keys into a `Set`. Compare against the actual keys in the
 parsed object. Error on any key not in the known set (with a "did you mean?" suggestion
@@ -446,7 +479,7 @@ using edit distance). This is how every good configuration parser works.
 
 ---
 
-## 11. applyDotQueryValidated Returns ONull on Path Miss (Rating: 7/10)
+## 11. applyDotQueryValidated Returns ONull on Path Miss (Rating: -7)
 
 ```haskell
 applyDotQueryValidated :: SrcMeta -> Text -> Text -> OValue -> Resolve OValue
@@ -473,16 +506,17 @@ returns null. Same conceptual operation, two different error behaviors.
 of erroring. The user gets a confusing CloudFormation error instead of a clear
 preprocessing error.
 
-**Russell rating:** 7 -- "The obvious use is wrong." The obvious expectation when
+**Russell rating:** -7 -- "Obvious use is wrong." The obvious expectation when
 traversing `config.database.host` is that you get the host or an error. Getting `null`
-silently is a debugging trap.
+silently is a debugging trap. The function name says "Validated" but the single-key
+path is not validated at all.
 
 **Fix:** Return an error when `traversePathO` returns `Nothing` in the single-key
 dot-path case, matching the comma-separated behavior. Both paths should be strict.
 
 ---
 
-## 12. Two Incompatible Error Presentation Paths (Rating: 6/10)
+## 12. Two Incompatible Error Presentation Paths (Rating: +2)
 
 YAML preprocessing errors go through the enhanced error display pipeline:
 
@@ -523,8 +557,10 @@ have nothing to do with CloudFormation.
 **The problem:** Three error presentation styles, no consistent format, and a
 generic "check the console" message that's wrong half the time.
 
-**Russell rating:** 6 -- "The name tells you nothing." The user cannot predict
-what an error will look like or what actionable information it will contain.
+**Russell rating:** +2 -- "Read the implementation and you'll get it right." The
+inconsistency is a code smell, not an active deception. A developer reading the
+error-handling code can understand and fix it. The user experience is poor but the
+API doesn't mislead maintainers about how errors flow.
 
 **Fix:** Route all errors through a single formatting function. Differentiate
 the "check the console" hint -- only emit it for actual AWS API errors. Give
@@ -533,7 +569,7 @@ errors (they're literally the same kind of error, just from a different module).
 
 ---
 
-## 13. The --environment Default Is "development" (Rating: 5/10)
+## 13. The --environment Default Is "development" (Rating: +4)
 
 ```haskell
 globalOptsParser :: Parser GlobalOpts
@@ -568,9 +604,10 @@ running a familiar command might not read it.
 "Safe default" and "silent default for a parameter that changes where infrastructure is
 deployed" are different things.
 
-**Russell rating:** 5 -- "Do it right or it breaks at runtime." The user must remember
-to pass `--environment` for every command that touches a non-development environment.
-Forgetting is a runtime error (wrong region), not a compile-time or parse-time error.
+**Russell rating:** +4 -- "Follow common convention and you'll get it right." Defaulting
+to development is the industry convention and the safer failure mode. The command metadata
+shows the environment. But the interaction with environment maps (silently selecting a
+different region) is dangerous enough that this isn't higher on the scale.
 
 **Fix:** Require `--environment` for write operations (create, update, delete). Only
 default to "development" for read-only operations (describe, list, render). Or: if
@@ -579,7 +616,7 @@ explicitly (error if it's missing rather than defaulting).
 
 ---
 
-## 14. oValuesEqual Is a Lie (Rating: 4/10)
+## 14. oValuesEqual Is a Lie (Rating: +6)
 
 ```haskell
 oValuesEqual :: OValue -> OValue -> Bool
@@ -611,16 +648,17 @@ name that suggests it does something non-obvious.
 **The problem:** A function that looks like a custom comparison but is just `(==)` with
 extra steps. Not a bug, but a source of confusion for future readers.
 
-**Russell rating:** 4 -- "The name tells you how to use it." The name says "equal" and
-it does equality. Fine. But the existence of a separate function (rather than using `==`
-directly) implies there's a reason for it, and there isn't.
+**Russell rating:** +6 -- "Name tells you how to use it." The name says "equal" and it
+does equality. The behavior is correct. The only issue is that the existence of a separate
+function (rather than using `==` directly) implies there's a reason for it, and there
+isn't. Confusing for maintainers but not misleading for users.
 
 **Fix:** Delete `oValuesEqual` and use `(==)` directly. If cross-type comparison is
 desired in the future, add it then with a clear name like `oValuesCoerce`.
 
 ---
 
-## 15. CLI --format Has Three Different Domains (Rating: 6/10)
+## 15. CLI --format Has Three Different Domains (Rating: +3)
 
 ```haskell
 data TemplateFormat = FormatJson | FormatYaml | FormatOriginal
@@ -648,8 +686,10 @@ user-facing interface reuses `--format` for four different value domains.
 **The problem:** Same flag name, different valid values across commands. The user must
 consult per-command help to know which formats are valid.
 
-**Russell rating:** 6 -- "The name tells you nothing." `--format` tells you that you're
-specifying a format, but not which formats are valid. You need `--help` for each command.
+**Russell rating:** +3 -- "Read the documentation and you'll get it right." `--format`
+tells you you're specifying a format; `--help` tells you which values are valid. Invalid
+values are rejected with a clear error. The per-command variation is surprising but
+documented, and the types are separate internally (good). Not misleading, just inconvenient.
 
 **Fix:** Use command-specific flag names where the valid set differs: `--template-format`,
 `--render-format`, `--param-format`. Or: unify the format domain so all commands accept
@@ -658,7 +698,7 @@ explicit; the latter is more ergonomic.
 
 ---
 
-## 16. Error Classification via String Matching (Rating: 8/10)
+## 16. Error Classification via String Matching (Rating: -2)
 
 ```haskell
 classifyMessage' :: [Text] -> SourceLocation -> Text -> EnhancedPreprocessingError
@@ -692,10 +732,11 @@ produced by separate modules. Changing an error message in one module silently b
 error display in another. There is no test that catches this regression (beyond the
 snapshot tests, which test specific fixtures).
 
-**Russell rating:** 8 -- "The compiler/type system won't let you get it right." The
-compiler cannot tell you that changing a message in `Resolver.hs` breaks a pattern
-match in `Conversion.hs`. You'd need to read the implementation of both to understand
-the coupling.
+**Russell rating:** -2 -- "Read the implementation and you'll get it wrong." Even reading
+the classifier's implementation won't reveal that changing a message in `Resolver.hs`
+breaks a pattern match in `Conversion.hs`. The coupling is cross-module and invisible.
+A conscientious developer reading the implementation of either module individually would
+still get it wrong.
 
 **Fix:** Extend `ResolveErrorKind` to cover all cases currently handled by string
 matching. Make `REGeneric` carry a sub-classification enum rather than falling through
@@ -704,7 +745,7 @@ parser boundary rather than classifying them by message text downstream.
 
 ---
 
-## 17. `try @SomeException` Used Pervasively at AWS Boundaries (Rating: 7/10)
+## 17. `try @SomeException` Used Pervasively at AWS Boundaries (Rating: -4)
 
 Finding #7 identified this pattern in `GlobalConfig`. But the same `try @SomeException` catch-all
 appears in **15+ call sites** across the codebase:
@@ -736,9 +777,11 @@ exception type information, making it impossible to extract service error detail
 converts structured SDK errors into opaque strings, and makes it impossible to distinguish
 between "S3 returned 403" and "the runtime is out of memory."
 
-**Russell rating:** 7 -- "The obvious use is wrong." `try @SomeException` is the obvious
-way to catch AWS errors if you haven't learned about async exception safety. The correct
-thing (`try @Amazonka.Error` or a targeted exception type) is non-obvious.
+**Russell rating:** -4 -- "Follow common convention and you'll get it wrong." The common
+Haskell beginner convention of `try @SomeException` is wrong here -- it catches async
+exceptions (`ThreadKilled`, `StackOverflow`) that must propagate. Following the convention
+actively masks runtime failures. The correct approach (`try @Amazonka.Error`) requires
+knowing about async exception safety, which is against the grain of the common pattern.
 
 **Fix:** Replace `try @SomeException` with `try @Amazonka.Error` at all AWS call sites.
 For non-AWS IO (Git subprocess, HTTP client), use `try @IOException`. Never catch
@@ -746,7 +789,7 @@ For non-AWS IO (Git subprocess, HTTP client), use `try @IOException`. Never catc
 
 ---
 
-## 18. requestConfirmation Returns Bool But Exit Code Semantics Are Caller-Dependent (Rating: 5/10)
+## 18. requestConfirmation Returns Bool But Exit Code Semantics Are Caller-Dependent (Rating: +3)
 
 ```haskell
 -- Iidy.Confirm
@@ -779,8 +822,10 @@ Every other caller returns exit 130. A `Bool` return type does not distinguish b
 exit code. A caller reading `requestConfirmation` sees a `Bool` and has no indication
 that some callers treat `False` as exit 130 and others as exit 1.
 
-**Russell rating:** 5 -- "Do it right or it breaks at runtime." The caller must read
-the PRD to know which exit code to use for `False`. The type does not help.
+**Russell rating:** +3 -- "Read the documentation and you'll get it right." The caller
+must read the PRD to know which exit code to use for `False`. The `Bool` return type
+doesn't capture the distinction, but the function doesn't actively mislead -- it just
+under-specifies. A developer reading the docs will get the exit codes right.
 
 **Fix:** Return a sum type: `data ConfirmResult = Confirmed | Cancelled | Rejected`.
 Or: have `requestConfirmation` take a parameter indicating whether decline is a
@@ -789,7 +834,7 @@ should not need to remember the exit code convention.
 
 ---
 
-## 19. `param get --format json` Accepted but Silently Ignored (Rating: 8/10)
+## 19. `param get --format json` Accepted but Silently Ignored (Rating: -8)
 
 The CLI parser validates `--format` for `param get`:
 
@@ -830,10 +875,11 @@ The same issue applies to `param get-by-path` and `param get-history` non-simple
 accepted, validated, and then silently ignored. This is worse than rejecting the flag --
 at least a rejection tells the user it's not supported.
 
-**Russell rating:** 8 -- "The compiler/type system won't let you get it right." The
-type system sees a `ParamFormat` ADT and everything compiles cleanly. The bug is that
-the command handler never inspects the format value. No compile-time signal, no runtime
-warning.
+**Russell rating:** -8 -- "Compiler will warn if you get it right." The type system
+creates a false sense of correctness: the `ParamFormat` ADT compiles cleanly, the CLI
+validates the flag, and everything looks wired up. A developer who *does* try to implement
+the format handling would find the existing plumbing fighting them (the handler returns
+raw text, not structured data). The infrastructure actively rewards ignoring the flag.
 
 **Fix:** Either implement the structured output formats, or reject `json` and `yaml`
 at the CLI parser level with: `"Format 'json' is not yet supported for param get. Use
@@ -841,7 +887,7 @@ at the CLI parser level with: `"Format 'json' is not yet supported for param get
 
 ---
 
-## 20. template-approval --context Flag Accepted but Never Applied (Rating: 6/10)
+## 20. template-approval --context Flag Accepted but Never Applied (Rating: -6)
 
 ```haskell
 -- CLI parser accepts --context with default 500
@@ -886,9 +932,11 @@ user doesn't read the PRD. They read `--help`, see `--context`, and expect it to
 pipeline, stored in the output type, and serialized to JSON -- but has no effect on
 the actual diff output. The entire pipeline for this flag is plumbing with no payload.
 
-**Russell rating:** 6 -- "The name tells you nothing." `--context 3` tells you "3 lines
-of context." The actual behavior is "all lines of context, always." The flag name actively
-misleads.
+**Russell rating:** -6 -- "Name tells you how NOT to use it." `--context 3` tells the
+user "3 lines of context." The actual behavior is "all lines of context, always." The
+flag name actively misleads -- it promises a feature that doesn't exist. The entire
+pipeline (parsing, threading, storage, serialization) creates the illusion of a working
+feature.
 
 **Fix:** Either implement context-line trimming in `generateDiff` (take the `Int`
 parameter and trim the output), or remove the flag from the CLI parser and emit a helpful
@@ -899,28 +947,28 @@ flags erode user trust.
 
 ## Summary
 
-| #  | Finding                                                | Rating | Scale Description                                  |
-|----|--------------------------------------------------------|--------|----------------------------------------------------|
-| 2  | getStackName falls back to "unnamed-stack"             | 9      | Read the manual or you'll get it wrong              |
-| 4  | StackArgs: 21-Maybe bag, no validation, no unknown-key | 9      | Read the manual or you'll get it wrong              |
-| 6  | TemplateLoader uses `fail` for recoverable errors      | 10     | Read the implementation or you'll get it wrong      |
-| 10 | Unknown YAML keys silently ignored                     | 8      | The compiler/type system won't let you get it right |
-| 16 | Error classification via string matching               | 8      | The compiler/type system won't let you get it right |
-| 19 | `param get --format json` accepted but silently ignored| 8      | The compiler/type system won't let you get it right |
-| 1  | mapOnFailure silently drops invalid values             | 7      | The obvious use is wrong                            |
-| 3  | getStrList silently drops non-string elements           | 7      | The obvious use is wrong                            |
-| 7  | GlobalConfig silently swallows all errors               | 7      | The obvious use is wrong                            |
-| 8  | Terminal statuses are stringly typed                    | 7      | The obvious use is wrong                            |
-| 11 | Dot-path query returns ONull on miss                   | 7      | The obvious use is wrong                            |
-| 17 | `try @SomeException` used at 15+ AWS boundaries        | 7      | The obvious use is wrong                            |
-| 5  | oIsTruthy: JavaScript-grade truthiness                 | 6      | The name tells you nothing                          |
-| 9  | PollConfig: 8 callbacks, no contracts                  | 6      | The name tells you nothing                          |
-| 12 | Three incompatible error presentation paths            | 6      | The name tells you nothing                          |
-| 15 | --format has three different value domains              | 6      | The name tells you nothing                          |
-| 20 | template-approval --context accepted but never applied | 6      | The name tells you nothing                          |
-| 13 | --environment defaults to "development"                | 5      | Do it right or it breaks at runtime                 |
-| 18 | requestConfirmation Bool hides exit-code semantics     | 5      | Do it right or it breaks at runtime                 |
-| 14 | oValuesEqual is just (==)                              | 4      | The name tells you how to use it                    |
+| #  | Finding                                                 | Rating | Scale Description                                       |
+|----|---------------------------------------------------------|--------|---------------------------------------------------------|
+| 19 | `param get --format json` accepted but silently ignored |     -8 | Compiler will warn if you get it right                  |
+| 1  | mapOnFailure silently drops invalid values              |     -7 | Obvious use is wrong                                    |
+| 2  | getStackName falls back to "unnamed-stack"              |     -7 | Obvious use is wrong                                    |
+| 3  | getStrList silently drops non-string elements           |     -7 | Obvious use is wrong                                    |
+| 7  | GlobalConfig silently swallows all errors               |     -7 | Obvious use is wrong                                    |
+| 10 | Unknown YAML keys silently ignored                      |     -7 | Obvious use is wrong                                    |
+| 11 | Dot-path query returns ONull on miss                    |     -7 | Obvious use is wrong                                    |
+| 6  | TemplateLoader uses `fail` for recoverable errors       |     -6 | Name tells you how NOT to use it                        |
+| 20 | template-approval --context accepted but never applied  |     -6 | Name tells you how NOT to use it                        |
+| 17 | `try @SomeException` used at 15+ AWS boundaries         |     -4 | Follow common convention and you'll get it wrong        |
+| 4  | StackArgs: 21-Maybe bag, no validation, no unknown-key  |     -3 | Read the documentation and you'll get it wrong          |
+| 16 | Error classification via string matching                |     -2 | Read the implementation and you'll get it wrong         |
+| 5  | oIsTruthy: JavaScript-grade truthiness                  |     +2 | Read the implementation and you'll get it right         |
+| 8  | Terminal statuses are stringly typed                     |     +2 | Read the implementation and you'll get it right         |
+| 9  | PollConfig: 8 callbacks, no contracts                   |     +2 | Read the implementation and you'll get it right         |
+| 12 | Three incompatible error presentation paths             |     +2 | Read the implementation and you'll get it right         |
+| 15 | --format has three different value domains               |     +3 | Read the documentation and you'll get it right          |
+| 18 | requestConfirmation Bool hides exit-code semantics      |     +3 | Read the documentation and you'll get it right          |
+| 13 | --environment defaults to "development"                 |     +4 | Follow common convention and you'll get it right        |
+| 14 | oValuesEqual is just (==)                               |     +6 | Name tells you how to use it                            |
 
 ---
 
@@ -928,30 +976,30 @@ flags erode user trust.
 
 Rusty doesn't just complain. Credit where it's earned.
 
-- **ResolveErrorKind is a proper sum type** (rating: 2). When it's used, the compiler
+- **ResolveErrorKind is a proper sum type** (rating: +8). When it's used, the compiler
   forces you to handle every error variant. The `classifyResolveError` path that uses it
   is excellent API design. The problem is the fallback path, not the primary one.
 
-- **CLI types are pure ADTs** (rating: 2). `Commands`, `StackFileArgs`, `RenderArgs` --
+- **CLI types are pure ADTs** (rating: +9). `Commands`, `StackFileArgs`, `RenderArgs` --
   all proper types, no strings, no dynamic dispatch. The optparse-applicative parser
   produces values that the compiler guarantees are well-formed. You literally cannot
   construct a `CreateStackArgs` missing the argsfile path.
 
-- **The format reader functions reject invalid input** (rating: 3). `colorChoiceReader`,
+- **The format reader functions reject invalid input** (rating: +7). `colorChoiceReader`,
   `themeReader`, `outputModeReader` -- these all return `Left` with a helpful error
   message on invalid input. The CLI layer does the right thing. The StackArgs layer does
   not.
 
-- **resolveAst is pure** (rating: 2). The core resolver takes a `TagContext` and a
+- **resolveAst is pure** (rating: +9). The core resolver takes a `TagContext` and a
   `YamlAst` and returns `Either ResolveError OValue`. No IO, no mutation, no callbacks.
-  The type signature tells you everything. This is level 2 on the scale.
+  The type signature tells you everything. The compiler won't let you get it wrong.
 
-- **CloudFormation tag validation is thorough** (rating: 3). `validateCfnTag` checks
+- **CloudFormation tag validation is thorough** (rating: +7). `validateCfnTag` checks
   every intrinsic function's argument structure and produces specific error messages.
   `!Ref` with a null value, `!Sub` with wrong array length, `!GetAtt` without dot
   notation -- all caught with clear messages. The obvious use is correct.
 
-The pattern: the pure core (resolver, CLI types, tag validation) is level 2-3 on the
+The pattern: the pure core (resolver, CLI types, tag validation) is +7 to +9 on the
 scale. The IO boundaries (StackArgsLoader, TemplateLoader, GlobalConfig, RequestBuilder)
-are level 6-10. The quality of the API design drops sharply when you cross from pure
+are -8 to -2. The quality of the API design drops sharply when you cross from pure
 code to effectful code. That's the systemic issue. Fix the boundaries.
