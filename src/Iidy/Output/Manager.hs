@@ -2,13 +2,14 @@ module Iidy.Output.Manager
   ( OutputDispatch(..)
   , mkOutputDispatch
   , renderOutput
+  , cleanupOutputDispatch
   ) where
 
 import Iidy.Cli (GlobalOpts(..))
 import Iidy.Output.Renderer (OutputMode(..))
 import Iidy.Output.Renderers.Interactive
   (InteractiveRenderer, InteractiveOptions(..), newInteractiveRenderer,
-   renderOutputData)
+   renderOutputData, stopSpinner)
 import Iidy.Output.Renderers.Json
   (JsonRenderer, newJsonRenderer, defaultJsonOptions,
    renderOutputDataJson)
@@ -30,6 +31,12 @@ data OutputDispatch
 renderOutput :: OutputDispatch -> OutputData -> IO ()
 renderOutput (DispatchInteractive r) od = renderOutputData r od
 renderOutput (DispatchJson r) od        = renderOutputDataJson r od
+
+-- | Stop any active spinner/timing threads. Call this in exception cleanup
+-- paths to prevent spinner corruption when polling throws.
+cleanupOutputDispatch :: OutputDispatch -> IO ()
+cleanupOutputDispatch (DispatchInteractive r) = stopSpinner r
+cleanupOutputDispatch (DispatchJson _)        = pure ()
 
 -- | Create an OutputDispatch from CLI GlobalOpts.
 -- Maps color/theme/output-mode flags to the appropriate renderer.

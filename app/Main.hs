@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 module Main (main) where
 
-import Control.Exception (SomeException, IOException, catch, fromException, displayException)
+import Control.Exception (SomeException, IOException, catch, finally, fromException, displayException)
 import qualified Amazonka
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
@@ -47,7 +47,7 @@ import Iidy.Demo (runDemo)
 import Iidy.Explain (explainErrors)
 import Iidy.GetImport (runGetImport)
 import Iidy.InitStackArgs (runInitStackArgs)
-import Iidy.Output.Manager (mkOutputDispatch, renderOutput)
+import Iidy.Output.Manager (mkOutputDispatch, renderOutput, cleanupOutputDispatch)
 import Iidy.Output.Types (OutputData(..))
 import Iidy.Params.Client (paramGet, paramSet, paramGetByPath, paramGetHistory)
 import Iidy.Params.Review (paramReview)
@@ -167,6 +167,7 @@ runCommand cli = case cliCommand cli of
       meta <- constructCommandMetadata ctx (cliToAwsSettings cli) emptyStackArgs env Nothing
       emit (OdCommandMetadata meta)
       result <- executeChangeset ctx stackName (ecsChangesetName args) emit
+        `finally` cleanupOutputDispatch dispatch
       case result of
         Left err -> dieTxt err
         Right rc -> do
@@ -189,6 +190,7 @@ runCommand cli = case cliCommand cli of
       ctx <- createSimpleContext cli OpWatchStack
       dispatch <- mkOutputDispatch (cliGlobalOpts cli)
       result <- watchStack ctx (waStackname args) (waInactivityTimeout args) (renderOutput dispatch)
+        `finally` cleanupOutputDispatch dispatch
       case result of
         Left err -> dieTxt err
         Right rc -> exitCode rc
@@ -210,6 +212,7 @@ runCommand cli = case cliCommand cli of
       meta <- constructCommandMetadata ctx (cliToAwsSettings cli) emptyStackArgs env Nothing
       emit (OdCommandMetadata meta)
       result <- deleteStack ctx (delStackname args) (delYes args) env emit
+        `finally` cleanupOutputDispatch dispatch
       case result of
         Left err -> dieTxt err
         Right rc -> do
@@ -369,6 +372,7 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
         else pure ()
 
       rc <- action ctx sa' (Just argsfilePath) env emit
+        `finally` cleanupOutputDispatch dispatch
 
       -- Emit FinalCommandSummary for write operations
       if emitsCommandMetadata operation
