@@ -41,6 +41,7 @@ data ResolveErrorKind
   | REHandlebars                                -- ^ handlebars template error
   | RETagSyntax         !(Maybe Text)           -- ^ tagName (if extractable)
   | REExpandNotFound    !Text                   -- ^ templateName
+  | RECircularExpansion !Text                   -- ^ templateName already being expanded
   | REParseSyntax                               -- ^ !$parseYaml/Json/expand parse error
   | REGeneric                                   -- ^ fallback
   deriving stock (Show, Eq)
@@ -116,6 +117,12 @@ expandNotFoundError :: SrcMeta -> Text -> Resolve a
 expandNotFoundError meta templateName =
   Left (ResolveError (smStart meta) msg (REExpandNotFound templateName))
   where msg = "!$expand: template '" <> templateName <> "' not found"
+
+-- | Circular template expansion detected.
+circularExpansionError :: SrcMeta -> Text -> Resolve a
+circularExpansionError meta templateName =
+  Left (ResolveError (smStart meta) msg (RECircularExpansion templateName))
+  where msg = "Circular template expansion detected: '" <> templateName <> "' is already being expanded"
 
 -- | Parse syntax error from !$parseYaml, !$parseJson, !$expand.
 parseSyntaxError :: SrcMeta -> Text -> Text -> Resolve a
@@ -218,13 +225,20 @@ resolveMappingWithExpansion ctx pairs = do
       where
         expandOne parentNames (acc, globals) (resName, resVal) =
           case getResourceType resVal of
-            Just typeName | Just tmplInfo <- Map.lookup typeName (tcCustomTemplateDefs ctx) -> do
-              let reparseF = buildReparse ctx
-              case expandCustomResource resName resVal tmplInfo reparseF parentNames of
-                Left err -> Left (ResolveError zeroPosition ("Custom resource expansion error: " <> err) REGeneric)
-                Right expansionResult ->
-                  let mergedGlobals = Map.unionWith mergeGlobalSection globals (erGlobalSections expansionResult)
-                  in pure (acc ++ erResources expansionResult, mergedGlobals)
+            Just typeName | Just tmplInfo <- Map.lookup typeName (tcCustomTemplateDefs ctx) ->
+              -- Check for circular custom resource expansion
+              if Set.member typeName (tcActiveExpansions ctx)
+                then Left (ResolveError zeroPosition
+                       ("Circular template expansion detected: '" <> typeName <> "' is already being expanded")
+                       (RECircularExpansion typeName))
+                else
+                  let expandCtx = ctx { tcActiveExpansions = Set.insert typeName (tcActiveExpansions ctx) }
+                      reparseF = buildReparse expandCtx
+                  in case expandCustomResource resName resVal tmplInfo reparseF parentNames of
+                    Left err -> Left (ResolveError zeroPosition ("Custom resource expansion error: " <> err) REGeneric)
+                    Right expansionResult ->
+                      let mergedGlobals = Map.unionWith mergeGlobalSection globals (erGlobalSections expansionResult)
+                      in pure (acc ++ erResources expansionResult, mergedGlobals)
             _ -> pure (acc ++ [(resName, resVal)], globals)
 
     mergeGlobalSection :: OValue -> OValue -> OValue
@@ -773,27 +787,33 @@ resolveExpand ctx meta (ExpandTag templateRefAst paramsAst) = do
   -- 1. Resolve template reference to get template name
   templateVal <- resolveAst ctx templateRefAst
   let templateName = oValueToText templateVal
-  -- 2. Look up template info
+  -- 2. Check for circular expansion
+  if Set.member templateName (tcActiveExpansions ctx)
+    then circularExpansionError meta templateName
+    else pure ()
+  -- 3. Look up template info
   case Map.lookup templateName (tcCustomTemplateDefs ctx) of
     Nothing -> expandNotFoundError meta templateName
     Just tmplInfo -> do
-      -- 3. Resolve provided params
+      -- 4. Resolve provided params
       providedParams <- resolveAst ctx paramsAst
       let provided = case providedParams of
             OObject kvs -> Map.fromList kvs
             _ -> Map.empty
-      -- 4. Merge with defaults from $params (defaults are Value, convert to OValue)
+      -- 5. Merge with defaults from $params (defaults are Value, convert to OValue)
       let merged = mergeExpandParams (tiParams tmplInfo) provided
-      -- 5. Re-parse the raw template YAML
+      -- 6. Re-parse the raw template YAML
       case parseYaml (BL.fromStrict (TE.encodeUtf8 (tiRawBody tmplInfo))) (tiLocation tmplInfo) of
         Left (ParseError _ msg) -> parseSyntaxError meta "!$expand parse error: " msg
         Right templateAst' -> do
-          -- 6. Build sub-context with merged params as variables
+          -- 7. Build sub-context with merged params as variables
+          --    Add templateName to active expansions for cycle detection
           let subCtx = ctx
                 { tcVariables = Map.union merged (tcVariables ctx)
                 , tcInputUri = Just (tiLocation tmplInfo)
+                , tcActiveExpansions = Set.insert templateName (tcActiveExpansions ctx)
                 }
-          -- 7. Resolve the template body
+          -- 8. Resolve the template body
           resolveAst subCtx templateAst'
 
 mergeExpandParams :: [ParamDef] -> Map.Map Text OValue -> Map.Map Text OValue

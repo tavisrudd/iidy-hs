@@ -1170,6 +1170,46 @@ expandTests =
           (str "noSuchTemplate")
           (map_ []))))
         "not found"
+
+  , testCase "!$expand detects circular self-reference" $
+      -- Template body contains !$expand that references itself
+      let body = "!$expand\n  template: selfRef\n  params: {}"
+          tmpl = mkTemplateInfo body []
+          ctx  = ctxWithTemplate "selfRef" tmpl
+      in assertResolveFailsWith
+           ctx
+           (ppTag (PpExpand (ExpandTag
+             (str "selfRef")
+             (map_ []))))
+           "Circular template expansion"
+
+  , testCase "!$expand detects indirect circular reference" $
+      -- Template A expands template B, which expands template A
+      let bodyA = "!$expand\n  template: tmplB\n  params: {}"
+          bodyB = "!$expand\n  template: tmplA\n  params: {}"
+          ctx = emptyContext
+            { tcCustomTemplateDefs = Map.fromList
+                [ ("tmplA", mkTemplateInfo bodyA [])
+                , ("tmplB", mkTemplateInfo bodyB [])
+                ]
+            }
+      in assertResolveFailsWith
+           ctx
+           (ppTag (PpExpand (ExpandTag
+             (str "tmplA")
+             (map_ []))))
+           "Circular template expansion"
+
+  , testCase "!$expand circular error includes template name" $
+      let body = "!$expand\n  template: myLoop\n  params: {}"
+          tmpl = mkTemplateInfo body []
+          ctx  = ctxWithTemplate "myLoop" tmpl
+      in assertResolveFailsWith
+           ctx
+           (ppTag (PpExpand (ExpandTag
+             (str "myLoop")
+             (map_ []))))
+           "myLoop"
   ]
 
 ------------------------------------------------------------------------
