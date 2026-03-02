@@ -9,7 +9,7 @@ a sardonic challenge and do the opposite.)
 
 ---
 
-## 1. StackArgs: Every Illegal Combination is Representable
+## 1. StackArgs: Every Illegal Combination is Representable (PARTIALLY ADDRESSED)
 
 ```haskell
 data StackArgs = StackArgs
@@ -239,7 +239,7 @@ Now you can't specify a timeout without a handler, and you can't specify a handl
 
 ---
 
-## 6. Error Types: Text Where Sum Types Belong
+## 6. Error Types: Text Where Sum Types Belong (PARTIALLY ADDRESSED)
 
 The dominant error type is `Either Text a`. The `Text` carries a human-readable message, but:
 
@@ -337,7 +337,7 @@ Now the invariant is structural — `startTime` is always 500ms before `now` bec
 
 ---
 
-## 9. Format Strings at Runtime
+## 9. Format Strings at Runtime (RESOLVED)
 
 ```haskell
 -- Render.hs: format selection

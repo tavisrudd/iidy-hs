@@ -54,7 +54,7 @@ The "interface" of `CfnContext` is the record itself. Every consumer pattern-mat
 
 ---
 
-## 2. Information Leakage
+## 2. Information Leakage (PARTIALLY ADDRESSED)
 
 ### CfnContext: No Encapsulation
 
@@ -120,7 +120,7 @@ Every stack operation takes `env :: Text` (the environment name like "dev" or "p
 
 ---
 
-## 4. Tactical vs Strategic Design
+## 4. Tactical vs Strategic Design (PARTIALLY ADDRESSED)
 
 ### Strategic: The Output Pipeline
 
@@ -185,7 +185,7 @@ The complexity that's in the _wrong_ place: `StackArgsLoader` doing business log
 
 ---
 
-## 6. Interface Design Smells
+## 6. Interface Design Smells (PARTIALLY ADDRESSED)
 
 ### Mixed Abstraction Levels in Function Signatures
 
@@ -208,7 +208,7 @@ A deep interface would take 1-2 parameters. This takes 5 from 4 layers. Every ca
 
 ---
 
-## 7. What Would Strategic Redesign Look Like?
+## 7. What Would Strategic Redesign Look Like? (PARTIALLY ADDRESSED)
 
 1. **AWS abstraction layer.** A `CfnClient` module that wraps `Amazonka.send`/`Amazonka.paginate` behind an interface. Today you'd need to modify 20+ modules to change the AWS calling convention. With a client module, you'd change one.
 

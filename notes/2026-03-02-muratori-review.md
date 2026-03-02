@@ -8,7 +8,7 @@ The question is blunt: **is this codebase doing too much to accomplish too littl
 
 ---
 
-## 1. The Problem Is Simple. The Solution Is 85 Modules.
+## 1. The Problem Is Simple. The Solution Is 85 Modules. (WONT FIX)
 
 Let's be clear about what iidy does:
 
@@ -28,7 +28,7 @@ How did we get here?
 
 ---
 
-## 2. Abstraction Tax: The Layer Cake
+## 2. Abstraction Tax: The Layer Cake (WONT FIX)
 
 The path from "read YAML" to "emit YAML" passes through:
 
@@ -87,7 +87,7 @@ That's 11 modules that could be folded into their neighbors with zero loss of cl
 
 ---
 
-## 4. Custom Implementations of Existing Things
+## 4. Custom Implementations of Existing Things (WONT FIX)
 
 The codebase contains custom implementations of:
 
@@ -114,7 +114,7 @@ The JMESPath implementation is the clearest example: it's a partial implementati
 
 ---
 
-## 5. The Output Pipeline: Over-Engineered for the Problem
+## 5. The Output Pipeline: Over-Engineered for the Problem (WONT FIX)
 
 The output pipeline has:
 - `OutputData` — a 27-variant sum type
@@ -160,7 +160,7 @@ The optimization effort is in the wrong place. `OValue`'s `O(n)` lookup is defen
 
 ---
 
-## 7. The Test Suite: Impressive but Expensive
+## 7. The Test Suite: Impressive but Expensive (PARTIALLY ADDRESSED)
 
 958 tests. That's admirable coverage for a 15k LOC project. But what's the maintenance cost?
 
