@@ -1,0 +1,6 @@
+# Mix of !$ direct references and handlebars in the same chain
+$defs:
+  val: 1234
+  hb: "{{ val }}"
+
+output: "value-is-{{ hb }}"

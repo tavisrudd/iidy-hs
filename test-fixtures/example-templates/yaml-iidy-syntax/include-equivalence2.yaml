@@ -1,0 +1,51 @@
+# Equivalence of short (!$ path) and long (!$ {path:, query:}) reference forms
+$defs:
+  config:
+    database:
+      host: "db.example.com"
+      port: 5432
+    cache:
+      host: "cache.example.com"
+      port: 6379
+    production: "prod-config-value"
+  environment: "production"
+
+# Short form: !$ path
+db_host_short: !$ config.database.host
+cache_port_short: !$ config.cache.port
+
+# Long form: !$ {path:}
+db_host_long: !$
+  path: config.database.host
+cache_port_long: !$
+  path: config.cache.port
+
+# Short form: query syntax
+db_config_query_short: !$ config.database?host,port
+
+# Long form: query syntax
+db_config_query_long: !$
+  path: config.database
+  query: "host,port"
+
+# Short form: object query
+explicit_short: !$ config.database?host,port
+
+# Long form: object query
+explicit_long: !$
+  path: config.database
+  query: "host,port"
+
+# Short form: variable reference
+env_ref_short: !$ environment
+
+# Long form: variable reference
+env_ref_long: !$
+  path: environment
+
+# Short form: bracket notation
+dynamic_short: !$ config[environment]
+
+# Long form: bracket notation
+dynamic_long: !$
+  path: "config[environment]"

@@ -1,0 +1,6 @@
+# Handlebars template referencing a $def via cross-reference
+$defs:
+  val: 1234
+  ref: !$ val
+
+output: "value-is-{{ ref }}"

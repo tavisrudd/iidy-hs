@@ -1,0 +1,8 @@
+# Dynamic scoping: inner scope sees outer $defs
+$defs:
+  prefix: "item"
+
+output: !$map
+  items: [1, 2, 3]
+  var: i
+  template: "{{ prefix }}-{{ i }}"

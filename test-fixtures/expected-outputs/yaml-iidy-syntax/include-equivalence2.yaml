@@ -1,0 +1,20 @@
+db_host_short: db.example.com
+cache_port_short: 6379
+db_host_long: db.example.com
+cache_port_long: 6379
+db_config_query_short:
+  host: db.example.com
+  port: 5432
+db_config_query_long:
+  host: db.example.com
+  port: 5432
+explicit_short:
+  host: db.example.com
+  port: 5432
+explicit_long:
+  host: db.example.com
+  port: 5432
+env_ref_short: production
+env_ref_long: production
+dynamic_short: prod-config-value
+dynamic_long: prod-config-value
