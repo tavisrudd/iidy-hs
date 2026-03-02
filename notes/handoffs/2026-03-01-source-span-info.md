@@ -82,12 +82,36 @@ separate end event.
 
 ## Progress
 
-- [ ] Research HsYAML event positions (MappingEnd, SequenceEnd, ScalarValue)
-- [ ] Prototype Option C in parser
-- [ ] Update makeSrcMeta to accept end position
-- [ ] Verify error snapshots still pass
-- [ ] Test with multi-line mapping/sequence nodes
+- [x] Research HsYAML event positions (MappingEnd, SequenceEnd, ScalarValue)
+- [x] Implement span computation (hybrid of Option B + C approach)
+- [x] Replace makeSrcMeta with makeScalarMeta + childrenEndPos
+- [x] Verify error snapshots still pass (48/49 pass, 1 pre-existing failure)
+- [x] Test with multi-line mapping/sequence nodes (14 new span tests)
 
 ## Handoff Notes
 
-(to be filled by implementing session)
+### Implementation (2026-03-01)
+
+**Approach**: The HsYAML high-level `Loader` API does NOT expose `MappingEnd`/`SequenceEnd`
+positions to callbacks -- those events are consumed internally. Pure Option C would require
+rewriting the parser to use the low-level `parseEvents` API, which was too risky.
+
+Instead, implemented a **hybrid of Option B** within the existing Loader callbacks:
+- **Scalars**: `makeScalarMeta` computes `smEnd = smStart + tagLen + textLen`
+  - Accounts for tag prefix (e.g., "!Ref " = 5 chars) when present
+  - Accurate for single-line scalars; approximate for multi-line (posLine stays same)
+- **Sequences**: `childrenEndPos` returns `smEnd` of last child element
+- **Mappings**: `childrenEndPos` returns `smEnd` of last value in pair list
+- **Empty collections**: Fall back to start position (zero-width, same as before)
+
+**Key findings**:
+- `makeSrcMeta` was removed entirely (unused after changes)
+- `foldl'` is in Prelude on GHC 9.10.3 (base 4.20), no `Data.List` import needed
+- Error display system (`formatSourceContext`) does NOT currently use `smEnd` --
+  caret widths are hardcoded per error type. The span info is now correct in the AST
+  for future use.
+- All 49 error snapshot tests unaffected (48 pass, 1 pre-existing wording diff)
+- All 37 render snapshot tests unaffected (35 pass, 2 pre-existing failures)
+- 14 new span-specific tests added, 972 total tests pass
+
+**Commit**: `6deb078` — Fix zero-width source spans in YAML parser
