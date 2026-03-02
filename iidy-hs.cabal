@@ -121,6 +121,7 @@ library
     , amazonka-s3
     , amazonka-ssm
     , amazonka-sts
+    , array
     , bytestring
     , conduit
     , containers
@@ -216,6 +217,7 @@ test-suite iidy-hs-test
     Test.GlobalConfigTest
     Test.PreprocessingPropertyTest
     Test.ErrorContentTest
+    Test.TemplateDiffTest
   default-language: GHC2021
   default-extensions:
     LambdaCase

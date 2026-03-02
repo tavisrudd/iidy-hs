@@ -44,6 +44,7 @@ import Test.TemplateLoaderTest (templateLoaderTests)
 import Test.GlobalConfigTest (globalConfigTests)
 import Test.PreprocessingPropertyTest (preprocessingPropertyTests)
 import Test.ErrorContentTest (errorContentTests)
+import Test.TemplateDiffTest (templateDiffTests)
 
 main :: IO ()
 main = do
@@ -92,4 +93,5 @@ main = do
     , testGroup "GlobalConfig"     globalConfigTests
     , testGroup "PreprocessingProperties" preprocessingPropertyTests
     , testGroup "ErrorContent"     errorContentTests
+    , testGroup "TemplateDiff"    templateDiffTests
     ]

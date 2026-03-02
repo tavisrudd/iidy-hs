@@ -8,11 +8,14 @@
 module Iidy.Cfn.Operations.TemplateApproval
   ( templateApprovalRequest
   , templateApprovalReview
+  , generateDiff
   ) where
 
 import Control.Exception (SomeException, try)
 import Control.Monad.Trans.Resource (runResourceT)
+import qualified Data.Array as Array
 import qualified Data.ByteString as BS
+import qualified Data.List as List
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -153,7 +156,7 @@ templateApprovalReview ctx url contextLines emit = do
                       let latest = either (const "") id latestTemplate
 
                       -- Generate and emit diff
-                      let diffOutput = generateDiff latest pending
+                      let diffOutput = generateDiff contextLines latest pending
                           hasChanges = not (T.null diffOutput)
                       emit $ OdTemplateDiff TemplateDiff
                         { tdDiffOutput   = diffOutput
@@ -251,20 +254,122 @@ deleteFromS3 awsEnv bucket key = do
     Right _  -> pure (Right ())
 
 ------------------------------------------------------------------------
--- Diff generation
+-- Diff generation (LCS-based)
 ------------------------------------------------------------------------
 
--- | Generate a simple line diff between old and new content.
-generateDiff :: Text -> Text -> Text
-generateDiff old new
+-- | A single diff operation.
+data DiffOp
+  = Equal  !Text   -- ^ Line present in both old and new
+  | Delete !Text   -- ^ Line removed from old
+  | Insert !Text   -- ^ Line added in new
+
+-- | Generate a unified-style line diff between old and new content.
+-- Shows @contextLines@ lines of context around each change group.
+-- Non-adjacent hunks are separated by @---@.
+-- Returns empty text when the inputs are identical.
+generateDiff :: Int -> Text -> Text -> Text
+generateDiff contextLines old new
   | old == new = ""
   | otherwise =
-      let oldLines = T.lines old
-          newLines = T.lines new
-          -- Simple diff: show removed and added lines
-          removed = filter (`notElem` newLines) oldLines
-          added = filter (`notElem` oldLines) newLines
-      in T.unlines $
-           map (\l -> "- " <> l) removed ++
-           map (\l -> "+ " <> l) added
+      let oldLns = T.lines old
+          newLns = T.lines new
+          ops    = lcsOps oldLns newLns
+          hunks  = buildHunks contextLines ops
+      in formatHunks hunks
+
+-- | Compute the LCS table via dynamic programming, then backtrack to
+-- produce a list of 'DiffOp' values that transform old into new.
+lcsOps :: [Text] -> [Text] -> [DiffOp]
+lcsOps oldLns newLns =
+  let m = length oldLns
+      n = length newLns
+      oldArr = Array.listArray (0, m - 1) oldLns
+      newArr = Array.listArray (0, n - 1) newLns
+      -- dp ! (i, j) = LCS length for oldLns[i..] vs newLns[j..]
+      dp :: Array.Array (Int, Int) Int
+      dp = Array.array ((0, 0), (m, n))
+        [ ((i, j), val i j)
+        | i <- [0..m]
+        , j <- [0..n]
+        ]
+      val :: Int -> Int -> Int
+      val i j
+        | i == m || j == n = 0
+        | oldArr Array.! i == newArr Array.! j = 1 + dp Array.! (i + 1, j + 1)
+        | otherwise = max (dp Array.! (i + 1, j)) (dp Array.! (i, j + 1))
+      -- Backtrack to produce diff ops
+      backtrack :: Int -> Int -> [DiffOp]
+      backtrack i j
+        | i == m && j == n = []
+        | i == m = Insert (newArr Array.! j) : backtrack i (j + 1)
+        | j == n = Delete (oldArr Array.! i) : backtrack (i + 1) j
+        | oldArr Array.! i == newArr Array.! j =
+            Equal (oldArr Array.! i) : backtrack (i + 1) (j + 1)
+        | dp Array.! (i + 1, j) >= dp Array.! (i, j + 1) =
+            Delete (oldArr Array.! i) : backtrack (i + 1) j
+        | otherwise =
+            Insert (newArr Array.! j) : backtrack i (j + 1)
+  in backtrack 0 0
+
+-- | A hunk is a contiguous group of diff lines to display.
+type Hunk = [DiffOp]
+
+-- | Build hunks from a flat list of diff ops, using @ctx@ lines of
+-- context around each change.
+buildHunks :: Int -> [DiffOp] -> [Hunk]
+buildHunks ctx ops =
+  let indexed = zip [0 :: Int ..] ops
+      -- Indices of non-Equal ops
+      changeIdxs = [ i | (i, op) <- indexed, isChange op ]
+  in case changeIdxs of
+       [] -> []  -- no changes
+       _  ->
+         let -- Expand each change index into a range [lo..hi] with context
+             ranges = map (\i -> (max 0 (i - ctx), min (totalLen - 1) (i + ctx)))
+                          changeIdxs
+             -- Merge overlapping/adjacent ranges
+             merged = mergeRanges ranges
+             -- Extract hunks from merged ranges
+         in map (extractHunk indexed) merged
+  where
+    totalLen :: Int
+    totalLen = length ops
+
+    isChange :: DiffOp -> Bool
+    isChange (Equal _) = False
+    isChange _         = True
+
+    mergeRanges :: [(Int, Int)] -> [(Int, Int)]
+    mergeRanges [] = []
+    mergeRanges (r:rs) = List.foldl' merge1 [r] rs
+
+    merge1 :: [(Int, Int)] -> (Int, Int) -> [(Int, Int)]
+    merge1 [] r = [r]
+    merge1 acc (lo, hi) =
+      let (prevLo, prevHi) = last acc
+      in if lo <= prevHi + 1
+         then init acc ++ [(prevLo, max prevHi hi)]
+         else acc ++ [(lo, hi)]
+
+    extractHunk :: [(Int, DiffOp)] -> (Int, Int) -> Hunk
+    extractHunk indexed (lo, hi) =
+      [ op | (i, op) <- indexed, i >= lo, i <= hi ]
+
+-- | Format hunks into the final text output. Non-adjacent hunks are
+-- separated by a @---@ line.
+formatHunks :: [Hunk] -> Text
+formatHunks [] = ""
+formatHunks hunks =
+  let formatted = map formatHunk hunks
+  in T.intercalate "\n---\n" formatted
+
+-- | Format a single hunk.
+formatHunk :: Hunk -> Text
+formatHunk ops = T.intercalate "\n" (map formatOp ops)
+
+-- | Format a single diff operation.
+formatOp :: DiffOp -> Text
+formatOp (Equal  l) = "  " <> l
+formatOp (Delete l) = "- " <> l
+formatOp (Insert l) = "+ " <> l
 
