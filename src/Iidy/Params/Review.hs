@@ -14,14 +14,12 @@ import Control.Monad.Trans.Resource (runResourceT)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import Lens.Micro ((^.))
 
 import Iidy.Confirm (requestConfirmation)
+import Iidy.Params.Client (fetchParam)
 import qualified Amazonka
-import qualified Amazonka.SSM.GetParameter as GP
 import qualified Amazonka.SSM.PutParameter as PP
 import qualified Amazonka.SSM.DeleteParameter as DP
-import qualified Amazonka.SSM.Types.Parameter as SSMP
 import qualified Amazonka.SSM.Types.ParameterType as SSMPT
 
 ------------------------------------------------------------------------
@@ -76,15 +74,6 @@ paramReview awsEnv path = do
 ------------------------------------------------------------------------
 -- SSM helpers
 ------------------------------------------------------------------------
-
--- | Fetch a parameter value from SSM.
-fetchParam :: Amazonka.Env -> Text -> Bool -> IO (Either Text Text)
-fetchParam awsEnv name withDecryption = do
-  let req = (GP.newGetParameter name) { GP.withDecryption = Just withDecryption }
-  result <- try @SomeException $ runResourceT $ Amazonka.send awsEnv req
-  case result of
-    Left ex -> pure (Left (T.pack (show ex)))
-    Right resp -> pure (Right (resp.parameter ^. SSMP.parameter_value))
 
 -- | Apply a pending change: write the value to the main path and delete the pending.
 applyPendingChange :: Amazonka.Env -> Text -> Text -> Text -> IO (Either Text ())

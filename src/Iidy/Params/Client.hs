@@ -6,7 +6,8 @@
 -- and return Either Text results for uniform error handling.
 module Iidy.Params.Client
   ( -- * Parameter operations
-    paramGet
+    fetchParam
+  , paramGet
   , paramSet
   , paramGetByPath
   , paramGetHistory
@@ -14,6 +15,8 @@ module Iidy.Params.Client
 
 import Control.Exception (SomeException, try)
 import Control.Monad.Trans.Resource (runResourceT)
+import Data.Conduit (runConduit, (.|))
+import qualified Data.Conduit.List as CL
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -36,20 +39,27 @@ import Iidy.Cli (ParamGetArgs(..), ParamSetArgs(..), ParamGetByPathArgs(..))
 ------------------------------------------------------------------------
 
 -- | Fetch a single SSM parameter value.
+-- Returns Right value on success, Left error message on failure.
+-- Exported for use in other modules (e.g. Review).
+fetchParam :: Amazonka.Env -> Text -> Bool -> IO (Either Text Text)
+fetchParam awsEnv paramName withDecryption = do
+  result <- try @SomeException $ runResourceT $ do
+    let req = (GP.newGetParameter paramName)
+                { GP.withDecryption = Just withDecryption }
+    resp <- Amazonka.send awsEnv req
+    pure (resp.parameter ^. SSMP.parameter_value)
+  case result of
+    Left ex   -> pure (Left (T.pack (show ex)))
+    Right val -> pure (Right val)
+
+-- | Fetch a single SSM parameter value (command-level wrapper with richer error).
 -- Uses withDecryption to support SecureString parameters.
 paramGet :: Amazonka.Env -> ParamGetArgs -> IO (Either Text Text)
 paramGet awsEnv args = do
-  result <- try @SomeException (fetchParam awsEnv args.pgaPath args.pgaDecrypt)
+  result <- fetchParam awsEnv args.pgaPath args.pgaDecrypt
   case result of
-    Left ex  -> pure $ Left $ "SSM GetParameter error for " <> args.pgaPath <> ": " <> T.pack (show ex)
+    Left ex  -> pure $ Left $ "SSM GetParameter error for " <> args.pgaPath <> ": " <> ex
     Right val -> pure (Right val)
-
-fetchParam :: Amazonka.Env -> Text -> Bool -> IO Text
-fetchParam awsEnv paramName withDecryption = runResourceT $ do
-  let req = (GP.newGetParameter paramName)
-              { GP.withDecryption = Just withDecryption }
-  resp <- Amazonka.send awsEnv req
-  pure (resp.parameter ^. SSMP.parameter_value)
 
 ------------------------------------------------------------------------
 -- paramSet
@@ -105,8 +115,8 @@ fetchByPath awsEnv args = runResourceT $ do
               { GPBP.recursive      = Just args.gpbRecursive
               , GPBP.withDecryption = Just args.gpbDecrypt
               }
-  resp <- Amazonka.send awsEnv req
-  let params = fromMaybe [] resp.parameters
+  pages <- runConduit $ Amazonka.paginate awsEnv req .| CL.consume
+  let params = concatMap (fromMaybe [] . (.parameters)) pages
   pure (map formatParam params)
 
 -- | Format a Parameter as "name=value".
@@ -133,8 +143,8 @@ fetchHistory :: Amazonka.Env -> Text -> Bool -> IO [Text]
 fetchHistory awsEnv paramName withDecryption = runResourceT $ do
   let req = (GPH.newGetParameterHistory paramName)
               { GPH.withDecryption = Just withDecryption }
-  resp <- Amazonka.send awsEnv req
-  let entries = fromMaybe [] resp.parameters
+  pages <- runConduit $ Amazonka.paginate awsEnv req .| CL.consume
+  let entries = concatMap (fromMaybe [] . (.parameters)) pages
   pure (mapMaybe formatHistoryEntry entries)
 
 -- | Format a ParameterHistory entry as "version: value".
