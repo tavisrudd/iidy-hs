@@ -1,4 +1,4 @@
-.PHONY: build build-strict test clean run help ci ci-act check-unused-deps
+.PHONY: build build-strict test clean run help ci ci-act check-unused-deps dev-setup
 
 build:
 	cabal build
@@ -26,6 +26,9 @@ modules:
 
 check-unused-deps:
 	scripts/check-unused-deps.sh
+
+dev-setup:
+	git config --local core.hooksPath .githooks
 
 ci:
 	$(MAKE) build-strict
