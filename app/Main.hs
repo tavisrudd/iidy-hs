@@ -49,7 +49,7 @@ import Iidy.GetImport (runGetImport)
 import Iidy.InitStackArgs (runInitStackArgs)
 import Iidy.Output.Manager (mkOutputDispatch, renderOutput, cleanupOutputDispatch)
 import Iidy.Output.Types (OutputData(..))
-import Iidy.Params.Client (paramGet, paramSet, paramGetByPath, paramGetHistory)
+import Iidy.Params.Client (paramGet, paramSet, paramGetByPath, paramGetHistory, GetByPathResult(..))
 import Iidy.Params.Review (paramReview)
 import Iidy.Render (runRender)
 
@@ -264,13 +264,16 @@ runCommand cli = case cliCommand cli of
         ParamGetByPath args -> do
           result <- paramGetByPath env args
           case result of
-            Left err   -> dieTxt err
-            Right vals -> mapM_ (\v -> emit (OdRawOutput (v <> "\n"))) vals
+            Left err -> dieTxt err
+            Right ByPathEmpty -> do
+              emit (OdRawOutput "No parameters found\n")
+              exitCode 1
+            Right (ByPathOutput txt) -> emit (OdRawOutput txt)
         ParamGetHistory args -> do
           result <- paramGetHistory env args
           case result of
-            Left err   -> dieTxt err
-            Right vals -> mapM_ (\v -> emit (OdRawOutput (v <> "\n"))) vals
+            Left err  -> dieTxt err
+            Right txt -> emit (OdRawOutput txt)
         ParamReview args -> do
           result <- paramReview env (ppaPath args)
           case result of
