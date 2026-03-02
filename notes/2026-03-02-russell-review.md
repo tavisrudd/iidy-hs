@@ -74,7 +74,7 @@ from ever entering the pipeline.
 
 ---
 
-## 2. getStackName Falls Back to "unnamed-stack" (Rating: -7)
+## 2. getStackName Falls Back to "unnamed-stack" (Rating: -7) (RESOLVED)
 
 ```haskell
 getStackName :: StackArgs -> Text
@@ -112,7 +112,7 @@ an error, not a default.
 
 ---
 
-## 3. getStrList Silently Drops Non-String Array Elements (Rating: -7)
+## 3. getStrList Silently Drops Non-String Array Elements (Rating: -7) (RESOLVED)
 
 ```haskell
 getStrList :: KM.KeyMap Value -> Text -> Maybe [Text]
@@ -286,7 +286,7 @@ handler in Main.hs should never see template loading errors as IOExceptions.
 
 ---
 
-## 7. GlobalConfig Silently Swallows All Errors (Rating: -7)
+## 7. GlobalConfig Silently Swallows All Errors (Rating: -7) (RESOLVED)
 
 ```haskell
 applyGlobalConfiguration :: Amazonka.Env -> StackArgs -> IO StackArgs
@@ -432,7 +432,7 @@ instead have two constructors: `WatchPollConfig` (waits for events) and
 
 ---
 
-## 10. Unknown YAML Keys in stack-args.yaml Are Silently Ignored (Rating: -7)
+## 10. Unknown YAML Keys in stack-args.yaml Are Silently Ignored (Rating: -7) (RESOLVED)
 
 ```haskell
 valueToStackArgs :: Value -> Either Text StackArgs
@@ -479,7 +479,7 @@ using edit distance). This is how every good configuration parser works.
 
 ---
 
-## 11. applyDotQueryValidated Returns ONull on Path Miss (Rating: -7)
+## 11. applyDotQueryValidated Returns ONull on Path Miss (Rating: -7) (RESOLVED)
 
 ```haskell
 applyDotQueryValidated :: SrcMeta -> Text -> Text -> OValue -> Resolve OValue
@@ -698,7 +698,7 @@ explicit; the latter is more ergonomic.
 
 ---
 
-## 16. Error Classification via String Matching (Rating: -2) (PARTIALLY ADDRESSED)
+## 16. Error Classification via String Matching (Rating: -2) (RESOLVED)
 
 ```haskell
 classifyMessage' :: [Text] -> SourceLocation -> Text -> EnhancedPreprocessingError
@@ -745,7 +745,7 @@ parser boundary rather than classifying them by message text downstream.
 
 ---
 
-## 17. `try @SomeException` Used Pervasively at AWS Boundaries (Rating: -4)
+## 17. `try @SomeException` Used Pervasively at AWS Boundaries (Rating: -4) (RESOLVED)
 
 Finding #7 identified this pattern in `GlobalConfig`. But the same `try @SomeException` catch-all
 appears in **15+ call sites** across the codebase:
@@ -789,7 +789,7 @@ For non-AWS IO (Git subprocess, HTTP client), use `try @IOException`. Never catc
 
 ---
 
-## 18. requestConfirmation Returns Bool But Exit Code Semantics Are Caller-Dependent (Rating: +3)
+## 18. requestConfirmation Returns Bool But Exit Code Semantics Are Caller-Dependent (Rating: +3) (RESOLVED)
 
 ```haskell
 -- Iidy.Confirm
@@ -834,7 +834,7 @@ should not need to remember the exit code convention.
 
 ---
 
-## 19. `param get --format json` Accepted but Silently Ignored (Rating: -8)
+## 19. `param get --format json` Accepted but Silently Ignored (Rating: -8) (RESOLVED)
 
 The CLI parser validates `--format` for `param get`:
 
@@ -887,7 +887,7 @@ at the CLI parser level with: `"Format 'json' is not yet supported for param get
 
 ---
 
-## 20. template-approval --context Flag Accepted but Never Applied (Rating: -6)
+## 20. template-approval --context Flag Accepted but Never Applied (Rating: -6) (RESOLVED)
 
 ```haskell
 -- CLI parser accepts --context with default 500
@@ -1013,24 +1013,24 @@ _These annotations were added after the review to track which findings have been
 | #  | Finding                                                 | Status               | Notes                                                                                                              |
 |----|---------------------------------------------------------|----------------------|--------------------------------------------------------------------------------------------------------------------|
 | 1  | mapOnFailure silently drops invalid values              | FIXED                | OnFailure ADT (`Maybe OnFailure` with DoNothing/Rollback/Delete) + Capability ADT (`Maybe [Capability]`). Parse at YAML boundary, clear errors on unrecognized values. |
-| 2  | getStackName falls back to "unnamed-stack"              | OPEN                 |                                                                                                                    |
-| 3  | getStrList silently drops non-string elements           | OPEN                 |                                                                                                                    |
-| 4  | StackArgs: 21-Maybe bag, no validation                  | PARTIALLY ADDRESSED  | OnFailure and Capability ADTs replace 2 stringly-typed fields. Broader issue (required-field validation, unknown-key rejection) remains open. |
+| 2  | getStackName falls back to "unnamed-stack"              | FIXED                | `saStackName :: !Text` non-optional, validated at parse time. `getStackName` removed entirely (33da957). |
+| 3  | getStrList silently drops non-string elements           | FIXED                | `getStrListValidated` replaces `getStrList`, errors on non-string elements with clear message (837536d). |
+| 4  | StackArgs: 21-Maybe bag, no validation                  | PARTIALLY ADDRESSED  | OnFailure/Capability ADTs, non-optional stackName (1E), unknown-key rejection with did-you-mean (1D). Per-operation validation remains open (4C). |
 | 5  | oIsTruthy: JavaScript-grade truthiness                  | FIXED                | Zero-is-falsy bug fixed (`ONumber n -> n /= 0`). Three truthiness functions cross-referenced with comments. Truthiness rules documented in `notes/truthiness-rules.md`. |
 | 6  | TemplateLoader uses `fail` for errors                   | FIXED                | All 6 `fail` calls replaced with `Either Text` returns. Propagated through RequestBuilder, operations, Main.hs. Template errors no longer surface as IOExceptions with misleading "check CloudFormation console" message. |
-| 7  | GlobalConfig silently swallows all errors               | OPEN                 |                                                                                                                    |
-| 8  | Terminal statuses are stringly typed                     | OPEN                 |                                                                                                                    |
+| 7  | GlobalConfig silently swallows all errors               | FIXED                | Catches `Amazonka.Error` not `SomeException`. Silent on empty path, warns on other AWS errors (33eb121). |
+| 8  | Terminal statuses are stringly typed                     | OPEN                 | Structural refactor (4A).                                                                                          |
 | 9  | PollConfig: 8 callbacks, no contracts                   | OPEN                 |                                                                                                                    |
-| 10 | Unknown YAML keys silently ignored                      | OPEN                 |                                                                                                                    |
-| 11 | Dot-path query returns ONull on miss                    | OPEN                 |                                                                                                                    |
+| 10 | Unknown YAML keys silently ignored                      | FIXED                | Unknown-key validation with `edit-distance` lib + did-you-mean suggestions (870be82).                              |
+| 11 | Dot-path query returns ONull on miss                    | FIXED                | `applyDotQueryValidated` errors on miss, matching Rust behavior (fe99283).                                         |
 | 12 | Three incompatible error presentation paths             | PARTIALLY ADDRESSED  | TemplateLoader fail->Either fix eliminates the `fail`/IOError path. Two paths remain (enhanced display vs. AWS error handler). |
 | 13 | --environment defaults to "development"                 | OPEN                 |                                                                                                                    |
 | 14 | oValuesEqual is just (==)                               | OPEN                 |                                                                                                                    |
 | 15 | --format has three different value domains               | PARTIALLY ADDRESSED  | RenderFormat ADT validates at parse time, rejects typos like `--format josn`. Per-command value domain variation remains by design. |
-| 16 | Error classification via string matching                | PARTIALLY ADDRESSED  | RECircularExpansion incomplete pattern fixed. 24 error content tests added (51-fixture coverage). Systemic string-matching approach remains. |
-| 17 | `try @SomeException` at 15+ AWS boundaries              | OPEN                 |                                                                                                                    |
-| 18 | requestConfirmation Bool hides exit-code semantics      | OPEN                 |                                                                                                                    |
-| 19 | `param get --format json` accepted but silently ignored | OPEN                 |                                                                                                                    |
-| 20 | template-approval --context accepted but never applied  | OPEN                 |                                                                                                                    |
+| 16 | Error classification via string matching                | FIXED                | Dead legacy patterns removed (452e30b). Remaining string matching serves parse-time errors only (live, correct path). Structured `ResolveErrorKind` handles all resolver errors. |
+| 17 | `try @SomeException` at 15+ AWS boundaries              | FIXED                | Narrowed to specific exception types (`Amazonka.Error`, `IOException`) at 13 AWS boundaries (c972b32).            |
+| 18 | requestConfirmation Bool hides exit-code semantics      | FIXED                | `ConfirmResult` ADT (Confirmed/Declined), `Text` not `String`. 6 call sites updated (6ca9fb3).                    |
+| 19 | `param get --format json` accepted but silently ignored | FIXED                | Full port: `ParamOutput`/`HistoryOutput` types, `ListTagsForResource`, json/yaml/simple format, 31 new tests (46cbde7). |
+| 20 | template-approval --context accepted but never applied  | FIXED                | LCS diff algorithm + `contextLines` wiring. 15 new tests (e3453c4).                                               |
 
-**Summary:** 3 FIXED, 4 PARTIALLY ADDRESSED, 13 OPEN. The fixes focused on the highest-impact type-safety improvements (ADTs replacing stringly-typed enums, `fail` elimination) and the truthiness correctness bug. The systemic IO-boundary issues (findings 7, 8, 10, 11, 17) remain the largest open cluster.
+**Summary:** 15 FIXED, 3 PARTIALLY ADDRESSED, 2 OPEN. All silent-drop bugs (section 1) and IO-boundary exception issues (section 3) resolved. Remaining OPEN items are structural (terminal status ADT, PollConfig contracts) or minor (environment default, oValuesEqual).
