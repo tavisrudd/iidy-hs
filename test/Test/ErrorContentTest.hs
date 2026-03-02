@@ -166,6 +166,102 @@ tagParsingTests =
       "tag-map-uses-source.yaml"
       "ERR_4002"
       ["items", "missing"]
+
+  , errorContentCase
+      "line-number-test: ERR_4002 + mapListToHash missing template"
+      "line-number-test.yaml"
+      "ERR_4002"
+      ["template", "missing", "mapListToHash"]
+
+  , errorContentCase
+      "map-missing-template: ERR_4002 + map missing template"
+      "map-missing-template.yaml"
+      "ERR_4002"
+      ["template", "missing", "!$map"]
+
+  , errorContentCase
+      "multiple-occurrence-error-positioning: ERR_4002 + if missing test"
+      "multiple-occurrence-error-positioning.yaml"
+      "ERR_4002"
+      ["test", "missing", "!$if"]
+
+  , errorContentCase
+      "multiple-occurrence-error-position-mapListToHash: ERR_4002"
+      "multiple-occurrence-error-position-mapListToHash.yaml"
+      "ERR_4002"
+      ["items", "missing", "mapListToHash"]
+
+  , errorContentCase
+      "tag-map-uses-transform: ERR_4002 + map missing template"
+      "tag-map-uses-transform.yaml"
+      "ERR_4002"
+      ["template", "missing", "!$map"]
+
+  , errorContentCase
+      "merge-missing-sources: ERR_4003 + must be sequence"
+      "merge-missing-sources.yaml"
+      "ERR_4003"
+      ["must be a sequence"]
+
+  , errorContentCase
+      "parsing-concat-not-sequence: ERR_4003 + must be sequence"
+      "parsing-concat-not-sequence.yaml"
+      "ERR_4003"
+      ["must be a sequence"]
+
+  , errorContentCase
+      "parsing-eq-not-sequence: ERR_4003 + must be sequence"
+      "parsing-eq-not-sequence.yaml"
+      "ERR_4003"
+      ["must be a sequence"]
+
+  , errorContentCase
+      "parsing-eq-wrong-element-count: ERR_4003 + exactly 2"
+      "parsing-eq-wrong-element-count.yaml"
+      "ERR_4003"
+      ["must have exactly 2"]
+
+  , errorContentCase
+      "parsing-groupby-not-mapping: ERR_4003 + must be mapping"
+      "parsing-groupby-not-mapping.yaml"
+      "ERR_4003"
+      ["must be a mapping"]
+
+  , errorContentCase
+      "parsing-if-not-mapping: ERR_4003 + must be mapping"
+      "parsing-if-not-mapping.yaml"
+      "ERR_4003"
+      ["must be a mapping"]
+
+  , errorContentCase
+      "parsing-join-not-sequence: ERR_4003 + must be sequence"
+      "parsing-join-not-sequence.yaml"
+      "ERR_4003"
+      ["must be a sequence"]
+
+  , errorContentCase
+      "parsing-let-not-mapping: ERR_4003 + must be mapping"
+      "parsing-let-not-mapping.yaml"
+      "ERR_4003"
+      ["must be a mapping"]
+
+  , errorContentCase
+      "parsing-maplisttohash-not-mapping: ERR_4003 + must be mapping"
+      "parsing-maplisttohash-not-mapping.yaml"
+      "ERR_4003"
+      ["must be a mapping"]
+
+  , errorContentCase
+      "parsing-split-not-sequence: ERR_4003 + must be sequence"
+      "parsing-split-not-sequence.yaml"
+      "ERR_4003"
+      ["must be a sequence"]
+
+  , errorContentCase
+      "tag-mapvalues-unknown-field: ERR_4005 + unexpected field"
+      "tag-mapvalues-unknown-field.yaml"
+      "ERR_4005"
+      ["unexpected field", "separator"]
   ]
 
 typeMismatchTests :: [TestTree]
@@ -203,6 +299,54 @@ typeMismatchTests =
   , errorContentCase
       "join-wrong-delimiter-type: ERR_5001 + delimiter"
       "join-wrong-delimiter-type.yaml"
+      "ERR_5001"
+      ["expected", "found"]
+
+  , errorContentCase
+      "frompairs-wrong-item-type: ERR_5001 + expected sequence"
+      "frompairs-wrong-item-type.yaml"
+      "ERR_5001"
+      ["expected", "found"]
+
+  , errorContentCase
+      "groupby-wrong-items-type: ERR_5001 + expected sequence"
+      "groupby-wrong-items-type.yaml"
+      "ERR_5001"
+      ["expected", "found"]
+
+  , errorContentCase
+      "join-wrong-array-item-type: ERR_5001 + expected string"
+      "join-wrong-array-item-type.yaml"
+      "ERR_5001"
+      ["expected", "found"]
+
+  , errorContentCase
+      "maplisttohash-wrong-items-type: ERR_5001 + expected sequence"
+      "maplisttohash-wrong-items-type.yaml"
+      "ERR_5001"
+      ["expected", "found"]
+
+  , errorContentCase
+      "maplisttohash-wrong-template-result: ERR_5001 + expected pair"
+      "maplisttohash-wrong-template-result.yaml"
+      "ERR_5001"
+      ["expected", "found"]
+
+  , errorContentCase
+      "mergemap-wrong-template-item: ERR_5001 + expected object"
+      "mergemap-wrong-template-item.yaml"
+      "ERR_5001"
+      ["expected", "found"]
+
+  , errorContentCase
+      "split-wrong-delimiter-type: ERR_5001 + expected string"
+      "split-wrong-delimiter-type.yaml"
+      "ERR_5001"
+      ["expected", "found"]
+
+  , errorContentCase
+      "split-wrong-delimiter-type-resolved: ERR_5001 + resolved var"
+      "split-wrong-delimiter-type-resolved.yaml"
       "ERR_5001"
       ["expected", "found"]
   ]
