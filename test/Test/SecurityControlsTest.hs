@@ -123,12 +123,14 @@ patternSchema pat = Object (KM.fromList [("type", String "string"), ("pattern", 
 schemaPatternTests :: [TestTree]
 schemaPatternTests =
   [ testCase "pattern at max length (1024) is accepted" $ do
-      let pat = T.replicate 1024 "a"
-      validateSchema (patternSchema pat) (String (T.replicate 1024 "a"))
+      -- Use a simple pattern padded to 1024 chars (avoid slow NFA compilation
+      -- from long literal patterns on some platforms)
+      let pat = "^x" <> T.replicate 1022 "."
+      validateSchema (patternSchema pat) (String ("x" <> T.replicate 1022 "y"))
         @?= Right ()
 
   , testCase "pattern exceeding max length (1025) is rejected" $ do
-      let pat = T.replicate 1025 "a"
+      let pat = "^x" <> T.replicate 1023 "."
       let result = validateSchema (patternSchema pat) (String "anything")
       case result of
         Left e  -> assertBool "mentions exceeds maximum length" ("exceeds maximum length" `T.isInfixOf` e)
