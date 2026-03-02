@@ -4,7 +4,7 @@ build:
 	cabal build
 
 build-strict:
-	cabal build all --ghc-options="-Wall -Wcompat -Werror"
+	cabal build all --enable-tests --ghc-options="-Wall -Wcompat -Werror"
 
 test:
 	cabal test all --test-show-details=direct
