@@ -116,7 +116,6 @@ library
     , amazonka-s3
     , amazonka-ssm
     , amazonka-sts
-    , amazonka-sns
     , bytestring
     , conduit
     , containers
@@ -126,7 +125,6 @@ library
     , HsYAML
     , microlens
     , memory
-    , mtl
     , network
     , optparse-applicative
     , prettyprinter
@@ -140,7 +138,6 @@ library
     , transformers
     , http-conduit
     , process
-    , unliftio
     , uuid
     , vector
     , aeson-pretty

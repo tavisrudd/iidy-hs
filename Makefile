@@ -25,7 +25,6 @@ modules:
 	@find src -name '*.hs' | wc -l
 
 ci:
-	cabal update
 	$(MAKE) build-strict
 	$(MAKE) test
 	cabal run iidy-hs -- --help

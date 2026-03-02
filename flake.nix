@@ -27,7 +27,6 @@
         hpkgs.amazonka-s3
         hpkgs.amazonka-sts
         hpkgs.amazonka-ssm
-        hpkgs.amazonka-sns
         hpkgs.aeson-pretty
         hpkgs.crypton
         hpkgs.memory
@@ -35,12 +34,18 @@
         hpkgs.regex-tdfa
         hpkgs.conduit
         hpkgs.resourcet
-        hpkgs.mtl
         hpkgs.transformers
-        hpkgs.unliftio
+        hpkgs.ansi-terminal
+        hpkgs.terminal-size
+        hpkgs.network
         hpkgs.optparse-applicative
+        hpkgs.prettyprinter
+        hpkgs.stm
+        hpkgs.uuid
         hpkgs.http-conduit
+        hpkgs.http-types
         hpkgs.process
+        hpkgs.temporary
         hpkgs.tasty
         hpkgs.tasty-hunit
         hpkgs.tasty-quickcheck
