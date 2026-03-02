@@ -24,8 +24,8 @@ oValueTests =
   , testCase "truthiness: non-empty string is truthy" $
       oIsTruthy (OString "hello") @?= True
 
-  , testCase "truthiness: all numbers are truthy (incl zero)" $
-      oIsTruthy (ONumber 0) @?= True
+  , testCase "truthiness: zero is falsy (matches Rust: n != 0.0)" $
+      oIsTruthy (ONumber 0) @?= False
 
   , testCase "truthiness: positive number is truthy" $
       oIsTruthy (ONumber 42) @?= True

@@ -121,7 +121,7 @@ preprocessingPropertyTests =
     , testProperty "let with unused bindings doesn't error" prop_let_unused_binding
     , testProperty "if with null condition takes else branch" prop_if_null_takes_else
     , testProperty "if with empty string takes else branch" prop_if_empty_string_takes_else
-    , testProperty "if with zero takes then branch (0 is truthy)" prop_if_zero_takes_then
+    , testProperty "if with zero takes else branch (0 is falsy)" prop_if_zero_takes_else
     , testProperty "nested map-let-merge preserves structure" prop_nested_map_let_merge
     ]
   ]
@@ -411,16 +411,16 @@ prop_if_empty_string_takes_else =
         result = resolveAst emptyContext ifAst
     in result === Right (OString elseText)
 
--- | Zero is truthy in iidy (all numbers are truthy) — should take then branch.
-prop_if_zero_takes_then :: Property
-prop_if_zero_takes_then =
+-- | Zero is falsy (matching Rust: n != 0.0) — should take else branch.
+prop_if_zero_takes_else :: Property
+prop_if_zero_takes_else =
   forAll ((,) <$> genSafeText <*> genSafeText) $ \(thenText, elseText) ->
     let ifAst = ppTag (PpIf (IfTag
           (AstNumber 0 m)
           (str thenText)
           (Just (str elseText))))
         result = resolveAst emptyContext ifAst
-    in result === Right (OString thenText)
+    in result === Right (OString elseText)
 
 ------------------------------------------------------------------------
 -- 13. Nested composition: map + let + merge

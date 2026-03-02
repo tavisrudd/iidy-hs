@@ -80,7 +80,7 @@ oIsTruthy = \case
   ONull     -> False
   OBool b   -> b
   OString s -> not (T.null s)
-  ONumber _ -> True
+  ONumber n -> n /= 0
   OArray a  -> not (null a)
   OObject o -> not (null o)
 
