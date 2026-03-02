@@ -31,7 +31,7 @@ import Iidy.Aws.Sts (getCallerIdentity)
 import Iidy.Cfn.Context (CfnContext(..))
 import Iidy.Cfn.StackOperations
   ( getStack
-  , fetchRecentStackEvents
+  , fetchStackEventsUpTo
   , collectStackContentsWithStack
   , PollConfig(..)
   , defaultPollConfig
@@ -70,7 +70,7 @@ describeStack ctx stackName numEvents env emit = do
         }
       pure (Right ())
     Just cfnStack -> do
-      events    <- fetchRecentStackEvents ctx stackName
+      events    <- fetchStackEventsUpTo ctx stackName numEvents
       contents  <- collectStackContentsWithStack ctx stackName (Just cfnStack)
       let stackDef      = convertStack cfnStack regionText
           eventsDisplay = buildEventsDisplay numEvents events

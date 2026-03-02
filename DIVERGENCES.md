@@ -55,11 +55,15 @@ Both Rust and Haskell respect the `FORCE_COLOR` env var to force colored output
 even when not connected to a TTY. Both also respect `NO_COLOR` with higher
 priority (NO_COLOR > FORCE_COLOR > TTY check).
 
-## AWS API Pagination (Untestable Offline)
+## describe-stack Event Pagination
 
-Event pagination for `describe-stack` and `list-stacks` uses AWS SDK pagination.
-Both implementations fetch events and paginate, but exact pagination behavior
-cannot be verified without live AWS API calls. Verified by code review.
+**Cause**: Intentional optimization with conditional pagination.
+
+Both implementations use single-page event fetches for polling loops (new events
+always appear on the first page). For `describe-stack --events N`, Rust paginates
+up to `N * 2` events to ensure the requested count is satisfiable. Haskell now
+does the same via `fetchStackEventsUpTo`. The `list-stacks` command paginates
+fully in both implementations.
 
 ## Drift Detection Polling Timeout
 

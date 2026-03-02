@@ -1,6 +1,7 @@
 -- | Core stack operations: fetching, event polling, content collection.
 --
 -- Provides building blocks used by individual CFN operations.
+{-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 module Iidy.Cfn.StackOperations
   ( -- * Stack info
@@ -10,6 +11,7 @@ module Iidy.Cfn.StackOperations
     -- * Events
   , fetchStackEvents
   , fetchRecentStackEvents
+  , fetchStackEventsUpTo
     -- * Content collection
   , collectStackContents
   , collectStackContentsWithStack
@@ -124,6 +126,32 @@ fetchRecentStackEvents ctx sId = do
               { DEvents.stackName = Just sId }
   resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
   pure $ fromMaybe [] resp.stackEvents
+
+-- | Fetch stack events across multiple pages until at least @maxEvents * 2@
+-- events are collected or all pages are exhausted.
+--
+-- Matches Rust semantics: fetches enough pages to satisfy the requested count.
+-- Use this for 'describe-stack' event display. Use 'fetchRecentStackEvents'
+-- for polling loops (new events always appear on the first page).
+fetchStackEventsUpTo :: CfnContext -> Text -> Int -> IO [CF.StackEvent]
+fetchStackEventsUpTo ctx sId maxEvents = go Nothing []
+  where
+    target :: Int
+    target = maxEvents * 2
+    go :: Maybe Text -> [CF.StackEvent] -> IO [CF.StackEvent]
+    go mToken acc
+      | length acc >= target = pure acc
+      | otherwise = do
+          let req = DEvents.newDescribeStackEvents
+                      { DEvents.stackName = Just sId
+                      , DEvents.nextToken = mToken
+                      }
+          resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
+          let events = fromMaybe [] resp.stackEvents
+              acc'   = acc <> events
+          case resp.nextToken of
+            Nothing -> pure acc'
+            Just tk -> go (Just tk) acc'
 
 ------------------------------------------------------------------------
 -- Content collection
