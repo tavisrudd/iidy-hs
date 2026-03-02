@@ -21,9 +21,10 @@ module Iidy.Aws.Config
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import System.Environment (lookupEnv, setEnv)
+import System.Environment (lookupEnv)
 
 import qualified Amazonka
+import qualified Amazonka.Auth.ConfigFile as ConfigFile
 import qualified Amazonka.Auth.STS as STS
 
 import Iidy.Aws.CredentialSource
@@ -39,15 +40,16 @@ createAwsEnv detectionCtx settings = do
   -- Detect credential sources for provenance tracking
   credStack <- detectCredentialSources detectionCtx
 
-  -- Set AWS_PROFILE before credential discovery if profile is specified.
-  -- This ensures amazonka's discover chain uses the correct profile
-  -- for both credentials and config (region, role_arn, etc.).
-  case awsProfile settings of
-    Just profile -> setEnv "AWS_PROFILE" (T.unpack profile)
-    Nothing -> pure ()
-
-  -- Create base env with default credential chain
-  env <- Amazonka.newEnv Amazonka.discover
+  -- Create base env with credential chain.
+  -- If a profile is specified, use fromFilePath to pass it programmatically
+  -- rather than mutating the process environment (setEnv is not thread-safe).
+  env <- case awsProfile settings of
+    Just profile -> do
+      credPath <- ConfigFile.configPathRelative "/.aws/credentials"
+      confPath <- ConfigFile.configPathRelative "/.aws/config"
+      Amazonka.newEnv (ConfigFile.fromFilePath profile credPath confPath)
+    Nothing ->
+      Amazonka.newEnv Amazonka.discover
 
   -- Apply region override if specified
   region <- resolveRegion (awsRegion settings)
