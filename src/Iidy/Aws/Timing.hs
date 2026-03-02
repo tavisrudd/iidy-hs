@@ -7,6 +7,13 @@
 -- Supports NTP-synchronized time for write operations (create, update, delete)
 -- and plain system time for read-only operations. NTP addresses clock drift
 -- during long-running CloudFormation operations.
+--
+-- Why not NTS (encrypted NTP)? NTS (RFC 8915) requires a TLS handshake
+-- (NTS-KE on TCP 4460), AEAD-encrypted packets, cookie management, and a TLS
+-- library dependency. pool.ntp.org doesn't support NTS. The data exchanged is
+-- just the current time (public info) and MITM clock skew is mitigated by the
+-- 500ms safety margin + silent system-clock fallback. Cost/benefit doesn't
+-- justify the ~3x code complexity increase for this use case.
 module Iidy.Aws.Timing
   ( TimeProvider(..)
   , systemTimeProvider

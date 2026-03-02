@@ -103,6 +103,14 @@ oValueToText = \case
 -- Lookup
 ------------------------------------------------------------------------
 
+-- | O(n) linear scan — intentionally kept simple. CloudFormation mappings
+-- have 5-30 keys typically (CFN limits: 500 resources, 60 parameters).
+-- At n=20, list scan averages ~10 Text comparisons; a Map would cost ~87
+-- comparisons just to construct plus ~4 per lookup, making it a net loss
+-- for the single-lookup-per-object pattern used throughout the resolver.
+-- List also wins on cache locality vs scattered tree nodes. Only worth
+-- switching if templates routinely exceed ~100 keys AND the same object
+-- is queried 10+ times — neither happens in practice.
 lookupO :: Text -> [(Text, OValue)] -> Maybe OValue
 lookupO k kvs = case [v | (k', v) <- kvs, k' == k] of
   (v:_) -> Just v
