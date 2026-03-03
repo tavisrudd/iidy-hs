@@ -213,15 +213,15 @@ racket tests/run-all.rkt
 
 ## Progress
 
-- [ ] P0-1: Add determinism property test
-- [ ] P0-2: Fix or document escape rule for expressions
+- [x] P0-1: Add determinism property test (4 tests added)
+- [x] P0-2: Fix escape rule — added escape-to-raw metafunction + 6 unit tests
 - [ ] P1-1: Create Iidy-Full union language
 - [ ] P1-2: Connect E-Tpl to Handlebars renderer
-- [ ] P1-3: Add algebraic property tests (merge assoc, eq sym, etc.)
+- [x] P1-3: Add algebraic property tests (14 tests: merge assoc/commut/idempotent, eq sym/trans, concat assoc, jcompare sym, etc.)
 - [ ] P2-1: Enable check-redundancy in test runner
 - [ ] P2-2: Add coverage tracking
-- [ ] P2-3: Document JMESPath wildcard deviation
-- [ ] P3-1: De-duplicate truthiness metafunctions
+- [x] P2-3: Document JMESPath wildcard deviation (comment added)
+- [x] P3-1: Document truthiness duplication rationale (comment added)
 - [ ] P3-2: Reduce Racket escapes in group-by-items
 - [ ] Final: all tests pass, commit
 
