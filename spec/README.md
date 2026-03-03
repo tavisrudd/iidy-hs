@@ -3,13 +3,15 @@
 Machine-readable, executable formal grammar and operational semantics for
 iidy's preprocessing language, written in [PLT Redex](https://redex.racket-lang.org/).
 
+Addresses Krishnamurthi review finding #2: "There is no specification."
+
 ## What This Gives You
 
-- **`define-language`** — machine-readable grammar for the value domain and all 22 preprocessing tags
+- **`define-language`** — machine-readable grammars for all 5 language layers
 - **`define-judgment-form`** — big-step evaluation rules (⟨e, σ⟩ ⇓ v)
-- **`define-metafunction`** — environment operations, merge, truthiness predicates
-- **`test-judgment-holds`** / **`rackunit`** — runnable test cases that verify the spec
-- **`redex-check`** — QuickCheck-style property tests (planned, Session 4)
+- **`define-metafunction`** — environment operations, merge, rendering, query evaluation
+- **`rackunit`** — 363 unit tests verifying the spec
+- **`redex-check`** — 25 QuickCheck-style property tests (200 random attempts each)
 
 ## Prerequisites
 
@@ -31,7 +33,7 @@ racket tests/run-all.rkt
 
 Expected output:
 ```
-123 success(es) 0 failure(s) 0 error(s) 123 test(s) run
+388 success(es) 0 failure(s) 0 error(s) 388 test(s) run
 ```
 
 ## File Structure
@@ -43,17 +45,28 @@ spec/
 ├── README.md                    This file
 ├── lang/
 │   ├── core.rkt                 Iidy-Core: value domain (null, bool, num, str, arr, obj)
-│   └── preprocessing.rkt        Iidy-Preprocess: all 22 tag expression forms
+│   ├── preprocessing.rkt        Iidy-Preprocess: all 22 tag expression forms
+│   ├── handlebars.rkt           Iidy-Handlebars: template AST (parts, expressions, blocks)
+│   └── jmespath.rkt             Iidy-JMESPath: query AST (14 expression forms)
 ├── semantics/
 │   ├── truthiness.rkt           Three truthiness variants (iidy, Handlebars, JMESPath)
 │   ├── env.rkt                  Environment: lookup, extend, path resolution
 │   ├── merge.rkt                Merge, concat, from-pairs, val->text
-│   └── eval.rkt                 Big-step evaluation judgment + iteration helpers
+│   ├── eval.rkt                 Big-step evaluation judgment + integration rules
+│   ├── handlebars-eval.rkt      Template rendering (block helpers, path lookup, helpers)
+│   ├── jmespath-eval.rkt        JMESPath query evaluation (projections, filters, etc.)
+│   └── bracket-expansion.rkt    Dynamic path segment resolution
 └── tests/
     ├── run-all.rkt              Master test runner
     ├── grammar-tests.rkt        Grammar well-formedness
     ├── truthiness-tests.rkt     Truthiness predicate tests
-    └── eval-tests.rkt           Per-tag evaluation tests
+    ├── env-tests.rkt            Environment operation tests
+    ├── merge-tests.rkt          Merge/concat/from-pairs tests
+    ├── eval-tests.rkt           Per-tag evaluation + integration tests
+    ├── properties.rkt           redex-check property tests (25 properties)
+    ├── handlebars-tests.rkt     Handlebars rendering tests
+    ├── jmespath-tests.rkt       JMESPath evaluation tests
+    └── bracket-expansion-tests.rkt  Bracket expansion tests
 ```
 
 ## Language Layers
@@ -76,6 +89,8 @@ Extends Iidy-Core with expression forms for all 22 preprocessing tags:
 | Tag              | Expression Form                  | Category          |
 |------------------|----------------------------------|--------------------|
 | `!$`             | `(var path)`                     | Variable lookup    |
+| `!$ ? query`     | `(var-q path query)`             | Lookup + dot-query |
+| `!$ @ jmespath`  | `(var-j path jmespath)`          | Lookup + JMESPath  |
 | `!$if`           | `(if e e e)`                     | Conditional        |
 | `!$let`          | `(let ((name e) ...) e)`         | Binding            |
 | `!$map`          | `(map e e var-name)`             | Iteration          |
@@ -92,11 +107,41 @@ Extends Iidy-Core with expression forms for all 22 preprocessing tags:
 | `!$groupBy`      | `(group-by e e var-name)`        | Compound iteration |
 | `!$fromPairs`    | `(from-pairs e)`                 | Construction       |
 | `!$toYamlString` | `(to-yaml e)`                    | Serialization      |
-| `!$parseYaml`    | `(parse-yaml e)`                 | Serialization      |
 | `!$toJsonString` | `(to-json e)`                    | Serialization      |
-| `!$parseJson`    | `(parse-json e)`                 | Serialization      |
 | `!$escape`       | `(escape e)`                     | Escape             |
 | `!$expand`       | `(expand e e)`                   | Template expansion |
+
+### Iidy-Handlebars (`lang/handlebars.rkt`)
+
+Template AST for string interpolation (`{{...}}`):
+
+```
+tmpl ::= (tp ...)
+tp   ::= (hb-literal s) | (hb-output hx) | (hb-block kind hx tmpl tmpl) | hb-comment
+hx   ::= (hb-path (s ...)) | (hb-lit-str s) | (hb-lit-num n) | (hb-lit-bool b)
+       | (hb-helper s (hx ...))
+kind ::= "if" | "unless" | "each" | "with"
+```
+
+### Iidy-JMESPath (`lang/jmespath.rkt`)
+
+Query expression AST (iidy's implemented subset):
+
+```
+jx ::= (jfield s) | (jindex i) | (jsub jx jx) | jwildcard | (jproj jx jx)
+     | (jflatten jx) | (jfilter jx jx) | (jmulti-hash ((s jx) ...))
+     | (jmulti-list (jx ...)) | (jlit v) | (jpipe jx jx) | jidentity
+     | (jcmp op jx jx) | (jnot jx)
+```
+
+### Iidy-BracketExpansion (`semantics/bracket-expansion.rkt`)
+
+Dynamic path segment resolution: `config[env].host` → `config.production.host`
+
+```
+bpath    ::= (bsegment ...)
+bsegment ::= string | (bracket-ref string)
+```
 
 ## Key Semantic Distinctions
 
@@ -122,11 +167,16 @@ The key difference: **iidy treats 0 as falsy** while Handlebars and JMESPath
 `merge-objs` is **shallow** and **right-biased**: overlay keys win on collision,
 base key order is preserved, new overlay keys are appended.
 
-## Planned Extensions
+### Model Boundaries
 
-- **Session 2**: Map/iteration tests, property tests
-- **Session 3**: Handlebars sub-language grammar + evaluation, JMESPath sub-language
-- **Session 4**: `!$expand` with cycle detection, `redex-check` property tests
+Some rules are formally specified but not executable in the Redex model:
+
+| Rule        | Why not executable                    | Tested via                |
+|-------------|---------------------------------------|---------------------------|
+| E-Var-J     | Requires JMESPath string parser       | jmespath-tests.rkt        |
+| E-ParseYaml | Requires YAML string parser           | Round-trip property spec   |
+| E-ParseJson | Requires JSON string parser           | Round-trip property spec   |
+| E-Expand    | Requires template registry Σ          | Formal spec in comments   |
 
 ## Reference
 
@@ -139,4 +189,5 @@ The formal semantics are derived from the Haskell implementation:
 | `Iidy.Yaml.Resolution.Resolver`       | Evaluation rules       |
 | `Iidy.Yaml.Resolution.Context`        | Environment operations |
 | `Iidy.Yaml.Handlebars.Engine`         | Handlebars evaluation  |
+| `Iidy.Yaml.Handlebars.Helpers`        | Helper function set    |
 | `Iidy.Yaml.JMESPath`                  | JMESPath evaluation    |

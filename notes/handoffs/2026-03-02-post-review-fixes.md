@@ -12,9 +12,10 @@ Session 46 produced 7 architecture reviews, a Russell API review (20 findings), 
 snapshot gap audit. Many findings overlap across reviews. This handoff consolidates ALL
 open work into one document, grouped by theme.
 
-**Current state**: 1150 tests, zero warnings.
+**Current state**: 1155 Haskell tests + 388 Redex tests, zero warnings.
 
 **Reviews**: hickey, kmett, krishnamurthi, minsky, muratori, ousterhout, russell
+**Formal semantics**: PLT Redex specification complete — addresses Krishnamurthi findings #1-4, #6, #8, #10.
 **Audit**: `notes/2026-03-02-snapshot-gap-audit.md`
 
 ---

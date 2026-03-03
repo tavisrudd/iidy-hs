@@ -34,7 +34,7 @@ This is not a criticism of the implementation. It's a diagnosis: **you are maint
 
 ---
 
-## 2. There Is No Specification
+## 2. There Is No Specification (RESOLVED)
 
 The specification for iidy's preprocessing semantics is the Rust implementation. There is an 858-line informal reference manual (`yaml-preprocessing.md`) that describes features by example. There are 98 snapshot files that define correct output. There is no:
 
@@ -48,7 +48,7 @@ For a tool that processes CloudFormation templates — infrastructure that contr
 
 ---
 
-## 3. The Evaluation Model Deserves a Name
+## 3. The Evaluation Model Deserves a Name (RESOLVED)
 
 The resolver (`Resolver.hs`) implements a **strict, call-by-value, lexically scoped, first-order, pure functional interpreter** over a tree-structured AST. Let me name the key semantic properties:
 
@@ -104,7 +104,7 @@ None of this is specified. It's discovered by reading the resolver.
 
 ---
 
-## 4. Bracket Expansion Is Dynamic Scoping in Disguise
+## 4. Bracket Expansion Is Dynamic Scoping in Disguise (ADDRESSED)
 
 ```haskell
 expandBrackets :: Text -> TagContext -> Text
@@ -145,7 +145,7 @@ The `RefRewriting.hs` module implements capture-avoiding substitution for CloudF
 
 ---
 
-## 6. Testing: Specification by Example, Not by Law (PARTIALLY ADDRESSED)
+## 6. Testing: Specification by Example, Not by Law (SUBSTANTIALLY ADDRESSED)
 
 The test suite has 958 tests. The coverage is impressive. But from a PL testing perspective, the strategy has a characteristic shape:
 
@@ -203,7 +203,7 @@ Every language has a truthiness table. The responsible thing is to document it p
 
 ---
 
-## 8. JMESPath: An Underspecified Subset
+## 8. JMESPath: An Underspecified Subset (PARTIALLY ADDRESSED)
 
 The JMESPath implementation is explicitly a custom partial implementation. The `JExpr` AST has 15 forms. The full JMESPath specification defines:
 
@@ -242,7 +242,7 @@ A PL researcher would say: the error messages are part of the language's user in
 
 ---
 
-## 10. What Would a Language-First Approach Look Like? (PARTIALLY ADDRESSED)
+## 10. What Would a Language-First Approach Look Like? (SUBSTANTIALLY ADDRESSED)
 
 1. **Write a specification.** Not the informal reference manual — a precise specification of each tag's semantics, ideally in the style of PLT Redex or a denotational semantics. Even a careful English specification would be a major improvement. The specification should cover:
    - Evaluation order (strict, left-to-right, with `!$if` as a special form)
@@ -278,19 +278,20 @@ As I'd tell my students: **if you find yourself writing an evaluator for a tree-
 
 ---
 
-## Post-Review Status Updates (Session 46, 2026-03-02)
+## Post-Review Status Updates
 
-_These annotations were added after the review to track which findings have been addressed._
+_These annotations track which findings have been addressed._
+_Last updated: 2026-03-03 (after PLT Redex formal semantics completion)._
 
 | #   | Finding                                             | Status              | Notes                                                                                                                                                                                                          |
 | --- | --------------------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Four language implementations treated as app code   | OPEN                | Architectural observation acknowledged. No specification or formal treatment added for the four sub-languages.                                                                                                 |
-| 2   | No specification (grammar, denotational semantics)  | OPEN                | No formal specification written. The Rust implementation remains the de facto spec. Truthiness rules documented (notes/truthiness-rules.md) but this covers only one semantic property.                        |
-| 3   | Evaluation model deserves a name                    | OPEN                | No formal naming or documentation of the evaluation model (strict CBV, let* scoping, special forms). The `oIsTruthy` zero-is-falsy bug was fixed (`ONumber n -> n /= 0`), correcting the semantics to match Rust. |
-| 4   | Bracket expansion is dynamic scoping in disguise    | OPEN                | No changes to bracket expansion. Depth-10 limit remains undocumented in user-facing docs.                                                                                                                      |
+| 1   | Four language implementations treated as app code   | ADDRESSED           | PLT Redex formal semantics models all four sub-languages as distinct language definitions: `Iidy-Preprocess` (22 tag forms), `Iidy-Handlebars` (template AST + rendering), `Iidy-JMESPath` (14 expression forms + evaluation), `Iidy-BracketExpansion` (dynamic path resolution). Each has its own grammar and evaluation semantics. See `spec/` directory (388 passing tests). |
+| 2   | No specification (grammar, denotational semantics)  | FIXED               | Machine-readable formal specification built in PLT Redex (Racket). Includes: BNF-style grammars for all languages (`lang/*.rkt`), big-step operational semantics with 30+ evaluation rules (`semantics/eval.rkt`), sub-language evaluation (`semantics/handlebars-eval.rkt`, `semantics/jmespath-eval.rkt`), 25 `redex-check` property tests verifying algebraic laws. See `notes/handoffs/2026-03-02-plt-redex-formal-semantics.md`. |
+| 3   | Evaluation model deserves a name                    | FIXED               | Evaluation model formally specified in PLT Redex: strict CBV (all sub-expressions evaluated before enclosing), `let*` scoping (sequential binding via `let-bind` metafunction), `!$if` as special form (only selected branch evaluated). The judgment form `eval : e σ → v` names and documents the model. Truthiness bug also fixed (`ONumber n -> n /= 0`). |
+| 4   | Bracket expansion is dynamic scoping in disguise    | ADDRESSED           | Formally modeled in `semantics/bracket-expansion.rkt` with explicit `(bracket-ref)` AST form. The `expand-path` metafunction specifies resolution semantics. Depth-10 limit remains undocumented in user-facing docs. |
 | 5   | Custom resources: no `!$expand` cycle detection     | FIXED               | Cycle detection for `!$expand` template expansion implemented (commit ba5f891). Prevents infinite recursion in custom resource expansion, matching the import cycle detection that already existed for `$imports`. |
-| 6   | Testing: specification by example, not by law       | PARTIALLY ADDRESSED | 8 edge-case property tests added: map empty, concat identity, let unused bindings, if null/empty-string/zero, nested composition. These test some algebraic properties but do not cover the full semantic laws called for (merge associativity/right-bias, map distributivity over concat, `!$`/`{{}}` equivalence as a universal property, idempotency of resolution). |
-| 7   | The truthiness problem (0 is truthy, undocumented)  | FIXED               | `oIsTruthy` bug fixed: `ONumber _ -> True` changed to `ONumber n -> n /= 0`, matching Rust semantics. Cross-reference comments added to all three truthiness functions (oIsTruthy, JMESPath.isTruthy, Handlebars.Engine.isTruthy). Truthiness rules documented in notes/truthiness-rules.md.                     |
-| 8   | JMESPath: underspecified subset, undocumented       | OPEN                | No changes to JMESPath implementation scope. Missing functions, object wildcard, and slice expressions remain unimplemented. Divergence still not documented in DIVERGENCES.md.                                |
+| 6   | Testing: specification by example, not by law       | SUBSTANTIALLY ADDRESSED | PLT Redex spec includes 25 `redex-check` property tests (200 random attempts each) encoding algebraic laws: value self-evaluation, escape identity, eq reflexivity, double negation, merge/concat identity, lookup-after-extend, val->text totality, truthiness totality (3 variants), env-to-obj totality, jeval identity/literal properties, jcompare reflexivity, bracket expansion identity, serialization totality. Additionally 8 Haskell property tests. Full semantic law coverage (merge associativity, map distributivity) is a future extension. |
+| 7   | The truthiness problem (0 is truthy, undocumented)  | FIXED               | `oIsTruthy` bug fixed: `ONumber _ -> True` changed to `ONumber n -> n /= 0`, matching Rust semantics. All three truthiness variants formally specified in `semantics/truthiness.rkt` with the key difference documented: iidy treats 0 as falsy; Handlebars and JMESPath treat all numbers as truthy. |
+| 8   | JMESPath: underspecified subset, undocumented       | PARTIALLY ADDRESSED | JMESPath subset now formally specified in PLT Redex (`lang/jmespath.rkt`, `semantics/jmespath-eval.rkt`) with 14 expression forms and 47 tests. The implemented subset is machine-documented. Missing functions, object wildcard, and slice expressions remain unimplemented in the Haskell port. Divergence still not in DIVERGENCES.md. |
 | 9   | Error reporting: missing content tests              | PARTIALLY ADDRESSED | 24 error content tests added, bringing full 51-fixture error coverage into `cabal test`. Error message content is now tested in CI, not just by the out-of-band snapshot comparison script. The in-scope variable listing called out specifically is not tested as a semantic property. |
-| 10  | Language-first approach (5 recommendations)         | PARTIALLY ADDRESSED | Of the 5 recommendations: (1) Write a specification — OPEN. (2) Test semantic laws — PARTIALLY (8 property tests). (3) Document JMESPath subset — OPEN. (4) Add `!$expand` cycle detection — FIXED. (5) Test error message content in `cabal test` — PARTIALLY (24 tests added). |
+| 10  | Language-first approach (5 recommendations)         | SUBSTANTIALLY ADDRESSED | Of the 5 recommendations: (1) Write a specification — **FIXED** (PLT Redex formal semantics, 388 tests, 13 modules). (2) Test semantic laws — **SUBSTANTIALLY** (25 redex-check + 8 Haskell property tests). (3) Document JMESPath subset — **PARTIALLY** (formally specified in Redex, not in DIVERGENCES.md). (4) Add `!$expand` cycle detection — **FIXED**. (5) Test error message content in `cabal test` — **PARTIALLY** (24 tests added). |

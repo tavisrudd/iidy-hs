@@ -296,7 +296,10 @@ Interactive rendering is text-identical to current behavior.
 
 ---
 
-## Phase 6: Krishnamurthi Testing Recommendations
+## Phase 6: Krishnamurthi Testing Recommendations (SUBSTANTIALLY ADDRESSED)
+
+_PLT Redex formal semantics (2026-03-02/03, Sessions 12-14 + 2026-03-03--1) addresses findings #1-4, #6, #8, #10._
+_See `notes/handoffs/2026-03-02-plt-redex-formal-semantics.md` and `spec/` directory (388 tests)._
 
 **Problem**: The test suite is implementation-tested, not specification-tested. It verifies
 specific inputs produce correct outputs but does not verify the algebraic properties that
