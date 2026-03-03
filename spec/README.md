@@ -214,6 +214,44 @@ because they share the same AST type. This spec models each sub-language's
 semantics faithfully; the composition gap is an artifact of the Redex
 formalization, not of iidy's design.
 
+## Spec–Implementation Conformance
+
+The spec and Haskell implementation are kept in sync via a **snapshot-based
+conformance** workflow. The snapshot captures the spec's behavior on key
+drift-point areas and the Haskell tests verify agreement.
+
+### Snapshot workflow
+
+1. `make snapshot` — regenerates `spec/snapshot.json` from the Redex spec
+2. `cabal test` — Haskell conformance tests read the snapshot (no Racket needed)
+3. CI verifies the snapshot is up to date (`make spec` + `git diff --exit-code`)
+
+### What the snapshot covers
+
+| Area              | What's captured                                      |
+|-------------------|------------------------------------------------------|
+| Truthiness        | 13 values → bool (iidy truthiness, where 0 is falsy) |
+| Merge             | 3 merge scenarios with key-order preservation         |
+| Path resolution   | 5 path lookups (nested, array index, missing, etc.)   |
+| Escape            | 4 escape-to-raw cases (value, object, template, tag)  |
+| MapValues binding | 2 binding structure tests ({key, value} shape)        |
+
+### When to regenerate
+
+Regenerate `snapshot.json` after any change to:
+- `semantics/truthiness.rkt` (truthiness rules)
+- `semantics/merge.rkt` (merge semantics)
+- `semantics/env.rkt` (path resolution, lookup)
+- `semantics/eval.rkt` (escape-to-raw, map-values binding)
+
+```bash
+make snapshot   # or: cd spec && nix develop --command racket snapshot.rkt
+```
+
+If the Haskell conformance test fails after a spec change, either:
+- The Haskell implementation needs updating to match the spec, or
+- The spec change was unintentional and should be reverted
+
 ## Reference
 
 The formal semantics are derived from the Haskell implementation:

@@ -1,6 +1,8 @@
 module Iidy.Yaml.Resolution.Resolver
   ( resolveAst
   , astToValueRaw
+  , mergeOObjects
+  , traversePathO
   , ResolveError(..)
   , ResolveErrorKind(..)
   ) where

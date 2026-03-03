@@ -45,11 +45,13 @@ import Test.GlobalConfigTest (globalConfigTests)
 import Test.PreprocessingPropertyTest (preprocessingPropertyTests)
 import Test.ErrorContentTest (errorContentTests)
 import Test.TemplateDiffTest (templateDiffTests)
+import Test.SpecConformanceTest (specConformanceTests)
 
 main :: IO ()
 main = do
   fixtureTests <- buildFixtureTests
   errorTests <- buildErrorTests
+  conformanceTests <- specConformanceTests
   defaultMain $ testGroup "iidy-hs"
     [ HelpTest.tests
     , testGroup "Parser" parserTests
@@ -94,4 +96,5 @@ main = do
     , testGroup "PreprocessingProperties" preprocessingPropertyTests
     , testGroup "ErrorContent"     errorContentTests
     , testGroup "TemplateDiff"    templateDiffTests
+    , testGroup "SpecConformance" conformanceTests
     ]

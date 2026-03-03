@@ -1,4 +1,4 @@
-.PHONY: build build-strict test clean run help ci ci-act check-unused-deps dev-setup
+.PHONY: build build-strict test clean run help ci ci-act check-unused-deps dev-setup spec snapshot
 
 build:
 	cabal build
@@ -36,6 +36,15 @@ ci:
 	$(MAKE) check-unused-deps
 	cabal run iidy-hs -- --help
 	cabal run iidy-hs -- --version
+
+# Run PLT Redex spec tests (requires: cd spec && nix develop)
+spec:
+	cd spec && nix develop --command racket tests/run-all.rkt
+
+# Regenerate spec/snapshot.json from the Redex spec.
+# Run this after changing spec behavior to update conformance vectors.
+snapshot:
+	cd spec && nix develop --command racket snapshot.rkt
 
 ci-act:
 	nix run nixpkgs#act -- -j build

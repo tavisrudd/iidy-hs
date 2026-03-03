@@ -1,0 +1,207 @@
+{
+    "generated": "2026-03-03",
+    "generator": "spec/snapshot.rkt",
+    "sections": {
+        "escape": [
+            {
+                "expected": 42,
+                "input_type": "value",
+                "input_value": 42,
+                "name": "value passthrough"
+            },
+            {
+                "expected": {
+                    "a": 1,
+                    "b": "hello"
+                },
+                "input_type": "object",
+                "input_value": {
+                    "a": 1,
+                    "b": "hello"
+                },
+                "name": "nested object expression"
+            },
+            {
+                "expected": "{{foo.bar}}",
+                "input_type": "template",
+                "input_value": "{{foo.bar}}",
+                "name": "template becomes literal string"
+            },
+            {
+                "expected": "!$escaped",
+                "input_type": "tag",
+                "input_value": null,
+                "name": "preprocessing tag becomes sentinel"
+            }
+        ],
+        "map_values_binding": [
+            {
+                "expected_binding": {
+                    "key": "alpha",
+                    "value": 42
+                },
+                "key": "alpha",
+                "name": "string key, numeric value",
+                "value": 42
+            },
+            {
+                "expected_binding": {
+                    "key": "settings",
+                    "value": {
+                        "host": "localhost"
+                    }
+                },
+                "key": "settings",
+                "name": "string key, object value",
+                "value": {
+                    "host": "localhost"
+                }
+            }
+        ],
+        "merge": [
+            {
+                "base": {
+                    "a": 1,
+                    "b": 2,
+                    "c": 3
+                },
+                "expected": {
+                    "a": 1,
+                    "b": 99,
+                    "c": 3,
+                    "d": 4
+                },
+                "name": "overlay wins, base order preserved",
+                "overlay": {
+                    "b": 99,
+                    "d": 4
+                }
+            },
+            {
+                "base": {
+                    "x": 10
+                },
+                "expected": {
+                    "x": 10,
+                    "y": 20
+                },
+                "name": "disjoint keys",
+                "overlay": {
+                    "y": 20
+                }
+            },
+            {
+                "base": {},
+                "expected": {
+                    "a": 1,
+                    "b": 2
+                },
+                "name": "empty base",
+                "overlay": {
+                    "a": 1,
+                    "b": 2
+                }
+            }
+        ],
+        "path_resolution": [
+            {
+                "expected": "localhost",
+                "name": "nested object traversal",
+                "path": [
+                    "config",
+                    "db",
+                    "host"
+                ]
+            },
+            {
+                "expected": 20,
+                "name": "array index",
+                "path": [
+                    "items",
+                    "1"
+                ]
+            },
+            {
+                "expected": null,
+                "name": "missing key",
+                "path": [
+                    "nonexistent"
+                ]
+            },
+            {
+                "expected": "test",
+                "name": "single segment",
+                "path": [
+                    "name"
+                ]
+            },
+            {
+                "expected": "first",
+                "name": "nested into array object",
+                "path": [
+                    "nested",
+                    "0",
+                    "id"
+                ]
+            }
+        ],
+        "truthiness": [
+            {
+                "expected": false,
+                "input": null
+            },
+            {
+                "expected": false,
+                "input": false
+            },
+            {
+                "expected": true,
+                "input": true
+            },
+            {
+                "expected": false,
+                "input": ""
+            },
+            {
+                "expected": true,
+                "input": "hello"
+            },
+            {
+                "expected": false,
+                "input": 0
+            },
+            {
+                "expected": true,
+                "input": 1
+            },
+            {
+                "expected": true,
+                "input": -1
+            },
+            {
+                "expected": true,
+                "input": 3.14
+            },
+            {
+                "expected": false,
+                "input": []
+            },
+            {
+                "expected": true,
+                "input": [
+                    1
+                ]
+            },
+            {
+                "expected": false,
+                "input": {}
+            },
+            {
+                "expected": true,
+                "input": {
+                    "a": 1
+                }
+            }
+        ]
+    }
+}
