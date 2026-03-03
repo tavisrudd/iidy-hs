@@ -1,8 +1,11 @@
 module Test.ImportLoaderTest (importLoaderTests) where
 
 import Data.Aeson (Value(..))
+import Data.Maybe (isJust)
 import qualified Data.Text as T
+import System.Directory (findExecutable)
 import System.Environment (setEnv, unsetEnv)
+import System.IO.Unsafe (unsafePerformIO)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=), assertBool)
 
@@ -61,9 +64,20 @@ envTests =
 -- Git tests
 ------------------------------------------------------------------------
 
+-- | Check once at startup whether @git@ is on PATH.
+hasGit :: Bool
+hasGit = unsafePerformIO (isJust <$> findExecutable "git")
+{-# NOINLINE hasGit #-}
+
+-- | Skip a test when @git@ is not available.
+requireGit :: IO () -> IO ()
+requireGit act
+  | hasGit    = act
+  | otherwise = pure ()  -- silently skip
+
 gitTests :: [TestTree]
 gitTests =
-  [ testCase "git:branch returns non-empty text" $ do
+  [ testCase "git:branch returns non-empty text" $ requireGit $ do
       result <- loadGitImport "git:branch" "."
       case result of
         Left (ImportError e) -> fail (T.unpack e)
@@ -71,7 +85,7 @@ gitTests =
           idType dat @?= ImportGit
           assertBool "branch non-empty" (not (T.null (idRawData dat)))
 
-  , testCase "git:sha returns 40-char hex" $ do
+  , testCase "git:sha returns 40-char hex" $ requireGit $ do
       result <- loadGitImport "git:sha" "."
       case result of
         Left (ImportError e) -> fail (T.unpack e)
@@ -80,7 +94,7 @@ gitTests =
           T.length (idRawData dat) @?= 40
           assertBool "all hex" (T.all isHexDigit (idRawData dat))
 
-  , testCase "git:describe returns non-empty text" $ do
+  , testCase "git:describe returns non-empty text" $ requireGit $ do
       result <- loadGitImport "git:describe" "."
       case result of
         Left (ImportError e) -> fail (T.unpack e)
