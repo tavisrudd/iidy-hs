@@ -30,6 +30,7 @@ import Prettyprinter.Render.String (renderString)
 shouldShowTopLevelHelp :: [String] -> Bool
 shouldShowTopLevelHelp args =
   null args ||
+  args == ["help"] ||
   (any isHelpFlag args && not (any (`elem` allCommandNames) args))
   where
     isHelpFlag opt = opt == "--help" || opt == "-h"

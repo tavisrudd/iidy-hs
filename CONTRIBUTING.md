@@ -34,7 +34,7 @@ cabal test           # run all tests
 
 1. Fork the repo and create a branch
 2. Make your changes
-3. Ensure `cabal build` and `cabal test` pass with zero warnings and zero failures
+3. Ensure `cabal build --ghc-options="-Wall -Wcompat -Werror"` and `cabal test` pass with zero warnings and zero failures
 4. Open a pull request with a clear description of what and why
 
 ## Reporting issues

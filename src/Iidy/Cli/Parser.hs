@@ -35,9 +35,13 @@ parseCliOpts = do
       let (msg, _) = renderFailure failure "iidy-hs"
           (parserHelp, exitCode, _) = execFailure failure "iidy-hs"
       case exitCode of
-        System.Exit.ExitSuccess -> do
-          renderHelpForArgs args msg
-          System.Exit.exitSuccess
+        System.Exit.ExitSuccess
+          | any isVersionFlag args -> do
+              putStrLn msg
+              System.Exit.exitSuccess
+          | otherwise -> do
+              renderHelpForArgs args msg
+              System.Exit.exitSuccess
         _ -> do
           renderParserFailure parserHelp
           System.Exit.exitWith exitCode
@@ -53,6 +57,9 @@ cliParserInfo = info (cliParser <**> helper <**> versionOption)
   <> header "iidy-hs - Is it done yet? CloudFormation preprocessor and deployer"
   <> footerDoc (Just statusCodesDoc)
   )
+
+isVersionFlag :: String -> Bool
+isVersionFlag opt = opt == "--version" || opt == "-V"
 
 versionOption :: Parser (a -> a)
 versionOption =
