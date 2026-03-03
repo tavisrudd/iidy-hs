@@ -8,10 +8,7 @@ module Iidy.Yaml.Imports.Loaders.S3
 import Control.Exception (Exception, catches, throwIO, Handler(..))
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource (runResourceT)
-import Data.Aeson (Value(..))
-import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BL
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -23,9 +20,8 @@ import qualified Amazonka.S3.GetObject as GO
 import qualified Data.Conduit.List as CL
 
 import Iidy.Constants (httpMaxResponseBytes)
+import Iidy.Yaml.Imports.ContentParsing (parseByExtensionStrict)
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..), ImportType(..))
-import Iidy.Yaml.Parser (parseYaml)
-import Iidy.Yaml.Resolution.Resolver (astToValueRaw)
 
 ------------------------------------------------------------------------
 -- Entry point
@@ -50,7 +46,7 @@ loadS3Import awsEnv location = do
             Right content ->
               let S3.ObjectKey keyText = key
                   ext = T.unpack (extractExtension keyText)
-              in case parseByExtension ext content bs of
+              in case parseByExtensionStrict ext content bs of
                    Left err -> pure (Left err)
                    Right doc -> pure $ Right $ ImportData
                      { idType     = ImportS3
@@ -90,32 +86,6 @@ fetchS3Object awsEnv bucket key = runResourceT $ do
   if BS.length body > s3MaxResponseBytes
     then liftIO $ throwIO (S3SizeLimitExceeded s3MaxResponseBytes)
     else pure body
-
-------------------------------------------------------------------------
--- Content parsing
-------------------------------------------------------------------------
-
--- | Parse content based on file extension.
--- Matches JS behavior: throws on parse failure for yaml/json extensions.
-parseByExtension :: String -> Text -> BS.ByteString -> Either ImportError Value
-parseByExtension ext content rawBytes
-  | ext `elem` [".yaml", ".yml"] = parseYamlStrict content
-  | ext == ".json"               = parseJsonStrict rawBytes
-  | otherwise                    = Right (String content)
-
-parseYamlStrict :: Text -> Either ImportError Value
-parseYamlStrict content =
-  case parseYaml (BL.fromStrict (TE.encodeUtf8 content)) "<s3-import>" of
-    Right ast -> Right (astToValueRaw ast)
-    Left err  -> Left $ ImportError $
-      "Failed to parse YAML from S3 object: " <> T.pack (show err)
-
-parseJsonStrict :: BS.ByteString -> Either ImportError Value
-parseJsonStrict rawBytes =
-  case Aeson.eitherDecodeStrict' rawBytes of
-    Right v -> Right v
-    Left err -> Left $ ImportError $
-      "Failed to parse JSON from S3 object: " <> T.pack err
 
 ------------------------------------------------------------------------
 -- URI parsing

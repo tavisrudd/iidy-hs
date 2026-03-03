@@ -17,8 +17,7 @@ import Iidy.Yaml.Imports.Loaders.Git (loadGitImport)
 import Iidy.Yaml.Imports.Loaders.Http (loadHttpImport)
 import Iidy.Yaml.Imports.Loaders.Random (loadRandomImport)
 import Iidy.Yaml.Imports.Loaders.S3 (loadS3Import)
-import Iidy.Yaml.Imports.Loaders.Ssm (loadSsmImport)
-import Iidy.Yaml.Imports.Loaders.SsmPath (loadSsmPathImport)
+import Iidy.Yaml.Imports.Loaders.Ssm (loadSsmImport, loadSsmPathImport)
 import Iidy.Yaml.Imports.Loaders.Cfn (loadCfnImport)
 
 ------------------------------------------------------------------------

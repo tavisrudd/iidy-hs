@@ -5,10 +5,7 @@ module Iidy.Yaml.Imports.Loaders.Http
   ) where
 
 import Control.Exception (Exception, Handler(..), catches, throwIO)
-import Data.Aeson (Value(..))
-import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BL
 import Data.IORef (IORef, newIORef, readIORef)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -30,9 +27,8 @@ import System.FilePath (takeExtension)
 import System.IO.Unsafe (unsafePerformIO)
 
 import Iidy.Constants (httpMaxResponseBytes, httpTimeoutSeconds)
+import Iidy.Yaml.Imports.ContentParsing (parseByExtension)
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..), ImportType(..))
-import Iidy.Yaml.Parser (parseYaml)
-import Iidy.Yaml.Resolution.Resolver (astToValueRaw)
 
 ------------------------------------------------------------------------
 -- Exception type
@@ -127,33 +123,6 @@ readWithLimit br maxBytes = go 0 []
           in if newAcc > maxBytes
              then throwIO (HttpSizeLimitExceeded maxBytes)
              else go newAcc (chunk : chunks)
-
-------------------------------------------------------------------------
--- Content parsing
-------------------------------------------------------------------------
-
--- | Parse response body based on URL path extension.
--- YAML/YML files are parsed with the YAML parser (matching the File loader),
--- JSON files use the JSON parser, and everything else is a plain string.
-parseByExtension :: String -> Text -> BS.ByteString -> Value
-parseByExtension ext content rawBytes
-  | ext `elem` [".yaml", ".yml"] = parseYamlToValue content
-  | ext == ".json"                = parseJsonOrString rawBytes content
-  | otherwise                     = String content
-
--- | Parse YAML text to a Value, falling back to a plain string on error.
-parseYamlToValue :: Text -> Value
-parseYamlToValue content =
-  case parseYaml (BL.fromStrict (TE.encodeUtf8 content)) "<http-import>" of
-    Right ast -> astToValueRaw ast
-    Left _    -> String content
-
--- | Attempt JSON parse; fall back to plain string.
-parseJsonOrString :: BS.ByteString -> Text -> Value
-parseJsonOrString rawBytes content =
-  case Aeson.eitherDecodeStrict' rawBytes of
-    Right v -> v
-    Left _  -> String content
 
 ------------------------------------------------------------------------
 -- URL helpers

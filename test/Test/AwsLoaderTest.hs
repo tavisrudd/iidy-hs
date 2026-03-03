@@ -9,8 +9,7 @@ import Test.Tasty.HUnit (testCase, (@?=), assertBool, assertFailure)
 
 import qualified Amazonka.S3 as S3
 import Iidy.Yaml.Imports.Loaders.S3 (parseS3Uri)
-import Iidy.Yaml.Imports.Loaders.Ssm (parseSsmLocation)
-import Iidy.Yaml.Imports.Loaders.SsmPath (parseSsmPathLocation, buildResultObject, stripPathPrefix)
+import Iidy.Yaml.Imports.Loaders.Ssm (parseSsmLocation, parseSsmPathLocation, buildResultObject, stripPathPrefix)
 import Iidy.Yaml.Imports.Loaders.Cfn (parseCfnLocation, CfnField(..))
 import Iidy.Yaml.Imports.Types (ImportError(..))
 

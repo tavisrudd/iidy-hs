@@ -6,11 +6,9 @@ module Iidy.Yaml.Imports.Loaders.File
 import Control.Exception (IOException, try)
 import Crypto.Hash (SHA256(..), hashWith)
 import Data.Aeson (Value(..))
-import qualified Data.Aeson as Aeson
 import Data.Bits ((.&.), (.|.), shiftL, shiftR)
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BL
 import Data.List (sort)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -18,9 +16,8 @@ import qualified Data.Text.Encoding as TE
 import Data.Word (Word8)
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import System.FilePath (takeExtension, takeDirectory, (</>))
+import Iidy.Yaml.Imports.ContentParsing (parseByExtension)
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportType(..), ImportError(..))
-import Iidy.Yaml.Parser (parseYaml)
-import Iidy.Yaml.Resolution.Resolver (astToValueRaw)
 
 ------------------------------------------------------------------------
 -- File import
@@ -41,7 +38,7 @@ loadFileImport location baseLocation = do
       Left err -> pure $ Left $ ImportError $ "Invalid UTF-8 in file: " <> T.pack (show err)
       Right content -> do
         let ext = takeExtension fullPath
-            doc = parseByExtension ext content
+            doc = parseByExtension ext content bs
         pure $ Right $ ImportData
           { idType     = ImportFile
           , idLocation = T.pack fullPath
@@ -216,20 +213,3 @@ isAbsolutePathStr :: FilePath -> Bool
 isAbsolutePathStr ('/':_) = True
 isAbsolutePathStr _ = False
 
-parseByExtension :: String -> Text -> Value
-parseByExtension ext content
-  | ext `elem` [".yaml", ".yml"] = parseYamlToValue content
-  | ext == ".json" = parseJson content
-  | otherwise = String content
-
-parseYamlToValue :: Text -> Value
-parseYamlToValue content =
-  case parseYaml (BL.fromStrict (TE.encodeUtf8 content)) "<import>" of
-    Right ast -> astToValueRaw ast
-    Left _ -> String content
-
-parseJson :: Text -> Value
-parseJson content =
-  case Aeson.eitherDecodeStrict' (TE.encodeUtf8 content) of
-    Right val -> val
-    Left _ -> String content
