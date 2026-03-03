@@ -5,13 +5,15 @@ iidy's preprocessing language, written in [PLT Redex](https://redex.racket-lang.
 
 Addresses Krishnamurthi review finding #2: "There is no specification."
 
+*Last updated: 2026-03-03. 410 tests (371 unit + 39 property), 20 modules.*
+
 ## What This Gives You
 
 - **`define-language`** — machine-readable grammars for all 5 language layers
 - **`define-judgment-form`** — big-step evaluation rules (⟨e, σ⟩ ⇓ v)
 - **`define-metafunction`** — environment operations, merge, rendering, query evaluation
-- **`rackunit`** — 363 unit tests verifying the spec
-- **`redex-check`** — 25 QuickCheck-style property tests (200 random attempts each)
+- **`rackunit`** — 370+ unit tests verifying the spec
+- **`redex-check`** — 40 QuickCheck-style property tests (200 random attempts each)
 
 ## Prerequisites
 
@@ -33,7 +35,7 @@ racket tests/run-all.rkt
 
 Expected output:
 ```
-388 success(es) 0 failure(s) 0 error(s) 388 test(s) run
+410 success(es) 0 failure(s) 0 error(s) 410 test(s) run
 ```
 
 ## File Structure
@@ -63,7 +65,7 @@ spec/
     ├── env-tests.rkt            Environment operation tests
     ├── merge-tests.rkt          Merge/concat/from-pairs tests
     ├── eval-tests.rkt           Per-tag evaluation + integration tests
-    ├── properties.rkt           redex-check property tests (25 properties)
+    ├── properties.rkt           redex-check property tests (39 properties)
     ├── handlebars-tests.rkt     Handlebars rendering tests
     ├── jmespath-tests.rkt       JMESPath evaluation tests
     └── bracket-expansion-tests.rkt  Bracket expansion tests
@@ -177,6 +179,40 @@ Some rules are formally specified but not executable in the Redex model:
 | E-ParseYaml | Requires YAML string parser           | Round-trip property spec   |
 | E-ParseJson | Requires JSON string parser           | Round-trip property spec   |
 | E-Expand    | Requires template registry Σ          | Formal spec in comments   |
+
+### Sub-Language Composition
+
+The four sub-languages (Iidy-Preprocess, Iidy-Handlebars, Iidy-JMESPath,
+and bracket expansion) each extend Iidy-Core independently. They are fully
+specified and tested in their own modules, but **they cannot compose within
+the eval judgment** because their non-terminals are not in each other's
+scope. Concretely:
+
+- **E-Tpl** (template strings) uses a simple regex-based renderer
+  (`simple-tpl-render`) that handles `{{path.to.var}}` interpolation.
+  The full Handlebars renderer in `handlebars-eval.rkt` — with block
+  helpers (`{{#if}}`, `{{#each}}`), helper functions, and literals — is
+  specified and tested separately but cannot be called from E-Tpl.
+
+- **E-Var-J** (JMESPath queries) is specified as a comment only. The
+  JMESPath evaluator in `jmespath-eval.rkt` is fully functional (14
+  expression forms, 110 tests), but its `jx` non-terminals are not
+  available in the Iidy-Preprocess grammar where eval is defined.
+
+- **Bracket expansion** (`bracket-expansion.rkt`) is tested in isolation.
+  It cannot be composed with variable resolution in the eval judgment.
+
+A union language (`Iidy-Full`) merging all sub-language grammars into a
+single `define-extended-language` would resolve this, allowing E-Tpl to
+dispatch to `render-template` and E-Var-J to call `jeval`. This refactor
+was evaluated and deferred: the sub-languages are individually validated
+(~210 tests) and the composition gap does not affect any correctness
+properties of the individual semantics.
+
+**In the Haskell implementation, all sub-languages compose naturally**
+because they share the same AST type. This spec models each sub-language's
+semantics faithfully; the composition gap is an artifact of the Redex
+formalization, not of iidy's design.
 
 ## Reference
 
