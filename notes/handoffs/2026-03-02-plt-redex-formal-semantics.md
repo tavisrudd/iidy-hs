@@ -5,7 +5,7 @@ Krishnamurthi review finding #2: preprocessing layer has no specification.
 Building machine-readable, checkable formal grammar and operational semantics
 using PLT Redex (Racket).
 
-## Status: In Progress (Session 1 of 4 complete)
+## Status: In Progress (Session 2 of 4 complete)
 
 ## Completed
 
@@ -21,13 +21,16 @@ using PLT Redex (Racket).
 - [x] `spec/README.md`
 - [x] Opus review completed with fixes applied
 
-## Remaining
+### Session 2: Iteration Tests and Properties (2026-03-02--13)
+- [x] `tests/env-tests.rkt` — 30 unit tests (lookup, extend, resolve-path, traverse-path, obj-lookup, arr-index, env-keys)
+- [x] `tests/merge-tests.rkt` — 28 unit tests (merge-objs, merge-all, concat-arrs, obj-from-pairs, val->text)
+- [x] Eval tests expanded: +18 tests for group-by, concat-map-f, map-list-to-hash-f, map-values edge cases, nested/compound operations
+- [x] `tests/properties.rkt` — 13 `redex-check` property tests (200 attempts each)
+- [x] Bug fix: `traverse-path` missing clause for `(traverse-path () unbound)`
+- [x] Exported `obj-lookup` and `arr-index` from env.rkt for direct testing
+- [x] Tests: 230 passing (grammar, truthiness, env, merge, eval, properties)
 
-### Session 2: Iteration Tests and Properties
-- [ ] More comprehensive map/iteration tests (map-f edge cases, nested ops)
-- [ ] Unit tests for env metafunctions (env-tests.rkt)
-- [ ] Unit tests for merge metafunctions (merge-tests.rkt)
-- [ ] Property tests with `redex-check` (properties.rkt)
+## Remaining
 
 ### Session 3: Sub-Languages
 - [ ] `lang/handlebars.rkt` — Handlebars template grammar
