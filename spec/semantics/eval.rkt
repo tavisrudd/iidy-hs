@@ -7,6 +7,27 @@
 ;; All evaluation is bottom-up (depth-first), eager, and deterministic.
 ;; New bindings are appended and shadow earlier ones (rightmost wins).
 ;; Object key ordering is preserved throughout.
+;;
+;; ── Compositional limitation ──────────────────────────────────────
+;; The sub-languages (Handlebars, JMESPath, bracket expansion) each
+;; extend Iidy-Core independently and are fully specified + tested in
+;; their own modules. However, they cannot compose within this eval
+;; judgment because their non-terminals are not in Iidy-Preprocess's
+;; scope. Concretely:
+;;
+;;   - E-Tpl uses simple regex rendering (simple-tpl-render), not the
+;;     full Handlebars renderer (handlebars-eval.rkt). Block helpers,
+;;     helper functions, and literals are not available here.
+;;   - E-Var-J (JMESPath query) is specified as a comment only — the
+;;     jx non-terminals from jmespath.rkt are not in scope.
+;;   - Bracket expansion (bracket-expansion.rkt) is tested in
+;;     isolation, not composed with variable resolution.
+;;
+;; A union language (Iidy-Full) merging all sub-language grammars
+;; would resolve this, allowing E-Tpl to call render-template and
+;; E-Var-J to call jeval. This was deferred as the sub-languages are
+;; individually validated (210 tests) and the refactor is substantial.
+;; ──────────────────────────────────────────────────────────────────
 
 (require redex/reduction-semantics
          racket/string
