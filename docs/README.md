@@ -7,6 +7,7 @@ User-facing documentation for iidy.
 - [Command Reference](command-reference.md) -- all commands, options, and exit codes
 - [Import Types](import-types.md) -- file, env, git, s3, ssm, cfn, and other import sources
 - [Security](SECURITY.md) -- import system security model for remote templates
+- [Formal Language Spec](../spec/README.md) -- PLT Redex executable semantics for the preprocessing language
 
 `dev/` contains internal developer and agent reference material (architecture,
 ADRs, coverage tooling, etc.) that is not intended for end users.

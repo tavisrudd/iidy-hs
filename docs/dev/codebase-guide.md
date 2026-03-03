@@ -1,13 +1,15 @@
 # iidy-hs Codebase Guide
 
-Module navigation reference for the iidy-hs Haskell project (86 modules).
+Module navigation reference for the iidy-hs Haskell project.
 
 ## Quick Start
 
 ```
 cabal build          # compile (runs inside nix devshell)
-cabal test           # run all 851 tests
+cabal test           # run all tests
 cabal run iidy-hs    # run the binary
+make spec            # run PLT Redex spec tests (requires: cd spec && nix develop)
+make snapshot        # regenerate spec/snapshot.json after spec changes
 ```
 
 Entry point: `app/Main.hs` -- parses CLI, dispatches to command handlers.
@@ -17,11 +19,17 @@ Entry point: `app/Main.hs` -- parses CLI, dispatches to command handlers.
 ```
 iidy-hs/
   app/Main.hs              -- Entry point: CLI parse + command dispatch
-  src/Iidy/                 -- Library source (86 modules)
-  test/Main.hs              -- Test entry point; suites in test/Test/ (~7400 LOC, 851 tests)
+  src/Iidy/                 -- Library source
+  test/Main.hs              -- Test entry point; suites in test/Test/
   test-fixtures/             -- Snapshot data and example templates
     example-templates/       -- YAML templates for render/preprocess tests
     expected-outputs/        -- Golden output snapshots
+  spec/                      -- PLT Redex formal semantics
+    lang/                    -- Language grammars (core, preprocessing, handlebars, jmespath)
+    semantics/               -- Evaluation rules, truthiness, merge, env ops
+    tests/                   -- Spec test suite
+    snapshot.rkt             -- Generates conformance test vectors
+    snapshot.json            -- Committed snapshot read by Haskell tests
   docs/                      -- Developer documentation
   notes/                     -- Phase research, session logs, analysis
   scripts/                   -- Snapshot comparison and CI helpers
@@ -168,15 +176,17 @@ Tests are split across multiple modules:
 
 ```
 test/Main.hs               -- Entry point: registers test groups (tasty framework)
-test/Test/                 -- 851 tests across ~7400 LOC of test modules
+test/Test/                 -- Test modules
 test-fixtures/
   example-templates/        -- YAML input fixtures
   expected-outputs/         -- Golden output snapshots
+spec/
+  snapshot.json             -- Conformance vectors read by SpecConformanceTest
 ```
 
-Test categories: unit tests for each layer, snapshot comparison against Rust
-oracle outputs, property tests for parsers and emitters, integration tests
-for the output pipeline (renderer pass-through, output sequencing).
+Test categories: unit tests for each layer, spec conformance tests (from PLT
+Redex snapshot), snapshot comparison against Rust oracle outputs, property tests
+for parsers and emitters, integration tests for the output pipeline.
 
 Scripts for cross-implementation snapshot comparison:
 

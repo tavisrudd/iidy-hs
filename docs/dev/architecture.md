@@ -9,10 +9,16 @@ preprocesses them through a custom YAML engine with imports, variable
 resolution, handlebars interpolation, and custom tags, then drives
 CloudFormation operations through the AWS API.
 
-The codebase is ~17,800 LOC of Haskell across 86 modules, using GHC 9.10 and
+The codebase is ~17,800 LOC of Haskell across 89 modules, using GHC 9.10 and
 amazonka 2.0. It implements 22 CLI commands covering the full lifecycle:
 stack CRUD, changesets, drift detection, SSM parameter management, template
 approval workflows, and offline utilities (render, lint, explain, demo).
+
+The preprocessing language has a [PLT Redex formal specification](../../spec/README.md)
+that serves as the executable ground truth for semantics. A snapshot-based
+conformance test suite verifies the Haskell implementation agrees with the
+spec on key drift-point behaviors (truthiness, merge ordering, path resolution,
+escape, map_values binding).
 
 Several subsystems are custom implementations rather than library wrappers:
 JMESPath query evaluation (~365 LOC), Handlebars template engine (~755 LOC),
@@ -372,12 +378,15 @@ for each.
 
 ## Testing Strategy
 
-The test suite has 851 tests using the tasty framework (tasty-hunit for unit
-tests, tasty-quickcheck for property tests). All tests run offline with no
-AWS calls.
+All tests run offline with no AWS calls.
 
 Key testing approaches:
 
+- **Spec conformance**: Snapshot vectors generated from the PLT Redex spec
+  verify the Haskell functions (`oIsTruthy`, `mergeOObjects`, `traversePathO`,
+  `astToValueRaw`) produce identical results. Covers three truthiness variants,
+  merge key-order preservation, path resolution, escape semantics, and
+  map_values binding structure.
 - **Snapshot comparison**: Render fixtures are compared against the Rust
   implementation's insta snapshots (`scripts/snapshot-compare.sh` for 37
   render snapshots, `scripts/error-snapshot-compare.sh` for 49 error
@@ -387,6 +396,6 @@ Key testing approaches:
 - **Output pipeline integration**: Test data builders for all 26 `OutputData`
   variants verify that both renderers accept every variant without errors.
 - **Property tests**: Handlebars round-trip, YAML parser edge cases, JMESPath
-  evaluation.
+  evaluation, preprocessing algebraic properties.
 
 For full details, see [testing-guide.md](testing-guide.md).

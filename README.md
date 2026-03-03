@@ -281,6 +281,8 @@ and other YAML-based artifacts.
   and other import sources
 - **[Security](docs/SECURITY.md)** -- import system security model for remote
   templates
+- **[Formal Language Spec](spec/README.md)** -- PLT Redex executable semantics
+  for the preprocessing language, with snapshot-based conformance tests
 
 ## Origin
 

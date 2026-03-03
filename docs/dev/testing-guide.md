@@ -2,11 +2,12 @@
 
 ## Overview
 
-iidy-hs has 851 tests covering the full YAML preprocessing engine, CloudFormation
-operations, output rendering pipeline, CLI parsing, error handling, and AWS
-integration. All tests run offline with no real AWS credentials required. The
-suite uses the **tasty** framework and is organized across multiple modules under
-`test/Test/` (~7,400 LOC total), with `test/Main.hs` as the entry point.
+iidy-hs tests cover the full YAML preprocessing engine, CloudFormation
+operations, output rendering pipeline, CLI parsing, error handling, AWS
+integration, and spec conformance. All tests run offline with no real AWS
+credentials required. The suite uses the **tasty** framework and is organized
+across multiple modules under `test/Test/`, with `test/Main.hs` as the entry
+point.
 
 ## Framework
 
@@ -55,8 +56,28 @@ list-stacks, global options, color flags).
 selection, footer/inline colorization), error display (`formatError`, error ID
 lookup, context lines).
 
-**Properties** -- Six QuickCheck tests: OValue round-trips, null/bool/string
-preservation, parse/emit stability, Handlebars literal passthrough.
+**Properties** -- QuickCheck tests: OValue round-trips, null/bool/string
+preservation, parse/emit stability, Handlebars literal passthrough, preprocessing
+property tests.
+
+**Spec Conformance** (`test/Test/SpecConformanceTest.hs`): Verifies that the
+Haskell implementation agrees with the PLT Redex formal specification on key
+drift-point behaviors. Reads test vectors from `spec/snapshot.json` (generated
+by `spec/snapshot.rkt`). Covers:
+
+| Section               | Tests | What's verified                               |
+|-----------------------|-------|-----------------------------------------------|
+| Truthiness (iidy)     | 13    | `oIsTruthy` -- 0 is falsy                     |
+| Truthiness (HBS)      | 13    | `HBS.isTruthy` -- 0 is truthy                 |
+| Truthiness (JMESPath) | 13    | `JMESPath.isTruthy` -- 0 is truthy             |
+| Merge                 | 4     | `mergeOObjects` -- values + key-order          |
+| Path resolution       | 5     | `traversePathO` -- nested, array, missing      |
+| Escape                | 4     | `astToValueRaw` -- passthrough, sentinel       |
+| MapValues binding     | 2     | `{key, value}` binding structure               |
+
+The snapshot is committed to git. Regenerate with `make snapshot` after spec
+changes. No Racket dependency is needed to run the Haskell tests -- only to
+regenerate the snapshot.
 
 **Snapshot Comparison** (external scripts, not part of `cabal test`):
 - `scripts/snapshot-compare.sh` -- 37 render snapshots vs Rust insta `.snap` files

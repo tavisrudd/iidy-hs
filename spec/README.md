@@ -228,13 +228,15 @@ drift-point areas and the Haskell tests verify agreement.
 
 ### What the snapshot covers
 
-| Area              | What's captured                                      |
-|-------------------|------------------------------------------------------|
-| Truthiness        | 13 values → bool (iidy truthiness, where 0 is falsy) |
-| Merge             | 3 merge scenarios with key-order preservation         |
-| Path resolution   | 5 path lookups (nested, array index, missing, etc.)   |
-| Escape            | 4 escape-to-raw cases (value, object, template, tag)  |
-| MapValues binding | 2 binding structure tests ({key, value} shape)        |
+| Area                   | Tests | What's captured                               |
+|------------------------|-------|-----------------------------------------------|
+| Truthiness (iidy)      | 13    | `oIsTruthy` — 0 is falsy                      |
+| Truthiness (Handlebars)| 13    | `HBS.isTruthy` — 0 is truthy                  |
+| Truthiness (JMESPath)  | 13    | `JMESPath.isTruthy` — 0 is truthy              |
+| Merge                  | 4     | Values + key-order preservation                |
+| Path resolution        | 5     | Nested, array index, missing, single, nested   |
+| Escape                 | 4     | Value, object, template→string, tag→sentinel   |
+| MapValues binding      | 2     | `{key, value}` binding structure               |
 
 ### When to regenerate
 
