@@ -144,7 +144,7 @@ The structured output pipeline exists to support JSON output mode and testabilit
 
 ---
 
-## 6. What Actually Matters: Performance
+## 6. What Actually Matters: Performance (RESOLVED)
 
 Nobody has measured it. There are no benchmarks. No profiling. No measurement of:
 - Template preprocessing time for large templates
@@ -239,8 +239,8 @@ Muratori's review is largely philosophical/structural critique rather than speci
 |----|-------------------------------------------------------------|---------------------|--------------------------------------------------------------------------------------------------------------------|
 | 1  | 85 modules for a simple problem                             | WONT FIX            | By design — faithful port of 96-module Rust codebase. Module count is a consequence of the "complete port" requirement, not an accident. |
 | 2  | Abstraction tax / 6 representations for data                | WONT FIX            | Each representation serves a purpose: key-order preservation (OValue), source locations (YamlAst), ecosystem compat (aeson Value). Reducing representations would sacrifice features. |
-| 3  | Module count disease (11 mergeable modules identified)      | OPEN                | Valid observation. Modules like Constants, TemplateHash, Location could be folded into neighbors. Not addressed in sessions 45-46. Note: Conversion.hs was *split* (not merged) per Gemini review in session 42, going in the opposite direction. |
+| 3  | Module count disease (11 mergeable modules identified)      | PARTIALLY ADDRESSED | SsmPath merged into Ssm (4D, -1 module). Remaining candidates (Constants, TemplateHash, Location) could still be folded into neighbors. Note: small focused modules are a deliberate choice — they fit easily into AI agent context windows, enabling targeted edits without loading unrelated code. Conversion.hs was *split* (not merged) per Gemini review in session 42 for the same reason. |
 | 4  | Custom implementations (JMESPath, Handlebars, etc.)         | WONT FIX            | Each custom impl has documented justification (abandoned packages, missing features, spec compliance). Session 45-46 added 8 property tests for JMESPath and Handlebars correctness, strengthening confidence in the custom impls. |
 | 5  | Output pipeline over-engineered                             | WONT FIX            | Required for JSON output mode, testability, and Rust behavioral equivalence. `OdRawOutput` escape hatch was added intentionally in session 42 for non-CFN commands. |
-| 6  | No performance measurement / benchmarks                     | OPEN                | No benchmarks were added. Valid critique — startup time and preprocessing latency remain unmeasured. |
+| 6  | No performance measurement / benchmarks                     | RESOLVED            | tasty-bench suite added (4F): parse, preprocess, emit, and full pipeline benchmarks across basic/simple-cfn/advanced-cfn fixtures plus synthetic 1000-key input. Run with `cabal bench`. Rust implementation also has criterion benchmarks (`cargo bench`) for cross-implementation comparison. |
 | 7  | Test suite impressive but expensive (maintenance cost)      | PARTIALLY ADDRESSED | Session 45-46 added 24 error content tests (full 51-fixture coverage) and 8 edge-case property tests. These increase coverage but also increase the maintenance surface Muratori flags. Snapshot gap audit documented. |

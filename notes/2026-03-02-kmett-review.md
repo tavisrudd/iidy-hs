@@ -245,7 +245,7 @@ Free monads have runtime overhead (allocating `Free` constructors) and cognitive
 
 ---
 
-## 7. Missing Abstractions for Import Loaders
+## 7. Missing Abstractions for Import Loaders (PARTIALLY ADDRESSED)
 
 The 10 import loaders follow a nearly identical pattern:
 
@@ -366,5 +366,5 @@ _These annotations were added after the review to track which findings have been
 | 4   | OValue wants to be a recursive scheme          | OPEN                | No changes to OValue representation. Manual catamorphisms remain in rewriteRefs, collectGlobalRefs, emitYaml, toValue, fromValue.                                |
 | 5   | YamlAst / OValue / Value triangle              | OPEN                | No changes to the three-representation pipeline or conversion boundaries. Phantom type indexing not pursued.                                                      |
 | 6   | OutputData callback is a free monad in disguise | OPEN                | No structural changes to the callback-driven output model. Acknowledged as a future direction if the codebase moves beyond port status.                           |
-| 7   | Missing abstractions for import loaders        | OPEN                | No typeclass or shared abstraction added for the 10 import loaders. Each still reimplements the fetch/parse/wrap pattern independently.                           |
+| 7   | Missing abstractions for import loaders        | PARTIALLY ADDRESSED | Shared `ContentParsing` module extracts duplicated YAML/JSON parsing from 4 loaders (4D). SSM + SsmPath merged into one module (-44 net lines, -1 module). Full typeclass abstraction deferred — loaders are small (38-175 LOC) and genuinely different in fetch logic. |
 | 8   | Status strings want a prism                    | OPEN                | Stack statuses remain as `Text`. No ADT, prisms, or structured status phase/outcome decomposition added.                                                         |
