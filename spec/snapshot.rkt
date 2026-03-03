@@ -11,6 +11,7 @@
          racket/match
          racket/port
          racket/list
+         racket/system
          json
          "lang/core.rkt"
          "lang/preprocessing.rkt"
@@ -230,10 +231,18 @@
 
 (define out-path "snapshot.json")
 
+;; Write compact JSON then pretty-print with jq for deterministic,
+;; human-readable output (jq preserves key order from input).
 (call-with-output-file out-path
   (λ (port)
     (write-json snapshot port)
     (newline port))
   #:exists 'replace)
+
+(define jq-rc
+  (system (format "jq --indent 4 . ~a > ~a.tmp && mv ~a.tmp ~a"
+                  out-path out-path out-path out-path)))
+(unless jq-rc
+  (error 'snapshot "jq formatting failed — is jq in PATH?"))
 
 (printf "Wrote ~a (~a bytes)\n" out-path (file-size out-path))

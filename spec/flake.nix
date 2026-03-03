@@ -17,6 +17,7 @@
           default = pkgs.mkShell {
             buildInputs = [
               pkgs.racket  # full racket needed for redex
+              pkgs.jq      # pretty-print snapshot.json deterministically
             ];
             shellHook = ''
               echo "iidy-spec: Racket $(racket --version 2>/dev/null | head -1)"
