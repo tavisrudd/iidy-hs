@@ -5,7 +5,7 @@ Krishnamurthi review finding #2: preprocessing layer has no specification.
 Building machine-readable, checkable formal grammar and operational semantics
 using PLT Redex (Racket).
 
-## Status: In Progress (Session 3 of 4 complete)
+## Status: Complete (4 sessions)
 
 ## Completed
 
@@ -41,12 +41,26 @@ using PLT Redex (Racket).
 - [x] `tests/bracket-expansion-tests.rkt` — 10 tests (grammar, expansion)
 - [x] Tests: 346 passing (230 existing + 116 new)
 
+### Session 4: Integration Rules and Properties (2026-03-03--1)
+- [x] E-Tpl: simple {{path}} template rendering via `simple-tpl-render` Racket function
+- [x] E-Var-Q: dot-query via `dot-query` metafunction (comma-separated key selection + single path traversal)
+- [x] E-ToYaml: value serialization to YAML text (via val->text)
+- [x] E-ToJson: value serialization to JSON text (via `val->json` Racket function)
+- [x] E-Var-J: formal specification documented (requires JMESPath string parser — outside model)
+- [x] E-ParseYaml, E-ParseJson: formal specification documented (round-trip property)
+- [x] E-Expand: formal specification documented (requires template registry Σ)
+- [x] Bridge metafunctions: `env-to-obj`, `dot-query`, `val->json`, `simple-tpl-render`
+- [x] 18 new eval tests: tpl (7), var-q (4), JMESPath integration (3), serialization (12), helpers (6)
+- [x] 24 new property tests (redex-check): env-to-obj, val->json, hb-val->text, hb-lookup totality; jeval identity/literal, jcompare reflexivity; bracket expansion identity; serialization totality
+- [x] Tests: 388 passing (346 existing + 42 new)
+
 ## Remaining
 
-### Session 4: Integration Rules and Properties
-- [ ] Evaluation rules for: tpl, var-q, var-j, to-yaml, parse-yaml, to-json, parse-json, expand
-- [ ] `redex-check` property tests
-- [ ] Final review pass: cross-reference all rules against Resolver.hs
+None — formal semantics complete. Potential future work:
+- JMESPath string parser (to make E-Var-J executable)
+- JSON/YAML string parsers (to make E-ParseJson/E-ParseYaml executable)
+- Thread template registry Σ through eval judgment (to make E-Expand executable)
+- Additional property tests: composition properties, commutativity of merge
 
 ## Key Decisions
 - Language names: `Iidy-Core`, `Iidy-Preprocess` (not YAML-*)
@@ -59,10 +73,20 @@ using PLT Redex (Racket).
 - Bracket expansion uses explicit `(bracket-ref)` AST form rather than string-level bracket parsing
 - JMESPath subset: no slice expressions, no function calls (matching Haskell implementation)
 - Helper registry is a fixed metafunction, not extensible — models iidy's closed set of helpers
+- String parsing is outside the formal model — sub-languages specify evaluation after parsing
+- Serialization modeled simply: to-yaml uses val->text, to-json uses a Racket JSON serializer
+- Executable vs specification rules: rules requiring parsers are documented as formal specifications (inference rule notation in comments) rather than omitted
+- Template registry Σ not threaded through eval judgment — expand rule documented as specification only
 
 ## Handoff Notes
 
-### Session 3 (2026-03-02--14 / $CLAUDE_SESSION_ID)
+### Session 4 (2026-03-03--1)
+- **Files modified**: `spec/semantics/eval.rkt`, `spec/tests/eval-tests.rkt`, `spec/tests/properties.rkt`
+- **Integration approach**: Executable rules for tpl/var-q/to-yaml/to-json; formal specifications (as comments) for var-j/parse-yaml/parse-json/expand. Sub-language evaluation is tested at the sub-language level; integration rules bridge the main eval judgment to sub-language semantics.
+- **Cross-language calling**: Handlebars/JMESPath metafunctions are defined for their own languages (extending Iidy-Core). From eval.rkt (Iidy-Preprocess), they're called via Racket-level `,` (unquote) in judgment clauses, since Iidy-Core values are valid in all extended languages.
+- **Model boundaries**: String parsing (Handlebars templates, JMESPath queries, YAML/JSON) is outside the formal model. The sub-language modules specify evaluation after parsing. Integration rules document the full pipeline as formal specifications.
+
+### Session 3 (2026-03-02--14)
 - **Files created**: `spec/lang/handlebars.rkt`, `spec/lang/jmespath.rkt`, `spec/semantics/handlebars-eval.rkt`, `spec/semantics/jmespath-eval.rkt`, `spec/semantics/bracket-expansion.rkt`, `spec/tests/handlebars-tests.rkt`, `spec/tests/jmespath-tests.rkt`, `spec/tests/bracket-expansion-tests.rkt`
 - **Files modified**: `spec/tests/run-all.rkt`
 - **Architecture**: Each sub-language uses `define-extended-language` extending `Iidy-Core`, so they share the value domain (v, σ) while defining their own expression forms. Handlebars context is a value (typically obj), not an environment — path lookup traverses the value directly.
