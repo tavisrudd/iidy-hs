@@ -61,7 +61,10 @@
 ;; ── JMESPath truthiness ─────────────────────────────────────────
 ;; Used by: [?filter] expressions in JMESPath queries
 ;;
-;; Identical to Handlebars: all numbers truthy.
+;; Currently identical to Handlebars truthiness. Kept as a separate
+;; metafunction for two reasons:
+;;   1. The JMESPath and Handlebars specs define truthiness independently
+;;   2. Future divergence is possible if either spec changes
 ;; This matches the JMESPath specification.
 
 (define-metafunction Iidy-Core

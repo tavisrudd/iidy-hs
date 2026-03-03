@@ -16,7 +16,7 @@
          "truthiness.rkt"
          "env.rkt"
          "merge.rkt")
-(provide eval env-to-obj dot-query val->json)
+(provide eval env-to-obj dot-query val->json escape-to-raw)
 
 
 ;; ═══════════════════════════════════════════════════════════════════
@@ -150,6 +150,43 @@
 
 
 ;; ═══════════════════════════════════════════════════════════════════
+;; Escape helper: convert AST to raw value without evaluation
+;;
+;; Models Haskell's astToValueRaw function. Structural nodes (seq,
+;; obj-e) are recursively converted. Template strings become literal
+;; strings (not interpolated). Preprocessing tag expressions become
+;; the sentinel string "!$escaped". CloudFormation tags are preserved
+;; as objects with their tag name as key.
+;; ═══════════════════════════════════════════════════════════════════
+
+(define-metafunction Iidy-Preprocess
+  escape-to-raw : e -> v
+
+  ;; Values pass through unchanged
+  [(escape-to-raw v) v]
+
+  ;; Sequence: recursively escape each element
+  [(escape-to-raw (seq (e_i ...)))
+   (arr ((escape-to-raw e_i) ...))]
+
+  ;; Object expression: recursively escape each value
+  [(escape-to-raw (obj-e ((ke_i e_i) ...)))
+   (obj ((ke_i (escape-to-raw e_i)) ...))]
+
+  ;; Template string: return as literal (NOT interpolated)
+  [(escape-to-raw (tpl s)) (str s)]
+
+  ;; CloudFormation: preserve as object with tag name key
+  [(escape-to-raw (cfn tag-name_t e))
+   (obj ((tag-name_t (escape-to-raw e))))]
+
+  ;; All preprocessing tag expressions → sentinel string
+  ;; This matches the Haskell implementation's astToValueRaw behavior
+  ;; where any !$ tag inside !$escape becomes (str "!$escaped").
+  [(escape-to-raw e) (str "!$escaped")])
+
+
+;; ═══════════════════════════════════════════════════════════════════
 ;; Integration helpers for sub-language rules
 ;; ═══════════════════════════════════════════════════════════════════
 
@@ -219,6 +256,9 @@
     [`(bool #t) "true"]
     [`(bool #f) "false"]
     [`(num ,n) (number->string n)]
+    ;; NOTE: String escaping is simplified for the formal model.
+    ;; Strings containing ", \, or control characters would produce
+    ;; invalid JSON. The Haskell implementation uses Aeson for correct escaping.
     [`(str ,s) (string-append "\"" s "\"")]
     [`(arr (,items ...))
      (string-append "[" (string-join (map val->json items) ",") "]")]
@@ -453,14 +493,20 @@
 
   ;; ── Escape (!$escape) ─────────────────────────────────────────
   ;; Suppresses tag resolution: converts the AST to a raw value
-  ;; WITHOUT evaluating preprocessing tags. In the formal model,
-  ;; literals pass through unchanged (escape is identity on values).
-  ;; For non-value expressions, escape converts to a string sentinel.
-  ;; (The full raw-conversion semantics depend on YAML AST structure
-  ;; which is outside this formal model's scope.)
+  ;; WITHOUT evaluating preprocessing tags.
+  ;;
+  ;; Models the Haskell astToValueRaw function:
+  ;;   - Values pass through unchanged
+  ;;   - Structural expressions (seq, obj-e) are recursively escaped
+  ;;   - Template strings become literal (not interpolated)
+  ;;   - Preprocessing tags become (str "!$escaped")
+  ;;   - CloudFormation tags become objects with tag name key
+  ;;
+  ;; Uses the escape-to-raw metafunction (defined above).
 
-  [--- "E-Escape-Val"
-   (eval (escape v) σ v)]
+  [(where v (escape-to-raw e))
+   --- "E-Escape"
+   (eval (escape e) σ v)]
 
 
   ;; ── CloudFormation pass-through ───────────────────────────────

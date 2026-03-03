@@ -66,6 +66,9 @@
   [(jeval jwildcard (obj ((k_i v_i) ...)))
    (arr (v_i ...))]
 
+  ;; NOTE: Per JMESPath spec, wildcard on array returns null.
+  ;; iidy deviates: wildcard passes arrays through unchanged.
+  ;; This matches the Haskell implementation's behavior.
   [(jeval jwildcard (arr (v_items ...)))
    (arr (v_items ...))]
 

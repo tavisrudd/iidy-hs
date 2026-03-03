@@ -642,7 +642,39 @@
     (test-case "escape an array passes through"
       (eval-expect (term (escape (arr ((num 1) (num 2)))))
                    (term ())
-                   (term (arr ((num 1) (num 2)))))))
+                   (term (arr ((num 1) (num 2))))))
+
+    ;; New: escape on non-value expressions (astToValueRaw semantics)
+
+    (test-case "escape a var expression → sentinel"
+      (eval-expect (term (escape (var ("x"))))
+                   (term (("x" (num 42))))
+                   (term (str "!$escaped"))))
+
+    (test-case "escape a template string → literal (not interpolated)"
+      (eval-expect (term (escape (tpl "Hello, {{name}}!")))
+                   (term (("name" (str "Alice"))))
+                   (term (str "Hello, {{name}}!"))))
+
+    (test-case "escape a sequence → recursively escaped array"
+      (eval-expect (term (escape (seq ((num 1) (var ("x"))))))
+                   (term (("x" (num 99))))
+                   (term (arr ((num 1) (str "!$escaped"))))))
+
+    (test-case "escape an object expression → recursively escaped"
+      (eval-expect (term (escape (obj-e (("key" (var ("x")))))))
+                   (term (("x" (num 99))))
+                   (term (obj (("key" (str "!$escaped")))))))
+
+    (test-case "escape a cfn tag → preserved as object"
+      (eval-expect (term (escape (cfn "!Ref" (str "MyBucket"))))
+                   (term ())
+                   (term (obj (("!Ref" (str "MyBucket")))))))
+
+    (test-case "escape an if expression → sentinel"
+      (eval-expect (term (escape (if (bool #t) (str "yes") (str "no"))))
+                   (term ())
+                   (term (str "!$escaped")))))
 
    ;; ── CloudFormation pass-through ───────────────────────────────
 

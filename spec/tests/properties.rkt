@@ -6,6 +6,7 @@
 
 (require redex/reduction-semantics
          rackunit
+         racket/list
          "../lang/core.rkt"
          "../lang/preprocessing.rkt"
          "../lang/handlebars.rkt"
@@ -236,4 +237,184 @@
       Iidy-Core v
       (let ([result (eval-single (term (to-json v)) (term ()))])
         (and result (redex-match? Iidy-Core (str s) result)))
+      #:attempts ATTEMPTS))
+
+   ;; ── Determinism: eval produces at most 1 result ────────────
+   ;; The spec claims evaluation is deterministic. Verify that
+   ;; judgment-holds never returns multiple distinct results.
+
+   (test-case "eval is deterministic on values"
+     (redex-check
+      Iidy-Core v
+      (= (length (judgment-holds (eval v () v_out) v_out)) 1)
+      #:attempts ATTEMPTS))
+
+   (test-case "eval is deterministic on eq"
+     (redex-check
+      Iidy-Core (v_1 v_2)
+      (= (length (judgment-holds (eval (eq v_1 v_2) () v_out) v_out)) 1)
+      #:attempts ATTEMPTS))
+
+   (test-case "eval is deterministic on not"
+     (redex-check
+      Iidy-Core v
+      (= (length (judgment-holds (eval (not v) () v_out) v_out)) 1)
+      #:attempts ATTEMPTS))
+
+   (test-case "eval is deterministic on escape"
+     (redex-check
+      Iidy-Core v
+      (= (length (judgment-holds (eval (escape v) () v_out) v_out)) 1)
+      #:attempts ATTEMPTS))
+
+
+   ;; ═══════════════════════════════════════════════════════════════
+   ;; Algebraic law tests
+   ;; ═══════════════════════════════════════════════════════════════
+
+   ;; ── Merge associativity ────────────────────────────────────────
+   ;; merge-objs(a, merge-objs(b, c)) = merge-objs(merge-objs(a, b), c)
+
+   (test-case "merge is associative (3 generated objects)"
+     (redex-check
+      Iidy-Core ((obj ((k_a v_a) ...)) (obj ((k_b v_b) ...)) (obj ((k_c v_c) ...)))
+      (let* ([a (term (obj ((k_a v_a) ...)))]
+             [b (term (obj ((k_b v_b) ...)))]
+             [c (term (obj ((k_c v_c) ...)))]
+             [ab (term (merge-objs ,a ,b))]
+             [bc (term (merge-objs ,b ,c))]
+             [left  (term (merge-objs ,ab ,c))]
+             [right (term (merge-objs ,a ,bc))])
+        (equal? left right))
+      #:attempts ATTEMPTS))
+
+   ;; ── Merge commutativity with empty ─────────────────────────────
+   ;; merge(a, {}) = merge({}, a) for any object a.
+
+   (test-case "merge with empty is commutative"
+     (redex-check
+      Iidy-Core (obj ((k v) ...))
+      (let* ([a (term (obj ((k v) ...)))]
+             [empty (term (obj ()))]
+             [left  (term (merge-objs ,a ,empty))]
+             [right (term (merge-objs ,empty ,a))])
+        (equal? left right))
+      #:attempts ATTEMPTS))
+
+   ;; ── Eq symmetry ───────────────────────────────────────────────
+   ;; eq(a, b) = eq(b, a) for all values.
+
+   (test-case "eq is symmetric"
+     (redex-check
+      Iidy-Core (v_1 v_2)
+      (let ([r1 (judgment-holds (eval (eq v_1 v_2) () v_out) v_out)]
+            [r2 (judgment-holds (eval (eq v_2 v_1) () v_out) v_out)])
+        (equal? r1 r2))
+      #:attempts ATTEMPTS))
+
+   ;; ── Concat associativity (singleton arrays) ──────────────────
+   ;; concat([a], [b], [c]) = concat([a], concat([b], [c]))
+
+   (test-case "concat is associative (singletons)"
+     (redex-check
+      Iidy-Core (v_1 v_2 v_3)
+      (let* ([a (term (arr (v_1)))]
+             [b (term (arr (v_2)))]
+             [c (term (arr (v_3)))]
+             [left  (term (concat-arrs (,a ,b ,c)))]
+             [bc    (term (concat-arrs (,b ,c)))]
+             [right (term (concat-arrs (,a ,bc)))])
+        (equal? left right))
+      #:attempts ATTEMPTS))
+
+   ;; ── Concat associativity (multi-element arrays) ──────────────
+
+   (test-case "concat is associative (multi-element)"
+     (redex-check
+      Iidy-Core ((arr (v_a ...)) (arr (v_b ...)) (arr (v_c ...)))
+      (let* ([a (term (arr (v_a ...)))]
+             [b (term (arr (v_b ...)))]
+             [c (term (arr (v_c ...)))]
+             [left  (term (concat-arrs (,a ,b ,c)))]
+             [bc    (term (concat-arrs (,b ,c)))]
+             [right (term (concat-arrs (,a ,bc)))])
+        (equal? left right))
+      #:attempts ATTEMPTS))
+
+   ;; ── jcompare == is symmetric ─────────────────────────────────
+
+   (test-case "jcompare == is symmetric"
+     (redex-check
+      Iidy-Core (v_1 v_2)
+      (equal? (term (jcompare == v_1 v_2))
+              (term (jcompare == v_2 v_1)))
+      #:attempts ATTEMPTS))
+
+   ;; ── jcompare != is symmetric ─────────────────────────────────
+
+   (test-case "jcompare != is symmetric"
+     (redex-check
+      Iidy-Core (v_1 v_2)
+      (equal? (term (jcompare != v_1 v_2))
+              (term (jcompare != v_2 v_1)))
+      #:attempts ATTEMPTS))
+
+   ;; ── merge-all equivalent to fold of merge-objs ───────────────
+
+   (test-case "merge-all of two objects equals merge-objs"
+     (redex-check
+      Iidy-Core ((obj ((k_a v_a) ...)) (obj ((k_b v_b) ...)))
+      (let* ([a (term (obj ((k_a v_a) ...)))]
+             [b (term (obj ((k_b v_b) ...)))]
+             [via-all (term (merge-all (,a ,b)))]
+             [via-objs (term (merge-objs ,a ,b))])
+        (equal? via-all via-objs))
+      #:attempts ATTEMPTS))
+
+   ;; ── Eq transitivity (same value) ─────────────────────────────
+   ;; Trivial case: eq(v,v) and eq(v,v) implies eq(v,v).
+
+   (test-case "eq is transitive (same value)"
+     (redex-check
+      Iidy-Core v
+      (let* ([r-ab (eval-single (term (eq v v)) (term ()))]
+             [r-bc (eval-single (term (eq v v)) (term ()))]
+             [r-ac (eval-single (term (eq v v)) (term ()))])
+        (and r-ab r-bc r-ac
+             (equal? r-ab (term (bool #t)))
+             (equal? r-bc (term (bool #t)))
+             (equal? r-ac (term (bool #t)))))
+      #:attempts ATTEMPTS))
+
+   ;; ── Not inverts eq ───────────────────────────────────────────
+   ;; not(eq(a, a)) = false for all values.
+
+   (test-case "not(eq(a, a)) is always false"
+     (redex-check
+      Iidy-Core v
+      (let ([result (eval-single (term (not (eq v v))) (term ()))])
+        (and result (equal? result (term (bool #f)))))
+      #:attempts ATTEMPTS))
+
+   ;; ── Concat identity: concat-arrs of empty is empty array ─────
+
+   (test-case "concat-arrs of empty list is empty array"
+     (redex-check
+      Iidy-Core v  ;; v unused; redex-check needs a pattern
+      (equal? (term (concat-arrs ())) (term (arr ())))
+      #:attempts 1))
+
+   ;; ── Merge idempotent (unique keys) ───────────────────────────
+   ;; merge(a, a) = a when object has no duplicate keys.
+
+   (test-case "merge is idempotent (unique keys)"
+     (redex-check
+      Iidy-Core (obj ((k v) ...))
+      (let* ([a (term (obj ((k v) ...)))]
+             [keys (term (k ...))]
+             [unique? (= (length keys)
+                         (length (remove-duplicates keys)))])
+        (or (not unique?)  ;; skip objects with duplicate keys
+            (let ([result (term (merge-objs ,a ,a))])
+              (equal? result a))))
       #:attempts ATTEMPTS))))
