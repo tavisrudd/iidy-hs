@@ -190,7 +190,7 @@ The decision on whether to proceed with these should be based on:
 | C     | DONE   | `8afb310` | OnFailure + Capability ADTs, 13 new tests                  |
 | D     | DONE   | `a4d77a5` | TemplateLoader fail → Either, 11 files changed, 2 new tests|
 | E     | DONE   | `a8526a7` | Snapshot gap audit (research) — `notes/2026-03-02-snapshot-gap-audit.md` |
-| F     | DONE   | `cc835d1` | Truthiness rules doc — `notes/truthiness-rules.md`         |
+| F     | DONE   | `cc835d1` | Truthiness rules doc — superseded by PLT Redex formal spec (`spec/`) |
 | —     | DONE   | `a8526a7` | Rusty Russell API review (20 findings, -10 to +10 scale)   |
 | —     | DONE   | `607f658` | Russell review: requirements cross-reference (+4 findings) |
 | —     | DONE   | `aaf4858` | Russell review: corrected to proper -10 to +10 scale       |

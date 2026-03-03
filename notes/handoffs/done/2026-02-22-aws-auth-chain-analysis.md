@@ -1,5 +1,7 @@
 # AWS Auth Chain Precedence Analysis
 
+**Status: DONE** — gaps addressed during port phases 13-16
+
 ## Summary
 
 Rust vs Haskell comparison of credential resolution, profile handling,

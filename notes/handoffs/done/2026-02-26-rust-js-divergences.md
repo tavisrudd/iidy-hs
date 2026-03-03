@@ -1,5 +1,7 @@
 # Rust Divergences from JS Source of Truth
 
+**Status: DONE** — documented divergences, Haskell port uses JS as source of truth
+
 Items to fix in ~/src/iidy/ (the Rust port) to match ~/src/iidy-js/ behavior.
 
 ## Import System

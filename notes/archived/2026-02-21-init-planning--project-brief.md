@@ -182,27 +182,27 @@ Launch these sub-agents in parallel. Each writes to a file and returns a summary
 - Read every `.rs` file in the iidy source tree
 - Produce a complete module dependency graph
 - For each module: LOC, public API surface (exported functions/types/traits), dependencies on other modules, external crate dependencies
-- Write to `~/src/iidy-hs/notes/module-inventory.md`
+- Write to `notes/module-inventory.md`
 
 **Agent B: Haskell ecosystem audit** (Opus)
 - For every external Rust crate in iidy's Cargo.toml, find the Haskell equivalent
 - Verify each Haskell package exists on Hackage, is maintained, and covers the needed API surface
 - Special attention to: amazonka coverage of all 7 AWS services, tree-sitter Haskell bindings (check Hackage, GitHub, any prior art for FFI to tree-sitter C), brick vs ratatui feature parity
 - Flag any gaps where no equivalent exists and propose solutions
-- Write to `~/src/iidy-hs/notes/ecosystem-audit.md`
+- Write to `notes/archived/2026-02-21-init-planning--ecosystem-audit.md`
 
 **Agent C: iidy CLI + UI audit** (Sonnet, Explore)
 - Document every CLI command, subcommand, and flag from clap definitions
 - Document every output format (interactive, JSON, plain)
 - Capture the interactive terminal UI behavior: what ratatui renders, event streaming format, color scheme, progress indicators
 - Document error message format and the enhanced error context system
-- Write to `~/src/iidy-hs/notes/cli-ui-spec.md`
+- Write to `notes/archived/2026-02-21-init-planning--cli-ui-spec.md`
 
 **Agent D: iidy test inventory** (Sonnet, Explore)
 - Catalog every test file, test function, and what it tests
 - Note which tests use mocks (mockito), property tests (proptest), snapshot tests (insta), benchmarks (criterion)
 - Map each test category to Haskell testing equivalents (hspec, QuickCheck, tasty, etc.)
-- Write to `~/src/iidy-hs/notes/test-inventory.md`
+- Write to `notes/archived/2026-02-21-init-planning--test-inventory.md`
 
 ### Step 2: Synthesize the workplan (main context, Opus)
 
@@ -218,7 +218,7 @@ Read all four research files. Produce the detailed workplan:
 5. **Risk register** -- anything Agent B flagged as a gap, with mitigation plan
 6. **Delegation strategy** -- which chunks go to Opus vs Sonnet sub-agents
 
-Write the workplan to `~/src/iidy-hs/WORKPLAN.md` (the port's own repo, not centaur-analysis). Research notes go to `~/src/iidy-hs/notes/`.
+Write the workplan to `WORKPLAN.md` (the port's own repo, not centaur-analysis). Research notes go to `notes/`.
 
 ### Step 3: User review
 
@@ -260,12 +260,12 @@ After the workplan is approved, execute it autonomously. The user should NOT nee
 
 ## Progress
 
-- [x] Step 1a: Module inventory (sub-agent) → `~/src/iidy-hs/notes/module-inventory.md`
-- [x] Step 1b: Ecosystem audit (sub-agent) → `~/src/iidy-hs/notes/ecosystem-audit.md`
-- [x] Step 1c: CLI + UI spec (sub-agent) → `~/src/iidy-hs/notes/cli-ui-spec.md`
-- [x] Step 1d: Test inventory (sub-agent) → `~/src/iidy-hs/notes/test-inventory.md`
-- [x] Step 2: Synthesize workplan with stage gates → `~/src/iidy-hs/WORKPLAN.md`
-- [x] Step 2.5: Risk review (3 parallel agents) → `~/src/iidy-hs/notes/workplan-{risk-review,agent-resilience,operational-review}.md`
+- [x] Step 1a: Module inventory (sub-agent) → `notes/module-inventory.md`
+- [x] Step 1b: Ecosystem audit (sub-agent) → `notes/archived/2026-02-21-init-planning--ecosystem-audit.md`
+- [x] Step 1c: CLI + UI spec (sub-agent) → `notes/archived/2026-02-21-init-planning--cli-ui-spec.md`
+- [x] Step 1d: Test inventory (sub-agent) → `notes/archived/2026-02-21-init-planning--test-inventory.md`
+- [x] Step 2: Synthesize workplan with stage gates → `WORKPLAN.md`
+- [x] Step 2.5: Risk review (3 parallel agents) → `notes/workplan-{risk-review,agent-resilience,operational-review}.md`
 - [x] Step 3: Workplan approved (user delegated review authority, self-reviewed)
 - [ ] Phase 1: Project skeleton + core types
 - [ ] Phase 2: YAML preprocessing engine (HsYAML + resolver)

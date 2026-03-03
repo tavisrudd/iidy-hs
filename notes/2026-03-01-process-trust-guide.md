@@ -100,7 +100,7 @@ repository. They are the primary evidence for trust:
 | Progress log                | `progress.log`                                                                   | Timestamped chronological record of work completed               |
 | Commit history              | `git log`                                                                        | 183 small, green, descriptive commits                            |
 | Risk review                 | `notes/reviews/2026-02-21-review--initial-workplan-risks-persona:mcconnell.md`   | Pre-implementation risk analysis using McConnell estimation      |
-| Agent resilience analysis   | `notes/workplan-agent-resilience.md`                                             | 12 cataloged stuck states with mitigations                       |
+| Agent resilience analysis   | `notes/archived/2026-02-21-init-planning--workplan-agent-resilience.md`           | 12 cataloged stuck states with mitigations                       |
 
 **What these artifacts can tell you:**
 - Whether the work was planned before implemented (research docs predate code)

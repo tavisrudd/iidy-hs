@@ -1,5 +1,7 @@
 # Architectural Refactoring Plan
 
+**Status: PAUSED**
+
 Synthesized from six architecture reviews (Hickey, Ousterhout, Minsky, Krishnamurthi, Kmett, Muratori).
 Ordered by impact-to-effort ratio. Each phase produces green commits (tests pass, zero warnings).
 

@@ -1,5 +1,7 @@
 # Changeset Consistency Analysis
 
+**Status: DONE** — all changeset paths implemented in Phase 13.5
+
 ## Overview
 
 This document analyzes changeset handling across all commands that support changesets,
