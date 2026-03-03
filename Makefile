@@ -1,4 +1,4 @@
-.PHONY: build build-strict test clean run help ci ci-act check-unused-deps dev-setup spec snapshot
+.PHONY: build build-strict test clean run help ci ci-act check-unused-deps dev-setup spec snapshot lint format format-check
 
 build:
 	cabal build
@@ -45,6 +45,15 @@ spec:
 # Run this after changing spec behavior to update conformance vectors.
 snapshot:
 	cd spec && nix develop --command racket snapshot.rkt
+
+lint:
+	hlint src/ app/ test/
+
+format:
+	fourmolu --mode inplace src/ app/ test/
+
+format-check:
+	fourmolu --mode check src/ app/ test/
 
 ci-act:
 	nix run nixpkgs#act -- -j build

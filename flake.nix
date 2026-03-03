@@ -71,6 +71,8 @@
             buildInputs = [
               (hp.ghcWithPackages haskellDeps)
               hp.cabal-install
+              hp.hlint
+              hp.fourmolu
               pkgs.pkg-config
               pkgs.zlib
             ];
