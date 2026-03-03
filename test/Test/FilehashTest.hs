@@ -11,8 +11,11 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=), assertBool)
 
 import Iidy.Yaml.Imports.Loaders.File (loadFilehashImport)
-import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher)
-import Iidy.Yaml.Imports.Types (ImportData(..), ImportType(..), ImportError(..))
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, ImportConfig(..))
+import Iidy.Yaml.Imports.Types (ImportData(..), ImportType(..), ImportError(..), RemoteImports(..))
+
+defaultImportCfg :: ImportConfig
+defaultImportCfg = ImportConfig Nothing AllowRemoteImports
 
 filehashTests :: [TestTree]
 filehashTests =
@@ -26,7 +29,7 @@ filehashTests =
     , testDirectoryDeterministic
     , testKnownHash
     ]
-  , testGroup "mkFullDispatcher Nothing"
+  , testGroup "mkFullDispatcher defaultImportCfg"
     [ testDispatchFilehash
     , testDispatchFilehashBase64
     , testDispatchFile
@@ -145,7 +148,7 @@ testDispatchFilehash = testCase "dispatches filehash: to filehash loader" $
     let fp = dir </> "test.txt"
     BS.writeFile fp "dispatch test"
     let location = "filehash:" <> T.pack fp
-    result <- mkFullDispatcher Nothing location "."
+    result <- mkFullDispatcher defaultImportCfg location "."
     case result of
       Left (ImportError e) -> fail (T.unpack e)
       Right dat -> do
@@ -158,7 +161,7 @@ testDispatchFilehashBase64 = testCase "dispatches filehash-base64: to filehash l
     let fp = dir </> "test.txt"
     BS.writeFile fp "dispatch test"
     let location = "filehash-base64:" <> T.pack fp
-    result <- mkFullDispatcher Nothing location "."
+    result <- mkFullDispatcher defaultImportCfg location "."
     case result of
       Left (ImportError e) -> fail (T.unpack e)
       Right dat ->
@@ -170,7 +173,7 @@ testDispatchFile = testCase "dispatches bare paths to file loader" $
     let fp = dir </> "test.yaml"
     BS.writeFile fp "key: value"
     let location = T.pack fp
-    result <- mkFullDispatcher Nothing location "."
+    result <- mkFullDispatcher defaultImportCfg location "."
     case result of
       Left (ImportError e) -> fail (T.unpack e)
       Right dat ->

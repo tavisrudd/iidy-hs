@@ -18,6 +18,15 @@ import Iidy.Cfn.TemplateLoader
   , loadCfnTemplate
   , templateMaxBytes
   )
+import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig(..))
+import Iidy.Yaml.Imports.Types (RemoteImports(..))
+
+------------------------------------------------------------------------
+-- Helpers (shared config)
+------------------------------------------------------------------------
+
+defaultImportCfg :: ImportConfig
+defaultImportCfg = ImportConfig Nothing AllowRemoteImports
 
 ------------------------------------------------------------------------
 -- Test groups
@@ -38,7 +47,7 @@ templateLoaderTests =
 urlTests :: [TestTree]
 urlTests =
   [ testCase "s3:// URL returned as trTemplateUrl" $ do
-      result <- loadCfnTemplate (Just "s3://my-bucket/cfn/template.yaml") Nothing "" Nothing
+      result <- loadCfnTemplate (Just "s3://my-bucket/cfn/template.yaml") Nothing "" defaultImportCfg
       case result of
         Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
         Right tr -> do
@@ -46,7 +55,7 @@ urlTests =
           trTemplateBody tr @?= Nothing
 
   , testCase "https://s3... URL returned as trTemplateUrl" $ do
-      result <- loadCfnTemplate (Just "https://s3.amazonaws.com/bucket/key.yaml") Nothing "" Nothing
+      result <- loadCfnTemplate (Just "https://s3.amazonaws.com/bucket/key.yaml") Nothing "" defaultImportCfg
       case result of
         Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
         Right tr -> do
@@ -54,7 +63,7 @@ urlTests =
           trTemplateBody tr @?= Nothing
 
   , testCase "https:// URL returned as trTemplateUrl" $ do
-      result <- loadCfnTemplate (Just "https://example.com/template.yaml") Nothing "" Nothing
+      result <- loadCfnTemplate (Just "https://example.com/template.yaml") Nothing "" defaultImportCfg
       case result of
         Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
         Right tr -> do
@@ -62,7 +71,7 @@ urlTests =
           trTemplateBody tr @?= Nothing
 
   , testCase "http:// URL returned as trTemplateUrl" $ do
-      result <- loadCfnTemplate (Just "http://example.com/template.yaml") Nothing "" Nothing
+      result <- loadCfnTemplate (Just "http://example.com/template.yaml") Nothing "" defaultImportCfg
       case result of
         Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
         Right tr -> do
@@ -70,7 +79,7 @@ urlTests =
           trTemplateBody tr @?= Nothing
 
   , testCase "Nothing input returns empty result" $ do
-      result <- loadCfnTemplate Nothing Nothing "" Nothing
+      result <- loadCfnTemplate Nothing Nothing "" defaultImportCfg
       case result of
         Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
         Right tr -> do
@@ -98,7 +107,7 @@ renderSuccessTests =
         (Just "render:simple.yaml")
         (Just argsfileInFixtureDir)
         "dev"
-        Nothing
+        defaultImportCfg
       case result of
         Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
         Right tr -> do
@@ -110,7 +119,7 @@ renderSuccessTests =
         (Just "render:simple.yaml")
         (Just argsfileInFixtureDir)
         "dev"
-        Nothing
+        defaultImportCfg
       case result of
         Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
         Right tr -> do
@@ -123,7 +132,7 @@ renderSuccessTests =
         (Just "render:with-defs.yaml")
         (Just argsfileInFixtureDir)
         "dev"
-        Nothing
+        defaultImportCfg
       case result of
         Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
         Right tr -> do
@@ -140,7 +149,7 @@ renderSuccessTests =
         (Just "render:simple.yaml")
         (Just argsfileInFixtureDir)
         "staging"
-        Nothing
+        defaultImportCfg
       case result of
         Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
         Right tr -> do
@@ -160,7 +169,7 @@ localFileTests =
         (Just "test-fixtures/template-loader/simple.yaml")
         Nothing
         "dev"
-        Nothing
+        defaultImportCfg
       case result of
         Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
         Right tr -> do
@@ -172,7 +181,7 @@ localFileTests =
         (Just "test-fixtures/template-loader/simple.yaml")
         Nothing
         "dev"
-        Nothing
+        defaultImportCfg
       case result of
         Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
         Right tr -> do
@@ -194,7 +203,7 @@ failureTests =
           (Just (T.pack ("render:" <> fp)))
           Nothing
           "dev"
-          Nothing
+          defaultImportCfg
         case result of
           Right _ -> assertFailure "expected Left for malformed YAML"
           Left err ->
@@ -209,7 +218,7 @@ failureTests =
           (Just (T.pack fp))
           Nothing
           "dev"
-          Nothing
+          defaultImportCfg
         case result of
           Right _ -> assertFailure "expected Left for $imports: without render:"
           Left err ->
@@ -224,7 +233,7 @@ failureTests =
           (Just (T.pack ("render:" <> fp)))
           Nothing
           "dev"
-          Nothing
+          defaultImportCfg
         case result of
           Right _ -> assertFailure "expected Left for AWS import without credentials"
           Left err ->
@@ -242,7 +251,7 @@ failureTests =
           (Just (T.pack fp))
           Nothing
           "dev"
-          Nothing
+          defaultImportCfg
         case result of
           Right _ -> assertFailure "expected Left for invalid UTF-8 file"
           Left err ->
@@ -268,7 +277,7 @@ failureTests =
           (Just (T.pack ("render:" <> fp)))
           Nothing
           "dev"
-          Nothing
+          defaultImportCfg
         case result of
           Right _ -> assertFailure "expected Left for oversized template"
           Left err ->
@@ -280,7 +289,7 @@ failureTests =
         (Just "$imports:\n  x: env:HOME\nResources: {}")
         Nothing
         "dev"
-        Nothing
+        defaultImportCfg
       case result of
         Right _ -> assertFailure "expected Left for inline $imports: without render:"
         Left err ->
@@ -294,7 +303,7 @@ failureTests =
         (Just "nonexistent-file-as-inline-content")
         Nothing
         "dev"
-        Nothing
+        defaultImportCfg
       case result of
         Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
         Right tr ->

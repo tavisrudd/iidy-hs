@@ -24,7 +24,8 @@ import Iidy.Yaml.Engine
   , PreprocessResult(..)
   )
 import Iidy.Yaml.Errors.Conversion (formatPreprocessErrorEnhanced, formatParseErrorEnhanced)
-import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher)
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, ImportConfig(..))
+import Iidy.Yaml.Imports.Types (RemoteImports(..))
 import Iidy.Yaml.JMESPath (applyJmesPath)
 import Iidy.Yaml.OValue (OValue, toValue, fromValue)
 import Iidy.Yaml.Parser (parseYaml, ParseError(..))
@@ -63,7 +64,11 @@ runRender emit args gopts = do
                         YamlAuto -> shouldUseYaml11Compatibility (detectYamlSpec source)
           preprocess = if useYaml11 then preprocessYaml11 else preprocessYaml
 
-      result <- preprocess (mkFullDispatcher Nothing) ast baseLocation
+      let importCfg = ImportConfig
+            { icAwsEnv        = Nothing
+            , icRemoteImports = if goRemoteImports gopts then AllowRemoteImports else BlockRemoteImports
+            }
+      result <- preprocess (mkFullDispatcher importCfg) ast baseLocation
       case result of
         Left err -> do
           formatted <- formatPreprocessErrorEnhanced (goColor gopts) baseLocation source err

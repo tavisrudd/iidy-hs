@@ -284,4 +284,6 @@ Local templates (loaded from the filesystem) can use any import type. Remote tem
 
 Relative imports within a remote template resolve using the parent's scheme. A relative path `./sibling.yaml` inside an S3 template resolves to an S3 object in the same bucket prefix, not a local file. Explicit local path indicators (`./`, `../`, or an absolute path starting with `/`) are blocked when used from remote templates.
 
+Additionally, the `--no-remote-imports` CLI flag blocks `http:`, `https:`, and `s3:` imports entirely (regardless of whether the importing template is local or remote). This is useful in air-gapped or egress-restricted environments. AWS API-based imports (`cfn:`, `ssm:`, `ssm-path:`) are NOT blocked by this flag — they are gated by AWS credentials and IAM policy instead.
+
 For the full security model, see [SECURITY.md](SECURITY.md).

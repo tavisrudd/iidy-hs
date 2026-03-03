@@ -36,6 +36,8 @@ import qualified Amazonka.CloudFormation.Types.Parameter as Param
 
 import Iidy.Aws.ClientReqToken (TokenInfo(..))
 import Iidy.Cfn.Context (CfnContext(..), ctxDeriveToken)
+import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig(..))
+import Iidy.Yaml.Imports.Types (RemoteImports(..))
 import Iidy.Cfn.TemplateLoader (TemplateResult(..), loadCfnTemplate)
 import Iidy.Cfn.Types (Capability(..), OnFailure(..), StackArgs(..))
 
@@ -51,13 +53,15 @@ buildCreateStackRequest
   -> Bool           -- ^ use primary token (vs derived)
   -> Maybe FilePath -- ^ argsfile path for template resolution
   -> Text           -- ^ environment name
+  -> RemoteImports  -- ^ whether HTTP/S3 imports are allowed
   -> IO (Either Text (CF.CreateStack, TokenInfo))
-buildCreateStackRequest ctx args usePrimary argsfilePath env = do
+buildCreateStackRequest ctx args usePrimary argsfilePath env remoteImports = do
   let sName = saStackName args
+      importCfg = ImportConfig { icAwsEnv = Just (cfnEnv ctx), icRemoteImports = remoteImports }
   token <- if usePrimary
     then pure (cfnPrimaryToken ctx)
     else ctxDeriveToken ctx "create-stack"
-  tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
+  tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env importCfg
   case tmplEither of
     Left err -> pure (Left err)
     Right tmplResult -> do
@@ -87,13 +91,15 @@ buildUpdateStackRequest
   -> Bool           -- ^ use primary token
   -> Maybe FilePath -- ^ argsfile path
   -> Text           -- ^ environment name
+  -> RemoteImports  -- ^ whether HTTP/S3 imports are allowed
   -> IO (Either Text (CF.UpdateStack, TokenInfo))
-buildUpdateStackRequest ctx args usePrimary argsfilePath env = do
+buildUpdateStackRequest ctx args usePrimary argsfilePath env remoteImports = do
   let sName = saStackName args
+      importCfg = ImportConfig { icAwsEnv = Just (cfnEnv ctx), icRemoteImports = remoteImports }
   token <- if usePrimary
     then pure (cfnPrimaryToken ctx)
     else ctxDeriveToken ctx "update-stack"
-  tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
+  tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env importCfg
   case tmplEither of
     Left err -> pure (Left err)
     Right tmplResult -> do
@@ -131,11 +137,13 @@ buildCreateChangeSetRequest
   -> CF.ChangeSetType  -- ^ CREATE or UPDATE
   -> Maybe FilePath
   -> Text     -- ^ environment
+  -> RemoteImports  -- ^ whether HTTP/S3 imports are allowed
   -> IO (Either Text (CF.CreateChangeSet, TokenInfo))
-buildCreateChangeSetRequest ctx args csName csType argsfilePath env = do
+buildCreateChangeSetRequest ctx args csName csType argsfilePath env remoteImports = do
   let sName = saStackName args
+      importCfg = ImportConfig { icAwsEnv = Just (cfnEnv ctx), icRemoteImports = remoteImports }
   token <- ctxDeriveToken ctx "create-changeset"
-  tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
+  tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env importCfg
   case tmplEither of
     Left err -> pure (Left err)
     Right tmplResult -> do

@@ -262,6 +262,7 @@ globalOptionHelpRows =
   , ("    --output-mode <OUTPUT_MODE>", "Output mode for console display\n\nPossible values:\n- plain:       Non-interactive text for CI/logs (no spinners)\n- interactive: Interactive text with spinners and colors (exact iidy-js match)\n- json:        Machine-readable JSON Lines format")
   , ("    --debug", "Log debug information to stderr.")
   , ("    --log-full-error", "Log full error information to stderr.")
+  , ("    --no-remote-imports", "Disallow HTTP and S3 $imports.\nAWS API imports (cfn:, ssm:, ssm-path:) are not affected.")
   ]
 
 awsOptionHelpRows :: [(String, String)]

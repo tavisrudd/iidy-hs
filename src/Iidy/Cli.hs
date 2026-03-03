@@ -57,12 +57,13 @@ data Cli = Cli
   } deriving stock (Show, Eq)
 
 data GlobalOpts = GlobalOpts
-  { goEnvironment   :: !Text
-  , goColor         :: !ColorChoice
-  , goTheme         :: !Theme
-  , goOutputMode    :: !(Maybe OutputMode)
-  , goDebug         :: !Bool
-  , goLogFullError  :: !Bool
+  { goEnvironment      :: !Text
+  , goColor            :: !ColorChoice
+  , goTheme            :: !Theme
+  , goOutputMode       :: !(Maybe OutputMode)
+  , goDebug            :: !Bool
+  , goLogFullError     :: !Bool
+  , goRemoteImports    :: !Bool
   } deriving stock (Show, Eq)
 
 data AwsOpts = AwsOpts

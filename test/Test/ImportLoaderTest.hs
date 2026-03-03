@@ -13,8 +13,11 @@ import Iidy.Yaml.Imports.Loaders.Env (loadEnvImport)
 import Iidy.Yaml.Imports.Loaders.Git (loadGitImport)
 import Iidy.Yaml.Imports.Loaders.Http (urlPath)
 import Iidy.Yaml.Imports.Loaders.Random (loadRandomImport)
-import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher)
-import Iidy.Yaml.Imports.Types (ImportData(..), ImportType(..), ImportError(..))
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, ImportConfig(..))
+import Iidy.Yaml.Imports.Types (ImportData(..), ImportType(..), ImportError(..), RemoteImports(..))
+
+defaultImportCfg :: ImportConfig
+defaultImportCfg = ImportConfig Nothing AllowRemoteImports
 
 importLoaderTests :: [TestTree]
 importLoaderTests =
@@ -183,7 +186,7 @@ dispatchTests :: [TestTree]
 dispatchTests =
   [ testCase "dispatches env: to env loader" $ do
       setEnv "IIDY_DISPATCH_TEST" "dispatched"
-      result <- mkFullDispatcher Nothing "env:IIDY_DISPATCH_TEST" "."
+      result <- mkFullDispatcher defaultImportCfg "env:IIDY_DISPATCH_TEST" "."
       unsetEnv "IIDY_DISPATCH_TEST"
       case result of
         Left (ImportError e) -> fail (T.unpack e)
@@ -192,7 +195,7 @@ dispatchTests =
           idRawData dat @?= "dispatched"
 
   , testCase "dispatches git: to git loader" $ do
-      result <- mkFullDispatcher Nothing "git:sha" "."
+      result <- mkFullDispatcher defaultImportCfg "git:sha" "."
       case result of
         Left (ImportError e) -> fail (T.unpack e)
         Right dat -> do
@@ -200,7 +203,7 @@ dispatchTests =
           T.length (idRawData dat) @?= 40
 
   , testCase "dispatches random: to random loader" $ do
-      result <- mkFullDispatcher Nothing "random:int" "."
+      result <- mkFullDispatcher defaultImportCfg "random:int" "."
       case result of
         Left (ImportError e) -> fail (T.unpack e)
         Right dat -> do
@@ -211,7 +214,7 @@ dispatchTests =
   , testCase "AWS prefixes return error, not file fallthrough" $ do
       let awsPrefixes = ["cfn:stack/key", "ssm:/param", "ssm-path:/path", "s3://bucket/key"]
       mapM_ (\loc -> do
-        result <- mkFullDispatcher Nothing loc "."
+        result <- mkFullDispatcher defaultImportCfg loc "."
         case result of
           Left (ImportError e) ->
             assertBool ("AWS error for " <> T.unpack loc)

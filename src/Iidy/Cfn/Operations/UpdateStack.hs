@@ -46,6 +46,7 @@ import Iidy.Cfn.StackOperations
   )
 import Iidy.Cfn.Types (StackArgs(..))
 import Iidy.Output.Types (OutputData(..), ChangeSetInfo(..))
+import Iidy.Yaml.Imports.Types (RemoteImports(..))
 
 -- | The CloudFormation error message returned when there are no changes to apply.
 noUpdatesMessage :: Text
@@ -72,12 +73,13 @@ updateStack
   -> Maybe FilePath       -- ^ argsfile path for template resolution
   -> Text                 -- ^ environment name
   -> (OutputData -> IO ()) -- ^ output emitter for progress display
+  -> RemoteImports        -- ^ whether HTTP/S3 imports are allowed
   -> IO (Either Text Int)
-updateStack ctx args argsfilePath env emit = do
+updateStack ctx args argsfilePath env emit remoteImports = do
   let stackName = saStackName args
 
   -- Step 1: Build the UpdateStack request (use primary token)
-  reqResult <- buildUpdateStackRequest ctx args True argsfilePath env
+  reqResult <- buildUpdateStackRequest ctx args True argsfilePath env remoteImports
   case reqResult of
     Left err -> pure (Left err)
     Right (req, _token) -> do
@@ -143,8 +145,9 @@ updateStackWithChangeset
   -> Maybe FilePath         -- ^ argsfile path for template resolution
   -> Text                   -- ^ environment name
   -> (OutputData -> IO ())  -- ^ output emitter for progress display
+  -> RemoteImports          -- ^ whether HTTP/S3 imports are allowed
   -> IO (Either Text Int)
-updateStackWithChangeset ctx args yesFlag argsfilePath env emit = do
+updateStackWithChangeset ctx args yesFlag argsfilePath env emit remoteImports = do
   let stackName = saStackName args
 
   -- Step 1: Fetch and emit StackDefinition
@@ -155,7 +158,7 @@ updateStackWithChangeset ctx args yesFlag argsfilePath env emit = do
       csName = "iidy-update-" <> tokenPrefix
 
   -- Step 3: Create the UPDATE changeset
-  csResult' <- createChangeset ctx args csName True argsfilePath env
+  csResult' <- createChangeset ctx args csName True argsfilePath env remoteImports
   case csResult' of
     Left err -> pure (Left err)
     Right info -> do

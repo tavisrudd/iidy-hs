@@ -126,6 +126,33 @@ with `./`, `../`, or `/` prefixes as implicit `file:` imports.
 4. **Local Flexibility** — Local templates retain full import capabilities
    for all trusted operations.
 
+## CLI Control: `--no-remote-imports`
+
+The `--no-remote-imports` flag disables all network-fetching import types at
+the CLI level. When set, any `http:`, `https:`, or `s3:` import returns an
+error instead of fetching content.
+
+**Blocked by `--no-remote-imports`:**
+
+- `http:` / `https:` — arbitrary HTTP fetches (SSRF risk)
+- `s3:` — arbitrary S3 object fetches
+
+**NOT blocked by `--no-remote-imports`:**
+
+- `cfn:`, `ssm:`, `ssm-path:` — these are AWS API calls that go through the
+  AWS SDK with IAM authentication. They require credentials and are bounded
+  by IAM policy, not open HTTP. They are gated by `--profile` / AWS
+  credential configuration, not by the remote imports flag.
+- `env:`, `file:`, `git:`, `filehash:`, `random:` — local operations.
+
+This flag is orthogonal to the remote-base trust model described above. The
+trust model prevents remote *templates* from reading local resources. The
+`--no-remote-imports` flag prevents local *users* from fetching remote
+content, useful in air-gapped or egress-restricted environments.
+
+The default is `--remote-imports` (allowed). Use `--no-remote-imports` to
+restrict.
+
 ## Implementation Notes
 
 Security validation is centralized in `parseImportType` in

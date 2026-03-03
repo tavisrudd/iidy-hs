@@ -4,6 +4,7 @@ module Iidy.Yaml.Imports.Types
   , ImportRecord(..)
   , ImportLoader(..)
   , ImportError(..)
+  , RemoteImports(..)
   , parseImportType
   ) where
 
@@ -44,6 +45,10 @@ data ImportRecord = ImportRecord
   } deriving stock (Show, Eq)
 
 newtype ImportError = ImportError Text
+  deriving stock (Show, Eq)
+
+-- | Whether remote (HTTP\/S3) imports are permitted.
+data RemoteImports = AllowRemoteImports | BlockRemoteImports
   deriving stock (Show, Eq)
 
 class ImportLoader m where

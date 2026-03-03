@@ -11,11 +11,11 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TLE
 import System.IO (hPutStrLn, stderr)
 
-import Iidy.Cli (GetImportArgs(..), RenderFormat(..))
+import Iidy.Cli (GetImportArgs(..), RenderFormat(..), GlobalOpts(..))
 import Iidy.Output.Types (OutputData(..))
 import Iidy.Yaml.Emitter (emitYaml)
-import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher)
-import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..))
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, ImportConfig(..))
+import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..), RemoteImports(..))
 import Iidy.Yaml.OValue (fromValue)
 
 ------------------------------------------------------------------------
@@ -25,11 +25,15 @@ import Iidy.Yaml.OValue (fromValue)
 -- | Run the get-import command.
 -- Loads an import, optionally applies a JMESPath query, and formats output.
 -- The emitter callback is used to send output through the output pipeline.
-runGetImport :: (OutputData -> IO ()) -> GetImportArgs -> IO Int
-runGetImport emit args = do
+runGetImport :: (OutputData -> IO ()) -> GetImportArgs -> GlobalOpts -> IO Int
+runGetImport emit args gopts = do
   let location = giaImport args
       baseLocation = "."
-      dispatcher = mkFullDispatcher Nothing
+      importCfg = ImportConfig
+        { icAwsEnv        = Nothing
+        , icRemoteImports = if goRemoteImports gopts then AllowRemoteImports else BlockRemoteImports
+        }
+      dispatcher = mkFullDispatcher importCfg
 
   result <- dispatcher location baseLocation
   case result of

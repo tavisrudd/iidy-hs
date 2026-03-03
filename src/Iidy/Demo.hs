@@ -34,7 +34,8 @@ import Text.Regex.TDFA ((=~))
 import Iidy.Types (ColorChoice(..))
 import Iidy.Yaml.Engine (preprocessYaml11, PreprocessResult(..))
 import Iidy.Yaml.Errors.Conversion (formatPreprocessErrorEnhanced, formatParseErrorEnhanced)
-import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher)
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, ImportConfig(..))
+import Iidy.Yaml.Imports.Types (RemoteImports(..))
 import Iidy.Yaml.OValue (toValue)
 import Iidy.Yaml.Parser (parseYaml, ParseError(..))
 
@@ -55,8 +56,8 @@ data DemoCommand
 ------------------------------------------------------------------------
 
 -- | Run a demo script. Returns exit code.
-runDemo :: Text -> Double -> Bool -> IO Int
-runDemo scriptPath timescaling maskSecrets = do
+runDemo :: Text -> Double -> Bool -> RemoteImports -> IO Int
+runDemo scriptPath timescaling maskSecrets remoteImports = do
   let fp = T.unpack scriptPath
   content <- BL.readFile fp
   let baseLocation = scriptPath
@@ -69,7 +70,8 @@ runDemo scriptPath timescaling maskSecrets = do
       pure 1
 
     Right ast -> do
-      result <- preprocessYaml11 (mkFullDispatcher Nothing) ast baseLocation
+      let importCfg = ImportConfig { icAwsEnv = Nothing, icRemoteImports = remoteImports }
+      result <- preprocessYaml11 (mkFullDispatcher importCfg) ast baseLocation
       case result of
         Left err -> do
           let source = TE.decodeUtf8 (BL.toStrict content)
@@ -84,10 +86,10 @@ runDemo scriptPath timescaling maskSecrets = do
               TIO.hPutStrLn stderr $ "Failed to parse demo script: " <> err
               pure 1
             Right (files, commands) ->
-              runWithTmpDir files commands timescaling maskSecrets
+              runWithTmpDir files commands timescaling maskSecrets remoteImports
 
-runWithTmpDir :: Map Text Text -> [DemoCommand] -> Double -> Bool -> IO Int
-runWithTmpDir files commands timescaling maskSecrets = do
+runWithTmpDir :: Map Text Text -> [DemoCommand] -> Double -> Bool -> RemoteImports -> IO Int
+runWithTmpDir files commands timescaling maskSecrets remoteImports = do
   tmpDir <- getTemporaryDirectory
   let demoDir = tmpDir </> "iidy-demo"
   bracket
@@ -102,7 +104,7 @@ runWithTmpDir files commands timescaling maskSecrets = do
       let envWithExe = case iidyExe of
             Just exe -> Map.insert "IIDY_EXE" (T.pack exe) envMap
             Nothing  -> envMap
-      runCommands commands d envWithExe iidyExe timescaling maskSecrets
+      runCommands commands d envWithExe iidyExe timescaling maskSecrets remoteImports
       pure 0
     )
 
@@ -157,25 +159,25 @@ unpackFiles files tmpDir =
 -- Command execution
 ------------------------------------------------------------------------
 
-runCommands :: [DemoCommand] -> FilePath -> Map Text Text -> Maybe String -> Double -> Bool -> IO ()
-runCommands commands workDir envMap iidyExe timescaling maskSecrets =
+runCommands :: [DemoCommand] -> FilePath -> Map Text Text -> Maybe String -> Double -> Bool -> RemoteImports -> IO ()
+runCommands commands workDir envMap iidyExe timescaling maskSecrets remoteImports =
   go commands envMap
   where
     go [] _ = pure ()
     go (cmd:rest) currentEnv = do
-      newEnv <- runCommand cmd workDir currentEnv iidyExe timescaling maskSecrets
+      newEnv <- runCommand cmd workDir currentEnv iidyExe timescaling maskSecrets remoteImports
       go rest newEnv
 
-runCommand :: DemoCommand -> FilePath -> Map Text Text -> Maybe String -> Double -> Bool -> IO (Map Text Text)
-runCommand cmd workDir envMap iidyExe timescaling maskSecrets = case cmd of
+runCommand :: DemoCommand -> FilePath -> Map Text Text -> Maybe String -> Double -> Bool -> RemoteImports -> IO (Map Text Text)
+runCommand cmd workDir envMap iidyExe timescaling maskSecrets remoteImports = case cmd of
   DemoShell shellCmd -> do
-    let substituted = substituteIidyCommand shellCmd iidyExe
+    let substituted = substituteIidyCommand shellCmd iidyExe remoteImports
     printCommand substituted timescaling
     execShell substituted workDir envMap maskSecrets
     pure envMap
 
   DemoSilent shellCmd -> do
-    let substituted = substituteIidyCommand shellCmd iidyExe
+    let substituted = substituteIidyCommand shellCmd iidyExe remoteImports
     execShell substituted workDir envMap maskSecrets
     pure envMap
 
@@ -284,10 +286,15 @@ maskString str =
 ------------------------------------------------------------------------
 
 -- | Replace 'iidy' command at command positions with the actual executable path.
-substituteIidyCommand :: Text -> Maybe String -> Text
-substituteIidyCommand cmd Nothing = cmd
-substituteIidyCommand cmd (Just exe) =
-  T.pack $ substAll (T.unpack cmd) (T.unpack (T.pack exe))
+-- When 'remoteImports' is 'BlockRemoteImports', appends @--no-remote-imports@
+-- immediately after the executable in the substitution.
+substituteIidyCommand :: Text -> Maybe String -> RemoteImports -> Text
+substituteIidyCommand cmd Nothing _ = cmd
+substituteIidyCommand cmd (Just exe) remoteImports =
+  let effectiveExe = case remoteImports of
+        BlockRemoteImports -> exe ++ " --no-remote-imports"
+        AllowRemoteImports -> exe
+  in T.pack $ substAll (T.unpack cmd) effectiveExe
 
 substAll :: String -> String -> String
 substAll [] _ = []

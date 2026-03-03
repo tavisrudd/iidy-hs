@@ -19,6 +19,8 @@ import Iidy.Cfn.Context (CfnContext(..))
 import Iidy.Cfn.TemplateLoader (loadCfnTemplate, TemplateResult(..))
 import Iidy.Cfn.Types (StackArgs(..))
 import Iidy.Output.Types
+import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig(..))
+import Iidy.Yaml.Imports.Types (RemoteImports(..))
 
 ------------------------------------------------------------------------
 -- Estimate cost operation
@@ -33,10 +35,11 @@ estimateCost
   -> Maybe FilePath  -- ^ argsfile path for template resolution
   -> Text            -- ^ environment name
   -> (OutputData -> IO ())  -- ^ emit callback
+  -> RemoteImports   -- ^ whether HTTP/S3 imports are allowed
   -> IO (Either Text Int)
-estimateCost ctx args argsfilePath env emit = do
+estimateCost ctx args argsfilePath env emit remoteImports = do
   -- Step 1: Load the template
-  tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (Just (cfnEnv ctx))
+  tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (ImportConfig (Just (cfnEnv ctx)) remoteImports)
   case tmplEither of
     Left err -> pure (Left err)
     Right tmplResult -> do

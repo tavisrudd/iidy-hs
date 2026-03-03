@@ -51,6 +51,7 @@ import Iidy.Output.Types (OutputData(..))
 import Iidy.Params.Client (paramGet, paramSet, paramGetByPath, paramGetHistory, GetByPathResult(..))
 import Iidy.Params.Review (paramReview)
 import Iidy.Render (runRender)
+import Iidy.Yaml.Imports.Types (RemoteImports(..))
 
 -- | POSIX _exit(2) — terminates immediately without cleanup.
 -- Used for signal handlers to avoid GHC's backtrace on exitWith.
@@ -121,28 +122,28 @@ runCommand cli = case cliCommand cli of
   -- CloudFormation operations with stack-args
   CmdCreateStack args   ->
     runCfnWithArgs cli OpCreateStack (csaArgsfile args) (csaStackName args)
-      $ \ctx sa fp env emit -> createStack ctx sa fp env emit >>= handleEither
+      $ \remoteImports ctx sa fp env emit -> createStack ctx sa fp env emit remoteImports >>= handleEither
 
   CmdUpdateStack args   ->
     runCfnWithArgs cli OpUpdateStack (sfaArgsfile (usaBase args)) (sfaStackName (usaBase args))
-      $ \ctx sa fp env emit ->
+      $ \remoteImports ctx sa fp env emit ->
           if usaChangeset args
-            then updateStackWithChangeset ctx sa (usaYes args) fp env emit >>= handleEither
-            else updateStack ctx sa fp env emit >>= handleEither
+            then updateStackWithChangeset ctx sa (usaYes args) fp env emit remoteImports >>= handleEither
+            else updateStack ctx sa fp env emit remoteImports >>= handleEither
 
   CmdCreateOrUpdate args ->
     runCfnWithArgs cli OpCreateOrUpdate (sfaArgsfile (usaBase args)) (sfaStackName (usaBase args))
-      $ \ctx sa fp env emit -> createOrUpdate ctx sa (usaChangeset args) (usaYes args) fp env emit >>= handleEither
+      $ \remoteImports ctx sa fp env emit -> createOrUpdate ctx sa (usaChangeset args) (usaYes args) fp env emit remoteImports >>= handleEither
 
   CmdEstimateCost args  ->
     runCfnWithArgs cli OpEstimateCost (sfaArgsfile args) (sfaStackName args)
-      $ \ctx sa fp env emit -> do
-          result <- estimateCost ctx sa fp env emit
+      $ \remoteImports ctx sa fp env emit -> do
+          result <- estimateCost ctx sa fp env emit remoteImports
           handleEither result
 
   CmdCreateChangeset args ->
     runCfnWithArgs cli OpCreateChangeset (ccsArgsfile args) (ccsStackName args)
-      $ \ctx sa fp env emit -> do
+      $ \remoteImports ctx sa fp env emit -> do
           -- Determine changeset name (user-provided or random)
           csName <- case ccsChangesetName args of
             Just name -> pure name
@@ -151,7 +152,7 @@ runCommand cli = case cliCommand cli of
           let stackName = saStackName sa
           state <- checkStackState ctx stackName
           let exists = case state of { StackNormal -> True; _ -> False }
-          csEither <- createChangeset ctx sa csName exists fp env
+          csEither <- createChangeset ctx sa csName exists fp env remoteImports
           case csEither of
             Left err -> do
               emit (OdRawOutput err)
@@ -290,8 +291,8 @@ runCommand cli = case cliCommand cli of
   CmdTemplateApproval acmd -> case acmd of
     ApprovalRequest args ->
       runCfnWithArgs cli OpTemplateApprovalRequest (araArgsfile args) Nothing
-        $ \ctx sa fp env emit -> do
-            result <- templateApprovalRequest ctx sa (araLintTemplate args) fp env emit
+        $ \remoteImports ctx sa fp env emit -> do
+            result <- templateApprovalRequest ctx sa (araLintTemplate args) fp env emit remoteImports
             handleEither result
     ApprovalReview args -> do
       ctx <- createSimpleContext cli OpTemplateApprovalReview
@@ -302,12 +303,14 @@ runCommand cli = case cliCommand cli of
         Right rc -> exitCode rc
   CmdGetImport args      -> do
       dispatch <- mkOutputDispatch (cliGlobalOpts cli)
-      runGetImport (renderOutput dispatch) args >>= exitCode
-  CmdDemo args           -> runDemo (daDemoscript args) (daTimescaling args) (daMaskSecrets args) >>= exitCode
+      runGetImport (renderOutput dispatch) args (cliGlobalOpts cli) >>= exitCode
+  CmdDemo args           ->
+    let ri = if goRemoteImports (cliGlobalOpts cli) then AllowRemoteImports else BlockRemoteImports
+    in runDemo (daDemoscript args) (daTimescaling args) (daMaskSecrets args) ri >>= exitCode
   CmdLintTemplate args   ->
     runCfnWithArgs cli OpLintTemplate (ltaArgsfile args) Nothing
-      $ \ctx sa fp env emit -> do
-          result <- lintTemplate ctx sa fp env emit
+      $ \remoteImports ctx sa fp env emit -> do
+          result <- lintTemplate ctx sa fp env emit remoteImports
           handleEither result
   CmdConvertStackToIidy args -> do
       ctx <- createSimpleContext cli OpConvertStackToIidy
@@ -346,17 +349,18 @@ runCfnWithArgs
   -> CfnOperation
   -> Text            -- ^ argsfile path
   -> Maybe Text      -- ^ stack name override from CLI
-  -> (CfnContext -> StackArgs -> Maybe FilePath -> Text -> (OutputData -> IO ()) -> IO Int)
+  -> (RemoteImports -> CfnContext -> StackArgs -> Maybe FilePath -> Text -> (OutputData -> IO ()) -> IO Int)
   -> IO ()
 runCfnWithArgs cli operation argsfile stackNameOverride action = do
   let env = goEnvironment (cliGlobalOpts cli)
       cliAws = cliToAwsSettings cli
       argsfilePath = T.unpack argsfile
+      remoteImports = if goRemoteImports (cliGlobalOpts cli) then AllowRemoteImports else BlockRemoteImports
 
   dispatch <- mkOutputDispatch (cliGlobalOpts cli)
   let emit = renderOutput dispatch
 
-  result <- loadStackArgs argsfilePath env operation cliAws
+  result <- loadStackArgs argsfilePath env operation cliAws remoteImports
   case result of
     Left err -> dieTxt err
     Right (LoadedStackArgs sa mergedAws detectionCtx) -> do
@@ -378,7 +382,7 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
           emit (OdCommandMetadata meta)
         else pure ()
 
-      rc <- action ctx sa' (Just argsfilePath) env emit
+      rc <- action remoteImports ctx sa' (Just argsfilePath) env emit
         `finally` cleanupOutputDispatch dispatch
 
       -- Emit FinalCommandSummary for write operations

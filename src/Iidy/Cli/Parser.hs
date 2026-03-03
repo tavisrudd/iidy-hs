@@ -120,6 +120,10 @@ globalOptsParser = GlobalOpts
       ( long "log-full-error"
       <> help "Log full error information to stderr."
       )
+  <*> flag True False
+      ( long "no-remote-imports"
+      <> help "Disallow HTTP and S3 $imports."
+      )
 
 ------------------------------------------------------------------------
 -- AWS options

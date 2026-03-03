@@ -26,6 +26,7 @@ import Iidy.Cfn.StackOperations
   )
 import Iidy.Cfn.Types (StackArgs(..))
 import Iidy.Output.Types (OutputData(..))
+import Iidy.Yaml.Imports.Types (RemoteImports(..))
 
 ------------------------------------------------------------------------
 -- Create stack operation
@@ -47,10 +48,11 @@ createStack
   -> Maybe FilePath       -- ^ argsfile path for template resolution
   -> Text                 -- ^ environment name
   -> (OutputData -> IO ()) -- ^ output emitter for progress display
+  -> RemoteImports        -- ^ whether HTTP/S3 imports are allowed
   -> IO (Either Text Int)
-createStack ctx args argsfilePath env emit = do
+createStack ctx args argsfilePath env emit remoteImports = do
   -- Step 1: Build the request (use primary token for create)
-  reqResult <- buildCreateStackRequest ctx args True argsfilePath env
+  reqResult <- buildCreateStackRequest ctx args True argsfilePath env remoteImports
   case reqResult of
     Left err -> pure (Left err)
     Right (req, _token) -> do

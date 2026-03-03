@@ -35,6 +35,8 @@ import Iidy.Cfn.TemplateHash (generateVersionedLocation, parseS3Url)
 import Iidy.Cfn.TemplateLoader (loadCfnTemplate, TemplateResult(..))
 import Iidy.Cfn.Types (StackArgs(..))
 import Iidy.Output.Types
+import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig(..))
+import Iidy.Yaml.Imports.Types (RemoteImports(..))
 
 ------------------------------------------------------------------------
 -- Template Approval Request
@@ -48,8 +50,9 @@ templateApprovalRequest
   -> Maybe FilePath -- ^ argsfile
   -> Text       -- ^ environment
   -> (OutputData -> IO ())  -- ^ emit callback
+  -> RemoteImports  -- ^ whether HTTP/S3 imports are allowed
   -> IO (Either Text Int)
-templateApprovalRequest ctx sa _lintTmpl argsfilePath env emit = do
+templateApprovalRequest ctx sa _lintTmpl argsfilePath env emit remoteImports = do
   -- Validate required fields
   case saApprovedTemplateLocation sa of
     Nothing -> pure (Left "ApprovedTemplateLocation is required in stack-args.yaml")
@@ -58,7 +61,7 @@ templateApprovalRequest ctx sa _lintTmpl argsfilePath env emit = do
         Nothing -> pure (Left "Template is required in stack-args.yaml")
         Just _tmplSpec -> do
           -- Load template
-          tmplEither <- loadCfnTemplate (saTemplate sa) (fmap id argsfilePath) env (Just (cfnEnv ctx))
+          tmplEither <- loadCfnTemplate (saTemplate sa) (fmap id argsfilePath) env (ImportConfig (Just (cfnEnv ctx)) remoteImports)
           case tmplEither of
             Left err -> pure (Left err)
             Right tmplResult -> case trTemplateBody tmplResult of

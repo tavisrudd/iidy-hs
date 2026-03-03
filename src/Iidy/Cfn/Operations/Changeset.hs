@@ -77,6 +77,7 @@ import Iidy.Output.Types
   , ChangeSetInfo(..), ChangeInfo(..), ChangeDetail(..)
   , ChangeSetCreationResult(..)
   )
+import Iidy.Yaml.Imports.Types (RemoteImports(..))
 
 ------------------------------------------------------------------------
 -- Changeset creation
@@ -101,15 +102,16 @@ createChangeset
   -> Bool            -- ^ stack exists? (True => UPDATE, False => CREATE type)
   -> Maybe FilePath  -- ^ argsfile path for template resolution
   -> Text            -- ^ environment name
+  -> RemoteImports   -- ^ whether HTTP/S3 imports are allowed
   -> IO (Either Text ChangeSetInfo)
-createChangeset ctx args csName stackExists' argsfilePath env = do
+createChangeset ctx args csName stackExists' argsfilePath env remoteImports = do
   let csType = if stackExists'
                  then CF.ChangeSetType_UPDATE
                  else CF.ChangeSetType_CREATE
       stackName' = saStackName args
 
   -- Step 1 & 2: Build and send the CreateChangeSet request
-  reqResult <- buildCreateChangeSetRequest ctx args csName csType argsfilePath env
+  reqResult <- buildCreateChangeSetRequest ctx args csName csType argsfilePath env remoteImports
   case reqResult of
     Left err -> pure (Left err)
     Right (req, _token) -> do

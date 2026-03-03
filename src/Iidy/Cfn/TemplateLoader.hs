@@ -10,7 +10,6 @@ module Iidy.Cfn.TemplateLoader
   , s3TemplateMaxBytes
   ) where
 
-import qualified Amazonka
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import Data.Text (Text)
@@ -25,7 +24,7 @@ import Iidy.Yaml.Engine
   ( preprocessYaml11
   , PreprocessResult(..)
   )
-import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher)
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, ImportConfig(..))
 import Iidy.Yaml.Location (zeroPosition)
 import Iidy.Yaml.Parser (parseYaml, ParseError(..))
 
@@ -56,14 +55,14 @@ data TemplateResult = TemplateResult
 
 -- | Load a CloudFormation template.
 -- Handles: file paths, S3 URLs, HTTP URLs, render: prefix, inline content.
--- The 'Maybe Amazonka.Env' is used by the render: path to resolve AWS
--- import types ($imports with ssm:, cfn:, s3: schemes).
+-- The 'ImportConfig' controls AWS credentials and remote import policy
+-- for the render: path (resolves $imports with ssm:, cfn:, s3: schemes).
 --
 -- Returns 'Left' with a descriptive error message on failure, instead of
 -- throwing via 'fail'.
-loadCfnTemplate :: Maybe Text -> Maybe FilePath -> Text -> Maybe Amazonka.Env -> IO (Either Text TemplateResult)
+loadCfnTemplate :: Maybe Text -> Maybe FilePath -> Text -> ImportConfig -> IO (Either Text TemplateResult)
 loadCfnTemplate Nothing _ _ _ = pure (Right (TemplateResult Nothing Nothing))
-loadCfnTemplate (Just tmplSpec) argsfilePath env mAwsEnv
+loadCfnTemplate (Just tmplSpec) argsfilePath env importCfg
   -- S3 URL - use as template URL
   | isS3Url tmplSpec = pure (Right (TemplateResult Nothing (Just tmplSpec)))
   -- HTTP(S) URL - use as template URL
@@ -79,7 +78,7 @@ loadCfnTemplate (Just tmplSpec) argsfilePath env mAwsEnv
         Right ast -> do
           -- Inject $envValues before preprocessing (matches Rust template_loader.rs:117-131)
           let astWithEnv = injectEnvValuesIntoAst ast env
-          result <- preprocessYaml11 (mkFullDispatcher mAwsEnv) astWithEnv baseLocation
+          result <- preprocessYaml11 (mkFullDispatcher importCfg) astWithEnv baseLocation
           case result of
             Left err ->
               pure (Left ("Preprocess error in rendered template " <> baseLocation <> ": " <> T.pack (show err)))
