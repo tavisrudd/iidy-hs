@@ -1,7 +1,7 @@
 # Review #1 Fixes: YAML Resolution Engine & Error Subsystem
 
 **Date**: 2026-02-28
-**Review**: `notes/2026-02-28-review-1-yaml-resolver-errors.md`
+**Review**: `notes/reviews/2026-02-28-review--yaml-resolver-errors--round-1.md`
 **Tests**: 469 → 561 (+92 tests)
 
 ---

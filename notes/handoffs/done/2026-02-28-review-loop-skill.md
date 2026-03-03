@@ -86,12 +86,12 @@ This pattern is valuable and should be a reusable Claude skill: `/t-review-loop`
 
 ## Codebase Reference
 
-| What                        | Where                                        |
-|-----------------------------|----------------------------------------------|
-| Existing review skill       | `~/.claude/skills/t-review/SKILL.md`         |
-| Example review output       | `notes/2026-02-28-review-1b-yaml-resolver-errors.md` |
-| Example grade output        | `notes/2026-02-28-review-1c-yaml-resolver-errors.md` |
-| Skills directory            | `~/.claude/skills/`                          |
+| What                        | Where                                                                |
+|-----------------------------|----------------------------------------------------------------------|
+| Existing review skill       | `~/.claude/skills/t-review/SKILL.md`                                 |
+| Example review output       | `notes/reviews/2026-02-28-review--yaml-resolver-errors--round-2.md`  |
+| Example grade output        | `notes/reviews/2026-02-28-review--yaml-resolver-errors--round-3.md`  |
+| Skills directory            | `~/.claude/skills/`                                                  |
 
 ## Delegation Strategy
 

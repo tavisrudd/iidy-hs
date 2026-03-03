@@ -14,10 +14,10 @@ This review loop focused on the interactive renderer subsystem: the `OutputData`
 
 | Round | File                                                                | Grade  | Issues Found | Fixed |
 |:-----:|:--------------------------------------------------------------------|:------:|:------------:|:-----:|
-| 1     | `notes/2026-02-28-review-2-interactive-renderer.md`                 |  74    |     33       |  11   |
-| 2     | `notes/2026-03-01-review-2b-interactive-renderer.md`                |  74    |     20       |   7   |
-| 3     | `notes/2026-03-01-review-2c-interactive-renderer.md`                |  78    |     18       |  10   |
-| 4     | `notes/2026-03-01-review-2d-interactive-renderer.md`                | 82→89  |     14       |  10   |
+| 1     | `notes/reviews/2026-02-28-review--interactive-renderer--round-1.md` |  74    |     33       |  11   |
+| 2     | `notes/reviews/2026-03-01-review--interactive-renderer--round-2.md` |  74    |     20       |   7   |
+| 3     | `notes/reviews/2026-03-01-review--interactive-renderer--round-3.md` |  78    |     18       |  10   |
+| 4     | `notes/reviews/2026-03-01-review--interactive-renderer--round-4.md` | 82→89  |     14       |  10   |
 
 ## Key Changes Made
 

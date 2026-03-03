@@ -44,9 +44,9 @@ fixtures and 49 error fixtures from the Rust test suite. All 86 pass.
 **Review loops.** Three rounds of AI code review (the reviewer was the same AI
 system, but in a fresh session with a review-specific prompt). The third loop
 ran 14 rounds on CFN operations/polling alone, raising the score from 72 to 90.
-Review findings and fixes are documented in `notes/2026-03-01-review-3*.md` (14
+Review findings and fixes are documented in `notes/reviews/2026-*-review--cfn-operations-polling--round-*.md` (14
 files) and the due diligence report at
-`notes/2026-03-01-review--general-due-diligence-style.md`.
+`notes/reviews/2026-03-01-review--general-due-diligence.md`.
 
 **Live testing as a backstop.** The human ran the tool against real AWS
 infrastructure (CloudFormation stacks, SSM parameters, S3, STS). This caught
@@ -87,20 +87,20 @@ verification strategy rather than auditing every line of implementation.
 The process artifacts for this project are extensive and committed to the
 repository. They are the primary evidence for trust:
 
-| Artifact                          | Location                                | What it tells you                                                |
-|:----------------------------------|:----------------------------------------|:-----------------------------------------------------------------|
-| Coding constitution               | `CLAUDE.md`                             | What rules governed every AI session                             |
-| Phased workplan                   | `WORKPLAN.md`                           | How the work was sequenced and gated                             |
-| Phase research docs               | `notes/phases/`                         | Whether research preceded implementation                         |
-| Session handoffs                  | `notes/sessions/`, `notes/handoffs/`    | How context was carried between sessions                         |
-| Review round findings             | `notes/2026-03-01-review-*.md`          | What was found and fixed in each review round                    |
-| Due diligence report              | `notes/2026-03-01-review--general-*.md` | Independent assessment with scorecard and risk register          |
-| Architecture decision records     | `docs/dev/adr/`                         | Why major design choices were made, with trade-offs acknowledged  |
-| Known divergences                 | `DIVERGENCES.md`                        | What intentionally differs from the reference and why            |
-| Progress log                      | `progress.log`                          | Timestamped chronological record of work completed               |
-| Commit history                    | `git log`                               | 183 small, green, descriptive commits                            |
-| Risk review                       | `notes/workplan-risk-review.md`         | Pre-implementation risk analysis using McConnell estimation       |
-| Agent resilience analysis         | `notes/workplan-agent-resilience.md`    | 12 cataloged stuck states with mitigations                       |
+| Artifact                    | Location                                                                         | What it tells you                                                |
+|:----------------------------|:---------------------------------------------------------------------------------|:-----------------------------------------------------------------|
+| Coding constitution         | `CLAUDE.md`                                                                      | What rules governed every AI session                             |
+| Phased workplan             | `WORKPLAN.md`                                                                    | How the work was sequenced and gated                             |
+| Phase research docs         | `notes/phases/`                                                                  | Whether research preceded implementation                         |
+| Session handoffs            | `notes/sessions/`, `notes/handoffs/`                                             | How context was carried between sessions                         |
+| Review round findings       | `notes/reviews/`                                                                 | What was found and fixed in each review round                    |
+| Due diligence report        | `notes/reviews/2026-03-01-review--general-due-diligence.md`                      | Independent assessment with scorecard and risk register          |
+| Architecture decision recs  | `docs/dev/adr/`                                                                  | Why major design choices were made, with trade-offs acknowledged |
+| Known divergences           | `DIVERGENCES.md`                                                                 | What intentionally differs from the reference and why            |
+| Progress log                | `progress.log`                                                                   | Timestamped chronological record of work completed               |
+| Commit history              | `git log`                                                                        | 183 small, green, descriptive commits                            |
+| Risk review                 | `notes/reviews/2026-02-21-review--initial-workplan-risks-persona:mcconnell.md`   | Pre-implementation risk analysis using McConnell estimation      |
+| Agent resilience analysis   | `notes/workplan-agent-resilience.md`                                             | 12 cataloged stuck states with mitigations                       |
 
 **What these artifacts can tell you:**
 - Whether the work was planned before implemented (research docs predate code)
@@ -323,7 +323,7 @@ The review loop (`t-review-loop` or equivalent prompt) works as follows:
 5. Steps 3-4 repeat until the score stabilizes or reaches the target.
 
 Each round's findings are documented in `notes/` (e.g.,
-`notes/2026-03-01-review-3a-cfn-operations-polling.md` through `3n`). This
+`notes/reviews/2026-*-review--cfn-operations-polling--round-*.md`). This
 creates a ratchet: each round catches issues the previous round missed, and the
 score can only go up because fixes do not introduce regressions (CI enforces
 this).

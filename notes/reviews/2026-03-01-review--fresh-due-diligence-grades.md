@@ -1,6 +1,6 @@
 # Code Review Letter Grades -- 2026-03-01
 
-Companion to [2026-03-01-fresh-review.md](2026-03-01-fresh-review.md).
+Companion to [2026-03-01-review--fresh-due-diligence.md](2026-03-01-review--fresh-due-diligence.md).
 
 ## Revision history
 

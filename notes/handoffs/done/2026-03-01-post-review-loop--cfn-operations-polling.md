@@ -76,21 +76,21 @@ Documented in code comments and intentionally not fixed:
 - Drift timeout cap (Rust has none) — intentional safety, in DIVERGENCES.md
 
 ### Review Files
-All in notes/:
-- `2026-02-28-review-3-cfn-operations-polling.md` (R1, 72/100)
-- `2026-03-01-review-3b-cfn-operations-polling.md` (R2, 82/100)
-- `2026-03-01-review-3c-cfn-operations-polling.md` (R3, 78/100)
-- `2026-03-01-review-3d-cfn-operations-polling.md` (R4, 80/100)
-- `2026-03-01-review-3e-cfn-operations-polling.md` (R5, 79/100)
-- `2026-03-01-review-3f-cfn-operations-polling.md` (R6, 81/100)
-- `2026-03-01-review-3g-cfn-operations-polling.md` (R7, 81/100)
-- `2026-03-01-review-3h-cfn-operations-polling.md` (R8, 82/100)
-- `2026-03-01-review-3i-cfn-operations-polling.md` (R9, 82/100)
-- `2026-03-01-review-3j-cfn-operations-polling.md` (R10, 87/100)
-- `2026-03-01-review-3k-cfn-operations-polling.md` (R11, 85/100, B+)
-- `2026-03-01-review-3l-cfn-operations-polling.md` (R12, 85/100, B+)
-- `2026-03-01-review-3m-cfn-operations-polling.md` (R13, 83/100, B → A post-fix)
-- `2026-03-01-review-3n-cfn-operations-polling.md` (R14, 90/100, A-)
+All in notes/reviews/:
+- `2026-02-28-review--cfn-operations-polling--round-1.md` (R1, 72/100)
+- `2026-03-01-review--cfn-operations-polling--round-2.md` (R2, 82/100)
+- `2026-03-01-review--cfn-operations-polling--round-3.md` (R3, 78/100)
+- `2026-03-01-review--cfn-operations-polling--round-4.md` (R4, 80/100)
+- `2026-03-01-review--cfn-operations-polling--round-5.md` (R5, 79/100)
+- `2026-03-01-review--cfn-operations-polling--round-6.md` (R6, 81/100)
+- `2026-03-01-review--cfn-operations-polling--round-7.md` (R7, 81/100)
+- `2026-03-01-review--cfn-operations-polling--round-8.md` (R8, 82/100)
+- `2026-03-01-review--cfn-operations-polling--round-9.md` (R9, 82/100)
+- `2026-03-01-review--cfn-operations-polling--round-10.md` (R10, 87/100)
+- `2026-03-01-review--cfn-operations-polling--round-11.md` (R11, 85/100, B+)
+- `2026-03-01-review--cfn-operations-polling--round-12.md` (R12, 85/100, B+)
+- `2026-03-01-review--cfn-operations-polling--round-13.md` (R13, 83/100, B → A post-fix)
+- `2026-03-01-review--cfn-operations-polling--round-14.md` (R14, 90/100, A-)
 
 ## Next Steps
 - R14 grade of 90 (A-) with no major issues suggests the loop is converging.

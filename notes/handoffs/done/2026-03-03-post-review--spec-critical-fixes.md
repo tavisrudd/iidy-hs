@@ -256,7 +256,7 @@ it vs. documenting the limitation. P0 items are quick wins.
 - `spec/semantics/truthiness.rkt` — duplication rationale comment
 - `spec/tests/eval-tests.rkt` — 6 new escape tests
 - `spec/tests/properties.rkt` — 4 determinism + 14 algebraic tests
-- `notes/2026-03-03-spec-critical-review.md` — full review document
+- `notes/reviews/2026-03-03-review--spec-critical.md` — full review document
 **Deviations from plan**: P0-2 was more thorough than planned — implemented
 full `escape-to-raw` metafunction modeling Haskell's `astToValueRaw` rather
 than just documenting the gap. P3-1 kept as documentation (comment) rather

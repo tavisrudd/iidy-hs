@@ -4,8 +4,8 @@
 **Date**: 2026-02-28
 **Session**: `bc778d26-2dea-4022-a23f-fdad1f0fd614`
 **References**:
-- Review: `notes/2026-02-28-review-1-yaml-resolver-errors.md`
-- Fixes so far: `notes/2026-02-28-review-1-fixes.md`
+- Review: `notes/reviews/2026-02-28-review--yaml-resolver-errors--round-1.md`
+- Fixes so far: `notes/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`
 
 ## Context
 
@@ -123,18 +123,18 @@ Not blocking anything.
 
 ## Codebase Reference
 
-| What                            | Where                                              |
-|---------------------------------|----------------------------------------------------|
-| Resolver (main fixes target)    | `src/Iidy/Yaml/Resolution/Resolver.hs` (798 lines) |
-| Tag context definition          | `src/Iidy/Yaml/Resolution/Context.hs` (lines 25-45) |
-| Error conversion (main target)  | `src/Iidy/Yaml/Errors/Conversion.hs` (884 lines)   |
-| Enhanced error types            | `src/Iidy/Yaml/Errors/Enhanced.hs`                  |
-| Error display                   | `src/Iidy/Yaml/Errors/Display.hs` (246 lines)       |
-| Resolver unit tests             | `test/Test/ResolverTest.hs` (49 tests)               |
-| Error classification tests      | `test/Test/ErrorClassificationTest.hs` (35 tests)    |
-| ErrorId tests                   | `test/Test/ErrorIdTest.hs` (6 tests)                 |
-| Fixes tracking doc              | `notes/2026-02-28-review-1-fixes.md`                 |
-| Rust resolver (read-only ref)   | `~/src/iidy/src/yaml/resolution/resolver.rs`         |
+| What                            | Where                                                                        |
+|---------------------------------|------------------------------------------------------------------------------|
+| Resolver (main fixes target)    | `src/Iidy/Yaml/Resolution/Resolver.hs` (798 lines)                          |
+| Tag context definition          | `src/Iidy/Yaml/Resolution/Context.hs` (lines 25-45)                         |
+| Error conversion (main target)  | `src/Iidy/Yaml/Errors/Conversion.hs` (884 lines)                            |
+| Enhanced error types            | `src/Iidy/Yaml/Errors/Enhanced.hs`                                          |
+| Error display                   | `src/Iidy/Yaml/Errors/Display.hs` (246 lines)                               |
+| Resolver unit tests             | `test/Test/ResolverTest.hs` (49 tests)                                       |
+| Error classification tests      | `test/Test/ErrorClassificationTest.hs` (35 tests)                            |
+| ErrorId tests                   | `test/Test/ErrorIdTest.hs` (6 tests)                                         |
+| Fixes tracking doc              | `notes/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`  |
+| Rust resolver (read-only ref)   | `~/src/iidy/src/yaml/resolution/resolver.rs`                                 |
 
 ## Build/Test Commands
 
@@ -157,17 +157,17 @@ Per CLAUDE.md. Use `~/.claude/bin/run-quiet` for noisy output.
 
 ## Workflow Instructions
 
-1. Read this file and `notes/2026-02-28-review-1-fixes.md`
+1. Read this file and `notes/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`
 2. Check Progress below for what's next
 3. Launch A+B as parallel Sonnet sub-agents
 4. After A+B pass, launch C as Sonnet sub-agent, then D
 5. For E, use an Explore agent to read Rust validation code first, then implement
 6. After each issue, build + test (`cabal clean && cabal build && cabal test`)
-7. **Update `notes/2026-02-28-review-1-fixes.md`** — move completed items from
+7. **Update `notes/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`** — move completed items from
    "Remaining Unfixed Issues" table to the "Code Fixes Applied" tables above
 8. Update Progress below and add Handoff Notes
 9. **When all done**: append a `## Session Summary` section at the bottom of
-   `notes/2026-02-28-review-1-fixes.md` with final test count, what was fixed,
+   `notes/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md` with final test count, what was fixed,
    what remains (if anything), and the revised grade assessment
 
 ## Progress
@@ -197,7 +197,7 @@ Per CLAUDE.md. Use `~/.claude/bin/run-quiet` for noisy output.
 - `test/Test/ErrorIdTest.hs`
 - `test-fixtures/example-templates/errors/expand-missing-template.yaml`
 - `test-fixtures/example-templates/errors/expand-parse-error.yaml`
-- `notes/2026-02-28-review-1-fixes.md`
+- `notes/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`
 
 **Files modified**:
 - `src/Iidy/Yaml/Resolution/Resolver.hs` — 7 fixes

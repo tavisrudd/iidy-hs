@@ -255,25 +255,25 @@ No performance measurement exists. Startup time and preprocessing latency unmeas
 
 ## Codebase Reference
 
-| What                      | Where                                              |
-|---------------------------|----------------------------------------------------|
-| Russell review            | `notes/2026-03-02-russell-review.md`               |
-| Hickey review             | `notes/2026-03-02-hickey-review.md`                |
-| Ousterhout review         | `notes/2026-03-02-ousterhout-review.md`            |
-| Minsky review             | `notes/2026-03-02-minsky-review.md`                |
-| Krishnamurthi review      | `notes/2026-03-02-krishnamurthi-review.md`         |
-| Kmett review              | `notes/2026-03-02-kmett-review.md`                 |
-| Muratori review           | `notes/2026-03-02-muratori-review.md`              |
-| Snapshot gap audit        | `notes/2026-03-02-snapshot-gap-audit.md`           |
-| StackArgsLoader           | `src/Iidy/Cfn/StackArgsLoader.hs`                 |
-| RequestBuilder            | `src/Iidy/Cfn/RequestBuilder.hs`                   |
-| GlobalConfig              | `src/Iidy/Cfn/GlobalConfig.hs`                     |
-| Params                    | `src/Iidy/Ssm/Params.hs`                          |
-| TemplateApproval          | `src/Iidy/Cfn/Operations/TemplateApproval.hs`     |
-| Resolver                  | `src/Iidy/Yaml/Resolution/Resolver.hs`            |
-| Errors/Conversion         | `src/Iidy/Yaml/Errors/Conversion.hs`              |
-| Confirm                   | `src/Iidy/Confirm.hs`                             |
-| CLI                       | `src/Iidy/Cli.hs`                                 |
+| What                      | Where                                                                     |
+|---------------------------|---------------------------------------------------------------------------|
+| Russell review            | `notes/reviews/2026-03-02-review--api-design-persona:russell.md`          |
+| Hickey review             | `notes/reviews/2026-03-02-review--architecture-persona:hickey.md`         |
+| Ousterhout review         | `notes/reviews/2026-03-02-review--architecture-persona:ousterhout.md`     |
+| Minsky review             | `notes/reviews/2026-03-02-review--architecture-persona:minsky.md`         |
+| Krishnamurthi review      | `notes/reviews/2026-03-02-review--architecture-persona:krishnamurthi.md`  |
+| Kmett review              | `notes/reviews/2026-03-02-review--architecture-persona:kmett.md`          |
+| Muratori review           | `notes/reviews/2026-03-02-review--architecture-persona:muratori.md`       |
+| Snapshot gap audit        | `notes/2026-03-02-snapshot-gap-audit.md`                                  |
+| StackArgsLoader           | `src/Iidy/Cfn/StackArgsLoader.hs`                                        |
+| RequestBuilder            | `src/Iidy/Cfn/RequestBuilder.hs`                                         |
+| GlobalConfig              | `src/Iidy/Cfn/GlobalConfig.hs`                                           |
+| Params                    | `src/Iidy/Ssm/Params.hs`                                                 |
+| TemplateApproval          | `src/Iidy/Cfn/Operations/TemplateApproval.hs`                            |
+| Resolver                  | `src/Iidy/Yaml/Resolution/Resolver.hs`                                   |
+| Errors/Conversion         | `src/Iidy/Yaml/Errors/Conversion.hs`                                     |
+| Confirm                   | `src/Iidy/Confirm.hs`                                                    |
+| CLI                       | `src/Iidy/Cli.hs`                                                        |
 
 ---
 

@@ -101,28 +101,28 @@ The notes below are the session 44 author's self-critique — one voice, not the
 
 ## Codebase Reference
 
-| What                          | Where                                             |
-|-------------------------------|----------------------------------------------------|
-| Refactoring plan              | `notes/2026-03-02-refactoring-plan.md`             |
-| Hickey review (complecting)   | `notes/2026-03-02-hickey-review.md`                |
-| Ousterhout review (depth)     | `notes/2026-03-02-ousterhout-review.md`            |
-| Minsky review (illegal states)| `notes/2026-03-02-minsky-review.md`                |
-| Krishnamurthi review (PL)     | `notes/2026-03-02-krishnamurthi-review.md`         |
-| Kmett review (type machinery) | `notes/2026-03-02-kmett-review.md`                 |
-| Muratori review (proportional)| `notes/2026-03-02-muratori-review.md`              |
-| StackArgs type                | `src/Iidy/Cfn/Types.hs`                            |
-| CfnContext type               | `src/Iidy/Cfn/Context.hs`                          |
-| OutputData type               | `src/Iidy/Output/Types.hs`                         |
-| StackArgsLoader               | `src/Iidy/Cfn/StackArgsLoader.hs`                  |
-| RequestBuilder                | `src/Iidy/Cfn/RequestBuilder.hs`                   |
-| StackOperations (PollConfig)  | `src/Iidy/Cfn/StackOperations.hs`                  |
-| TemplateLoader                | `src/Iidy/Cfn/TemplateLoader.hs`                   |
-| JMESPath                      | `src/Iidy/Yaml/JMESPath.hs`                        |
-| Main.hs                       | `app/Main.hs`                                       |
-| Resolver                      | `src/Iidy/Yaml/Resolution/Resolver.hs`             |
-| Rust source (read-only)       | `~/src/iidy/`                                       |
-| Rust RequestBuilder           | `~/src/iidy/src/cfn/request_builder.rs`            |
-| Rust StackArgs                | `~/src/iidy/src/cfn/stack_args.rs`                 |
+| What                           | Where                                                                     |
+|--------------------------------|---------------------------------------------------------------------------|
+| Refactoring plan               | `notes/2026-03-02-refactoring-plan.md`                                    |
+| Hickey review (complecting)    | `notes/reviews/2026-03-02-review--architecture-persona:hickey.md`         |
+| Ousterhout review (depth)      | `notes/reviews/2026-03-02-review--architecture-persona:ousterhout.md`     |
+| Minsky review (illegal states) | `notes/reviews/2026-03-02-review--architecture-persona:minsky.md`         |
+| Krishnamurthi review (PL)      | `notes/reviews/2026-03-02-review--architecture-persona:krishnamurthi.md`  |
+| Kmett review (type machinery)  | `notes/reviews/2026-03-02-review--architecture-persona:kmett.md`          |
+| Muratori review (proportional) | `notes/reviews/2026-03-02-review--architecture-persona:muratori.md`       |
+| StackArgs type                 | `src/Iidy/Cfn/Types.hs`                                                   |
+| CfnContext type                | `src/Iidy/Cfn/Context.hs`                                                 |
+| OutputData type                | `src/Iidy/Output/Types.hs`                                                |
+| StackArgsLoader                | `src/Iidy/Cfn/StackArgsLoader.hs`                                         |
+| RequestBuilder                 | `src/Iidy/Cfn/RequestBuilder.hs`                                          |
+| StackOperations (PollConfig)   | `src/Iidy/Cfn/StackOperations.hs`                                         |
+| TemplateLoader                 | `src/Iidy/Cfn/TemplateLoader.hs`                                          |
+| JMESPath                       | `src/Iidy/Yaml/JMESPath.hs`                                               |
+| Main.hs                        | `app/Main.hs`                                                              |
+| Resolver                       | `src/Iidy/Yaml/Resolution/Resolver.hs`                                     |
+| Rust source (read-only)        | `~/src/iidy/`                                                              |
+| Rust RequestBuilder             | `~/src/iidy/src/cfn/request_builder.rs`                                    |
+| Rust StackArgs                  | `~/src/iidy/src/cfn/stack_args.rs`                                         |
 
 ## Chunks
 

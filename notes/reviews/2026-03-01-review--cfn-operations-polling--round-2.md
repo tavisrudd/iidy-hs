@@ -3,7 +3,7 @@
 **Date**: 2026-03-01
 **Round**: 2 of 2
 **Scope**: 12 production files, 8 test files (20 total)
-**Prior reviews**: notes/2026-02-28-review-3-cfn-operations-polling.md
+**Prior reviews**: notes/reviews/2026-02-28-review--cfn-operations-polling--round-1.md
 
 ### Production Files
 | File                                                            | Lines | Role                                     |

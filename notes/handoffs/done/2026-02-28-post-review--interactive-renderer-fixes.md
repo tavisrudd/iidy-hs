@@ -1,6 +1,6 @@
 # Interactive Renderer Review Fixes
 
-**Source:** `notes/2026-02-28-review-2-interactive-renderer.md`
+**Source:** `notes/reviews/2026-02-28-review--interactive-renderer--round-1.md`
 **Date:** 2026-03-01
 
 ## Fix Plan
