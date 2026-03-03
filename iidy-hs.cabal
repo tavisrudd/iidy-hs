@@ -249,3 +249,22 @@ test-suite iidy-hs-test
     , tasty-quickcheck
     , temporary
     , time
+
+benchmark iidy-hs-bench
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  main-is:          Main.hs
+  hs-source-dirs:   bench
+  default-language: GHC2021
+  default-extensions:
+    LambdaCase
+    OverloadedStrings
+  ghc-options:      -threaded -rtsopts "-with-rtsopts=-N -A32m"
+  build-depends:
+      base >= 4.17 && < 5
+    , iidy-hs
+    , tasty-bench
+    , bytestring
+    , deepseq
+    , filepath
+    , text

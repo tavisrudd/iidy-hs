@@ -53,6 +53,8 @@
         hpkgs.tasty
         hpkgs.tasty-hunit
         hpkgs.tasty-quickcheck
+        hpkgs.tasty-bench
+        hpkgs.deepseq
         hpkgs.QuickCheck
       ];
     in {
