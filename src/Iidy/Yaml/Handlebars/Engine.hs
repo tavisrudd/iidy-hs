@@ -7,6 +7,7 @@
 -- Does not implement partials, decorators, or inline partials.
 module Iidy.Yaml.Handlebars.Engine
   ( interpolate
+  , isTruthy
   , InterpolateError(..)
   , HelperFn
   , defaultHelpers

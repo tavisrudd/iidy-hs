@@ -13,6 +13,8 @@ import Test.Tasty.HUnit (testCase, (@?=), assertFailure)
 
 import Iidy.Yaml.Ast (YamlAst(..), SrcMeta(..), PreprocessingTag(..), NotTag(..))
 import Iidy.Yaml.Location (zeroPosition)
+import qualified Iidy.Yaml.Handlebars.Engine as HBS
+import qualified Iidy.Yaml.JMESPath as JMESPath
 import Iidy.Yaml.OValue (OValue(..), fromValue, oIsTruthy)
 import Iidy.Yaml.Resolution.Resolver (mergeOObjects, traversePathO, astToValueRaw)
 
@@ -28,6 +30,8 @@ buildSpecConformanceTests = do
       pure []
     Right snapshot -> pure
       [ testGroup "Truthiness" (truthinessTests (snTruthiness snapshot))
+      , testGroup "Truthiness/Handlebars" (hbsTruthinessTests (snTruthinessHandlebars snapshot))
+      , testGroup "Truthiness/JMESPath" (jmespathTruthinessTests (snTruthinessJMESPath snapshot))
       , testGroup "Merge" (mergeTests (snMerge snapshot))
       , testGroup "PathResolution" (pathTests (snPathResolution snapshot))
       , testGroup "Escape" (escapeTests (snEscape snapshot))
@@ -44,11 +48,13 @@ specConformanceTests = buildSpecConformanceTests
 ------------------------------------------------------------------------
 
 data Snapshot = Snapshot
-  { snTruthiness      :: [TruthinessVector]
-  , snMerge           :: [MergeVector]
-  , snPathResolution  :: [PathVector]
-  , snEscape          :: [EscapeVector]
-  , snMapValuesBinding :: [MapValuesBindingVector]
+  { snTruthiness           :: [TruthinessVector]
+  , snTruthinessHandlebars :: [TruthinessVector]
+  , snTruthinessJMESPath   :: [TruthinessVector]
+  , snMerge                :: [MergeVector]
+  , snPathResolution       :: [PathVector]
+  , snEscape               :: [EscapeVector]
+  , snMapValuesBinding     :: [MapValuesBindingVector]
   }
 
 instance Aeson.FromJSON Snapshot where
@@ -56,6 +62,8 @@ instance Aeson.FromJSON Snapshot where
     sections <- o .: "sections"
     Snapshot
       <$> sections .: "truthiness"
+      <*> sections .: "truthiness_handlebars"
+      <*> sections .: "truthiness_jmespath"
       <*> sections .: "merge"
       <*> sections .: "path_resolution"
       <*> sections .: "escape"
@@ -139,17 +147,46 @@ truthinessTests = map $ \tv ->
   in testCase label $ oIsTruthy ov @?= tvExpected tv
 
 
+-- | Handlebars truthiness: all numbers are truthy (including 0)
+hbsTruthinessTests :: [TruthinessVector] -> [TestTree]
+hbsTruthinessTests = map $ \tv ->
+  let label = "truthy/hbs(" <> showCompact (tvInput tv) <> ") == " <> show (tvExpected tv)
+  in testCase label $ HBS.isTruthy (tvInput tv) @?= tvExpected tv
+
+
+-- | JMESPath truthiness: all numbers are truthy (including 0)
+jmespathTruthinessTests :: [TruthinessVector] -> [TestTree]
+jmespathTruthinessTests = map $ \tv ->
+  let label = "truthy/jmespath(" <> showCompact (tvInput tv) <> ") == " <> show (tvExpected tv)
+  in testCase label $ JMESPath.isTruthy (tvInput tv) @?= tvExpected tv
+
+
 -- | Merge: mergeOObjects base overlayPairs == expected
+-- Snapshot-driven tests verify merge VALUES; the order-preservation test
+-- below uses direct OValue construction (not JSON) to test key ordering.
 mergeTests :: [MergeVector] -> [TestTree]
-mergeTests = map $ \mv ->
-  testCase (T.unpack (mvName mv)) $ do
-    let base = fromValue (mvBase mv)
-        overlayPairs = case fromValue (mvOverlay mv) of
-          OObject kvs -> kvs
-          _           -> error "overlay must be an object"
-        result = mergeOObjects base overlayPairs
-        expected = fromValue (mvExpected mv)
-    result @?= expected
+mergeTests vecs =
+  map snapshotTest vecs ++ [orderPreservationTest]
+  where
+    snapshotTest mv = testCase (T.unpack (mvName mv)) $ do
+      let base = fromValue (mvBase mv)
+          overlayPairs = case fromValue (mvOverlay mv) of
+            OObject kvs -> kvs
+            _           -> error "overlay must be an object"
+          result = mergeOObjects base overlayPairs
+          expected = fromValue (mvExpected mv)
+      result @?= expected
+
+    -- This test uses non-alphabetical keys to verify that base key order
+    -- is preserved and new overlay keys are appended, not sorted.
+    -- Cannot be tested through JSON because JSON objects are unordered.
+    orderPreservationTest = testCase "key order: base order preserved, overlay appended" $ do
+      let base = OObject [("z", ONumber 1), ("a", ONumber 2), ("m", ONumber 3)]
+          overlay = [("a", ONumber 99), ("b", ONumber 4)]
+          result = mergeOObjects base overlay
+          -- Expected: z (base), a (updated by overlay), m (base), b (new from overlay)
+          expected = OObject [("z", ONumber 1), ("a", ONumber 99), ("m", ONumber 3), ("b", ONumber 4)]
+      result @?= expected
 
 
 -- | Path resolution: traversePathO segments env == expected

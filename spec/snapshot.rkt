@@ -10,6 +10,7 @@
 (require redex/reduction-semantics
          racket/match
          racket/port
+         racket/list
          json
          "lang/core.rkt"
          "lang/preprocessing.rkt"
@@ -20,6 +21,11 @@
 
 
 ;; ── Redex value → jsexpr conversion ──────────────────────────────
+;; Uses sorted-hasheq for deterministic JSON output (Racket hasheq
+;; iteration order is unspecified and could change across versions).
+
+(define (sorted-hasheq . pairs)
+  (make-hasheq (sort pairs string<? #:key (λ (p) (symbol->string (car p))))))
 
 (define (val->jsexpr v)
   (match v
@@ -30,7 +36,7 @@
     [`(str ,s)                                        s]
     [`(arr ,items)                                    (map val->jsexpr items)]
     [`(obj ,pairs)
-     (make-hasheq
+     (apply sorted-hasheq
       (map (λ (p) (cons (string->symbol (car p))
                         (val->jsexpr (cadr p))))
            pairs))]
@@ -39,7 +45,7 @@
 
 
 ;; ── Section 1: Truthiness ────────────────────────────────────────
-;; 13 input values → boolean (iidy OValue truthiness, where 0 is falsy)
+;; 13 input values × 3 truthiness variants
 
 (define truthiness-inputs
   '(null
@@ -49,15 +55,30 @@
     (arr ()) (arr ((num 1)))
     (obj ()) (obj (("a" (num 1))))))
 
+;; iidy OValue truthiness: 0 is falsy
 (define truthiness-vectors
   (map (λ (v)
-         (hasheq 'input (val->jsexpr v)
-                 'expected (term (truthy ,v))))
+         (sorted-hasheq (cons 'input (val->jsexpr v))
+                        (cons 'expected (term (truthy ,v)))))
+       truthiness-inputs))
+
+;; Handlebars truthiness: all numbers truthy (including 0)
+(define hbs-truthiness-vectors
+  (map (λ (v)
+         (sorted-hasheq (cons 'input (val->jsexpr v))
+                        (cons 'expected (term (truthy/hbs ,v)))))
+       truthiness-inputs))
+
+;; JMESPath truthiness: all numbers truthy (including 0)
+(define jmespath-truthiness-vectors
+  (map (λ (v)
+         (sorted-hasheq (cons 'input (val->jsexpr v))
+                        (cons 'expected (term (truthy/jmespath ,v)))))
        truthiness-inputs))
 
 
 ;; ── Section 2: Merge ─────────────────────────────────────────────
-;; 3 merge scenarios with key-order preservation
+;; 3 merge scenarios (key-order tested in Haskell-only test)
 
 (define merge-vectors
   (list
@@ -65,28 +86,31 @@
    (let ([result (term (merge-objs
                         (obj (("a" (num 1)) ("b" (num 2)) ("c" (num 3))))
                         (obj (("b" (num 99)) ("d" (num 4))))))])
-     (hasheq 'name "overlay wins, base order preserved"
-             'base (val->jsexpr (term (obj (("a" (num 1)) ("b" (num 2)) ("c" (num 3))))))
-             'overlay (val->jsexpr (term (obj (("b" (num 99)) ("d" (num 4))))))
-             'expected (val->jsexpr result)))
+     (sorted-hasheq
+      (cons 'name "overlay wins, base order preserved")
+      (cons 'base (val->jsexpr (term (obj (("a" (num 1)) ("b" (num 2)) ("c" (num 3)))))))
+      (cons 'overlay (val->jsexpr (term (obj (("b" (num 99)) ("d" (num 4)))))))
+      (cons 'expected (val->jsexpr result))))
 
    ;; Disjoint keys: simple concatenation
    (let ([result (term (merge-objs
                         (obj (("x" (num 10))))
                         (obj (("y" (num 20))))))])
-     (hasheq 'name "disjoint keys"
-             'base (val->jsexpr (term (obj (("x" (num 10))))))
-             'overlay (val->jsexpr (term (obj (("y" (num 20))))))
-             'expected (val->jsexpr result)))
+     (sorted-hasheq
+      (cons 'name "disjoint keys")
+      (cons 'base (val->jsexpr (term (obj (("x" (num 10)))))))
+      (cons 'overlay (val->jsexpr (term (obj (("y" (num 20)))))))
+      (cons 'expected (val->jsexpr result))))
 
    ;; Empty base: overlay becomes result
    (let ([result (term (merge-objs
                         (obj ())
                         (obj (("a" (num 1)) ("b" (num 2))))))])
-     (hasheq 'name "empty base"
-             'base (val->jsexpr (term (obj ())))
-             'overlay (val->jsexpr (term (obj (("a" (num 1)) ("b" (num 2))))))
-             'expected (val->jsexpr result)))))
+     (sorted-hasheq
+      (cons 'name "empty base")
+      (cons 'base (val->jsexpr (term (obj ()))))
+      (cons 'overlay (val->jsexpr (term (obj (("a" (num 1)) ("b" (num 2)))))))
+      (cons 'expected (val->jsexpr result))))))
 
 
 ;; ── Section 3: Path resolution ───────────────────────────────────
@@ -101,35 +125,35 @@
 
 (define path-vectors
   (list
-   ;; Nested object traversal
    (let ([result (term (resolve-path ("config" "db" "host") ,path-env))])
-     (hasheq 'name "nested object traversal"
-             'path '("config" "db" "host")
-             'expected (val->jsexpr result)))
+     (sorted-hasheq
+      (cons 'name "nested object traversal")
+      (cons 'path '("config" "db" "host"))
+      (cons 'expected (val->jsexpr result))))
 
-   ;; Array index
    (let ([result (term (resolve-path ("items" "1") ,path-env))])
-     (hasheq 'name "array index"
-             'path '("items" "1")
-             'expected (val->jsexpr result)))
+     (sorted-hasheq
+      (cons 'name "array index")
+      (cons 'path '("items" "1"))
+      (cons 'expected (val->jsexpr result))))
 
-   ;; Missing key → unbound (null in JSON)
    (let ([result (term (resolve-path ("nonexistent") ,path-env))])
-     (hasheq 'name "missing key"
-             'path '("nonexistent")
-             'expected (val->jsexpr result)))
+     (sorted-hasheq
+      (cons 'name "missing key")
+      (cons 'path '("nonexistent"))
+      (cons 'expected (val->jsexpr result))))
 
-   ;; Single segment
    (let ([result (term (resolve-path ("name") ,path-env))])
-     (hasheq 'name "single segment"
-             'path '("name")
-             'expected (val->jsexpr result)))
+     (sorted-hasheq
+      (cons 'name "single segment")
+      (cons 'path '("name"))
+      (cons 'expected (val->jsexpr result))))
 
-   ;; Nested into array object
    (let ([result (term (resolve-path ("nested" "0" "id") ,path-env))])
-     (hasheq 'name "nested into array object"
-             'path '("nested" "0" "id")
-             'expected (val->jsexpr result)))))
+     (sorted-hasheq
+      (cons 'name "nested into array object")
+      (cons 'path '("nested" "0" "id"))
+      (cons 'expected (val->jsexpr result))))))
 
 
 ;; ── Section 4: Escape ────────────────────────────────────────────
@@ -137,34 +161,34 @@
 
 (define escape-vectors
   (list
-   ;; Value passthrough
    (let ([result (term (escape-to-raw (num 42)))])
-     (hasheq 'name "value passthrough"
-             'input_type "value"
-             'input_value 42
-             'expected (val->jsexpr result)))
+     (sorted-hasheq
+      (cons 'name "value passthrough")
+      (cons 'input_type "value")
+      (cons 'input_value 42)
+      (cons 'expected (val->jsexpr result))))
 
-   ;; Nested object expression
    (let ([result (term (escape-to-raw
                         (obj-e (("a" (num 1)) ("b" (str "hello"))))))])
-     (hasheq 'name "nested object expression"
-             'input_type "object"
-             'input_value (val->jsexpr (term (obj (("a" (num 1)) ("b" (str "hello"))))))
-             'expected (val->jsexpr result)))
+     (sorted-hasheq
+      (cons 'name "nested object expression")
+      (cons 'input_type "object")
+      (cons 'input_value (val->jsexpr (term (obj (("a" (num 1)) ("b" (str "hello")))))))
+      (cons 'expected (val->jsexpr result))))
 
-   ;; Template becomes literal string
    (let ([result (term (escape-to-raw (tpl "{{foo.bar}}")))])
-     (hasheq 'name "template becomes literal string"
-             'input_type "template"
-             'input_value "{{foo.bar}}"
-             'expected (val->jsexpr result)))
+     (sorted-hasheq
+      (cons 'name "template becomes literal string")
+      (cons 'input_type "template")
+      (cons 'input_value "{{foo.bar}}")
+      (cons 'expected (val->jsexpr result))))
 
-   ;; Preprocessing tag → sentinel
    (let ([result (term (escape-to-raw (not (bool #t))))])
-     (hasheq 'name "preprocessing tag becomes sentinel"
-             'input_type "tag"
-             'input_value 'null
-             'expected (val->jsexpr result)))))
+     (sorted-hasheq
+      (cons 'name "preprocessing tag becomes sentinel")
+      (cons 'input_type "tag")
+      (cons 'input_value 'null)
+      (cons 'expected (val->jsexpr result))))))
 
 
 ;; ── Section 5: MapValues binding ─────────────────────────────────
@@ -172,33 +196,37 @@
 
 (define map-values-binding-vectors
   (list
-   ;; Binding for string key, numeric value
-   (hasheq 'name "string key, numeric value"
-           'key "alpha"
-           'value 42
-           'expected_binding
-           (val->jsexpr (term (obj (("key" (str "alpha")) ("value" (num 42)))))))
+   (sorted-hasheq
+    (cons 'name "string key, numeric value")
+    (cons 'key "alpha")
+    (cons 'value 42)
+    (cons 'expected_binding
+          (val->jsexpr (term (obj (("key" (str "alpha")) ("value" (num 42))))))))
 
-   ;; Binding for string key, object value
-   (hasheq 'name "string key, object value"
-           'key "settings"
-           'value (hasheq 'host "localhost")
-           'expected_binding
-           (val->jsexpr (term (obj (("key" (str "settings"))
-                                   ("value" (obj (("host" (str "localhost"))))))))))))
+   (sorted-hasheq
+    (cons 'name "string key, object value")
+    (cons 'key "settings")
+    (cons 'value (sorted-hasheq (cons 'host "localhost")))
+    (cons 'expected_binding
+          (val->jsexpr (term (obj (("key" (str "settings"))
+                                  ("value" (obj (("host" (str "localhost")))))))))))))
 
 
 ;; ── Assemble and write ───────────────────────────────────────────
 
 (define snapshot
-  (hasheq 'generated "2026-03-03"
-          'generator "spec/snapshot.rkt"
-          'sections
-          (hasheq 'truthiness       truthiness-vectors
-                  'merge            merge-vectors
-                  'path_resolution  path-vectors
-                  'escape           escape-vectors
-                  'map_values_binding map-values-binding-vectors)))
+  (sorted-hasheq
+   (cons 'generated "2026-03-03")
+   (cons 'generator "spec/snapshot.rkt")
+   (cons 'sections
+         (sorted-hasheq
+          (cons 'truthiness            truthiness-vectors)
+          (cons 'truthiness_handlebars hbs-truthiness-vectors)
+          (cons 'truthiness_jmespath   jmespath-truthiness-vectors)
+          (cons 'merge                 merge-vectors)
+          (cons 'path_resolution       path-vectors)
+          (cons 'escape                escape-vectors)
+          (cons 'map_values_binding    map-values-binding-vectors)))))
 
 (define out-path "snapshot.json")
 

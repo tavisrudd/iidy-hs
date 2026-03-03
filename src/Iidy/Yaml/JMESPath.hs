@@ -6,6 +6,7 @@
 -- multi-select lists/hashes, pipe expressions, and literal values.
 module Iidy.Yaml.JMESPath
   ( applyJmesPath
+  , isTruthy
   , JMESPathError(..)
   ) where
 
