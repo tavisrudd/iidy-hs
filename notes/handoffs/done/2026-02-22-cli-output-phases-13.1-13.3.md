@@ -1,5 +1,8 @@
 # Session 29 Handoff
 
+**Date**: 2026-02-22
+**Status**: DONE
+
 ## What Was Done
 - **Phase 13.1**: Fixed section headings (renderStackEvents prints sedTitle, renderStackContents prints "Stack Resources"), removed console URL slash encoding (matching Rust raw stack_id), swapped region priority to AWS_REGION before AWS_DEFAULT_REGION, exported convertStack/buildEventsDisplay/buildConsoleUrl from DescribeStack
 - **Phase 13.2**: Created Iidy.Aws.Sts module with getCallerIdentity (STS call with fallback). delete-stack now emits OdStackAbsentInfo with account/auth_arn when stack is absent.

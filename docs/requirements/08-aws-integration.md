@@ -429,7 +429,7 @@ of indirection that must be exercised in tests with multiple environments.
 ## Cross-References
 
 - `docs/dev/aws-configuration.md` — developer guide covering the same subsystem
-- `notes/phases/phase-13-research/` — live AWS verification research notes
+- `notes/archive/phase-13-research/` — live AWS verification research notes
 - `DIVERGENCES.md` — known CLI behavioral differences from Rust iidy
 - PRD-07: Error Handling — error formatting pipeline that surfaces AWS errors
 - PRD-05: CloudFormation Operations — commands that use the NTP time provider

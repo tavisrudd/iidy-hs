@@ -1,5 +1,8 @@
 # Phase 13: CLI Output Fixes (Live Testing + Full Audit)
 
+**Date**: 2026-02-22
+**Status**: DONE
+
 ## Context
 
 Live testing of `iidy-hs` vs `iidy-rs` (captured in `cli-output-tests-rs-vs-hs.ansii.txt`)
@@ -13,22 +16,22 @@ Detailed Rust-vs-Haskell side-by-side analysis for each command:
 
 | Command | Research File | Severity |
 |---------|---------------|----------|
-| create-stack | [create-stack.md](phase-13-research/create-stack.md) | HIGH — missing 5 output steps |
-| update-stack | [update-stack.md](phase-13-research/update-stack.md) | **CRITICAL** — changeset path unimplemented |
-| create-or-update | [create-or-update.md](phase-13-research/create-or-update.md) | **CRITICAL** — changeset path unimplemented, 5 paths |
-| delete-stack | [delete-stack.md](phase-13-research/delete-stack.md) | HIGH — no pre-confirmation display |
-| describe-stack | [describe-stack.md](phase-13-research/describe-stack.md) | HIGH — missing headings + error handling |
-| watch-stack | [watch-stack.md](phase-13-research/watch-stack.md) | HIGH — missing definition, previous events, inactivity timeout |
-| changeset ops | [changeset.md](phase-13-research/changeset.md) | **CRITICAL** — create-changeset result never shown |
-| list-stacks | [list-stacks.md](phase-13-research/list-stacks.md) | OK — only region bug affects this |
-| describe-stack-drift | [describe-stack-drift.md](phase-13-research/describe-stack-drift.md) | **CRITICAL** — only initiates, never shows results |
-| estimate-cost | [estimate-cost.md](phase-13-research/estimate-cost.md) | LOW — works but bypasses renderer |
-| lint-template | [lint-template.md](phase-13-research/lint-template.md) | MEDIUM — raw error vs styled output |
-| template-approval | [template-approval.md](phase-13-research/template-approval.md) | MEDIUM — works but bypasses renderer |
-| get-stack-template | [get-stack-template.md](phase-13-research/get-stack-template.md) | OK — functionally correct |
-| convert-stack | [convert-stack.md](phase-13-research/convert-stack.md) | OK — both use direct stderr |
-| cross-cutting | [cross-cutting.md](phase-13-research/cross-cutting.md) | — all shared issues |
-| edge cases | [edge-cases.md](phase-13-research/edge-cases.md) | — behavioral edge cases |
+| create-stack | [create-stack.md](../../archive/phase-13-research/create-stack.md) | HIGH — missing 5 output steps |
+| update-stack | [update-stack.md](../../archive/phase-13-research/update-stack.md) | **CRITICAL** — changeset path unimplemented |
+| create-or-update | [create-or-update.md](../../archive/phase-13-research/create-or-update.md) | **CRITICAL** — changeset path unimplemented, 5 paths |
+| delete-stack | [delete-stack.md](../../archive/phase-13-research/delete-stack.md) | HIGH — no pre-confirmation display |
+| describe-stack | [describe-stack.md](../../archive/phase-13-research/describe-stack.md) | HIGH — missing headings + error handling |
+| watch-stack | [watch-stack.md](../../archive/phase-13-research/watch-stack.md) | HIGH — missing definition, previous events, inactivity timeout |
+| changeset ops | [changeset.md](../../archive/phase-13-research/changeset.md) | **CRITICAL** — create-changeset result never shown |
+| list-stacks | [list-stacks.md](../../archive/phase-13-research/list-stacks.md) | OK — only region bug affects this |
+| describe-stack-drift | [describe-stack-drift.md](../../archive/phase-13-research/describe-stack-drift.md) | **CRITICAL** — only initiates, never shows results |
+| estimate-cost | [estimate-cost.md](../../archive/phase-13-research/estimate-cost.md) | LOW — works but bypasses renderer |
+| lint-template | [lint-template.md](../../archive/phase-13-research/lint-template.md) | MEDIUM — raw error vs styled output |
+| template-approval | [template-approval.md](../../archive/phase-13-research/template-approval.md) | MEDIUM — works but bypasses renderer |
+| get-stack-template | [get-stack-template.md](../../archive/phase-13-research/get-stack-template.md) | OK — functionally correct |
+| convert-stack | [convert-stack.md](../../archive/phase-13-research/convert-stack.md) | OK — both use direct stderr |
+| cross-cutting | [cross-cutting.md](../../archive/phase-13-research/cross-cutting.md) | — all shared issues |
+| edge cases | [edge-cases.md](../../archive/phase-13-research/edge-cases.md) | — behavioral edge cases |
 
 ## Severity Summary
 
