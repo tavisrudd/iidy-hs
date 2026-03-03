@@ -15,21 +15,22 @@ import Test.Tasty.HUnit
 
 import Iidy.Cfn.Context (allTerminalStatuses)
 import Iidy.Cfn.Operations.UpdateStack (isNoUpdatesError)
+import Iidy.Cfn.Status (StackStatus(..))
 import Iidy.Cfn.StackOperations (stackNameFromId, isStackNotFoundError, pollForCompletionWith, PollConfig(..), defaultPollConfig, PollResult(..))
 
 watchStackTests :: [TestTree]
 watchStackTests =
   [ testCase "allTerminalStatuses - contains expected statuses" $ do
-      assertBool "CREATE_COMPLETE" ("CREATE_COMPLETE" `elem` allTerminalStatuses)
-      assertBool "DELETE_COMPLETE" ("DELETE_COMPLETE" `elem` allTerminalStatuses)
-      assertBool "UPDATE_COMPLETE" ("UPDATE_COMPLETE" `elem` allTerminalStatuses)
-      assertBool "ROLLBACK_COMPLETE" ("ROLLBACK_COMPLETE" `elem` allTerminalStatuses)
-      assertBool "CREATE_FAILED" ("CREATE_FAILED" `elem` allTerminalStatuses)
+      assertBool "CreateComplete" (CreateComplete `elem` allTerminalStatuses)
+      assertBool "DeleteComplete" (DeleteComplete `elem` allTerminalStatuses)
+      assertBool "UpdateComplete" (UpdateComplete `elem` allTerminalStatuses)
+      assertBool "RollbackComplete" (RollbackComplete `elem` allTerminalStatuses)
+      assertBool "CreateFailed" (CreateFailed `elem` allTerminalStatuses)
   , testCase "allTerminalStatuses - does not contain in-progress" $ do
-      assertBool "CREATE_IN_PROGRESS not terminal"
-        ("CREATE_IN_PROGRESS" `notElem` allTerminalStatuses)
-      assertBool "UPDATE_IN_PROGRESS not terminal"
-        ("UPDATE_IN_PROGRESS" `notElem` allTerminalStatuses)
+      assertBool "CreateInProgress not terminal"
+        (CreateInProgress `notElem` allTerminalStatuses)
+      assertBool "UpdateInProgress not terminal"
+        (UpdateInProgress `notElem` allTerminalStatuses)
   , testCase "stackNameFromId - ARN format" $
       stackNameFromId "arn:aws:cloudformation:us-east-1:123456:stack/my-stack/guid"
         @?= "my-stack"
@@ -49,7 +50,7 @@ watchStackTests =
       result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
                   allTerminalStatuses
                   (testPollConfig { pcOnNewEvents = const (pure ()) })
-      result @?= PollSuccess "CREATE_COMPLETE"
+      result @?= PollSuccess CreateComplete
 
   , testCase "pollForCompletionWith - polls multiple times until terminal" $ do
       let inProgress = [mkStackEvt "evt-1" CF.ResourceStatus_CREATE_IN_PROGRESS]
@@ -67,7 +68,7 @@ watchStackTests =
       result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
                   allTerminalStatuses
                   (testPollConfig { pcOnNewEvents = const (pure ()) })
-      result @?= PollSuccess "CREATE_COMPLETE"
+      result @?= PollSuccess CreateComplete
       polls <- readIORef pollCount
       assertBool "should poll at least twice" (polls >= 2)
 
@@ -111,7 +112,7 @@ watchStackTests =
       result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
                   allTerminalStatuses
                   (testPollConfig { pcOnNewEvents = const (pure ()) })
-      result @?= PollSuccess "CREATE_COMPLETE"
+      result @?= PollSuccess CreateComplete
 
   , testCase "pollForCompletionWith - detects DELETE_COMPLETE" $ do
       let events = [mkStackEvt "evt-1" CF.ResourceStatus_DELETE_COMPLETE]
@@ -124,7 +125,7 @@ watchStackTests =
       result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
                   allTerminalStatuses
                   (testPollConfig { pcOnNewEvents = const (pure ()) })
-      result @?= PollSuccess "DELETE_COMPLETE"
+      result @?= PollSuccess DeleteComplete
 
   , testCase "pollForCompletionWith - detects UPDATE_ROLLBACK_COMPLETE" $ do
       let inProgress = [mkStackEvt "evt-1" CF.ResourceStatus_UPDATE_IN_PROGRESS]
@@ -140,7 +141,7 @@ watchStackTests =
       result <- pollForCompletionWith fetchEvents "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
                   allTerminalStatuses
                   (testPollConfig { pcOnNewEvents = const (pure ()) })
-      result @?= PollSuccess "UPDATE_ROLLBACK_COMPLETE"
+      result @?= PollSuccess UpdateRollbackComplete
 
   , testCase "pollForCompletionWith - returns PollTimeout when overall timeout exceeded" $ do
       -- Set startTime 120 seconds in the past so elapsed > timeout immediately

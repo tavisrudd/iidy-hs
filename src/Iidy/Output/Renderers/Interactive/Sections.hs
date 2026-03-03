@@ -50,8 +50,9 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 import Iidy.Aws.ClientReqToken (TokenInfo(..))
+import Iidy.Cfn.Status (toText, isFailed)
 import Iidy.Cfn.Types (StackChangeType(..))
-import Iidy.Output.Color
+import Iidy.Output.Color (colorizeResourceStatus, colorizeResourceStatusText, DynColor(..), IidyTheme(..), colorize, colorizeBold, colorizeOnBg, colorByEnvironment)
 import Iidy.Output.Renderers.Interactive.Types
 import Iidy.Output.Types
 
@@ -163,7 +164,7 @@ renderStackEvents r evts = do
           limited = case sedMaxEvents evts of
             Just mx -> take mx sorted
             Nothing -> sorted
-          statusPad = calcPadding limited (seResourceStatus . sewEvent)
+          statusPad = calcPadding limited (toText . seResourceStatus . sewEvent)
           rtypePad = calcPadding limited (seResourceType . sewEvent)
       mapM_ (renderSingleStackEvent r statusPad rtypePad) limited
       case sedTruncated evts of
@@ -177,9 +178,9 @@ renderSingleStackEvent r statusPad rtypePad ewt = do
       ts = case seTimestamp event of
         Just t  -> formatTimestampText r (renderTimestamp t)
         Nothing -> formatTimestampText r (T.replicate 25 " ")
-      -- Pad before coloring to avoid ANSI length issues
-      statusPadded = padRight statusPad (seResourceStatus event)
-      status = colorizeResourceStatus (th r) statusPadded
+      -- Pad the text representation before coloring to avoid ANSI length issues
+      statusPadded = padRight statusPad (toText (seResourceStatus event))
+      status = colorizeResourceStatusText (th r) (seResourceStatus event) statusPadded
       rtypePadded = padRight rtypePad (seResourceType event)
       rtype = colorize (th r) (thInfo (th r)) rtypePadded
       logId = formatLogicalId r (seLogicalResourceId event)
@@ -189,7 +190,7 @@ renderSingleStackEvent r statusPad rtypePad ewt = do
   rPutStrLn r (" " <> ts <> " " <> status <> " " <> rtype <> " " <> logId <> dur)
   -- Show failure reason on new line
   case seResourceStatusReason event of
-    Just reason | not (T.null reason) && T.isInfixOf "FAILED" (seResourceStatus event) ->
+    Just reason | not (T.null reason) && isFailed (seResourceStatus event) ->
       let cleaned = case T.breakOnEnd "Initiated" reason of
             (_, after) | not (T.null after) -> T.strip after
             _ -> T.strip reason
@@ -242,7 +243,8 @@ renderStackContents r contents = do
   -- Current Status
   printSectionHeading r "Current Stack Status"
   rPutStrLn r (" " <> colorizeResourceStatus (th r) (ssiStatus (scCurrentStatus contents))
-    <> " " <> styleMuted r (fromMaybe "" (ssiStatusReason (scCurrentStatus contents))))
+    <> " " <> styleMuted r (fromMaybe "" (ssiStatusReason (scCurrentStatus contents)))
+    )
   -- Pending changesets
   unless (null (scPendingChangesets contents)) $ do
     printSectionHeadingLn r "Pending Changesets"
@@ -313,7 +315,7 @@ renderStackList r lst = do
     then rPutStrLn r "No stacks found"
     else do
       let timePad = 24 :: Int
-          statusPad = calcPadding (sldStacks lst) sleStackStatus
+          statusPad = calcPadding (sldStacks lst) (toText . sleStackStatus)
           header = padRight timePad "Creation/Update Time,"
                 <> " " <> padRight statusPad "Status,"
                 <> " " <> if sldShowTags lst then "Name, Tags" else "Name"
@@ -339,8 +341,8 @@ renderStackList r lst = do
             tagsDisplay = if sldShowTags lst
               then " " <> styleMuted r (prettyFormatTags (sleTags stack) (Just 3))
               else ""
-            statusPadded = padRight statusPad (sleStackStatus stack)
-            statusColored = colorizeResourceStatus (th r) statusPadded
+            statusPadded = padRight statusPad (toText (sleStackStatus stack))
+            statusColored = colorizeResourceStatusText (th r) (sleStackStatus stack) statusPadded
         rPutStrLn r (formatTimestampText r tsText <> " " <> statusColored <> " "
                       <> styleMuted r lifecycleIcon <> stackName <> tagsDisplay)
         -- Show failure reason
@@ -465,7 +467,7 @@ renderNewStackEvents r events = do
     -- Preserve timing start time across spinner restart
     preservedState <- readTVarIO (irTimingState r)
     stopSpinner r
-    let statusPad = calcPadding events (seResourceStatus . sewEvent)
+    let statusPad = calcPadding events (toText . seResourceStatus . sewEvent)
         rtypePad = calcPadding events (seResourceType . sewEvent)
     mapM_ (renderSingleStackEvent r statusPad rtypePad) events
     -- Restart spinner for continued polling

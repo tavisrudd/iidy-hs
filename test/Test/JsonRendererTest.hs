@@ -10,6 +10,8 @@ import qualified Data.Text.Encoding as TE
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
+import Iidy.Cfn.Status (StackStatus(..))
+
 import Iidy.Output.Renderers.Json
   ( JsonOptions(..), defaultJsonOptions
   , metadataToValue, defToValue, eventToValue, eventWithTimingToValue
@@ -304,11 +306,11 @@ jsonRendererTests =
   , testCase "contentsToValue - has resources and outputs" $ do
       let contents = StackContents
             { scResources =
-                [ StackResourceInfo "MyBucket" (Just "bucket-abc") "AWS::S3::Bucket" "CREATE_COMPLETE" Nothing Nothing ]
+                [ StackResourceInfo "MyBucket" (Just "bucket-abc") "AWS::S3::Bucket" CreateComplete Nothing Nothing ]
             , scOutputs =
                 [ StackOutputInfo "BucketArn" "arn:aws:s3:::bucket-abc" (Just "ARN of bucket") Nothing ]
             , scExports = []
-            , scCurrentStatus = StackStatusInfo "CREATE_COMPLETE" Nothing Nothing
+            , scCurrentStatus = StackStatusInfo CreateComplete Nothing Nothing
             , scPendingChangesets = []
             }
           val = contentsToValue contents

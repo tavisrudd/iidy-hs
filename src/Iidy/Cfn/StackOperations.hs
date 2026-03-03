@@ -60,6 +60,7 @@ import qualified Amazonka.CloudFormation.ListChangeSets as LCS
 
 import Lens.Micro ((.~))
 import Iidy.Cfn.Context (CfnContext(..))
+import Iidy.Cfn.Status (StackStatus(..), fromCfnResourceStatus, fromCfnStackStatus)
 import Iidy.Output.Types
 
 ------------------------------------------------------------------------
@@ -193,9 +194,9 @@ collectStackContentsWithStack ctx sName mStack = do
         Nothing -> []
         Just s  -> mapMaybe convertOutput (fromMaybe [] s.outputs)
       statusInfo = case mStack of
-        Nothing -> StackStatusInfo "UNKNOWN" Nothing Nothing
+        Nothing -> StackStatusInfo CreateFailed Nothing Nothing
         Just s  -> StackStatusInfo
-          { ssiStatus = CF.fromStackStatus s.stackStatus
+          { ssiStatus = fromCfnStackStatus s.stackStatus
           , ssiStatusReason = s.stackStatusReason
           , ssiTimestamp = Nothing
           }
@@ -258,17 +259,17 @@ defaultPollConfig = PollConfig
 
 -- | Result of a polling operation.
 data PollResult
-  = PollSuccess Text        -- ^ Terminal status reached
-  | PollTimeout             -- ^ Overall timeout elapsed
-  | PollInactivityTimeout   -- ^ Inactivity timeout elapsed
+  = PollSuccess StackStatus  -- ^ Terminal status reached
+  | PollTimeout              -- ^ Overall timeout elapsed
+  | PollInactivityTimeout    -- ^ Inactivity timeout elapsed
   deriving stock (Show, Eq)
 
 -- | Poll for stack operation completion.
 -- Returns a PollResult describing how polling ended.
 pollForCompletion
   :: CfnContext
-  -> Text          -- ^ stack ID (use ID not name for deletes)
-  -> [Text]        -- ^ terminal status strings
+  -> Text              -- ^ stack ID (use ID not name for deletes)
+  -> [StackStatus]     -- ^ terminal statuses
   -> PollConfig
   -> IO PollResult
 pollForCompletion ctx sId = pollForCompletionWith (fetchRecentStackEvents ctx sId) sId
@@ -277,7 +278,7 @@ pollForCompletion ctx sId = pollForCompletionWith (fetchRecentStackEvents ctx sI
 pollForCompletionWith
   :: IO [CF.StackEvent]  -- ^ event fetcher
   -> Text                -- ^ stack ID (for isStackEvent check)
-  -> [Text]              -- ^ terminal status strings
+  -> [StackStatus]       -- ^ terminal statuses
   -> PollConfig
   -> IO PollResult
 pollForCompletionWith fetchEvents sId terminalStatuses config = do
@@ -319,23 +320,23 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
               _ -> do
                 -- Check if we hit a terminal status
                 let stackEvents = filter isStackEvent events
-                    currentStatus = case stackEvents of
-                      (e:_) -> maybe "" CF.fromResourceStatus e.resourceStatus
-                      _     -> ""
+                    mCurrentStatus = case stackEvents of
+                      (e:_) -> fmap fromCfnResourceStatus e.resourceStatus
+                      _     -> Nothing
                 -- When pcWaitForStatusChange is True, only exit on terminal
                 -- status after we've seen new events (i.e., a new operation started)
                 let shouldCheckTerminal = not (pcWaitForStatusChange config)
                                        || hasSeenNewEvents
-                if shouldCheckTerminal && currentStatus `elem` terminalStatuses
-                  then do
+                case mCurrentStatus of
+                  Just currentStatus | shouldCheckTerminal && currentStatus `elem` terminalStatuses -> do
                     let elapsed = round (diffUTCTime now startTime) :: Int
                     pcOnOperationComplete config OperationCompleteInfo
                       { ociElapsedSeconds        = elapsed
                       , ociOperationStartTime    = startTime
-                      , ociSkipRemainingSections = currentStatus == "DELETE_COMPLETE"
+                      , ociSkipRemainingSections = currentStatus == DeleteComplete
                       }
                     pure (PollSuccess currentStatus)
-                  else
+                  _ ->
                     let !newSet = Set.union lastEventSet
                                    (Set.fromList (map (.eventId) newEvents))
                     in go newSet
@@ -368,7 +369,7 @@ convertResource r = StackResourceInfo
   { sriLogicalResourceId = r.logicalResourceId
   , sriPhysicalResourceId = r.physicalResourceId
   , sriResourceType = r.resourceType
-  , sriResourceStatus = CF.fromResourceStatus r.resourceStatus
+  , sriResourceStatus = fromCfnResourceStatus r.resourceStatus
   , sriResourceStatusReason = r.resourceStatusReason
   , sriLastUpdated = Just r.timestamp.fromTime
   }

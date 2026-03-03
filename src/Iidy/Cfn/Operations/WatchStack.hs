@@ -17,6 +17,7 @@ import qualified Amazonka.CloudFormation.Types as CF
 
 import Iidy.Constants (defaultPreviousEventsCount)
 import Iidy.Cfn.Context (CfnContext(..), allTerminalStatuses)
+import Iidy.Cfn.Status (StackStatus(..))
 import Iidy.Cfn.Operations.DescribeStack (convertStack, buildEventsDisplay, mkStandardPollConfig)
 import Iidy.Cfn.StackOperations
   ( getStack
@@ -85,7 +86,7 @@ watchStack ctx stackName timeoutSeconds emit = do
       -- distinguish timeout from completion should check the OdInactivityTimeout
       -- event emitted by pcOnInactivityTimeout above.
       case pollResult of
-        PollSuccess "DELETE_COMPLETE" -> pure (Right 0)
+        PollSuccess DeleteComplete -> pure (Right 0)
         _ -> do
           contents <- collectStackContents ctx stackName
           emit (OdStackContents contents)

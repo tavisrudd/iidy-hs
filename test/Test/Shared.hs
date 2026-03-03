@@ -55,6 +55,7 @@ import Data.Time.Clock (UTCTime(..))
 
 import Iidy.Aws.ClientReqToken (TokenInfo(..), TokenSource(..))
 import Iidy.Aws.CredentialSource (AwsSettings(..))
+import Iidy.Cfn.Status (StackStatus(..))
 import Iidy.Cfn.Types (StackChangeType(..))
 import Iidy.Output.Color (darkTheme, noColorTheme)
 import Iidy.Output.Renderers.Interactive
@@ -127,7 +128,7 @@ mkPlainRenderer = do
     }
 
 -- | Create a test StackEvent with the given fields.
-mkEvent :: Text -> Text -> Text -> Text -> Maybe UTCTime -> StackEvent
+mkEvent :: Text -> Text -> Text -> StackStatus -> Maybe UTCTime -> StackEvent
 mkEvent eid logId rtype status mTs = StackEvent
   { seEventId              = eid
   , seStackId              = "arn:stack"
@@ -158,7 +159,7 @@ testStackDef = StackDefinition
   { sdName = "my-stack"
   , sdStacksetName = Nothing
   , sdDescription = Just "Test stack"
-  , sdStatus = "CREATE_COMPLETE"
+  , sdStatus = CreateComplete
   , sdStatusReason = Nothing
   , sdCapabilities = ["CAPABILITY_IAM"]
   , sdServiceRole = Nothing
@@ -185,7 +186,7 @@ testStackEvent = StackEvent
   , sePhysicalResourceId = Just "my-bucket-abc"
   , seResourceType = "AWS::S3::Bucket"
   , seTimestamp = Just testTimestamp
-  , seResourceStatus = "CREATE_COMPLETE"
+  , seResourceStatus = CreateComplete
   , seResourceStatusReason = Nothing
   , seResourceProperties = Nothing
   , seClientRequestToken = Just "tok-abc123"
@@ -215,7 +216,7 @@ testCommandResult = CommandResult
 testStackListEntry :: StackListEntry
 testStackListEntry = StackListEntry
   { sleStackName = "my-stack"
-  , sleStackStatus = "CREATE_COMPLETE"
+  , sleStackStatus = CreateComplete
   , sleCreationTime = Just testTimestamp
   , sleLastUpdatedTime = Nothing
   , sleTags = Map.fromList [("Environment", "production")]
@@ -270,7 +271,7 @@ testStackContents = StackContents
       { sriLogicalResourceId = "MyBucket"
       , sriPhysicalResourceId = Just "my-bucket-abc"
       , sriResourceType = "AWS::S3::Bucket"
-      , sriResourceStatus = "CREATE_COMPLETE"
+      , sriResourceStatus = CreateComplete
       , sriResourceStatusReason = Nothing
       , sriLastUpdated = Just testTimestamp
       }]
@@ -282,7 +283,7 @@ testStackContents = StackContents
       }]
   , scExports = []
   , scCurrentStatus = StackStatusInfo
-      { ssiStatus = "CREATE_COMPLETE"
+      { ssiStatus = CreateComplete
       , ssiStatusReason = Nothing
       , ssiTimestamp = Just testTimestamp
       }

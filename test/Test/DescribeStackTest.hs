@@ -14,6 +14,7 @@ import qualified Amazonka.CloudFormation.Types.Stack as ST
 import qualified Amazonka.CloudFormation.Types.Parameter as Param
 import Amazonka.Data.Time (Time(..))
 import Iidy.Cfn.Operations.DescribeStack (calculateEventDurations, buildConsoleUrl, convertEvent, convertStack, buildEventsDisplay)
+import Iidy.Cfn.Status (StackStatus(..))
 import Iidy.Output.Types
 import Test.Shared (mkEvent)
 
@@ -33,8 +34,8 @@ describeStackTests =
   [ testGroup "calculateEventDurations"
     [ testCase "matching IN_PROGRESS -> COMPLETE pair produces correct duration" $ do
         let events =
-              [ mkEvent "e1" "MyBucket" "AWS::S3::Bucket" "CREATE_IN_PROGRESS" (Just (at 100))
-              , mkEvent "e2" "MyBucket" "AWS::S3::Bucket" "CREATE_COMPLETE" (Just (at 145))
+              [ mkEvent "e1" "MyBucket" "AWS::S3::Bucket" CreateInProgress (Just (at 100))
+              , mkEvent "e2" "MyBucket" "AWS::S3::Bucket" CreateComplete (Just (at 145))
               ]
             result = calculateEventDurations events
         -- The COMPLETE event should have a duration of 45 seconds
@@ -47,8 +48,8 @@ describeStackTests =
 
     , testCase "duration is at least 1 second (floor clamped)" $ do
         let events =
-              [ mkEvent "e1" "MyFunc" "AWS::Lambda::Function" "CREATE_IN_PROGRESS" (Just (at 100))
-              , mkEvent "e2" "MyFunc" "AWS::Lambda::Function" "CREATE_COMPLETE" (Just (at 100))
+              [ mkEvent "e1" "MyFunc" "AWS::Lambda::Function" CreateInProgress (Just (at 100))
+              , mkEvent "e2" "MyFunc" "AWS::Lambda::Function" CreateComplete (Just (at 100))
               ]
             result = calculateEventDurations events
         -- Same timestamp -> max 1 (floor 0) = 1
@@ -58,7 +59,7 @@ describeStackTests =
 
     , testCase "event with no matching start has Nothing duration" $ do
         let events =
-              [ mkEvent "e1" "MyBucket" "AWS::S3::Bucket" "CREATE_COMPLETE" (Just (at 200))
+              [ mkEvent "e1" "MyBucket" "AWS::S3::Bucket" CreateComplete (Just (at 200))
               ]
             result = calculateEventDurations events
         case result of
@@ -71,8 +72,8 @@ describeStackTests =
 
     , testCase "FAILED event also gets duration from IN_PROGRESS" $ do
         let events =
-              [ mkEvent "e1" "MyTable" "AWS::DynamoDB::Table" "CREATE_IN_PROGRESS" (Just (at 50))
-              , mkEvent "e2" "MyTable" "AWS::DynamoDB::Table" "CREATE_FAILED" (Just (at 80))
+              [ mkEvent "e1" "MyTable" "AWS::DynamoDB::Table" CreateInProgress (Just (at 50))
+              , mkEvent "e2" "MyTable" "AWS::DynamoDB::Table" CreateFailed (Just (at 80))
               ]
             result = calculateEventDurations events
         case result of
@@ -81,10 +82,10 @@ describeStackTests =
 
     , testCase "multiple resources tracked independently" $ do
         let events =
-              [ mkEvent "e1" "BucketA" "AWS::S3::Bucket" "CREATE_IN_PROGRESS" (Just (at 10))
-              , mkEvent "e2" "BucketB" "AWS::S3::Bucket" "CREATE_IN_PROGRESS" (Just (at 20))
-              , mkEvent "e3" "BucketA" "AWS::S3::Bucket" "CREATE_COMPLETE" (Just (at 30))
-              , mkEvent "e4" "BucketB" "AWS::S3::Bucket" "CREATE_COMPLETE" (Just (at 50))
+              [ mkEvent "e1" "BucketA" "AWS::S3::Bucket" CreateInProgress (Just (at 10))
+              , mkEvent "e2" "BucketB" "AWS::S3::Bucket" CreateInProgress (Just (at 20))
+              , mkEvent "e3" "BucketA" "AWS::S3::Bucket" CreateComplete (Just (at 30))
+              , mkEvent "e4" "BucketB" "AWS::S3::Bucket" CreateComplete (Just (at 50))
               ]
             result = calculateEventDurations events
         -- BucketA: 30 - 10 = 20s, BucketB: 50 - 20 = 30s
@@ -93,8 +94,8 @@ describeStackTests =
 
     , testCase "events with no timestamp produce Nothing duration" $ do
         let events =
-              [ mkEvent "e1" "MyBucket" "AWS::S3::Bucket" "CREATE_IN_PROGRESS" Nothing
-              , mkEvent "e2" "MyBucket" "AWS::S3::Bucket" "CREATE_COMPLETE" Nothing
+              [ mkEvent "e1" "MyBucket" "AWS::S3::Bucket" CreateInProgress Nothing
+              , mkEvent "e2" "MyBucket" "AWS::S3::Bucket" CreateComplete Nothing
               ]
             result = calculateEventDurations events
         case result of
@@ -147,7 +148,7 @@ describeStackTests =
         seLogicalResourceId result @?= "MyBucket"
         sePhysicalResourceId result @?= Just "my-bucket-phys"
         seResourceType result @?= "AWS::S3::Bucket"
-        seResourceStatus result @?= "CREATE_COMPLETE"
+        seResourceStatus result @?= CreateComplete
         seResourceStatusReason result @?= Just "Resource creation complete"
         seResourceProperties result @?= Just "{\"BucketName\":\"test\"}"
         seClientRequestToken result @?= Just "tok-abc"
@@ -158,7 +159,7 @@ describeStackTests =
         seLogicalResourceId result @?= ""
         sePhysicalResourceId result @?= Nothing
         seResourceType result @?= ""
-        seResourceStatus result @?= ""
+        seResourceStatus result @?= CreateFailed  -- fallback when resourceStatus is Nothing
         seResourceStatusReason result @?= Nothing
         seResourceProperties result @?= Nothing
         seClientRequestToken result @?= Nothing
@@ -192,7 +193,7 @@ describeStackTests =
             result = convertStack cfStack "us-east-1"
         sdName result @?= "my-stack"
         sdDescription result @?= Just "Test stack description"
-        sdStatus result @?= "CREATE_COMPLETE"
+        sdStatus result @?= CreateComplete
         sdStatusReason result @?= Just "Stack created"
         sdCapabilities result @?= ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"]
         sdServiceRole result @?= Just "arn:aws:iam::123:role/cfn-role"
@@ -215,7 +216,7 @@ describeStackTests =
             result = convertStack cfStack "eu-west-1"
         sdName result @?= "minimal-stack"
         sdDescription result @?= Nothing
-        sdStatus result @?= "DELETE_COMPLETE"
+        sdStatus result @?= DeleteComplete
         sdStatusReason result @?= Nothing
         sdCapabilities result @?= []
         sdServiceRole result @?= Nothing

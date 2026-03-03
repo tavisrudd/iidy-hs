@@ -72,6 +72,7 @@ import Data.Time (UTCTime, defaultTimeLocale, formatTime, getCurrentTime, diffUT
 import System.IO (Handle, stdout, stderr, hFlush, hIsTerminalDevice)
 
 import Iidy.Aws.ClientReqToken (TokenSource(..), DerivedTokenInfo(..))
+import Iidy.Cfn.Status (StackStatus(..), isFailed)
 import Iidy.Output.Color
 import Iidy.Output.Spinner
   ( Spinner, SpinnerStyle(..)
@@ -432,11 +433,11 @@ prettyFormatParameters params
 ------------------------------------------------------------------------
 
 -- | Whether a stack status warrants displaying its reason
-shouldShowStatusReason :: Text -> Bool
+shouldShowStatusReason :: StackStatus -> Bool
 shouldShowStatusReason status =
-  T.isSuffixOf "_FAILED" status
-  || status == "ROLLBACK_COMPLETE"
-  || status == "UPDATE_ROLLBACK_COMPLETE"
+  isFailed status
+  || status == RollbackComplete
+  || status == UpdateRollbackComplete
 
 ------------------------------------------------------------------------
 -- Utility helpers

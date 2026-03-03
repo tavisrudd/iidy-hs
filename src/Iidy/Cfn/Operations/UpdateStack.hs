@@ -28,6 +28,7 @@ import qualified Amazonka.CloudFormation.UpdateStack as US
 
 import Iidy.Aws.ClientReqToken (TokenInfo(..))
 import Iidy.Cfn.Context (CfnContext(..), updateSuccessStates, updateTerminalStatuses)
+import Iidy.Cfn.Status (StackStatus(..))
 import Iidy.Confirm (ConfirmResult(..))
 import Iidy.Cfn.Operations.Changeset
   ( createChangeset
@@ -112,7 +113,7 @@ updateStack ctx args argsfilePath env emit = do
 
           -- Step 6: Return exit code based on success/failure
           case pollResult of
-            PollSuccess "DELETE_COMPLETE" -> pure (Right 1)
+            PollSuccess DeleteComplete -> pure (Right 1)
             PollSuccess finalStatus -> do
               contents <- collectStackContents ctx stackName
               emit (OdStackContents contents)

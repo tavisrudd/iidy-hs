@@ -4,6 +4,7 @@ import qualified Data.Text as T
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
+import Iidy.Cfn.Status (StackStatus(..))
 import Iidy.Output.Color
   ( darkTheme, lightTheme, highContrastTheme, noColorTheme
   , IidyTheme(..), colorize, colorizeResourceStatus
@@ -50,18 +51,18 @@ themeVariantTests =
       assertBool "contains text" ("ERR" `T.isInfixOf` result)
 
   , testCase "colorizeResourceStatus consistent across themes" $ do
-      let darkResult = colorizeResourceStatus darkTheme "UPDATE_COMPLETE"
-          lightResult = colorizeResourceStatus lightTheme "UPDATE_COMPLETE"
-          hcResult = colorizeResourceStatus highContrastTheme "UPDATE_COMPLETE"
+      let darkResult = colorizeResourceStatus darkTheme UpdateComplete
+          lightResult = colorizeResourceStatus lightTheme UpdateComplete
+          hcResult = colorizeResourceStatus highContrastTheme UpdateComplete
       assertBool "dark has ANSI" ("\ESC[" `T.isInfixOf` darkResult)
       assertBool "light has ANSI" ("\ESC[" `T.isInfixOf` lightResult)
       assertBool "hc has ANSI" ("\ESC[" `T.isInfixOf` hcResult)
 
   , testCase "colorizeResourceStatus - ROLLBACK uses error color" $ do
-      let result = colorizeResourceStatus darkTheme "ROLLBACK_COMPLETE"
+      let result = colorizeResourceStatus darkTheme RollbackComplete
       assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
 
   , testCase "colorizeResourceStatus - DELETE_SKIPPED uses muted" $ do
-      let result = colorizeResourceStatus darkTheme "DELETE_SKIPPED"
+      let result = colorizeResourceStatus darkTheme DeleteSkipped
       assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
   ]

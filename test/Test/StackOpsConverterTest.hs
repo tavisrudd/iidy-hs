@@ -11,6 +11,7 @@ import qualified Amazonka.CloudFormation.Types.StackResource as SR
 import qualified Amazonka.CloudFormation.Types.Output as Out
 import qualified Amazonka.CloudFormation.Types.ChangeSetSummary as CSS
 import Amazonka.Data.Time (Time(..))
+import Iidy.Cfn.Status (StackStatus(..))
 import Iidy.Cfn.StackOperations (convertResource, convertOutput, convertChangeSetSummary)
 import Iidy.Output.Types
 
@@ -37,7 +38,7 @@ stackOpsConverterTests =
         sriLogicalResourceId result @?= "MyBucket"
         sriPhysicalResourceId result @?= Just "my-bucket-phys-123"
         sriResourceType result @?= "AWS::S3::Bucket"
-        sriResourceStatus result @?= "CREATE_COMPLETE"
+        sriResourceStatus result @?= CreateComplete
         sriResourceStatusReason result @?= Just "Resource creation complete"
         sriLastUpdated result @?= Just epoch
 
@@ -47,15 +48,15 @@ stackOpsConverterTests =
         sriLogicalResourceId result @?= "MyFunc"
         sriPhysicalResourceId result @?= Nothing
         sriResourceType result @?= "AWS::Lambda::Function"
-        sriResourceStatus result @?= "DELETE_IN_PROGRESS"
+        sriResourceStatus result @?= DeleteInProgress
         sriResourceStatusReason result @?= Nothing
         sriLastUpdated result @?= Just epoch
 
     , testCase "various resource statuses" $ do
         let mkRes st = SR.newStackResource "R" "AWS::EC2::Instance" epoch st
-        sriResourceStatus (convertResource (mkRes CF.ResourceStatus_UPDATE_COMPLETE)) @?= "UPDATE_COMPLETE"
-        sriResourceStatus (convertResource (mkRes CF.ResourceStatus_CREATE_FAILED)) @?= "CREATE_FAILED"
-        sriResourceStatus (convertResource (mkRes CF.ResourceStatus_UPDATE_IN_PROGRESS)) @?= "UPDATE_IN_PROGRESS"
+        sriResourceStatus (convertResource (mkRes CF.ResourceStatus_UPDATE_COMPLETE)) @?= UpdateComplete
+        sriResourceStatus (convertResource (mkRes CF.ResourceStatus_CREATE_FAILED)) @?= CreateFailed
+        sriResourceStatus (convertResource (mkRes CF.ResourceStatus_UPDATE_IN_PROGRESS)) @?= UpdateInProgress
     ]
 
   , testGroup "convertOutput"

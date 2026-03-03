@@ -50,6 +50,7 @@ import Data.Time.Format.ISO8601 (iso8601Show)
 import System.IO (Handle, stdout, stderr, hFlush)
 
 import Iidy.Aws.ClientReqToken (TokenInfo(..), TokenSource(..), DerivedTokenInfo(..))
+import Iidy.Cfn.Status (toText)
 import Iidy.Cfn.Types (StackChangeType(..))
 import Iidy.Output.Types
 
@@ -204,7 +205,7 @@ defToValue d = object
   [ "name" .= sdName d
   , "stackset_name" .= sdStacksetName d
   , "description" .= sdDescription d
-  , "status" .= sdStatus d
+  , "status" .= toText (sdStatus d)
   , "status_reason" .= sdStatusReason d
   , "capabilities" .= sdCapabilities d
   , "service_role" .= sdServiceRole d
@@ -231,7 +232,7 @@ eventToValue e = object
   , "physical_resource_id" .= sePhysicalResourceId e
   , "resource_type" .= seResourceType e
   , "timestamp" .= seTimestamp e
-  , "resource_status" .= seResourceStatus e
+  , "resource_status" .= toText (seResourceStatus e)
   , "resource_status_reason" .= seResourceStatusReason e
   , "resource_properties" .= seResourceProperties e
   , "client_request_token" .= seClientRequestToken e
@@ -262,7 +263,7 @@ resourceInfoToValue r = object
   [ "logical_resource_id" .= sriLogicalResourceId r
   , "physical_resource_id" .= sriPhysicalResourceId r
   , "resource_type" .= sriResourceType r
-  , "resource_status" .= sriResourceStatus r
+  , "resource_status" .= toText (sriResourceStatus r)
   , "resource_status_reason" .= sriResourceStatusReason r
   , "last_updated" .= sriLastUpdated r
   ]
@@ -285,7 +286,7 @@ exportInfoToValue e = object
 
 statusInfoToValue :: StackStatusInfo -> Value
 statusInfoToValue s = object
-  [ "status" .= ssiStatus s
+  [ "status" .= toText (ssiStatus s)
   , "status_reason" .= ssiStatusReason s
   , "timestamp" .= ssiTimestamp s
   ]
@@ -364,7 +365,7 @@ summaryToValue s = object
 stackListEntryToValue :: StackListEntry -> Value
 stackListEntryToValue e = object
   [ "stack_name" .= sleStackName e
-  , "stack_status" .= sleStackStatus e
+  , "stack_status" .= toText (sleStackStatus e)
   , "creation_time" .= sleCreationTime e
   , "last_updated_time" .= sleLastUpdatedTime e
   , "tags" .= sleTags e

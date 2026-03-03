@@ -24,6 +24,7 @@ import qualified Amazonka.CloudFormation.Types as CF
 import qualified Amazonka.CloudFormation.DescribeStacks as DStacks
 
 import Iidy.Cfn.Context (CfnContext(..))
+import Iidy.Cfn.Status (fromCfnStackStatus)
 import Iidy.Output.Types
   ( OutputData(..)
   , StackListDisplay(..)
@@ -102,7 +103,7 @@ stackTagMap stack =
 convertStack :: CF.Stack -> StackListEntry
 convertStack s = StackListEntry
   { sleStackName             = s.stackName
-  , sleStackStatus           = CF.fromStackStatus s.stackStatus
+  , sleStackStatus           = fromCfnStackStatus s.stackStatus
   , sleCreationTime          = Just (s.creationTime.fromTime)
   , sleLastUpdatedTime       = fmap (.fromTime) s.lastUpdatedTime
   , sleTags                  = stackTagMap s

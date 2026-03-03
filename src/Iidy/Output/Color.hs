@@ -16,12 +16,14 @@ module Iidy.Output.Color
   , resetCode
     -- * Semantic color helpers
   , colorizeResourceStatus
+  , colorizeResourceStatusText
   , colorByEnvironment
   ) where
 
 import Data.Text (Text)
 import qualified Data.Text as T
 
+import Iidy.Cfn.Status (StackStatus, toText)
 import Iidy.Output.Status (StatusCategory (..), categorizeStatus)
 
 ------------------------------------------------------------------------
@@ -219,14 +221,28 @@ bold theme t
 -- Semantic helpers
 ------------------------------------------------------------------------
 
--- | Colorize a CloudFormation resource status
-colorizeResourceStatus :: IidyTheme -> Text -> Text
-colorizeResourceStatus theme status = case categorizeStatus status of
-  StatusInProgress -> colorize theme (thWarning theme) status
-  StatusComplete   -> colorize theme (thSuccess theme) status
-  StatusFailed     -> colorize theme (thError theme) status
-  StatusSkipped    -> colorize theme (thSkipped theme) status
-  StatusUnknown    -> colorize theme (thInfo theme) status
+-- | Colorize a CloudFormation resource status.
+-- Takes a StackStatus ADT and renders it with the appropriate color.
+-- The displayed text is the AWS-style string (e.g., "CREATE_COMPLETE").
+colorizeResourceStatus :: IidyTheme -> StackStatus -> Text
+colorizeResourceStatus theme status =
+  let statusText = toText status
+  in case categorizeStatus status of
+    StatusInProgress -> colorize theme (thWarning theme) statusText
+    StatusComplete   -> colorize theme (thSuccess theme) statusText
+    StatusFailed     -> colorize theme (thError theme) statusText
+    StatusSkipped    -> colorize theme (thSkipped theme) statusText
+    StatusUnknown    -> colorize theme (thInfo theme) statusText
+
+-- | Colorize arbitrary text using the color appropriate for a given StackStatus.
+-- Used when the text has been padded or otherwise modified before colorizing.
+colorizeResourceStatusText :: IidyTheme -> StackStatus -> Text -> Text
+colorizeResourceStatusText theme status txt = case categorizeStatus status of
+  StatusInProgress -> colorize theme (thWarning theme) txt
+  StatusComplete   -> colorize theme (thSuccess theme) txt
+  StatusFailed     -> colorize theme (thError theme) txt
+  StatusSkipped    -> colorize theme (thSkipped theme) txt
+  StatusUnknown    -> colorize theme (thInfo theme) txt
 
 -- | Color text by environment name
 colorByEnvironment :: IidyTheme -> Text -> Text -> Text

@@ -7,8 +7,7 @@ module Iidy.Output.Status
   , isStatusTerminal
   ) where
 
-import Data.Text (Text)
-import qualified Data.Text as T
+import Iidy.Cfn.Status (StackStatus(..), isFailed, isInProgress, isSuccess)
 
 -- | Categorization of CloudFormation resource statuses
 data StatusCategory
@@ -19,26 +18,25 @@ data StatusCategory
   | StatusUnknown
   deriving stock (Show, Eq, Ord)
 
--- | Categorize a CloudFormation status string
-categorizeStatus :: Text -> StatusCategory
-categorizeStatus status
-  | T.isSuffixOf "_IN_PROGRESS" status = StatusInProgress
-  | status == "REVIEW_IN_PROGRESS"     = StatusInProgress
-  | T.isSuffixOf "_COMPLETE" status    = StatusComplete
-  | T.isSuffixOf "_FAILED" status      = StatusFailed
-  | status == "DELETE_SKIPPED"         = StatusSkipped
-  | otherwise                          = StatusUnknown
+-- | Categorize a StackStatus into a display category
+categorizeStatus :: StackStatus -> StatusCategory
+categorizeStatus = \case
+  DeleteSkipped -> StatusSkipped
+  s | isInProgress s -> StatusInProgress
+    | isSuccess s    -> StatusComplete
+    | isFailed s     -> StatusFailed
+    | otherwise      -> StatusUnknown
 
-isStatusInProgress :: Text -> Bool
+isStatusInProgress :: StackStatus -> Bool
 isStatusInProgress s = categorizeStatus s == StatusInProgress
 
-isStatusComplete :: Text -> Bool
+isStatusComplete :: StackStatus -> Bool
 isStatusComplete s = categorizeStatus s == StatusComplete
 
-isStatusFailed :: Text -> Bool
+isStatusFailed :: StackStatus -> Bool
 isStatusFailed s = categorizeStatus s == StatusFailed
 
-isStatusTerminal :: Text -> Bool
+isStatusTerminal :: StackStatus -> Bool
 isStatusTerminal s = case categorizeStatus s of
   StatusComplete -> True
   StatusFailed   -> True

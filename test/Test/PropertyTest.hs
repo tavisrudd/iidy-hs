@@ -17,7 +17,7 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.QuickCheck (testProperty)
 import Test.QuickCheck hiding (Failure, Success)
 
-import Iidy.Cfn.Status (isFailureStatus, isInProgressStatus, isSuccessStatus)
+import Iidy.Cfn.Status (StackStatus(..), isFailureStatus, isInProgressStatus, isSuccessStatus, fromText, toText)
 import Iidy.Cfn.TemplateHash (calculateTemplateHash)
 import Iidy.Output.Renderers.Interactive (padRight)
 import Iidy.Yaml.CustomResources.JsonSchema (validateSchema)
@@ -96,33 +96,8 @@ genNonEmptyArray = do
   elems <- listOf1 genScalarValue
   pure (Array (V.fromList elems))
 
--- | CFN-like status strings for meaningful coverage
-genCfnLikeText :: Gen T.Text
-genCfnLikeText = oneof
-  [ elements knownCfnStatuses
-  , do prefix <- elements ["CREATE", "DELETE", "UPDATE", "ROLLBACK", "IMPORT"]
-       suffix <- elements ["_COMPLETE", "_FAILED", "_IN_PROGRESS"]
-       pure (prefix <> suffix)
-  , do prefix <- elements ["CREATE", "UPDATE", "DELETE"]
-       mid <- elements ["", "_ROLLBACK"]
-       suffix <- elements ["_COMPLETE", "_FAILED", "_IN_PROGRESS"]
-       pure (prefix <> mid <> suffix)
-  , genSafeText
-  ]
-
-knownCfnStatuses :: [T.Text]
-knownCfnStatuses =
-  [ "CREATE_IN_PROGRESS", "CREATE_COMPLETE", "CREATE_FAILED"
-  , "DELETE_IN_PROGRESS", "DELETE_COMPLETE", "DELETE_FAILED"
-  , "UPDATE_IN_PROGRESS", "UPDATE_COMPLETE", "UPDATE_FAILED"
-  , "UPDATE_ROLLBACK_COMPLETE", "UPDATE_ROLLBACK_FAILED"
-  , "UPDATE_ROLLBACK_IN_PROGRESS"
-  , "ROLLBACK_IN_PROGRESS", "ROLLBACK_COMPLETE", "ROLLBACK_FAILED"
-  , "IMPORT_IN_PROGRESS", "IMPORT_COMPLETE"
-  , "IMPORT_ROLLBACK_COMPLETE", "IMPORT_ROLLBACK_FAILED"
-  , "IMPORT_ROLLBACK_IN_PROGRESS"
-  , "DELETE_SKIPPED", "REVIEW_IN_PROGRESS"
-  ]
+-- Note: genCfnLikeText and knownCfnStatuses removed; status testing now
+-- uses the StackStatus ADT directly (see prop_cfn_status_exclusive, prop_cfn_status_roundtrip).
 
 -- | All ErrorId constructors
 allErrorIds :: [ErrorId]
@@ -218,6 +193,7 @@ propertyTests =
   , testProperty "Bool False schema rejects all values" prop_schema_false_rejects_all
   -- CFN Status
   , testProperty "failure/success/in-progress mutually exclusive" prop_cfn_status_exclusive
+  , testProperty "fromText . toText roundtrip for all statuses" prop_cfn_status_roundtrip
   -- Template Hash
   , testProperty "Template hash: 64 lowercase hex chars" prop_templateHash_format
   -- Error IDs
@@ -461,18 +437,29 @@ prop_schema_false_rejects_all = forAll (resize 4 arbitrary) $ \(v :: Value) ->
 -- CFN Status properties
 ------------------------------------------------------------------------
 
--- | isFailureStatus, isSuccessStatus, isInProgressStatus are mutually exclusive:
--- at most one can be true for any text (they check different suffixes)
+-- | isFailureStatus, isSuccessStatus, isInProgressStatus are mutually exclusive
+-- for all StackStatus constructors.
 prop_cfn_status_exclusive :: Property
-prop_cfn_status_exclusive = forAll genCfnLikeText $ \s ->
+prop_cfn_status_exclusive = forAll (elements allStatuses) $ \s ->
   let f = isFailureStatus s
       p = isSuccessStatus s
       i = isInProgressStatus s
       trueCount = length (filter id [f, p, i])
-  in counterexample (T.unpack s <> ": failure=" <> show f
+  in counterexample (show s <> ": failure=" <> show f
                      <> " success=" <> show p
                      <> " inProgress=" <> show i) $
      trueCount <= 1
+  where
+    allStatuses :: [StackStatus]
+    allStatuses = [minBound .. maxBound]
+
+-- | fromText . toText is Just for all StackStatus constructors.
+prop_cfn_status_roundtrip :: Property
+prop_cfn_status_roundtrip = forAll (elements allStatuses) $ \s ->
+  fromText (toText s) === Just s
+  where
+    allStatuses :: [StackStatus]
+    allStatuses = [minBound .. maxBound]
 
 ------------------------------------------------------------------------
 -- Template Hash properties

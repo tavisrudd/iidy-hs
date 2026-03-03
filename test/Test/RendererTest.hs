@@ -9,6 +9,7 @@ import Test.Tasty.HUnit
 
 import Iidy.Aws.ClientReqToken (DerivedTokenInfo(..), TokenSource(..))
 import Iidy.Cfn.Operations.DescribeStack (calculateEventDurations)
+import Iidy.Cfn.Status (StackStatus(..))
 import Iidy.Output.Color (darkTheme, noColorTheme, IidyTheme(..), colorize, colorizeResourceStatus)
 import Iidy.Output.Renderers.Interactive
   ( formatSectionHeading, formatSectionLabel, formatSectionEntry
@@ -147,8 +148,8 @@ rendererTests =
       let t0 = UTCTime (fromGregorian 2026 1 1) 0
           t5 = addUTCTime (secondsToNominalDiffTime 5) t0
           events =
-            [ mkEvent "e1" "MyResource" "AWS::S3::Bucket" "CREATE_IN_PROGRESS" (Just t0)
-            , mkEvent "e2" "MyResource" "AWS::S3::Bucket" "CREATE_COMPLETE" (Just t5)
+            [ mkEvent "e1" "MyResource" "AWS::S3::Bucket" CreateInProgress (Just t0)
+            , mkEvent "e2" "MyResource" "AWS::S3::Bucket" CreateComplete (Just t5)
             ]
           result = calculateEventDurations events
       assertEqual "IN_PROGRESS has no duration" Nothing (sewDurationSeconds (result !! 0))
@@ -157,7 +158,7 @@ rendererTests =
   , testCase "calculateEventDurations - no matching start" $ do
       let t0 = UTCTime (fromGregorian 2026 1 1) 0
           events =
-            [ mkEvent "e1" "MyResource" "AWS::S3::Bucket" "CREATE_COMPLETE" (Just t0)
+            [ mkEvent "e1" "MyResource" "AWS::S3::Bucket" CreateComplete (Just t0)
             ]
           result = calculateEventDurations events
       case result of
@@ -168,8 +169,8 @@ rendererTests =
       let t0 = UTCTime (fromGregorian 2026 1 1) 0
           t3 = addUTCTime (secondsToNominalDiffTime 3) t0
           events =
-            [ mkEvent "e1" "MyResource" "AWS::EC2::Instance" "CREATE_IN_PROGRESS" (Just t0)
-            , mkEvent "e2" "MyResource" "AWS::EC2::Instance" "CREATE_FAILED" (Just t3)
+            [ mkEvent "e1" "MyResource" "AWS::EC2::Instance" CreateInProgress (Just t0)
+            , mkEvent "e2" "MyResource" "AWS::EC2::Instance" CreateFailed (Just t3)
             ]
           result = calculateEventDurations events
       assertEqual "FAILED has 3s duration" (Just 3) (sewDurationSeconds (result !! 1))
@@ -180,10 +181,10 @@ rendererTests =
           t4 = addUTCTime (secondsToNominalDiffTime 4) t0
           t7 = addUTCTime (secondsToNominalDiffTime 7) t0
           events =
-            [ mkEvent "e1" "Bucket" "AWS::S3::Bucket" "CREATE_IN_PROGRESS" (Just t0)
-            , mkEvent "e2" "Instance" "AWS::EC2::Instance" "CREATE_IN_PROGRESS" (Just t2)
-            , mkEvent "e3" "Bucket" "AWS::S3::Bucket" "CREATE_COMPLETE" (Just t4)
-            , mkEvent "e4" "Instance" "AWS::EC2::Instance" "CREATE_COMPLETE" (Just t7)
+            [ mkEvent "e1" "Bucket" "AWS::S3::Bucket" CreateInProgress (Just t0)
+            , mkEvent "e2" "Instance" "AWS::EC2::Instance" CreateInProgress (Just t2)
+            , mkEvent "e3" "Bucket" "AWS::S3::Bucket" CreateComplete (Just t4)
+            , mkEvent "e4" "Instance" "AWS::EC2::Instance" CreateComplete (Just t7)
             ]
           result = calculateEventDurations events
       assertEqual "Bucket = 4s" (Just 4) (sewDurationSeconds (result !! 2))
@@ -199,20 +200,20 @@ rendererTests =
       assertEqual "no color" "OK" result
 
   , testCase "colorizeResourceStatus - IN_PROGRESS is warning color" $ do
-      let result = colorizeResourceStatus darkTheme "CREATE_IN_PROGRESS"
+      let result = colorizeResourceStatus darkTheme CreateInProgress
       assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
       assertBool "has text" ("CREATE_IN_PROGRESS" `T.isInfixOf` result)
 
   , testCase "colorizeResourceStatus - COMPLETE is success color" $ do
-      let result = colorizeResourceStatus darkTheme "CREATE_COMPLETE"
+      let result = colorizeResourceStatus darkTheme CreateComplete
       assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
 
   , testCase "colorizeResourceStatus - FAILED is error color" $ do
-      let result = colorizeResourceStatus darkTheme "CREATE_FAILED"
+      let result = colorizeResourceStatus darkTheme CreateFailed
       assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
 
   , testCase "colorizeResourceStatus - noColor" $ do
-      let result = colorizeResourceStatus noColorTheme "CREATE_COMPLETE"
+      let result = colorizeResourceStatus noColorTheme CreateComplete
       assertEqual "no color" "CREATE_COMPLETE" result
 
   , testCase "column2Start is 25" $ do

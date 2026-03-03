@@ -13,6 +13,7 @@ import Data.Time.Clock (UTCTime(..))
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
+import Iidy.Cfn.Status (StackStatus(..))
 import Iidy.Output.Color (darkTheme, colorizeResourceStatus)
 import Iidy.Output.Renderers.Interactive
   ( formatSectionHeading, formatSectionEntry
@@ -64,13 +65,13 @@ rendererOutputTests =
       assertBool "has name" ("WebServer" `T.isInfixOf` fid)
 
   , testCase "colorizeResourceStatus maps status families correctly" $ do
-      let inProgressResult = colorizeResourceStatus darkTheme "CREATE_IN_PROGRESS"
+      let inProgressResult = colorizeResourceStatus darkTheme CreateInProgress
       assertBool "in_progress colored" ("\ESC[" `T.isInfixOf` inProgressResult)
-      let completeResult = colorizeResourceStatus darkTheme "UPDATE_COMPLETE"
+      let completeResult = colorizeResourceStatus darkTheme UpdateComplete
       assertBool "complete colored" ("\ESC[" `T.isInfixOf` completeResult)
-      let failedResult = colorizeResourceStatus darkTheme "DELETE_FAILED"
+      let failedResult = colorizeResourceStatus darkTheme DeleteFailed
       assertBool "failed colored" ("\ESC[" `T.isInfixOf` failedResult)
-      let rollbackResult = colorizeResourceStatus darkTheme "ROLLBACK_IN_PROGRESS"
+      let rollbackResult = colorizeResourceStatus darkTheme RollbackInProgress
       assertBool "rollback colored" ("\ESC[" `T.isInfixOf` rollbackResult)
 
   , testCase "renderTimestamp produces expected format" $ do

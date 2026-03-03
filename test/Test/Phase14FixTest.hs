@@ -23,6 +23,7 @@ import Iidy.Aws.CredentialSource
 import Iidy.Cfn.CommandMetadata (buildCliArguments)
 import Iidy.Cfn.Operations.DescribeStack (calculateEventDurations, convertEventWithDuration)
 import Iidy.Cfn.Operations.UpdateStack (isNoUpdatesError)
+import Iidy.Cfn.Status (StackStatus(..))
 import Iidy.Cfn.StackArgsLoader (getStrMapValidated)
 import Iidy.Output.Types (StackEventWithTiming(..))
 import Test.Shared (mkEvent)
@@ -158,8 +159,8 @@ phase14FixTests =
       let t0 = UTCTime (fromGregorian 2026 1 1) 0
           t05 = addUTCTime (secondsToNominalDiffTime 0.5) t0
           events =
-            [ mkEvent "e1" "Res" "AWS::S3::Bucket" "CREATE_IN_PROGRESS" (Just t0)
-            , mkEvent "e2" "Res" "AWS::S3::Bucket" "CREATE_COMPLETE" (Just t05)
+            [ mkEvent "e1" "Res" "AWS::S3::Bucket" CreateInProgress (Just t0)
+            , mkEvent "e2" "Res" "AWS::S3::Bucket" CreateComplete (Just t05)
             ]
           result = calculateEventDurations events
       assertEqual "sub-second -> 1" (Just 1) (sewDurationSeconds (result !! 1))

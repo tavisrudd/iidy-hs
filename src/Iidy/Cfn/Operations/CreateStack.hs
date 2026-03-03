@@ -16,6 +16,7 @@ import qualified Amazonka
 import qualified Amazonka.CloudFormation.CreateStack as CS
 
 import Iidy.Cfn.Context (CfnContext(..), createSuccessStates, createTerminalStatuses)
+import Iidy.Cfn.Status (StackStatus(..))
 import Iidy.Cfn.Operations.DescribeStack (mkStandardPollConfig, emitStackDefinition)
 import Iidy.Cfn.RequestBuilder (buildCreateStackRequest)
 import Iidy.Cfn.StackOperations
@@ -70,7 +71,7 @@ createStack ctx args argsfilePath env emit = do
 
       -- Step 5: Handle DELETE_COMPLETE (rollback caused stack deletion)
       case pollResult of
-        PollSuccess "DELETE_COMPLETE" -> pure (Right 1)
+        PollSuccess DeleteComplete -> pure (Right 1)
         PollSuccess finalStatus -> do
           -- Step 6: Collect and emit stack contents
           contents <- collectStackContents ctx stackName

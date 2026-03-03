@@ -59,6 +59,7 @@ import Iidy.Cfn.Context
   , ctxDeriveToken
   , changesetTerminalStatuses
   )
+import Iidy.Cfn.Status (StackStatus(..))
 import Iidy.Cfn.RequestBuilder (buildCreateChangeSetRequest)
 import Iidy.Cfn.Operations.DescribeStack (buildEventsDisplay, mkStandardPollConfig, emitStackDefinition)
 import Iidy.Cfn.StackOperations
@@ -220,7 +221,7 @@ executeChangeset ctx stackName csName emit = do
   -- Step 4: Emit StackContents
   let successStates = createSuccessStates ++ updateSuccessStates
   case pollResult of
-    PollSuccess "DELETE_COMPLETE" -> pure (Right 1)
+    PollSuccess DeleteComplete -> pure (Right 1)
     PollSuccess finalStatus -> do
       contents <- collectStackContents ctx stackName
       emit (OdStackContents contents)

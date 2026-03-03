@@ -61,6 +61,7 @@ import Data.Map.Strict (Map)
 import Data.Text (Text)
 import Data.Time (UTCTime)
 import Iidy.Aws.ClientReqToken (TokenInfo)
+import Iidy.Cfn.Status (StackStatus)
 import Iidy.Cfn.Types (StackChangeType)
 
 ------------------------------------------------------------------------
@@ -126,7 +127,7 @@ data StackEvent = StackEvent
   , sePhysicalResourceId :: !(Maybe Text)
   , seResourceType       :: !Text
   , seTimestamp          :: !(Maybe UTCTime)
-  , seResourceStatus     :: !Text
+  , seResourceStatus     :: !StackStatus
   , seResourceStatusReason :: !(Maybe Text)
   , seResourceProperties :: !(Maybe Text)
   , seClientRequestToken :: !(Maybe Text)
@@ -157,7 +158,7 @@ data StackDefinition = StackDefinition
   { sdName                   :: !Text
   , sdStacksetName           :: !(Maybe Text)
   , sdDescription            :: !(Maybe Text)
-  , sdStatus                 :: !Text
+  , sdStatus                 :: !StackStatus
   , sdStatusReason           :: !(Maybe Text)
   , sdCapabilities           :: ![Text]
   , sdServiceRole            :: !(Maybe Text)
@@ -183,7 +184,7 @@ data StackResourceInfo = StackResourceInfo
   { sriLogicalResourceId   :: !Text
   , sriPhysicalResourceId  :: !(Maybe Text)
   , sriResourceType        :: !Text
-  , sriResourceStatus      :: !Text
+  , sriResourceStatus      :: !StackStatus
   , sriResourceStatusReason :: !(Maybe Text)
   , sriLastUpdated         :: !(Maybe UTCTime)
   } deriving stock (Show, Eq)
@@ -203,7 +204,7 @@ data StackExportInfo = StackExportInfo
   } deriving stock (Show, Eq)
 
 data StackStatusInfo = StackStatusInfo
-  { ssiStatus       :: !Text
+  { ssiStatus       :: !StackStatus
   , ssiStatusReason :: !(Maybe Text)
   , ssiTimestamp    :: !(Maybe UTCTime)
   } deriving stock (Show, Eq)
@@ -313,7 +314,7 @@ data StackListDisplay = StackListDisplay
 
 data StackListEntry = StackListEntry
   { sleStackName             :: !Text
-  , sleStackStatus           :: !Text
+  , sleStackStatus           :: !StackStatus
   , sleCreationTime          :: !(Maybe UTCTime)
   , sleLastUpdatedTime       :: !(Maybe UTCTime)
   , sleTags                  :: !(Map Text Text)

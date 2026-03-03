@@ -29,6 +29,7 @@ import qualified Amazonka.CloudFormation.Types as CF
 
 import Iidy.Aws.Sts (getCallerIdentity)
 import Iidy.Cfn.Context (CfnContext(..))
+import Iidy.Cfn.Status (StackStatus(..), fromCfnResourceStatus, fromCfnStackStatus, toText)
 import Iidy.Cfn.StackOperations
   ( getStack
   , fetchStackEventsUpTo
@@ -104,7 +105,7 @@ convertStack s regionText =
        { sdName                  = s.stackName
        , sdStacksetName          = Map.lookup "StackSetName" tagMap
        , sdDescription           = s.description
-       , sdStatus                = CF.fromStackStatus s.stackStatus
+       , sdStatus                = fromCfnStackStatus s.stackStatus
        , sdStatusReason          = s.stackStatusReason
        , sdCapabilities          = capTexts
        , sdServiceRole           = s.roleARN
@@ -152,7 +153,7 @@ convertEvent e = StackEvent
   , sePhysicalResourceId   = e.physicalResourceId
   , seResourceType         = fromMaybe "" e.resourceType
   , seTimestamp            = Just e.timestamp.fromTime
-  , seResourceStatus       = maybe "" CF.fromResourceStatus e.resourceStatus
+  , seResourceStatus       = maybe CreateFailed fromCfnResourceStatus e.resourceStatus
   , seResourceStatusReason = e.resourceStatusReason
   , seResourceProperties   = e.resourceProperties
   , seClientRequestToken   = e.clientRequestToken
@@ -176,12 +177,13 @@ calculateEventDurations events =
     go starts acc (e:es) =
       let key = seLogicalResourceId e <> "/" <> seResourceType e
           status = seResourceStatus e
+          statusText = toText status
           (starts', dur) = case seTimestamp e of
             Nothing -> (starts, Nothing)
             Just ts
-              | "_IN_PROGRESS" `T.isSuffixOf` status ->
+              | "_IN_PROGRESS" `T.isSuffixOf` statusText ->
                   (Map.insert key ts starts, Nothing)
-              | "_COMPLETE" `T.isSuffixOf` status || "_FAILED" `T.isSuffixOf` status ->
+              | "_COMPLETE" `T.isSuffixOf` statusText || "_FAILED" `T.isSuffixOf` statusText ->
                   case Map.lookup key starts of
                     Just startTs ->
                       let secs = max 1 (floor (diffUTCTime ts startTs)) :: Int
