@@ -244,3 +244,26 @@ racket tests/run-all.rkt
 **Notes for next session**: P1-1 (union language) is the biggest lift
 and unblocks P1-2. Consider whether the architectural refactor is worth
 it vs. documenting the limitation. P0 items are quick wins.
+
+### Fix Implementation (2026-03-03)
+
+**Session**: 2026-03-03--1 (`e5538714-ac98-4c9f-afc6-5d853ea7bc9d`)
+**Completed**: P0-1, P0-2, P1-3, P2-3, P3-1 (6 of 10 items)
+**Files modified**:
+- `spec/semantics/eval.rkt` — escape-to-raw metafunction, val->json comment
+- `spec/semantics/jmespath-eval.rkt` — wildcard deviation comment
+- `spec/semantics/truthiness.rkt` — duplication rationale comment
+- `spec/tests/eval-tests.rkt` — 6 new escape tests
+- `spec/tests/properties.rkt` — 4 determinism + 14 algebraic tests
+- `notes/2026-03-03-spec-critical-review.md` — full review document
+**Deviations from plan**: P0-2 was more thorough than planned — implemented
+full `escape-to-raw` metafunction modeling Haskell's `astToValueRaw` rather
+than just documenting the gap. P3-1 kept as documentation (comment) rather
+than deduplication, since the two metafunctions represent independent specs.
+**Notes for next session**: Remaining items are P1-1/P1-2 (union language,
+big refactor), P2-1/P2-2 (quick tooling), P3-2 (style). P2 items are
+trivial one-session work. P1-1+P1-2 need architectural judgment on whether
+to create a full union language or accept the current modular structure.
+**Instructions for next agent**: Run tests with
+`cd spec && nix develop --command racket tests/run-all.rkt` — bare `racket`
+is not on PATH. Expected: 410 tests, 0 failures.
