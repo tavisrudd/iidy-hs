@@ -10,8 +10,7 @@
 -- thin wrappers covering each combination.
 module Iidy.Yaml.Imports.ContentParsing
   ( -- * Extension-dispatched parsing
-    parseByExtension
-  , parseByExtensionStrict
+    parseByExtensionStrict
     -- * Format-suffix-dispatched parsing
   , parseByFormatSuffix
   , parseByFormatSuffixLenient
@@ -56,16 +55,7 @@ parseJsonContent rawBytes =
 -- Extension-dispatched variants
 ------------------------------------------------------------------------
 
--- | Parse content by file extension, falling back to @String@ on parse failure.
--- Used by File and Http loaders.
-parseByExtension :: String -> Text -> BS.ByteString -> Value
-parseByExtension ext content rawBytes
-  | ext `elem` [".yaml", ".yml"] = either (const (String content)) id (parseYamlContent content)
-  | ext == ".json"               = either (const (String content)) id (parseJsonContent rawBytes)
-  | otherwise                    = String content
-
 -- | Parse content by file extension, returning 'ImportError' on parse failure.
--- Used by S3 loader.
 parseByExtensionStrict :: String -> Text -> BS.ByteString -> Either ImportError Value
 parseByExtensionStrict ext content rawBytes
   | ext `elem` [".yaml", ".yml"] =

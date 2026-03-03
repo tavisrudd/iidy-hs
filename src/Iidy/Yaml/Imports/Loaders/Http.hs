@@ -27,7 +27,7 @@ import System.FilePath (takeExtension)
 import System.IO.Unsafe (unsafePerformIO)
 
 import Iidy.Constants (httpMaxResponseBytes, httpTimeoutSeconds)
-import Iidy.Yaml.Imports.ContentParsing (parseByExtension)
+import Iidy.Yaml.Imports.ContentParsing (parseByExtensionStrict)
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..), ImportType(..))
 
 ------------------------------------------------------------------------
@@ -75,8 +75,9 @@ loadHttpImport location = do
                 "UTF-8 decode error for " <> location <> ": " <> T.pack (show ex)
             Right content ->
               let ext = takeExtension (T.unpack (urlPath location))
-                  doc = parseByExtension ext content body
-              in  pure $ Right $ ImportData
+              in case parseByExtensionStrict ext content body of
+                Left err -> pure (Left err)
+                Right doc -> pure $ Right $ ImportData
                     { idType     = ImportHttp
                     , idLocation = location
                     , idRawData  = content

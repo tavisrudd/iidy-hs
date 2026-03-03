@@ -16,7 +16,7 @@ import qualified Data.Text.Encoding as TE
 import Data.Word (Word8)
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import System.FilePath (takeExtension, takeDirectory, (</>))
-import Iidy.Yaml.Imports.ContentParsing (parseByExtension)
+import Iidy.Yaml.Imports.ContentParsing (parseByExtensionStrict)
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportType(..), ImportError(..))
 
 ------------------------------------------------------------------------
@@ -36,15 +36,16 @@ loadFileImport location baseLocation = do
     Left err -> pure $ Left $ ImportError $ "Failed to read file: " <> T.pack (show err)
     Right bs -> case TE.decodeUtf8' bs of
       Left err -> pure $ Left $ ImportError $ "Invalid UTF-8 in file: " <> T.pack (show err)
-      Right content -> do
+      Right content ->
         let ext = takeExtension fullPath
-            doc = parseByExtension ext content bs
-        pure $ Right $ ImportData
-          { idType     = ImportFile
-          , idLocation = T.pack fullPath
-          , idRawData  = content
-          , idDoc      = doc
-          }
+        in case parseByExtensionStrict ext content bs of
+          Left err -> pure (Left err)
+          Right doc -> pure $ Right $ ImportData
+            { idType     = ImportFile
+            , idLocation = T.pack fullPath
+            , idRawData  = content
+            , idDoc      = doc
+            }
 
 ------------------------------------------------------------------------
 -- Filehash import

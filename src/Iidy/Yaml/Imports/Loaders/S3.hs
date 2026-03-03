@@ -7,7 +7,7 @@ module Iidy.Yaml.Imports.Loaders.S3
 
 import Control.Exception (Exception, catches, throwIO, Handler(..))
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.Resource (runResourceT)
+import Control.Monad.Trans.Resource (ResourceT, runResourceT)
 import qualified Data.ByteString as BS
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -17,7 +17,7 @@ import qualified Amazonka
 import qualified Amazonka.Data as AmazonkaData
 import qualified Amazonka.S3 as S3
 import qualified Amazonka.S3.GetObject as GO
-import qualified Data.Conduit.List as CL
+import Data.Conduit (ConduitT, await)
 
 import Iidy.Constants (httpMaxResponseBytes)
 import Iidy.Yaml.Imports.ContentParsing (parseByExtensionStrict)
@@ -75,17 +75,30 @@ s3MaxResponseBytes = httpMaxResponseBytes
 
 -- | Fetch an S3 object and return the raw bytes.
 -- Enforces the same size limit as the HTTP loader ('httpMaxResponseBytes')
--- by checking accumulated bytes after streaming and throwing
--- 'S3SizeLimitExceeded' if the limit is exceeded.
+-- by checking accumulated bytes incrementally during streaming and throwing
+-- 'S3SizeLimitExceeded' before the full body is buffered.
 fetchS3Object :: Amazonka.Env -> S3.BucketName -> S3.ObjectKey -> IO BS.ByteString
 fetchS3Object awsEnv bucket key = runResourceT $ do
   let req = GO.newGetObject bucket key
   resp <- Amazonka.send awsEnv req
-  chunks <- AmazonkaData.sinkBody resp.body CL.consume
-  let body = BS.concat chunks
-  if BS.length body > s3MaxResponseBytes
-    then liftIO $ throwIO (S3SizeLimitExceeded s3MaxResponseBytes)
-    else pure body
+  chunks <- AmazonkaData.sinkBody resp.body (limitedConsume s3MaxResponseBytes)
+  pure (BS.concat chunks)
+
+-- | Consume chunks from a conduit, aborting with 'S3SizeLimitExceeded'
+-- as soon as accumulated bytes exceed the limit.
+limitedConsume :: Int -> ConduitT BS.ByteString o (ResourceT IO) [BS.ByteString]
+limitedConsume maxBytes = go 0 []
+  where
+    go :: Int -> [BS.ByteString] -> ConduitT BS.ByteString o (ResourceT IO) [BS.ByteString]
+    go !acc chunks = do
+      mChunk <- await
+      case mChunk of
+        Nothing -> pure (reverse chunks)
+        Just chunk ->
+          let newAcc = acc + BS.length chunk
+          in if newAcc > maxBytes
+             then liftIO $ throwIO (S3SizeLimitExceeded maxBytes)
+             else go newAcc (chunk : chunks)
 
 ------------------------------------------------------------------------
 -- URI parsing
