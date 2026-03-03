@@ -52,6 +52,14 @@ using PLT Redex (Racket).
 - Helper metafunctions for iteration (map-items, map-filter-items, etc.) instead of Racket-level for/list inside judgment forms — cleaner, more idiomatic Redex
 - `escape` rule only handles values (E-Escape-Val) — full AST-to-raw conversion depends on YAML AST structure outside this model
 
+## Handoff Notes
+
+### Session 2 (2026-03-02--13 / bab341b4-d66f-47ed-bac7-d4f1daab5701)
+- **Files modified**: `spec/semantics/env.rkt`, `spec/tests/eval-tests.rkt`, `spec/tests/run-all.rkt`
+- **Files created**: `spec/tests/env-tests.rkt`, `spec/tests/merge-tests.rkt`, `spec/tests/properties.rkt`
+- **Bug found**: `traverse-path` was partial — `(traverse-path () unbound)` had no matching clause. Fixed by adding explicit unbound base case before the value base case.
+- **For next session**: Session 3 is sub-languages (Handlebars + JMESPath). Will need to study the Haskell implementations in `src/Iidy/Resolver.hs` for template rendering and JMESPath query semantics. The `tpl` eval rule needs Handlebars grammar first.
+
 ## Review Findings Applied
 - Fixed group-by-items key ordering (append new groups, don't prepend)
 - Fixed val->text to handle arr/obj (was partial)
