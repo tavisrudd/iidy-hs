@@ -1,6 +1,8 @@
 # Handoffs
 
-Session handoff and task documents for work that spans context windows.
+Work-batch tracking documents. Originally named for cross-session handoffs,
+but also used to scope and record work done within a single session —
+a session may create and complete many handoffs via sub-agents.
 
 ## Directory Layout
 
