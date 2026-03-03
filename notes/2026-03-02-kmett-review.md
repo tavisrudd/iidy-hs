@@ -286,7 +286,7 @@ This factors the three concerns (parse location, fetch content, parse result) in
 
 ---
 
-## 8. The Status Strings Want a Prism
+## 8. The Status Strings Want a Prism (RESOLVED)
 
 Stack statuses are `Text` everywhere. But they're pattern-matched as strings:
 
@@ -367,4 +367,4 @@ _These annotations were added after the review to track which findings have been
 | 5   | YamlAst / OValue / Value triangle              | OPEN                | No changes to the three-representation pipeline or conversion boundaries. Phantom type indexing not pursued.                                                      |
 | 6   | OutputData callback is a free monad in disguise | OPEN                | No structural changes to the callback-driven output model. Acknowledged as a future direction if the codebase moves beyond port status.                           |
 | 7   | Missing abstractions for import loaders        | PARTIALLY ADDRESSED | Shared `ContentParsing` module extracts duplicated YAML/JSON parsing from 4 loaders (4D). SSM + SsmPath merged into one module (-44 net lines, -1 module). Full typeclass abstraction deferred — loaders are small (38-175 LOC) and genuinely different in fetch logic. |
-| 8   | Status strings want a prism                    | OPEN                | Stack statuses remain as `Text`. No ADT, prisms, or structured status phase/outcome decomposition added.                                                         |
+| 8   | Status strings want a prism                    | RESOLVED            | `StackStatus` ADT with 22 constructors, `toText`/`fromText` conversions (4A). Full prism/phase-outcome decomposition not pursued — ADT with pattern-match predicates covers all use cases. |
