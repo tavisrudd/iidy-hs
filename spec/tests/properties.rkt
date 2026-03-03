@@ -8,10 +8,15 @@
          rackunit
          "../lang/core.rkt"
          "../lang/preprocessing.rkt"
+         "../lang/handlebars.rkt"
+         "../lang/jmespath.rkt"
          "../semantics/truthiness.rkt"
          "../semantics/env.rkt"
          "../semantics/merge.rkt"
-         "../semantics/eval.rkt")
+         "../semantics/eval.rkt"
+         "../semantics/handlebars-eval.rkt"
+         "../semantics/jmespath-eval.rkt"
+         "../semantics/bracket-expansion.rkt")
 
 (provide property-tests)
 
@@ -138,4 +143,97 @@
      (redex-check
       Iidy-Core v
       (boolean? (term (truthy/jmespath v)))
+      #:attempts ATTEMPTS))
+
+
+   ;; ── env-to-obj always produces an obj ────────────────────────
+
+   (test-case "env-to-obj always produces an obj"
+     (redex-check
+      Iidy-Core σ
+      (redex-match? Iidy-Core (obj ((k v) ...)) (term (env-to-obj σ)))
+      #:attempts ATTEMPTS))
+
+
+   ;; ── val->json always produces a string ───────────────────────
+
+   (test-case "val->json always produces a string"
+     (redex-check
+      Iidy-Core v
+      (string? (val->json (term v)))
+      #:attempts ATTEMPTS))
+
+
+   ;; ── Handlebars: hb-val->text is total ────────────────────────
+
+   (test-case "hb-val->text is total"
+     (redex-check
+      Iidy-Core v
+      (string? (term (hb-val->text v)))
+      #:attempts ATTEMPTS))
+
+
+   ;; ── Handlebars: hb-lookup returns a value ────────────────────
+   ;; Looking up any path in any value always returns a value (null for miss).
+
+   (test-case "hb-lookup is total (empty path)"
+     (redex-check
+      Iidy-Core v
+      (redex-match? Iidy-Core v (term (hb-lookup () v)))
+      #:attempts ATTEMPTS))
+
+
+   ;; ── JMESPath: jeval identity is identity ─────────────────────
+
+   (test-case "jeval identity returns input"
+     (redex-check
+      Iidy-Core v
+      (equal? (term (jeval jidentity v)) (term v))
+      #:attempts ATTEMPTS))
+
+
+   ;; ── JMESPath: jeval literal ignores context ──────────────────
+
+   (test-case "jeval literal ignores context"
+     (redex-check
+      Iidy-Core v
+      (equal? (term (jeval (jlit v) null)) (term v))
+      #:attempts ATTEMPTS))
+
+
+   ;; ── JMESPath: jcompare == is reflexive ───────────────────────
+
+   (test-case "jcompare == is reflexive"
+     (redex-check
+      Iidy-Core v
+      (equal? (term (jcompare == v v)) (term #t))
+      #:attempts ATTEMPTS))
+
+
+   ;; ── Bracket expansion: literal-only paths pass through ───────
+
+   (test-case "expand-path with no bracket-refs is identity"
+     (redex-check
+      Iidy-Core σ
+      (let ([path (term ("a" "b" "c"))])
+        (equal? (term (expand-path ,path σ)) path))
+      #:attempts ATTEMPTS))
+
+
+   ;; ── Serialization: to-yaml produces a string ─────────────────
+
+   (test-case "to-yaml always produces a string result"
+     (redex-check
+      Iidy-Core v
+      (let ([result (eval-single (term (to-yaml v)) (term ()))])
+        (and result (redex-match? Iidy-Core (str s) result)))
+      #:attempts ATTEMPTS))
+
+   ;; ── Serialization: to-json produces a string ─────────────────
+
+   (test-case "to-json always produces a string result"
+     (redex-check
+      Iidy-Core v
+      (let ([result (eval-single (term (to-json v)) (term ()))])
+        (and result (redex-match? Iidy-Core (str s) result)))
       #:attempts ATTEMPTS))))

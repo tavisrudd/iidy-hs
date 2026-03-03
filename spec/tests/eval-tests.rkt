@@ -11,7 +11,9 @@
          "../semantics/truthiness.rkt"
          "../semantics/env.rkt"
          "../semantics/merge.rkt"
-         "../semantics/eval.rkt")
+         "../semantics/eval.rkt"
+         "../lang/jmespath.rkt"
+         "../semantics/jmespath-eval.rkt")
 
 (provide eval-tests)
 
@@ -655,4 +657,195 @@
     (test-case "Sub wraps as object"
       (eval-expect (term (cfn "!Sub" (str "arn:aws:s3:::${Bucket}")))
                    (term ())
-                   (term (obj (("!Sub" (str "arn:aws:s3:::${Bucket}"))))))))))
+                   (term (obj (("!Sub" (str "arn:aws:s3:::${Bucket}"))))))))
+
+   ;; ── Template string ─────────────────────────────────────────────
+
+   (test-suite
+    "Template string (tpl)"
+
+    (test-case "simple variable interpolation"
+      (eval-expect (term (tpl "Hello, {{name}}!"))
+                   (term (("name" (str "Alice"))))
+                   (term (str "Hello, Alice!"))))
+
+    (test-case "nested path interpolation"
+      (eval-expect (term (tpl "Region: {{config.region}}"))
+                   (term (("config" (obj (("region" (str "us-west-2")))))))
+                   (term (str "Region: us-west-2"))))
+
+    (test-case "multiple interpolations"
+      (eval-expect (term (tpl "{{first}} {{last}}"))
+                   (term (("first" (str "Jane")) ("last" (str "Doe"))))
+                   (term (str "Jane Doe"))))
+
+    (test-case "no interpolation — literal passthrough"
+      (eval-expect (term (tpl "plain text"))
+                   (term ())
+                   (term (str "plain text"))))
+
+    (test-case "missing variable produces empty"
+      (eval-expect (term (tpl "val={{missing}}"))
+                   (term ())
+                   (term (str "val="))))
+
+    (test-case "number interpolation"
+      (eval-expect (term (tpl "count: {{n}}"))
+                   (term (("n" (num 42))))
+                   (term (str "count: 42"))))
+
+    (test-case "boolean interpolation"
+      (eval-expect (term (tpl "flag: {{f}}"))
+                   (term (("f" (bool #t))))
+                   (term (str "flag: true")))))
+
+   ;; ── Variable with dot-query ──────────────────────────────────────
+
+   (test-suite
+    "Variable with dot-query (var-q)"
+
+    (test-case "single path traversal"
+      (eval-expect (term (var-q ("config") "db.host"))
+                   (term (("config" (obj (("db" (obj (("host" (str "localhost"))))))))))
+                   (term (str "localhost"))))
+
+    (test-case "comma-separated key selection"
+      (eval-expect (term (var-q ("obj") "a, c"))
+                   (term (("obj" (obj (("a" (num 1)) ("b" (num 2)) ("c" (num 3)))))))
+                   (term (obj (("a" (num 1)) ("c" (num 3)))))))
+
+    (test-case "comma-separated with missing key → null"
+      (eval-expect (term (var-q ("obj") "a, missing"))
+                   (term (("obj" (obj (("a" (num 1)))))))
+                   (term (obj (("a" (num 1)) ("missing" null))))))
+
+    (test-case "single key selection"
+      (eval-expect (term (var-q ("data") "name"))
+                   (term (("data" (obj (("name" (str "Alice")) ("age" (num 30)))))))
+                   (term (str "Alice")))))
+
+   ;; ── JMESPath integration (tested at sub-language level) ──────────
+
+   (test-suite
+    "JMESPath integration"
+
+    ;; These tests verify JMESPath evaluation directly via the
+    ;; jmespath-eval module. The E-Var-J eval rule is a specification
+    ;; only (requires JMESPath string parsing).
+
+    (test-case "jeval field access integrates with core values"
+      (check-equal?
+       (term (jeval (jfield "name") (obj (("name" (str "test"))))))
+       (term (str "test"))))
+
+    (test-case "jeval projection integrates with core values"
+      (check-equal?
+       (term (jeval (jproj jwildcard (jfield "name"))
+                    (arr ((obj (("name" (str "a")))) (obj (("name" (str "b"))))))))
+       (term (arr ((str "a") (str "b"))))))
+
+    (test-case "jeval filter integrates with core values"
+      (check-equal?
+       (term (jeval (jfilter (jcmp > (jfield "v") (jlit (num 1))) jidentity)
+                    (arr ((obj (("v" (num 1)))) (obj (("v" (num 2))))))))
+       (term (arr ((obj (("v" (num 2))))))))))
+
+   ;; ── Serialization ────────────────────────────────────────────────
+
+   (test-suite
+    "Serialization (to-yaml, to-json)"
+
+    (test-case "to-yaml string"
+      (eval-expect (term (to-yaml (str "hello")))
+                   (term ())
+                   (term (str "hello"))))
+
+    (test-case "to-yaml number"
+      (eval-expect (term (to-yaml (num 42)))
+                   (term ())
+                   (term (str "42"))))
+
+    (test-case "to-yaml bool"
+      (eval-expect (term (to-yaml (bool #t)))
+                   (term ())
+                   (term (str "true"))))
+
+    (test-case "to-yaml null"
+      (eval-expect (term (to-yaml null))
+                   (term ())
+                   (term (str "null"))))
+
+    (test-case "to-json string"
+      (eval-expect (term (to-json (str "hello")))
+                   (term ())
+                   (term (str "\"hello\""))))
+
+    (test-case "to-json number"
+      (eval-expect (term (to-json (num 42)))
+                   (term ())
+                   (term (str "42"))))
+
+    (test-case "to-json bool true"
+      (eval-expect (term (to-json (bool #t)))
+                   (term ())
+                   (term (str "true"))))
+
+    (test-case "to-json null"
+      (eval-expect (term (to-json null))
+                   (term ())
+                   (term (str "null"))))
+
+    (test-case "to-json array"
+      (eval-expect (term (to-json (arr ((num 1) (num 2)))))
+                   (term ())
+                   (term (str "[1,2]"))))
+
+    (test-case "to-json object"
+      (eval-expect (term (to-json (obj (("a" (num 1))))))
+                   (term ())
+                   (term (str "{\"a\":1}"))))
+
+    (test-case "to-yaml evaluates subexpression"
+      (eval-expect (term (to-yaml (var ("x"))))
+                   (term (("x" (num 99))))
+                   (term (str "99"))))
+
+    (test-case "to-json evaluates subexpression"
+      (eval-expect (term (to-json (var ("x"))))
+                   (term (("x" (str "hi"))))
+                   (term (str "\"hi\"")))))
+
+   ;; ── Helper metafunction tests ────────────────────────────────────
+
+   (test-suite
+    "Helper metafunctions"
+
+    (test-case "env-to-obj converts environment to object"
+      (check-equal?
+       (term (env-to-obj (("a" (num 1)) ("b" (str "two")))))
+       (term (obj (("a" (num 1)) ("b" (str "two")))))))
+
+    (test-case "env-to-obj empty environment"
+      (check-equal?
+       (term (env-to-obj ()))
+       (term (obj ()))))
+
+    (test-case "dot-query single path"
+      (check-equal?
+       (term (dot-query "host" (obj (("host" (str "localhost")) ("port" (num 5432))))))
+       (term (str "localhost"))))
+
+    (test-case "dot-query nested path"
+      (check-equal?
+       (term (dot-query "db.host" (obj (("db" (obj (("host" (str "localhost")))))))))
+       (term (str "localhost"))))
+
+    (test-case "dot-query comma-separated keys"
+      (check-equal?
+       (term (dot-query "a, c" (obj (("a" (num 1)) ("b" (num 2)) ("c" (num 3))))))
+       (term (obj (("a" (num 1)) ("c" (num 3)))))))
+
+    (test-case "val->json nested structure"
+      (check-equal?
+       (val->json (term (obj (("items" (arr ((num 1) (bool #t) null)))))))
+       "{\"items\":[1,true,null]}")))))

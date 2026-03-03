@@ -10,12 +10,13 @@
 
 (require redex/reduction-semantics
          racket/string
+         racket/match
          "../lang/core.rkt"
          "../lang/preprocessing.rkt"
          "truthiness.rkt"
          "env.rkt"
          "merge.rkt")
-(provide eval)
+(provide eval env-to-obj dot-query val->json)
 
 
 ;; ═══════════════════════════════════════════════════════════════════
@@ -146,6 +147,89 @@
    (obj ((string_k (arr (v_items ...))) (k_out v_out) ...))
    (where (obj ((k_out v_out) ...))
           (group-by-to-obj ((string_rest (v_rest_items ...)) ...)))])
+
+
+;; ═══════════════════════════════════════════════════════════════════
+;; Integration helpers for sub-language rules
+;; ═══════════════════════════════════════════════════════════════════
+
+;; ── env-to-obj: convert environment to object value ───────────
+;; Bridges σ (env) → v (obj) for Handlebars template context.
+;; The Handlebars renderer takes a value (typically obj) as context,
+;; not an environment. This converts the environment to an obj.
+
+(define-metafunction Iidy-Preprocess
+  env-to-obj : σ -> v
+
+  [(env-to-obj ((string_k v_v) ...))
+   (obj ((string_k v_v) ...))])
+
+
+;; ── dot-query: apply dot-query to a value ─────────────────────
+;; Two modes (determined by whether query contains commas):
+;;   Comma-separated: "a, b" → {a: val.a, b: val.b}
+;;   Single path:     "x.y"  → traverse dot path into value
+
+(define-metafunction Iidy-Preprocess
+  dot-query : string v -> any
+
+  [(dot-query string_q v_base)
+   ,(let* ([q (term string_q)]
+           [base (term v_base)]
+           [parts (map string-trim (string-split q ","))])
+      (if (= (length parts) 1)
+          ;; Single path: split on dots, traverse into value
+          (let ([segs (string-split (car parts) ".")])
+            (term (traverse-path ,segs ,base)))
+          ;; Multiple keys: select from object
+          (match base
+            [`(obj ,kvs)
+             (let ([selected (map (lambda (key)
+                                   (let ([found (assoc key kvs)])
+                                     (list key (if found (cadr found) (term null)))))
+                                 parts)])
+               `(obj ,selected))]
+            [_ (term null)])))])
+
+
+;; ── simple-tpl-render: basic {{path}} template substitution ───
+;; Implements simple variable interpolation: {{path.to.var}}.
+;; The full Handlebars semantics (block helpers, helpers, context
+;; merging) are specified in semantics/handlebars-eval.rkt.
+
+(define (simple-tpl-render template-str env-term)
+  (regexp-replace* #rx"\\{\\{([^{}]+)\\}\\}"
+    template-str
+    (lambda (full-match captured)
+      (let* ([path-str (string-trim captured)]
+             [segments (string-split path-str ".")]
+             [resolved (term (resolve-path ,segments ,env-term))])
+        (if (equal? resolved (term unbound))
+            ""
+            (term (val->text ,resolved)))))))
+
+
+;; ── val->json: convert value to JSON string ───────────────────
+;; Simplified JSON serialization for the formal model.
+;; String escaping is minimal (sufficient for specification).
+
+(define (val->json v)
+  (match v
+    ['null "null"]
+    [`(bool #t) "true"]
+    [`(bool #f) "false"]
+    [`(num ,n) (number->string n)]
+    [`(str ,s) (string-append "\"" s "\"")]
+    [`(arr (,items ...))
+     (string-append "[" (string-join (map val->json items) ",") "]")]
+    [`(obj ((,ks ,vs) ...))
+     (string-append "{"
+       (string-join (map (lambda (k v)
+                           (string-append "\"" k "\":" (val->json v)))
+                         ks vs)
+                    ",")
+       "}")]
+    [_ "null"]))
 
 
 ;; ═══════════════════════════════════════════════════════════════════
@@ -384,5 +468,98 @@
   [(eval e σ v)
    --- "E-Cfn"
    (eval (cfn tag-name_t e) σ (obj ((tag-name_t v))))]
+
+
+  ;; ── Template string (!$tpl) ───────────────────────────────────
+  ;; In iidy, any YAML string containing {{...}} is a templated string.
+  ;; The full Handlebars rendering semantics (block helpers, helpers,
+  ;; context merging) are specified in semantics/handlebars-eval.rkt.
+  ;;
+  ;; This rule implements simple {{path.to.var}} substitution.
+  ;; The variable context is the evaluation environment σ.
+
+  [(where s_out ,(simple-tpl-render (term s) (term σ)))
+   --- "E-Tpl"
+   (eval (tpl s) σ (str s_out))]
+
+
+  ;; ── Variable with dot-query (!$ path ? query) ─────────────────
+  ;; Resolves the base variable, then applies the dot-query.
+  ;; Comma-separated: "a, b" → select keys → new object
+  ;; Single path:     "x.y"  → traverse → nested value
+
+  [(where v_base (resolve-path (string_seg ...) σ))
+   (side-condition (not (equal? (term v_base) (term unbound))))
+   (where v_result (dot-query query v_base))
+   (side-condition (not (equal? (term v_result) (term unbound))))
+   --- "E-Var-Q"
+   (eval (var-q (string_seg ...) query) σ v_result)]
+
+
+  ;; ── Variable with JMESPath (!$ path @ jmespath) ───────────────
+  ;; JMESPath query is applied to the resolved base value.
+  ;;
+  ;; Formal specification:
+  ;;   resolve-path(path, σ) = v_base  ≠ unbound
+  ;;   parse-jmespath(jmespath) = jx
+  ;;   jeval(jx, v_base) = v_result
+  ;;   ──────────────────────────────────────────────
+  ;;   eval(var-j(path, jmespath), σ) = v_result
+  ;;
+  ;; The JMESPath evaluation semantics are fully specified and tested
+  ;; in semantics/jmespath-eval.rkt (all 14 expression forms).
+  ;; This rule requires a JMESPath string parser (outside this model).
+  ;;
+  ;; [Rule not executable — requires JMESPath string parser.
+  ;;  JMESPath evaluation tested via jmespath-tests.rkt.]
+
+
+  ;; ── Serialization (!$toYamlString) ────────────────────────────
+  ;; Converts a value to its YAML text representation.
+  ;; In the formal model, uses val->text for simplicity.
+
+  [(eval e σ v)
+   (where s_out (val->text v))
+   --- "E-ToYaml"
+   (eval (to-yaml e) σ (str s_out))]
+
+
+  ;; ── Serialization (!$toJsonString) ────────────────────────────
+  ;; Converts a value to its JSON text representation.
+
+  [(eval e σ v)
+   (where s_out ,(val->json (term v)))
+   --- "E-ToJson"
+   (eval (to-json e) σ (str s_out))]
+
+
+  ;; ── Deserialization (!$parseYaml, !$parseJson) ────────────────
+  ;; Inverse operations of serialization.
+  ;; Key property: parse-yaml(to-yaml(v)) = v
+  ;;               parse-json(to-json(v)) = v
+  ;;
+  ;; Full parsing requires YAML/JSON parsers outside this model.
+  ;;
+  ;; [Rules not executable — require string parsers.
+  ;;  Specified by the round-trip property above.]
+
+
+  ;; ── Template expansion (!$expand) ─────────────────────────────
+  ;; Looks up a custom template definition by name, merges default
+  ;; and provided parameters, evaluates the template body.
+  ;;
+  ;; Formal specification (requires template registry Σ):
+  ;;   eval(e_name, σ) = (str template-name)
+  ;;   eval(e_params, σ) = (obj params)
+  ;;   Σ(template-name) = (body, default-params)
+  ;;   σ_ext = extend-many(merge(default-params, params), σ)
+  ;;   eval(parse(body), σ_ext) = v_result
+  ;;   ──────────────────────────────────────────────
+  ;;   eval(expand(e_name, e_params), σ, Σ) = v_result
+  ;;
+  ;; The template registry Σ is not in the eval judgment signature.
+  ;; A full implementation would thread Σ through all rules.
+  ;;
+  ;; [Rule not executable — requires template registry Σ.]
 
   )
