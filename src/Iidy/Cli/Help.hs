@@ -563,9 +563,18 @@ parseSections = reverse . finalize [] Nothing . dropWhile null
       | isRowLine line =
           case current of
             Nothing -> finalize acc current rest
-            Just (title, rows) ->
-              let entry = parseRow line
-              in finalize acc (Just (title, rows ++ [entry])) rest
+            Just (title, rows)
+              | isEntryStart line ->
+                  let entry = parseRow line
+                  in finalize acc (Just (title, rows ++ [entry])) rest
+              | otherwise ->
+                  -- Continuation of previous row's description
+                  let contText = trim (dropWhile Char.isSpace line)
+                  in case reverse rows of
+                       [] -> finalize acc current rest
+                       (name, desc) : earlier ->
+                         let rows' = reverse ((name, desc <> " " <> contText) : earlier)
+                         in finalize acc (Just (title, rows')) rest
       | otherwise = finalize acc current rest
 
 isSectionHeader :: String -> Bool
@@ -578,6 +587,19 @@ isSectionHeader line =
 isRowLine :: String -> Bool
 isRowLine line =
   "  " `isPrefixOf` line && any (not . Char.isSpace) (drop 2 line)
+
+-- | Check if a row line starts a new entry (option or argument) vs being a
+-- continuation of the previous entry's description.
+isEntryStart :: String -> Bool
+isEntryStart line =
+  case dropWhile Char.isSpace line of
+    '-':_ -> True     -- option (short or long)
+    '<':_ -> True     -- named argument in angle brackets
+    c:cs  -> Char.isUpper c
+             && all isMetavarChar (takeWhile (not . Char.isSpace) cs)
+    _     -> False
+  where
+    isMetavarChar x = Char.isUpper x || x == '_' || Char.isDigit x
 
 parseRow :: String -> (String, String)
 parseRow line =
