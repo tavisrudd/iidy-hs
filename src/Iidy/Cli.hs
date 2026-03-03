@@ -143,7 +143,7 @@ data ParamType = ParamString | ParamSecureString | ParamStringList
   deriving stock (Show, Eq)
 
 -- | Parameter output format
-data ParamFormat = ParamFormatRaw | ParamFormatJson | ParamFormatYaml
+data ParamFormat = ParamFormatSimple | ParamFormatJson | ParamFormatYaml
   deriving stock (Show, Eq)
 
 -- | Shell type for completion generation
@@ -289,8 +289,7 @@ data DemoArgs = DemoArgs
   } deriving stock (Show, Eq)
 
 data LintTemplateArgs = LintTemplateArgs
-  { ltaArgsfile      :: !Text
-  , ltaUseParameters :: !Bool
+  { ltaArgsfile :: !Text
   } deriving stock (Show, Eq)
 
 data ConvertArgs = ConvertArgs

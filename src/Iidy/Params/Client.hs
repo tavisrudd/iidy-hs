@@ -373,7 +373,7 @@ fetchParameter awsEnv paramName withDecryption = do
 -- For simple: bare value. For json/yaml: full ParamOutput with tags.
 paramGet :: Amazonka.Env -> ParamGetArgs -> IO (Either Text Text)
 paramGet awsEnv args = case args.pgaFormat of
-  ParamFormatRaw -> do
+  ParamFormatSimple -> do
     result <- fetchParam awsEnv args.pgaPath args.pgaDecrypt
     case result of
       Left ex  -> pure $ Left $ "SSM GetParameter error for " <> args.pgaPath <> ": " <> ex
@@ -442,7 +442,7 @@ paramGetByPath awsEnv args = do
       | otherwise   -> do
           let sorted = List.sortBy (comparing (\p -> p ^. SSMP.parameter_name)) params
           case args.gpbFormat of
-            ParamFormatRaw -> do
+            ParamFormatSimple -> do
               -- Default: sort by name, build Map name->value, print as YAML
               let m = Map.fromList
                         [ (p ^. SSMP.parameter_name, p ^. SSMP.parameter_value)
@@ -508,7 +508,7 @@ paramGetHistory awsEnv args = do
 
     formatHistory :: ParamFormat -> Map.Map Text Text
                   -> SSM.ParameterHistory -> [SSM.ParameterHistory] -> Text
-    formatHistory ParamFormatRaw tagMap current previous =
+    formatHistory ParamFormatSimple tagMap current previous =
       let msg = fromMaybe "" (Map.lookup messageTag tagMap)
           sh = SimpleHistory
             { shCurrent = SimpleHistoryCurrent
@@ -569,9 +569,9 @@ formatHistoryEntry ph =
 ------------------------------------------------------------------------
 
 -- | Format a value with the given ParamFormat (json or yaml).
--- Precondition: format is not ParamFormatRaw.
+-- Precondition: format is not ParamFormatSimple.
 formatWith :: ToJSON a => ParamFormat -> a -> Text
 formatWith ParamFormatJson x = formatAsJson x
 formatWith ParamFormatYaml x = formatAsYaml x
-formatWith ParamFormatRaw  _ = ""  -- Should not be called with Raw
+formatWith ParamFormatSimple  _ = ""  -- Should not be called with Raw
 

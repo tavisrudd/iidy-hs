@@ -88,7 +88,7 @@ iidy update-stack <argsfile> [options] [global options]
 | `--lint-template <BOOL>` | | Enable or disable template linting before update |
 | `--changeset` | false | Create a changeset instead of updating directly; requires manual execution |
 | `--yes` | false | Skip the confirmation prompt |
-| `--diff` | true | Show a template diff before updating |
+| `--diff` / `--no-diff` | true | Show a template diff before updating |
 | `--stack-policy-during-update <FILE>` | | Stack policy to apply during this update only |
 
 ```
@@ -114,7 +114,7 @@ iidy create-or-update <argsfile> [options] [global options]
 | `--lint-template <BOOL>` | | Enable or disable template linting |
 | `--changeset` | false | Use a changeset for the update path |
 | `--yes` | false | Skip the confirmation prompt |
-| `--diff` | true | Show a template diff before updating |
+| `--diff` / `--no-diff` | true | Show a template diff before updating |
 | `--stack-policy-during-update <FILE>` | | Stack policy to apply during update only |
 
 ```
@@ -452,12 +452,11 @@ iidy template-approval request <argsfile> [options] [global options]
 | Option | Default | Description |
 |--------|---------|-------------|
 | `<argsfile>` | | Path to stack-args.yaml (required) |
-| `--lint-template` | true | Lint the template before requesting approval |
-| `--lint-using-parameters` | false | Pass actual parameter values to the linter |
+| `--no-lint-template` | | Skip linting the template before requesting approval |
 
 ```
 iidy template-approval request stack-args.yaml
-iidy -e prod template-approval request stack-args.yaml --lint-using-parameters
+iidy template-approval request stack-args.yaml --no-lint-template
 ```
 
 ## template-approval review
@@ -659,17 +658,13 @@ and submitting it to the AWS `ValidateTemplate` API. Any preprocessing errors (b
 imports, Handlebars syntax) surface during template loading; structural CloudFormation errors are
 caught by the API. Returns exit code 0 if the template is valid, 1 if errors are found.
 
-The `--use-parameters` flag is accepted for CLI compatibility but has no effect (the AWS
-ValidateTemplate API does not accept parameters).
-
 ```
-iidy lint-template <argsfile> [options] [global options]
+iidy lint-template <argsfile> [global options]
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `<argsfile>` | | Path to stack-args.yaml (required) |
-| `--use-parameters` | false | Accepted for compatibility; has no effect |
 
 ```
 iidy lint-template stack-args.yaml
@@ -702,9 +697,8 @@ iidy -e prod convert-stack-to-iidy my-app-prod ./my-app --move-params-to-ssm --p
 
 ## init-stack-args
 
-Initializes a new `stack-args.yaml` and `cfn-template.yaml` in the specified directory (defaults
-to the current directory). Creates a commented template with common fields to help you get
-started quickly.
+Initializes a new `stack-args.yaml` and `cfn-template.yaml` in the current directory. Creates a
+commented template with common fields to help you get started quickly.
 
 ```
 iidy init-stack-args [options] [global options]
@@ -712,11 +706,13 @@ iidy init-stack-args [options] [global options]
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--dir <DIR>` | `.` | Directory in which to create the files |
+| `--force` | false | Overwrite all existing files |
+| `--force-stack-args` | false | Overwrite stack-args.yaml if it exists |
+| `--force-cfn-template` | false | Overwrite cfn-template.yaml if it exists |
 
 ```
 iidy init-stack-args
-iidy init-stack-args --dir ./my-new-stack
+iidy init-stack-args --force
 ```
 
 ---

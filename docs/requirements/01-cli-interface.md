@@ -652,10 +652,8 @@ shell completion, and error lookup, **so that** I have a self-contained toolchai
 
 #### lint-template
 
-- Command: `iidy lint-template <ARGSFILE> [--use-parameters]`
+- Command: `iidy lint-template <ARGSFILE>`
 - `<ARGSFILE>` (positional, required).
-- `--use-parameters` (flag, default: false): accepted for CLI compatibility; the AWS
-  ValidateTemplate API does not accept parameters so this flag has no effect.
 - Exit 0 if valid. Exit 1 on preprocessing or validation error.
 
 #### get-stack-instances (hidden)

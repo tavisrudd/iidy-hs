@@ -309,7 +309,10 @@ updateStackArgsParser = UpdateStackArgs
       ))
   <*> switch (long "changeset" <> help "Use a changeset for the update")
   <*> switch (long "yes" <> help "Skip confirmation prompt")
-  <*> flag True False (long "no-diff" <> help "Don't show diff before updating")
+  <*> (   flag' False (long "no-diff" <> help "Don't show diff before updating")
+      <|> flag' True  (long "diff" <> help "Show a template diff before updating (default)")
+      <|> pure True
+      )
   <*> optional (option textReader
       ( long "stack-policy-during-update"
       <> metavar "POLICY"
@@ -472,7 +475,7 @@ paramGetArgsParser = ParamGetArgs
   <*> flag True False (long "no-decrypt" <> help "Don't decrypt SecureString values")
   <*> option paramFormatReader
       ( long "format"
-      <> value ParamFormatRaw
+      <> value ParamFormatSimple
       <> metavar "FORMAT"
       <> help "Output format: raw|json|yaml (default: raw)"
       )
@@ -483,7 +486,7 @@ paramGetByPathArgsParser = ParamGetByPathArgs
   <*> flag True False (long "no-decrypt" <> help "Don't decrypt SecureString values")
   <*> option paramFormatReader
       ( long "format"
-      <> value ParamFormatRaw
+      <> value ParamFormatSimple
       <> metavar "FORMAT"
       <> help "Output format: raw|json|yaml (default: raw)"
       )
@@ -570,7 +573,6 @@ demoArgsParser = DemoArgs
 lintTemplateArgsParser :: Parser LintTemplateArgs
 lintTemplateArgsParser = LintTemplateArgs
   <$> argument textReader (metavar "ARGSFILE" <> help "Path to stack-args.yaml")
-  <*> switch (long "use-parameters" <> help "Use parameter values when linting")
 
 convertArgsParser :: Parser ConvertArgs
 convertArgsParser = ConvertArgs
@@ -665,11 +667,11 @@ paramTypeReader = eitherReader $ \s -> case map toLower s of
 
 paramFormatReader :: ReadM ParamFormat
 paramFormatReader = eitherReader $ \s -> case map toLower s of
-  "raw"    -> Right ParamFormatRaw
+  "simple" -> Right ParamFormatSimple
   "json"   -> Right ParamFormatJson
   "yaml"   -> Right ParamFormatYaml
-  "simple" -> Right ParamFormatRaw
-  _        -> Left $ "Unknown format: " <> s <> ". Expected: raw|json|yaml"
+  "raw"    -> Right ParamFormatSimple  -- alias for simple
+  _        -> Left $ "Unknown format: " <> s <> ". Expected: simple|json|yaml"
 
 shellTypeReader :: ReadM ShellType
 shellTypeReader = eitherReader $ \s -> case map toLower s of
