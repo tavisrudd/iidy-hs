@@ -11,7 +11,10 @@
          "env-tests.rkt"
          "merge-tests.rkt"
          "eval-tests.rkt"
-         "properties.rkt")
+         "properties.rkt"
+         "handlebars-tests.rkt"
+         "jmespath-tests.rkt"
+         "bracket-expansion-tests.rkt")
 
 (define all-tests
   (test-suite
@@ -21,7 +24,10 @@
    env-tests
    merge-tests
    eval-tests
-   property-tests))
+   property-tests
+   handlebars-tests
+   jmespath-tests
+   bracket-expansion-tests))
 
 (define exit-code
   (run-tests all-tests 'verbose))
