@@ -42,6 +42,7 @@ import Data.Conduit (runConduit, (.|))
 import qualified Data.Conduit.List as CL
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.List as List
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Scientific (isInteger, coefficient)
@@ -490,24 +491,20 @@ paramGetHistory awsEnv args = do
   case result of
     Left ex -> pure $ Left $
       "SSM GetParameterHistory error for " <> args.pgaPath <> ": " <> T.pack (show ex)
-    Right entries | null entries -> pure $ Left $
-      "No history found for parameter '" <> args.pgaPath <> "'"
-    Right entries -> do
-      let sorted = List.sortBy (comparing historyDate) entries
-          (current, previous) = splitLast sorted
-      tags <- listParamTags awsEnv args.pgaPath
-      case tags of
-        Left err -> pure (Left err)
-        Right tagMap -> pure $ Right $ formatHistory args.pgaFormat tagMap current previous
+    Right entries -> case NE.nonEmpty entries of
+      Nothing -> pure $ Left $
+        "No history found for parameter '" <> args.pgaPath <> "'"
+      Just ne -> do
+        let sorted = NE.sortBy (comparing historyDate) ne
+            current = NE.last sorted
+            previous = NE.init sorted
+        tags <- listParamTags awsEnv args.pgaPath
+        case tags of
+          Left err -> pure (Left err)
+          Right tagMap -> pure $ Right $ formatHistory args.pgaFormat tagMap current previous
   where
     historyDate :: SSM.ParameterHistory -> Maybe UTCTime
     historyDate ph = ph ^. SSMPH.parameterHistory_lastModifiedDate
-
-    -- Safe: caller guarantees non-empty list
-    splitLast :: [a] -> (a, [a])
-    splitLast xs = case reverse xs of
-      (c:ps) -> (c, reverse ps)
-      []     -> error "splitLast: empty list (unreachable)"
 
     formatHistory :: ParamFormat -> Map.Map Text Text
                   -> SSM.ParameterHistory -> [SSM.ParameterHistory] -> Text

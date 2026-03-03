@@ -6,7 +6,6 @@ module Iidy.Yaml.Imports.Loaders.Http
 
 import Control.Exception (Exception, Handler(..), catches, throwIO)
 import qualified Data.ByteString as BS
-import Data.IORef (IORef, newIORef, readIORef)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -24,7 +23,6 @@ import Network.HTTP.Client.TLS (newTlsManager)
 import Network.HTTP.Simple (parseRequest, setRequestResponseTimeout)
 import Network.HTTP.Types.Status (statusCode)
 import System.FilePath (takeExtension)
-import System.IO.Unsafe (unsafePerformIO)
 
 import Iidy.Constants (httpMaxResponseBytes, httpTimeoutSeconds)
 import Iidy.Yaml.Imports.ContentParsing (parseByExtensionStrict)
@@ -41,17 +39,6 @@ data HttpSizeLimitExceeded = HttpSizeLimitExceeded Int
 instance Exception HttpSizeLimitExceeded
 
 ------------------------------------------------------------------------
--- Shared TLS Manager (created once, reused across all HTTP imports)
-------------------------------------------------------------------------
-
--- | Global TLS-capable HTTP manager, created on first use.
--- Using a module-level IORef with NOINLINE ensures we create exactly one
--- connection pool for the lifetime of the process, and it supports HTTPS.
-globalManagerRef :: IORef Manager
-globalManagerRef = unsafePerformIO (newTlsManager >>= newIORef)
-{-# NOINLINE globalManagerRef #-}
-
-------------------------------------------------------------------------
 -- Entry point
 ------------------------------------------------------------------------
 
@@ -63,7 +50,8 @@ globalManagerRef = unsafePerformIO (newTlsManager >>= newIORef)
 -- Returns the response body as UTF-8 text on success, or an error message.
 loadHttpImport :: Text -> IO (Either ImportError ImportData)
 loadHttpImport location = do
-  mgr    <- readIORef globalManagerRef
+  -- Fresh manager per call; fine for a CLI tool with a handful of HTTP imports.
+  mgr    <- newTlsManager
   let mkError :: Text -> IO (Either ImportError ImportData)
       mkError msg = pure $ Left $ ImportError $
         "HTTP fetch error for " <> location <> ": " <> msg
