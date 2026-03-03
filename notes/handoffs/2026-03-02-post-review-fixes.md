@@ -294,9 +294,14 @@ No performance measurement exists. Startup time and preprocessing latency unmeas
 | 3A   | DONE      | c972b32 | Narrowed SomeException to specific types across 13 files. |
 | 3B   | DONE      | 452e30b | Removed 13 dead legacy patterns + 5 dead tests. ParseErrorKind refactor deferred. |
 | 3C   | DONE      | 6ca9fb3 | ConfirmResult ADT (Confirmed/Declined), Text not String. 6 call sites updated. |
-| 4A-F | PENDING   | —       | Structural improvements — larger refactoring.        |
+| 4A   | DONE      | e4b2be3 | StackStatus ADT (22 constructors), 25 files updated, 1 new test. |
+| 4B   | PENDING   | —       | CfnContext separation (read-only vs mutable).        |
+| 4C   | PENDING   | —       | StackArgsLoader extraction / per-operation validation. |
+| 4D   | DONE      | 13bffad | ContentParsing shared module, SSM+SsmPath merged. -44 net lines, -1 module. |
+| 4E   | PENDING   | —       | OValue/Value unification.                            |
+| 4F   | DONE      | b4df5a4 | tasty-bench suite: parse, preprocess, emit, pipeline. 16 benchmarks. |
 
-**Tests**: 1091 → 1154 (+63, net after removing 5 dead legacy tests)
+**Tests**: 1091 → 1155 (+64, net after removing 5 dead legacy tests)
 
 ## Handoff Notes
 
@@ -358,3 +363,16 @@ No performance measurement exists. Startup time and preprocessing latency unmeas
 - 3B full refactor (ParseErrorKind structured types replacing string matching) deferred — file as t-later
 - 4A-F are larger structural refactors — each is a session unto itself
 - Pre-commit now validates cabal↔flake dep sync
+
+### Session 2026-03-02--11 (`c7c8b863-05d5-47b7-bb49-0aaa987d96d1`)
+**Completed**:
+- 4A: StackStatus ADT with 22 constructors replaces Text throughout 25 files (e4b2be3). 1 new test.
+- 4D: ContentParsing shared module deduplicates YAML/JSON parsing from 4 loaders; SSM+SsmPath merged (13bffad). -44 net lines, -1 module.
+- 4F: tasty-bench benchmark suite — parse, preprocess, emit, full pipeline (b4df5a4). 16 benchmarks.
+- Updated 6 review docs: Hickey #7, Kmett #7/#8, Minsky #2, Muratori #3/#6, Russell #8, Ousterhout #1b — 8 findings resolved.
+- All 3 tasks run in parallel via sub-agents in isolated worktrees, cherry-picked to main.
+**Files modified**: 25 src/test files (4A), 9 files (4D), 3 files (4F), 5 review docs
+**Notes for next session**:
+- 4B (CfnContext separation), 4C (StackArgsLoader per-op validation), 4E (OValue/Value unification) remain
+- Each is a session-sized refactor touching 16+ files
+- Rust has criterion benchmarks in `benches/` for cross-implementation comparison
