@@ -107,7 +107,40 @@
    (where ((k_out v_out) ...) (map-values-items ((k_rest v_rest) ...) e var-name σ))])
 
 
+;; ── insert-into-group: insert a value into grouped pairs ────────
+;; Finds the group matching string_k and prepends v_new to it.
+;; If no matching group exists, appends a new group at the end
+;; (preserving first-seen key ordering).
+
+(define-metafunction Iidy-Preprocess
+  insert-into-group : string v ((string (v ...)) ...) -> ((string (v ...)) ...)
+
+  ;; No groups yet: create new group with this value
+  [(insert-into-group string_k v_new ())
+   ((string_k (v_new)))]
+
+  ;; Found matching key: prepend value to that group's items
+  [(insert-into-group string_k v_new
+                      ((string_k (v_existing ...))
+                       (string_rest (v_rest ...)) ...))
+   ((string_k (v_new v_existing ...))
+    (string_rest (v_rest ...)) ...)]
+
+  ;; Key doesn't match first group: keep it, recurse on rest
+  [(insert-into-group string_k v_new
+                      ((string_first (v_first ...))
+                       (string_rest (v_rest ...)) ...))
+   ((string_first (v_first ...))
+    (string_out (v_out ...)) ...)
+   (where ((string_out (v_out ...)) ...)
+          (insert-into-group string_k v_new
+                             ((string_rest (v_rest ...)) ...)))])
+
+
 ;; ── group-by-items: group array items by computed key ────────────
+;; Recursively processes items right-to-left, inserting each into
+;; the appropriate group. Left-to-right element order is preserved
+;; because we recurse on rest first, then prepend the current item.
 
 (define-metafunction Iidy-Preprocess
   group-by-items : (v ...) e var-name σ -> ((string (v ...)) ...)
@@ -115,24 +148,12 @@
   [(group-by-items () e_key var-name σ) ()]
 
   [(group-by-items (v_hd v_rest ...) e_key var-name σ)
-   ,(let* ([vn (term var-name)]
-           [σ-ext (term (extend ,vn v_hd σ))]
-           [key-val (term (eval-one e_key ,σ-ext))]
-           [key-str (term (val->text ,key-val))]
-           [rest-groups (term (group-by-items (v_rest ...) e_key var-name σ))])
-      ;; Insert v_hd into group for key-str, preserving input order.
-      ;; Since we recurse on rest first, rest-groups has later items.
-      ;; cons v_hd onto existing group items maintains L-to-R element order.
-      ;; New groups are appended to preserve first-seen key order.
-      (let ([existing (assoc key-str rest-groups)])
-        (if existing
-            (map (lambda (pair)
-                   (if (equal? (car pair) key-str)
-                       (list key-str (cons (term v_hd) (cadr pair)))
-                       pair))
-                 rest-groups)
-            ;; New group: append to end for first-seen key ordering
-            (append rest-groups (list (list key-str (list (term v_hd))))))))])
+   (insert-into-group string_k v_hd ((string_g (v_g ...)) ...))
+   (where σ_ext (extend var-name v_hd σ))
+   (where v_key (eval-one e_key σ_ext))
+   (where string_k (val->text v_key))
+   (where ((string_g (v_g ...)) ...)
+          (group-by-items (v_rest ...) e_key var-name σ))])
 
 
 ;; ── group-by-to-obj: convert grouped pairs to obj value ─────────

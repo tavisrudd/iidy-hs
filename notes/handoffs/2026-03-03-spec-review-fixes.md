@@ -215,15 +215,15 @@ racket tests/run-all.rkt
 
 - [x] P0-1: Add determinism property test (4 tests added)
 - [x] P0-2: Fix escape rule — added escape-to-raw metafunction + 6 unit tests
-- [ ] P1-1: Create Iidy-Full union language
-- [ ] P1-2: Connect E-Tpl to Handlebars renderer
+- [~] P1-1: Create Iidy-Full union language — DEFERRED (see notes below)
+- [~] P1-2: Connect E-Tpl to Handlebars renderer — DEFERRED (depends on P1-1)
 - [x] P1-3: Add algebraic property tests (14 tests: merge assoc/commut/idempotent, eq sym/trans, concat assoc, jcompare sym, etc.)
-- [ ] P2-1: Enable check-redundancy in test runner
-- [ ] P2-2: Add coverage tracking
+- [x] P2-1: Enable check-redundancy in test runner
+- [x] P2-2: Add coverage tracking (static — Redex API only supports reduction relations, not judgment forms)
 - [x] P2-3: Document JMESPath wildcard deviation (comment added)
 - [x] P3-1: Document truthiness duplication rationale (comment added)
-- [ ] P3-2: Reduce Racket escapes in group-by-items
-- [ ] Final: all tests pass, commit
+- [x] P3-2: Refactored group-by-items — extracted insert-into-group metafunction, pure Redex patterns
+- [x] Final: all 410 tests pass, committed
 
 ## Handoff Notes
 
@@ -267,3 +267,26 @@ to create a full union language or accept the current modular structure.
 **Instructions for next agent**: Run tests with
 `cd spec && nix develop --command racket tests/run-all.rkt` — bare `racket`
 is not on PATH. Expected: 410 tests, 0 failures.
+
+### Final Batch (2026-03-03)
+
+**Session**: 2026-03-03--2
+**Completed**: P2-1, P2-2, P3-2, P1-1/P1-2 decision (8/10 items total, 2 deferred)
+**Files modified**:
+- `spec/tests/run-all.rkt` — check-redundancy enabled, static coverage enumeration
+- `spec/semantics/eval.rkt` — extracted `insert-into-group` metafunction from
+  `group-by-items`, replacing Racket-level `let*/assoc/map/append` with pure
+  Redex pattern matching (3 clauses)
+**Deviations from plan**:
+- P2-2 (coverage): `make-coverage` only supports reduction relations, not
+  judgment forms. Implemented as static coverage enumeration (comment listing
+  all 27 eval rules and which test modules exercise them) rather than runtime
+  tracker. This is actually more useful as permanent documentation.
+- P1-1/P1-2 (union language): DEFERRED after architectural analysis. Creating
+  Iidy-Full would enable compositional rules (E-Tpl → Handlebars renderer,
+  E-Var-J → JMESPath evaluator) but is ~7-8 hours of refactor for structural
+  completeness. Current modular structure validates each sub-language
+  independently with 410 tests. The 210 isolated sub-language tests already
+  cover all Handlebars/JMESPath/bracket-expansion semantics. The limitation
+  is documented: sub-languages can't compose in the eval judgment.
+**Status**: All actionable items complete. Spec review fixes DONE.
