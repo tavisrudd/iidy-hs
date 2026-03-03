@@ -1,5 +1,6 @@
 # SSM Params: Unit Tests -- R1-5
 
+**Status**: DONE
 **Date**: 2026-03-01
 **Session**: `00cdf3e0-e600-42b8-8b73-07f9dcd707ad`
 **References**: Gemini review R1-5
@@ -65,3 +66,6 @@ These are currently internal (not exported), so the test module will need export
 ## Handoff Notes
 
 (to be filled by implementing session)
+
+## Status Notes
+Completed in commit a6c245f ("Add unit tests for SSM parameter pure functions"). Tests in test/Test/ParamsClientTest.hs (524 lines).

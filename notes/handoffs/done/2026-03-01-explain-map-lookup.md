@@ -1,5 +1,6 @@
 # Convert Explain.hs to Map Lookup -- Minor Optimization
 
+**Status**: DONE
 **Date**: 2026-03-01
 **Session**: `00cdf3e0-e600-42b8-8b73-07f9dcd707ad`
 
@@ -55,3 +56,6 @@ lookupErrorCode raw = Map.lookup (normaliseCode raw) errorMap
 ## Handoff Notes
 
 (to be filled by implementing session)
+
+## Status Notes
+Completed in commit e00f3be ("Convert Explain.hs error lookup from linear search to Map").

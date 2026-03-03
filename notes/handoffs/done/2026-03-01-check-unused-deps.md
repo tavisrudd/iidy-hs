@@ -1,5 +1,6 @@
 # Add make check-unused-deps Target for CI -- Tooling
 
+**Status**: DONE
 **Date**: 2026-03-01
 **References**: `Makefile`, `.github/workflows/ci.yml`, `iidy-hs.cabal`
 

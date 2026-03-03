@@ -1,5 +1,6 @@
 # Safety Hardening: Partial Functions, NTP, S3 Limit (H-2, H-3, M-3, M-7)
 
+**Status**: DONE
 **Severity**: High/Medium
 **Files**: `src/Iidy/Cfn/TemplateLoader.hs`, `src/Iidy/Aws/Timing.hs`,
 `src/Iidy/Yaml/Emitter.hs`, `src/Iidy/Yaml/Imports/Loaders/S3.hs`

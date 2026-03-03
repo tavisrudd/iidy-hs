@@ -1,5 +1,6 @@
 # Replace Partial `!!` in Random.hs with Total Indexing -- Bug Fix
 
+**Status**: DONE
 **Date**: 2026-03-01
 **References**: `src/Iidy/Yaml/Imports/Loaders/Random.hs:45`, CLAUDE.md ("No partial functions")
 

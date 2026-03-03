@@ -1,5 +1,6 @@
 # Unknown Import Prefix Should Error, Not Fall Through -- Bug Fix
 
+**Status**: DONE
 **Date**: 2026-03-01
 **Session**: `00cdf3e0-e600-42b8-8b73-07f9dcd707ad`
 **References**: Rust source `~/src/iidy/src/yaml/imports/mod.rs:241-247`
@@ -57,3 +58,6 @@ file paths instead of flagging the mistake.
 ## Handoff Notes
 
 (to be filled by implementing session)
+
+## Status Notes
+Completed in commit 642c9f0 ("Error on unknown import prefixes instead of falling through to file").

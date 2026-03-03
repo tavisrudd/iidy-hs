@@ -1,5 +1,6 @@
 # Stderr Usage Audit & Corrections -- Review Plan
 
+**Status**: DONE
 **Date**: 2026-02-25
 **Session**: `8334c9cc-a311-4d42-937f-314d40b539f5`
 **References**: Rust source (`~/src/iidy/src/main.rs`, `render.rs`, `cfn/`), Unix conventions

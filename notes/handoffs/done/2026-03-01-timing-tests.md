@@ -1,5 +1,6 @@
 # Add Subsystem Tests for Iidy.Aws.Timing -- Test Addition
 
+**Status**: DONE
 **Date**: 2026-03-01
 **References**: `src/Iidy/Aws/Timing.hs`, `~/src/iidy/src/aws/timing.rs`
 

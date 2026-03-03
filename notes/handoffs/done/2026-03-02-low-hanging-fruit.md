@@ -1,5 +1,6 @@
 # Low-Hanging Fruit: No-Debate Improvements
 
+**Status**: DONE
 **Date**: 2026-03-02
 **Scope**: Items from the architecture reviews and refactoring plan that have zero downsides
 **Estimated**: 5 commits, ~8 files touched, 1-2 sessions

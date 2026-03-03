@@ -1,5 +1,6 @@
 # Reconcile describe-stack --events Pagination Semantics -- Enhancement
 
+**Status**: DONE
 **Date**: 2026-03-01
 **References**: `src/Iidy/Cfn/Operations/DescribeStack.hs`, Rust `src/cfn/describe_stack.rs`
 

@@ -1,5 +1,6 @@
 # Fix Noisy Integration Tests -- Implementation Plan
 
+**Status**: DONE
 **Date**: 2026-02-25
 **Session**: `8334c9cc-a311-4d42-937f-314d40b539f5`
 **References**: `notes/2026-02-24-noisy-tests.md` (corrected), `notes/2026-02-24-silent-tests.md` (failed hCapture approach)

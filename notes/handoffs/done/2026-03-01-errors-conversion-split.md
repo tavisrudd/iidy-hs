@@ -1,5 +1,6 @@
 # Split Errors/Conversion.hs Into Domain-Specific Modules -- Refactoring
 
+**Status**: DONE
 **Date**: 2026-03-01
 **Session**: `00cdf3e0-e600-42b8-8b73-07f9dcd707ad`
 
@@ -111,3 +112,6 @@ Phases 2 and 3 can run in parallel after Phase 1.
 ## Handoff Notes
 
 (to be filled by implementing session)
+
+## Status Notes
+Completed in commit 6c2a7ef ("Split Errors/Conversion.hs into domain-specific sub-modules"). Core module reduced from ~998 to ~524 LOC.

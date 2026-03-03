@@ -1,5 +1,6 @@
 # Fix Loss of Source Span Information -- Feature Enhancement
 
+**Status**: DONE
 **Date**: 2026-03-01
 **Session**: `00cdf3e0-e600-42b8-8b73-07f9dcd707ad`
 

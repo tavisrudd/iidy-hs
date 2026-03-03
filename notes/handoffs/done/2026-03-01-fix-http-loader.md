@@ -1,5 +1,6 @@
 # Fix HTTP Loader: Manager Reuse + TLS + YAML Parsing (H-4, M-6)
 
+**Status**: DONE
 **Severity**: High/Medium
 **File**: `src/Iidy/Yaml/Imports/Loaders/Http.hs`
 

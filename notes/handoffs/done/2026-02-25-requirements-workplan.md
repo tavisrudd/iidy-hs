@@ -1,5 +1,6 @@
 # Requirements Documentation -- Multi-Session Workplan
 
+**Status**: DONE
 **Date**: 2026-02-25
 **Session**: `e67ca969-1c4d-4ab4-b023-825844ff2c32`
 **References**: `docs/` (user-facing docs), `DIVERGENCES.md`, `WORKPLAN.md`, `src/Iidy/` (81 modules), `~/src/iidy/` (Rust source, read-only)

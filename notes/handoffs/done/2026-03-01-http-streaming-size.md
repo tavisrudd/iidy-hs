@@ -1,5 +1,6 @@
 # Rework HTTP Import Size Enforcement to Stream -- Enhancement
 
+**Status**: DONE
 **Date**: 2026-03-01
 **References**: `src/Iidy/Yaml/Imports/Loaders/Http.hs`, `src/Iidy/Constants.hs`
 

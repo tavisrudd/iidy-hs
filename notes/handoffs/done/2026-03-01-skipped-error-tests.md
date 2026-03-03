@@ -1,5 +1,6 @@
 # Re-enable 11 Skipped Error Fixture Tests -- Bug Fix Batch
 
+**Status**: DONE
 **Date**: 2026-03-01
 **Session**: `00cdf3e0-e600-42b8-8b73-07f9dcd707ad`
 
@@ -61,3 +62,6 @@ For each skipped test:
 ## Handoff Notes
 
 (to be filled by implementing session)
+
+## Status Notes
+Completed in commit 6d20b10 ("Re-enable 11 skipped error fixture tests"). Skip list removed from ErrorFixtureTest.hs.

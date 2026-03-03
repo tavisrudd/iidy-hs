@@ -1,5 +1,6 @@
 # Security Review Fixes (Codex Findings) -- Bug Fix Batch
 
+**Status**: DONE
 **Date**: 2026-03-01
 **Session**: `9b77427d-2cd4-4c4b-a7a0-d2726e72261d`
 **References**: Codex security review comments

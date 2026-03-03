@@ -1,5 +1,6 @@
 # PLT Redex Spec Review Fixes -- Bug-Fix / Improvement Batch
 
+**Status**: DONE
 **Date**: 2026-03-03
 **Session**: 2026-03-03--1 (`e5538714-ac98-4c9f-afc6-5d853ea7bc9d`)
 **References**: Critical review in this session's conversation; PLT Redex docs (docs.racket-lang.org/redex/)

@@ -1,5 +1,6 @@
 # Fix Spinner Thread Exception Safety (H-5)
 
+**Status**: DONE
 **Severity**: High
 **File**: `src/Iidy/Output/Renderers/Interactive/Sections.hs` (and related spinner code)
 

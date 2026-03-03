@@ -1,5 +1,6 @@
 # Fix SSM GetParametersByPath Pagination (C-1)
 
+**Status**: DONE
 **Severity**: Critical
 **Files**: `src/Iidy/Yaml/Imports/Loaders/SsmPath.hs`, `src/Iidy/Cfn/GlobalConfig.hs`
 

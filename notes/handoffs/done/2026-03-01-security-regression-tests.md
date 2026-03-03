@@ -1,5 +1,6 @@
 # Security Controls Regression Tests -- Test Addition
 
+**Status**: DONE
 **Date**: 2026-03-01
 **References**: Commit `fa767b3`, handoff `notes/handoffs/done/2026-03-01-security-review-fixes.md`
 

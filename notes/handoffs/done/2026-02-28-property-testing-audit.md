@@ -1,5 +1,6 @@
 # Property-Based Testing Audit & Plan
 
+**Status**: DONE
 **Date**: 2026-02-28
 **Session**: `1c1b0e58-98ae-46a4-a7eb-9fbac4c0b212`
 **References**: `test/Test/PropertyTest.hs` (existing), QuickCheck docs

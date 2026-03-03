@@ -1,5 +1,6 @@
 # Review Loop Skill -- Claude Skill Implementation
 
+**Status**: DONE
 **Date**: 2026-02-28
 **Session**: `8f647906-271e-4a66-8a76-b8142dfa8367`
 **References**: This session's review workflow (reviews 1, 1b, 1c), existing `/t-review` skill
@@ -113,3 +114,6 @@ This pattern is valuable and should be a reusable Claude skill: `/t-review-loop`
 ## Handoff Notes
 
 (none yet)
+
+## Status Notes
+Completed in commit d43b54c ("Add /t-review-loop skill + handoff doc"). Skill file at ~/.claude/skills/t-review-loop/SKILL.md.

@@ -1,5 +1,6 @@
 # Fix StackArgsLoader: Env Map Error + Region Default (H-1, M-5)
 
+**Status**: DONE
 **Severity**: High
 **File**: `src/Iidy/Cfn/StackArgsLoader.hs`
 

@@ -1,5 +1,6 @@
 # CLI Flag Type Safety -- Refactoring
 
+**Status**: DONE
 **Date**: 2026-03-01
 **Session**: `00cdf3e0-e600-42b8-8b73-07f9dcd707ad`
 
@@ -76,3 +77,6 @@ data ShellType = ShellBash | ShellZsh | ShellFish
 ## Handoff Notes
 
 (to be filled by implementing session)
+
+## Status Notes
+Completed in commit 7a1a18f ("Add type-safe CLI flags for param type, format, and shell completion"). Follow-on in a4ab630 ("Replace stringly-typed OutputFormat with RenderFormat ADT").

@@ -1,5 +1,6 @@
 # Review #1 Remaining Fixes -- Bug-Fix Batch
 
+**Status**: DONE
 **Date**: 2026-02-28
 **Session**: `bc778d26-2dea-4022-a23f-fdad1f0fd614`
 **References**:

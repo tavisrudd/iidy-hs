@@ -1,5 +1,6 @@
 # Resolve Output Pipeline ADR Drift -- Review/Plan
 
+**Status**: DONE
 **Date**: 2026-03-01
 **Session**: `00cdf3e0-e600-42b8-8b73-07f9dcd707ad`
 **References**: `docs/dev/adr/001-output-pipeline.md`
@@ -96,3 +97,6 @@ to Sonnet sub-agents.
 ## Handoff Notes
 
 (to be filled by implementing session)
+
+## Status Notes
+Completed in commit 778348c ("Add OdRawOutput variant, begin output pipeline drift resolution"). HIGH-priority items migrated to renderOutput dispatch.

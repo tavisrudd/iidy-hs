@@ -1,5 +1,6 @@
 # Fix OValue/Resolver Performance (M-1, M-2)
 
+**Status**: DONE
 **Severity**: Medium
 **File**: `src/Iidy/Yaml/OValue.hs`, `src/Iidy/Yaml/Resolution/Resolver.hs`
 

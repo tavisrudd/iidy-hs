@@ -1,5 +1,6 @@
 # PLT Redex Formal Semantics for iidy Preprocessing
 
+**Status**: DONE
 ## Context
 Krishnamurthi review finding #2: preprocessing layer has no specification.
 Building machine-readable, checkable formal grammar and operational semantics
