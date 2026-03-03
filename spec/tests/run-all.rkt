@@ -8,14 +8,20 @@
          rackunit/text-ui
          "grammar-tests.rkt"
          "truthiness-tests.rkt"
-         "eval-tests.rkt")
+         "env-tests.rkt"
+         "merge-tests.rkt"
+         "eval-tests.rkt"
+         "properties.rkt")
 
 (define all-tests
   (test-suite
    "iidy formal semantics"
    grammar-tests
    truthiness-tests
-   eval-tests))
+   env-tests
+   merge-tests
+   eval-tests
+   property-tests))
 
 (define exit-code
   (run-tests all-tests 'verbose))

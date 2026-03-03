@@ -472,7 +472,155 @@
                    (term ())
                    ;; Each item is {key: k, value: v}
                    (term (obj (("x" (obj (("key" (str "x")) ("value" (num 1)))))
-                               ("y" (obj (("key" (str "y")) ("value" (num 2)))))))))))
+                               ("y" (obj (("key" (str "y")) ("value" (num 2))))))))))
+
+    (test-case "map-values with transformation accessing value"
+      (eval-expect (term (map-values
+                           (obj (("count" (num 5))))
+                           (var ("item" "value"))
+                           "item"))
+                   (term ())
+                   (term (obj (("count" (num 5)))))))
+
+    (test-case "map-values on empty object"
+      (eval-expect (term (map-values
+                           (obj ())
+                           (var ("item"))
+                           "item"))
+                   (term ())
+                   (term (obj ())))))
+
+   ;; ── GroupBy ────────────────────────────────────────────────────
+
+   (test-suite
+    "GroupBy (group-by)"
+
+    (test-case "group by simple key"
+      (eval-expect (term (group-by
+                           (arr ((obj (("type" (str "a")) ("val" (num 1))))
+                                 (obj (("type" (str "b")) ("val" (num 2))))
+                                 (obj (("type" (str "a")) ("val" (num 3))))))
+                           (var ("item" "type"))
+                           "item"))
+                   (term ())
+                   (term (obj (("a" (arr ((obj (("type" (str "a")) ("val" (num 1))))
+                                          (obj (("type" (str "a")) ("val" (num 3)))))))
+                               ("b" (arr ((obj (("type" (str "b")) ("val" (num 2))))))))))))
+
+    (test-case "group-by with all same key"
+      (eval-expect (term (group-by
+                           (arr ((num 1) (num 2) (num 3)))
+                           (str "same")
+                           "item"))
+                   (term ())
+                   (term (obj (("same" (arr ((num 1) (num 2) (num 3)))))))))
+
+    (test-case "group-by with empty array"
+      (eval-expect (term (group-by
+                           (arr ())
+                           (var ("item"))
+                           "item"))
+                   (term ())
+                   (term (obj ()))))
+
+    (test-case "group-by preserves first-seen key order"
+      (eval-expect (term (group-by
+                           (arr ((str "b1") (str "a1") (str "b2")))
+                           ;; Use the first character as the group key
+                           ;; Since we can't do substring, use a let to
+                           ;; simulate: items whose equality groups them
+                           (if (eq (var ("item")) (str "a1"))
+                               (str "a")
+                               (str "b"))
+                           "item"))
+                   (term ())
+                   (term (obj (("b" (arr ((str "b1") (str "b2"))))
+                               ("a" (arr ((str "a1"))))))))))
+
+   ;; ── ConcatMap with filter ──────────────────────────────────────
+
+   (test-suite
+    "ConcatMap with filter (concat-map-f)"
+
+    (test-case "concat-map-f filters then flattens"
+      (eval-expect (term (concat-map-f
+                           (arr ((arr ((num 1) (num 2)))
+                                 (arr ())
+                                 (arr ((num 3)))))
+                           (var ("item"))
+                           "item"
+                           ;; Only keep non-empty arrays (arr is truthy)
+                           (not (eq (var ("item")) (arr ())))))
+                   (term ())
+                   (term (arr ((num 1) (num 2) (num 3)))))))
+
+   ;; ── MapListToHash with filter ──────────────────────────────────
+
+   (test-suite
+    "MapListToHash with filter (map-list-to-hash-f)"
+
+    (test-case "map-list-to-hash-f filters then hashes"
+      (eval-expect (term (map-list-to-hash-f
+                           (arr ((str "a") (str "b") (str "c")))
+                           (seq ((var ("item")) (num 1)))
+                           "item"
+                           (not (eq (var ("item")) (str "b")))))
+                   (term ())
+                   (term (obj (("a" (num 1)) ("c" (num 1))))))))
+
+   ;; ── Nested / compound operations ──────────────────────────────
+
+   (test-suite
+    "Nested and compound operations"
+
+    (test-case "map inside let"
+      (eval-expect (term (let (("items" (arr ((num 10) (num 20)))))
+                           (map (var ("items"))
+                                (eq (var ("x")) (num 10))
+                                "x")))
+                   (term ())
+                   (term (arr ((bool #t) (bool #f))))))
+
+    (test-case "if inside map"
+      (eval-expect (term (map (arr ((num 1) (num 2) (num 3)))
+                              (if (eq (var ("item")) (num 2))
+                                  (str "two")
+                                  (str "other"))
+                              "item"))
+                   (term ())
+                   (term (arr ((str "other") (str "two") (str "other"))))))
+
+    (test-case "merge of dynamically-keyed mapped results"
+      ;; Use from-pairs to create objects with dynamic keys from item values
+      (eval-expect (term (merge-map
+                           (arr ((str "a") (str "b")))
+                           (from-pairs (seq ((seq ((var ("item")) (num 1))))))
+                           "item"))
+                   (term ())
+                   (term (obj (("a" (num 1)) ("b" (num 1)))))))
+
+    (test-case "let shadows work with nested scope"
+      (eval-expect (term (let (("x" (num 1)))
+                           (let (("x" (num 2)))
+                             (var ("x")))))
+                   (term ())
+                   (term (num 2))))
+
+    (test-case "concat of mapped results"
+      (eval-expect (term (concat-map
+                           (arr ((num 1) (num 2)))
+                           (seq ((var ("item")) (var ("item"))))
+                           "item"))
+                   (term ())
+                   (term (arr ((num 1) (num 1) (num 2) (num 2))))))
+
+    (test-case "map with complex body expression"
+      (eval-expect (term (map (arr ((str "hello") (str "world")))
+                              (join (str "-")
+                                    (split (str "l") (var ("item"))))
+                              "item"))
+                   (term ())
+                   (term (arr ((str "he--o") (str "wor-d")))))))
 
    ;; ── Escape ────────────────────────────────────────────────────
 

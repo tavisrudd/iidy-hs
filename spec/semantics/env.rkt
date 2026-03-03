@@ -12,6 +12,7 @@
          "../lang/core.rkt")
 (provide lookup extend extend-many
          resolve-path traverse-path
+         obj-lookup arr-index
          env-keys)
 
 
@@ -99,7 +100,11 @@
 (define-metafunction Iidy-Core
   traverse-path : (string ...) any -> any
 
-  ;; Base case: no more segments
+  ;; Base case: no more segments (unbound)
+  [(traverse-path () unbound)
+   unbound]
+
+  ;; Base case: no more segments (value)
   [(traverse-path () v)
    v]
 
