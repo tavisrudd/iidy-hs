@@ -5,7 +5,7 @@ Krishnamurthi review finding #2: preprocessing layer has no specification.
 Building machine-readable, checkable formal grammar and operational semantics
 using PLT Redex (Racket).
 
-## Status: In Progress (Session 2 of 4 complete)
+## Status: In Progress (Session 3 of 4 complete)
 
 ## Completed
 
@@ -30,17 +30,20 @@ using PLT Redex (Racket).
 - [x] Exported `obj-lookup` and `arr-index` from env.rkt for direct testing
 - [x] Tests: 230 passing (grammar, truthiness, env, merge, eval, properties)
 
+### Session 3: Sub-Languages (2026-03-02--14)
+- [x] `lang/handlebars.rkt` — Iidy-Handlebars grammar (template parts, expressions, block kinds)
+- [x] `semantics/handlebars-eval.rkt` — Template rendering: render-template, hb-eval, hb-lookup, block helpers (if/unless/each/with), each with @index/@first/@last/@key, with context merging, helper dispatch (toLowerCase, toUpperCase, lookup, eq, length, concat)
+- [x] `lang/jmespath.rkt` — Iidy-JMESPath grammar (field, index, sub, wildcard, projection, flatten, filter, multi-select, literal, pipe, identity, comparison, not)
+- [x] `semantics/jmespath-eval.rkt` — Query evaluation: jeval for all 14 expression forms, projection with null filtering, filter with JMESPath truthiness, comparison operators (== != < <= > >=), negation
+- [x] `semantics/bracket-expansion.rkt` — Iidy-BracketExpansion language with (bracket-ref) segments, expand-path metafunction
+- [x] `tests/handlebars-tests.rkt` — 55 tests (grammar, lookup, eval, rendering, blocks, helpers, val->text)
+- [x] `tests/jmespath-tests.rkt` — 47 tests (grammar, field, index, identity, wildcard, projection, flatten, filter, multi-select, pipe, comparison, negation)
+- [x] `tests/bracket-expansion-tests.rkt` — 10 tests (grammar, expansion)
+- [x] Tests: 346 passing (230 existing + 116 new)
+
 ## Remaining
 
-### Session 3: Sub-Languages
-- [ ] `lang/handlebars.rkt` — Handlebars template grammar
-- [ ] `semantics/handlebars-eval.rkt` — Template rendering
-- [ ] `lang/jmespath.rkt` — JMESPath grammar (implemented subset)
-- [ ] `semantics/jmespath-eval.rkt` — Query evaluation
-- [ ] `semantics/bracket-expansion.rkt` — Dynamic path expansion
-- [ ] Sub-language tests
-
-### Session 4: Module System and Properties
+### Session 4: Integration Rules and Properties
 - [ ] Evaluation rules for: tpl, var-q, var-j, to-yaml, parse-yaml, to-json, parse-json, expand
 - [ ] `redex-check` property tests
 - [ ] Final review pass: cross-reference all rules against Resolver.hs
@@ -51,8 +54,24 @@ using PLT Redex (Racket).
 - Separate `spec/flake.nix` — keeps Racket toolchain independent of Haskell flake
 - Helper metafunctions for iteration (map-items, map-filter-items, etc.) instead of Racket-level for/list inside judgment forms — cleaner, more idiomatic Redex
 - `escape` rule only handles values (E-Escape-Val) — full AST-to-raw conversion depends on YAML AST structure outside this model
+- Sub-languages extend `Iidy-Core` (not `Iidy-Preprocess`) — they share the value domain but have their own expression forms
+- Handlebars context is a value, not an environment σ — template rendering traverses values directly
+- Bracket expansion uses explicit `(bracket-ref)` AST form rather than string-level bracket parsing
+- JMESPath subset: no slice expressions, no function calls (matching Haskell implementation)
+- Helper registry is a fixed metafunction, not extensible — models iidy's closed set of helpers
 
 ## Handoff Notes
+
+### Session 3 (2026-03-02--14 / $CLAUDE_SESSION_ID)
+- **Files created**: `spec/lang/handlebars.rkt`, `spec/lang/jmespath.rkt`, `spec/semantics/handlebars-eval.rkt`, `spec/semantics/jmespath-eval.rkt`, `spec/semantics/bracket-expansion.rkt`, `spec/tests/handlebars-tests.rkt`, `spec/tests/jmespath-tests.rkt`, `spec/tests/bracket-expansion-tests.rkt`
+- **Files modified**: `spec/tests/run-all.rkt`
+- **Architecture**: Each sub-language uses `define-extended-language` extending `Iidy-Core`, so they share the value domain (v, σ) while defining their own expression forms. Handlebars context is a value (typically obj), not an environment — path lookup traverses the value directly.
+- **Key design choices**:
+  - Handlebars helpers modeled as fixed metafunction clauses (representative subset: toLowerCase, toUpperCase, lookup, eq, length, concat). Unknown helpers return null.
+  - JMESPath projections filter out null results (matching spec). Filter uses JMESPath truthiness.
+  - Bracket expansion uses explicit `(bracket-ref "var")` segments rather than string parsing — cleaner for formal model.
+  - `each` over arrays provides @index/@first/@last via context merging. Objects provide @key.
+- **For next session**: Session 4 hooks sub-languages into eval.rkt (E-Tpl, E-Var-Q, E-Var-J rules), adds serialization rules (to-yaml/json, parse-yaml/json), expand rule, redex-check property tests for sub-languages, and final review pass.
 
 ### Session 2 (2026-03-02--13 / bab341b4-d66f-47ed-bac7-d4f1daab5701)
 - **Files modified**: `spec/semantics/env.rkt`, `spec/tests/eval-tests.rkt`, `spec/tests/run-all.rkt`
