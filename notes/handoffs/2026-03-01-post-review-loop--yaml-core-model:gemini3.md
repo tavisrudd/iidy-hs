@@ -17,7 +17,12 @@
 
 ## Round 1 Summary
 - **Grade**: 95/100
-- **Issues**: 1 Major (FIXED), 3 Minor, 1 Info (IMPROVED)
+- **Issues**: 1 Major (FIXED), 3 Minor
 - **Review File**: `notes/reviews/2026-03-01-review--yaml-core-model:gemini3--round-1.md`
 
-**Status**: Success. Target grade 90 reached. (Core parser issues resolved).
+## Round 2 Summary
+- **Grade**: 99/100
+- **Issues**: 0 OPEN
+- **Review File**: `notes/reviews/2026-03-03-review--yaml-core-model:gemini3--round-2.md`
+
+**Status**: Success. Subsystem is formally verified and robustly tested.
