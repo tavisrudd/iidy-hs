@@ -473,10 +473,11 @@ buildHunks ctx ops =
     merge1 :: [(Int, Int)] -> (Int, Int) -> [(Int, Int)]
     merge1 [] r = [r]
     merge1 acc (lo, hi) =
-        let (prevLo, prevHi) = last acc
-         in if lo <= prevHi + 1
-                then init acc ++ [(prevLo, max prevHi hi)]
-                else acc ++ [(lo, hi)]
+        case reverse acc of
+            [] -> [(lo, hi)]
+            (prevLo, prevHi) : rest
+                | lo <= prevHi + 1 -> reverse rest ++ [(prevLo, max prevHi hi)]
+                | otherwise -> acc ++ [(lo, hi)]
 
     extractHunk :: [(Int, DiffOp)] -> (Int, Int) -> Hunk
     extractHunk indexed (lo, hi) =

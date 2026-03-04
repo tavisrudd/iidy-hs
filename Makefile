@@ -1,4 +1,4 @@
-.PHONY: build build-strict test clean run help ci ci-act check-unused-deps dev-setup spec snapshot lint format format-check
+.PHONY: build build-strict test clean run help ci ci-act check-unused-deps dev-setup spec snapshot lint lint-stan format format-check
 
 build:
 	cabal build
@@ -48,6 +48,9 @@ snapshot:
 
 lint:
 	hlint src/ app/ test/
+
+lint-stan:
+	stan --hiedir=.hie
 
 format:
 	fourmolu --mode inplace src/ app/ test/

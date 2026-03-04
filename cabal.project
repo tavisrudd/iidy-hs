@@ -2,4 +2,4 @@ packages: .
 jobs: 4
 
 package iidy-hs
-  ghc-options: -O0
+  ghc-options: -O0 -fwrite-ide-info -hiedir=.hie

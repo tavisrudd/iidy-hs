@@ -30,6 +30,7 @@ import Data.Aeson.KeyMap qualified as KM
 import Data.ByteString.Lazy qualified as BL
 import Data.Char (isDigit)
 import Data.List (sortBy)
+import Data.List qualified as List
 import Data.Maybe (catMaybes, fromMaybe, listToMaybe)
 import Data.Scientific qualified as Scientific
 import Data.Text (Text)
@@ -78,7 +79,7 @@ cause later ones to match, producing double-replacement. This matches
 the Rust implementation behavior.
 -}
 parameterizeEnv :: Text -> Text
-parameterizeEnv s = foldl (\acc env -> T.replace env "{{environment}}" acc) s knownEnvironments
+parameterizeEnv s = List.foldl' (\acc env -> T.replace env "{{environment}}" acc) s knownEnvironments
 
 {- | Parameterize a stack name by replacing environment, trailing digits,
 and project name with template variables.
@@ -465,7 +466,7 @@ buildStackArgsYaml
                     ]
             yamlText = T.unlines ls
          in -- Post-process: replace SSM placeholders with !$ tags
-            foldl
+            List.foldl'
                 ( \acc k ->
                     T.replace ("__SSM_REF__" <> k) ("!$ ssmParams." <> k) acc
                 )

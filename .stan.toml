@@ -1,0 +1,67 @@
+# Stan static analysis configuration
+# https://github.com/kowainik/stan
+
+# Infinite list warnings — all lists in this codebase are finite
+[[check]]
+  id = "STAN-0101"  # reverse on infinite
+  scope = "all"
+  type = "Exclude"
+
+[[check]]
+  id = "STAN-0102"  # isSuffixOf on infinite
+  scope = "all"
+  type = "Exclude"
+
+[[check]]
+  id = "STAN-0103"  # length on infinite
+  scope = "all"
+  type = "Exclude"
+
+[[check]]
+  id = "STAN-0104"  # genericLength on infinite
+  scope = "all"
+  type = "Exclude"
+
+[[check]]
+  id = "STAN-0105"  # sum on infinite
+  scope = "all"
+  type = "Exclude"
+
+[[check]]
+  id = "STAN-0106"  # product on infinite
+  scope = "all"
+  type = "Exclude"
+
+# Text.length is O(n) but fine for short strings; "use ByteString" is wrong advice
+[[check]]
+  id = "STAN-0208"  # slow T.length
+  scope = "all"
+  type = "Exclude"
+
+# Non-strict fields — most are IO-typed (intentionally lazy)
+[[check]]
+  id = "STAN-0206"
+  scope = "all"
+  type = "Exclude"
+
+# Big tuples — intentional internal return types
+[[check]]
+  id = "STAN-0302"
+  scope = "all"
+  type = "Exclude"
+
+# Partial Enum ops — all uses are bounded hex nibble encoders
+[[check]]
+  id = "STAN-0010"  # succ
+  scope = "all"
+  type = "Exclude"
+
+[[check]]
+  id = "STAN-0011"  # pred
+  scope = "all"
+  type = "Exclude"
+
+[[check]]
+  id = "STAN-0012"  # toEnum
+  scope = "all"
+  type = "Exclude"

@@ -58,7 +58,7 @@ detectErrorColors ColorAuto = do
     case (noColorEnv, forceColorEnv) of
         (Just _, _) -> pure noColors -- NO_COLOR takes precedence
         (_, Just _) -> pure defaultColors -- FORCE_COLOR forces colors on
-        _ -> do
+        _checkTty -> do
             isTty <- hIsTerminalDevice stderr
             pure $ if isTty then defaultColors else noColors
 

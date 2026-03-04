@@ -4,6 +4,7 @@ dist/
 result
 *.hi
 *.o
+.hie/
 *~
 iidy-hs
 iidy-rs
