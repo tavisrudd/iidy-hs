@@ -73,6 +73,7 @@
               hp.cabal-install
               hp.hlint
               hp.fourmolu
+              hp.haskell-language-server
               pkgs.pkg-config
               pkgs.zlib
             ];

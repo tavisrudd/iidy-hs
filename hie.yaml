@@ -1,0 +1,8 @@
+cradle:
+  cabal:
+    - path: "src"
+      component: "lib:iidy-hs"
+    - path: "app"
+      component: "exe:iidy-hs"
+    - path: "test"
+      component: "test:iidy-hs-test"
