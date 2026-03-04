@@ -17,6 +17,10 @@ module Iidy.Cfn.StackArgsLoader
   , parseOnFailureText
   , parseCapabilityText
   , validateNoUnknownKeys
+  , mergeAwsSettings
+  , mergeSentinel
+  , noProfileSentinel
+  , noRoleSentinel
   ) where
 
 import Control.Applicative ((<|>))
@@ -225,13 +229,29 @@ getStr obj key = case KM.lookup (Key.fromText key) obj of
   Just (String s) -> Just s
   _               -> Nothing
 
--- | Merge AWS settings (CLI overrides argsfile)
+-- | Sentinel value: @--profile=no-profile@ clears any inherited profile.
+noProfileSentinel :: Text
+noProfileSentinel = "no-profile"
+
+-- | Sentinel value: @--assume-role-arn=no-role@ clears any inherited role.
+noRoleSentinel :: Text
+noRoleSentinel = "no-role"
+
+-- | Merge AWS settings (CLI overrides argsfile).
+-- Sentinel values "no-profile" and "no-role" clear inherited settings.
 mergeAwsSettings :: AwsSettings -> AwsSettings -> AwsSettings
 mergeAwsSettings cli argsfile = AwsSettings
-  { awsProfile = awsProfile cli <|> awsProfile argsfile
+  { awsProfile = mergeSentinel noProfileSentinel (awsProfile cli) (awsProfile argsfile)
   , awsRegion = awsRegion cli <|> awsRegion argsfile
-  , awsAssumeRoleArn = awsAssumeRoleArn cli <|> awsAssumeRoleArn argsfile
+  , awsAssumeRoleArn = mergeSentinel noRoleSentinel (awsAssumeRoleArn cli) (awsAssumeRoleArn argsfile)
   }
+
+-- | Merge with sentinel support: if CLI value is the sentinel, return 'Nothing'
+-- (clearing any inherited value). Otherwise normal CLI-overrides-argsfile.
+mergeSentinel :: Text -> Maybe Text -> Maybe Text -> Maybe Text
+mergeSentinel sentinel (Just val) _
+  | val == sentinel = Nothing
+mergeSentinel _ cli argsfile = cli <|> argsfile
 
 ------------------------------------------------------------------------
 -- Unknown key validation

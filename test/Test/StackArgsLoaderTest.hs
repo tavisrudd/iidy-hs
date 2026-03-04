@@ -11,7 +11,7 @@ import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
 import Iidy.Aws.CredentialSource (AwsSettings(..))
-import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..), getStrListValidated, resolveEnvMaps, parseOnFailureText, parseCapabilityText, validateNoUnknownKeys)
+import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..), getStrListValidated, resolveEnvMaps, parseOnFailureText, parseCapabilityText, validateNoUnknownKeys, mergeAwsSettings, mergeSentinel, noProfileSentinel, noRoleSentinel)
 import Iidy.Cfn.Types (CfnOperation(..), Capability(..), OnFailure(..), StackArgs(..))
 import Iidy.Yaml.Imports.Types (RemoteImports(..))
 import Test.Shared (noAwsSettings)
@@ -308,4 +308,33 @@ stackArgsLoaderTests =
           assertBool "error mentions Paramters" (T.isInfixOf "Paramters" err)
           assertBool "error suggests Parameters" (T.isInfixOf "Parameters" err)
         Right _ -> assertFailure "Expected error for unknown key in fixture"
+
+    -- Sentinel value tests (no-profile / no-role)
+  , testCase "no-profile sentinel clears argsfile profile" $ do
+      let cli = AwsSettings (Just noProfileSentinel) Nothing Nothing
+          argsfile = AwsSettings (Just "prod-profile") (Just "us-east-1") Nothing
+          merged = mergeAwsSettings cli argsfile
+      awsProfile merged @?= Nothing
+      awsRegion merged @?= Just "us-east-1"
+
+  , testCase "no-role sentinel clears argsfile assume-role-arn" $ do
+      let cli = AwsSettings Nothing Nothing (Just noRoleSentinel)
+          argsfile = AwsSettings Nothing Nothing (Just "arn:aws:iam::123:role/Foo")
+          merged = mergeAwsSettings cli argsfile
+      awsAssumeRoleArn merged @?= Nothing
+
+  , testCase "normal profile still overrides argsfile" $ do
+      let cli = AwsSettings (Just "cli-profile") Nothing Nothing
+          argsfile = AwsSettings (Just "argsfile-profile") Nothing Nothing
+          merged = mergeAwsSettings cli argsfile
+      awsProfile merged @?= Just "cli-profile"
+
+  , testCase "mergeSentinel: sentinel returns Nothing" $
+      mergeSentinel "no-profile" (Just "no-profile") (Just "inherited") @?= Nothing
+
+  , testCase "mergeSentinel: non-sentinel passes through" $
+      mergeSentinel "no-profile" (Just "real-profile") (Just "inherited") @?= Just "real-profile"
+
+  , testCase "mergeSentinel: Nothing falls through to argsfile" $
+      mergeSentinel "no-profile" Nothing (Just "inherited") @?= Just "inherited"
   ]
