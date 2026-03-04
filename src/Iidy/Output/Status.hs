@@ -1,31 +1,32 @@
-module Iidy.Output.Status
-  ( StatusCategory(..)
-  , categorizeStatus
-  , isStatusInProgress
-  , isStatusComplete
-  , isStatusFailed
-  , isStatusTerminal
-  ) where
+module Iidy.Output.Status (
+    StatusCategory (..),
+    categorizeStatus,
+    isStatusInProgress,
+    isStatusComplete,
+    isStatusFailed,
+    isStatusTerminal,
+) where
 
-import Iidy.Cfn.Status (StackStatus(..), isFailed, isInProgress, isSuccess)
+import Iidy.Cfn.Status (StackStatus (..), isFailed, isInProgress, isSuccess)
 
 -- | Categorization of CloudFormation resource statuses
 data StatusCategory
-  = StatusInProgress
-  | StatusComplete
-  | StatusFailed
-  | StatusSkipped
-  | StatusUnknown
-  deriving stock (Show, Eq, Ord)
+    = StatusInProgress
+    | StatusComplete
+    | StatusFailed
+    | StatusSkipped
+    | StatusUnknown
+    deriving stock (Show, Eq, Ord)
 
 -- | Categorize a StackStatus into a display category
 categorizeStatus :: StackStatus -> StatusCategory
 categorizeStatus = \case
-  DeleteSkipped -> StatusSkipped
-  s | isInProgress s -> StatusInProgress
-    | isSuccess s    -> StatusComplete
-    | isFailed s     -> StatusFailed
-    | otherwise      -> StatusUnknown
+    DeleteSkipped -> StatusSkipped
+    s
+        | isInProgress s -> StatusInProgress
+        | isSuccess s -> StatusComplete
+        | isFailed s -> StatusFailed
+        | otherwise -> StatusUnknown
 
 isStatusInProgress :: StackStatus -> Bool
 isStatusInProgress s = categorizeStatus s == StatusInProgress
@@ -38,6 +39,6 @@ isStatusFailed s = categorizeStatus s == StatusFailed
 
 isStatusTerminal :: StackStatus -> Bool
 isStatusTerminal s = case categorizeStatus s of
-  StatusComplete -> True
-  StatusFailed   -> True
-  _              -> False
+    StatusComplete -> True
+    StatusFailed -> True
+    _ -> False

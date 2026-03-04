@@ -1,67 +1,71 @@
-module Test.Shared
-  ( -- * Test timestamps
-    testTimestamp
-    -- * Shared helpers
-  , noAwsSettings
-  , mkColoredRenderer
-  , mkPlainRenderer
-  , mkEvent
-  , jsonLookup
-  , isObject
-    -- * Test data builders
-  , testTokenInfo
-  , testStackDef
-  , testStackEvent
-  , testEventWithTiming
-  , testStatusUpdate
-  , testCommandResult
-  , testStackListEntry
-  , testErrorInfo
-  , testAbsentInfo
-  , testCommandMetadata
-  , testStackEventsDisplay
-  , testStackContents
-  , testFinalCommandSummary
-  , testStackListDisplay
-  , testChangeSetResult
-  , testStackDrift
-  , testOperationComplete
-  , testInactivityTimeout
-  , testConfirmationRequest
-  , testStackChangeDetails
-  , testCostEstimate
-  , testStackTemplate
-  , testApprovalRequestResult
-  , testTemplateValidation
-  , testApprovalStatus
-  , testTemplateDiff
-  , testApprovalResult
-  , testRawOutput
-    -- * All OutputData variants
-  , allTestOutputData
-  , odConstructorName
-  ) where
+module Test.Shared (
+    -- * Test timestamps
+    testTimestamp,
 
-import Data.Aeson (Value(..))
-import qualified Data.Aeson.Key as AesonKey
-import qualified Data.Aeson.KeyMap as KM
+    -- * Shared helpers
+    noAwsSettings,
+    mkColoredRenderer,
+    mkPlainRenderer,
+    mkEvent,
+    jsonLookup,
+    isObject,
+
+    -- * Test data builders
+    testTokenInfo,
+    testStackDef,
+    testStackEvent,
+    testEventWithTiming,
+    testStatusUpdate,
+    testCommandResult,
+    testStackListEntry,
+    testErrorInfo,
+    testAbsentInfo,
+    testCommandMetadata,
+    testStackEventsDisplay,
+    testStackContents,
+    testFinalCommandSummary,
+    testStackListDisplay,
+    testChangeSetResult,
+    testStackDrift,
+    testOperationComplete,
+    testInactivityTimeout,
+    testConfirmationRequest,
+    testStackChangeDetails,
+    testCostEstimate,
+    testStackTemplate,
+    testApprovalRequestResult,
+    testTemplateValidation,
+    testApprovalStatus,
+    testTemplateDiff,
+    testApprovalResult,
+    testRawOutput,
+
+    -- * All OutputData variants
+    allTestOutputData,
+    odConstructorName,
+) where
+
 import Control.Concurrent.STM (newTVarIO)
+import Data.Aeson (Value (..))
+import Data.Aeson.Key qualified as AesonKey
+import Data.Aeson.KeyMap qualified as KM
 import Data.IORef (newIORef)
-import System.IO (stdout, stderr)
-import qualified Data.Map.Strict as Map
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Time.Calendar (fromGregorian)
-import Data.Time.Clock (UTCTime(..))
+import Data.Time.Clock (UTCTime (..))
+import System.IO (stderr, stdout)
 
-import Iidy.Aws.ClientReqToken (TokenInfo(..), TokenSource(..))
-import Iidy.Aws.CredentialSource (AwsSettings(..))
-import Iidy.Cfn.Status (StackStatus(..))
-import Iidy.Cfn.Types (StackChangeType(..))
+import Iidy.Aws.ClientReqToken (TokenInfo (..), TokenSource (..))
+import Iidy.Aws.CredentialSource (AwsSettings (..))
+import Iidy.Cfn.Status (StackStatus (..))
+import Iidy.Cfn.Types (StackChangeType (..))
 import Iidy.Output.Color (darkTheme, noColorTheme)
-import Iidy.Output.Renderers.Interactive
-  ( InteractiveRenderer(..)
-  , defaultInteractiveOptions, plainInteractiveOptions
-  )
+import Iidy.Output.Renderers.Interactive (
+    InteractiveRenderer (..),
+    defaultInteractiveOptions,
+    plainInteractiveOptions,
+ )
 import Iidy.Output.Types
 
 ------------------------------------------------------------------------
@@ -86,331 +90,371 @@ isObject _ = False
 -- | Create a colored renderer for testing (bypasses terminal detection).
 mkColoredRenderer :: IO InteractiveRenderer
 mkColoredRenderer = do
-  hasRendered <- newIORef False
-  spinnerRef <- newTVarIO Nothing
-  spinnerThreadRef <- newTVarIO Nothing
-  timingStateRef <- newTVarIO Nothing
-  timingThreadRef <- newTVarIO Nothing
-  pure InteractiveRenderer
-    { irStdout             = stdout
-    , irStderr             = stderr
-    , irTheme              = darkTheme
-    , irOptions            = defaultInteractiveOptions
-    , irTerminalWidth      = 130
-    , irIsTty              = False
-    , irHasRenderedContent = hasRendered
-    , irSpinner            = spinnerRef
-    , irSpinnerThread      = spinnerThreadRef
-    , irTimingState        = timingStateRef
-    , irTimingThread       = timingThreadRef
-    }
+    hasRendered <- newIORef False
+    spinnerRef <- newTVarIO Nothing
+    spinnerThreadRef <- newTVarIO Nothing
+    timingStateRef <- newTVarIO Nothing
+    timingThreadRef <- newTVarIO Nothing
+    pure
+        InteractiveRenderer
+            { irStdout = stdout
+            , irStderr = stderr
+            , irTheme = darkTheme
+            , irOptions = defaultInteractiveOptions
+            , irTerminalWidth = 130
+            , irIsTty = False
+            , irHasRenderedContent = hasRendered
+            , irSpinner = spinnerRef
+            , irSpinnerThread = spinnerThreadRef
+            , irTimingState = timingStateRef
+            , irTimingThread = timingThreadRef
+            }
 
 -- | Create a plain renderer for testing (no colors, no spinners).
 mkPlainRenderer :: IO InteractiveRenderer
 mkPlainRenderer = do
-  hasRendered <- newIORef False
-  spinnerRef <- newTVarIO Nothing
-  spinnerThreadRef <- newTVarIO Nothing
-  timingStateRef <- newTVarIO Nothing
-  timingThreadRef <- newTVarIO Nothing
-  pure InteractiveRenderer
-    { irStdout             = stdout
-    , irStderr             = stderr
-    , irTheme              = noColorTheme
-    , irOptions            = plainInteractiveOptions
-    , irTerminalWidth      = 130
-    , irIsTty              = False
-    , irHasRenderedContent = hasRendered
-    , irSpinner            = spinnerRef
-    , irSpinnerThread      = spinnerThreadRef
-    , irTimingState        = timingStateRef
-    , irTimingThread       = timingThreadRef
-    }
+    hasRendered <- newIORef False
+    spinnerRef <- newTVarIO Nothing
+    spinnerThreadRef <- newTVarIO Nothing
+    timingStateRef <- newTVarIO Nothing
+    timingThreadRef <- newTVarIO Nothing
+    pure
+        InteractiveRenderer
+            { irStdout = stdout
+            , irStderr = stderr
+            , irTheme = noColorTheme
+            , irOptions = plainInteractiveOptions
+            , irTerminalWidth = 130
+            , irIsTty = False
+            , irHasRenderedContent = hasRendered
+            , irSpinner = spinnerRef
+            , irSpinnerThread = spinnerThreadRef
+            , irTimingState = timingStateRef
+            , irTimingThread = timingThreadRef
+            }
 
 -- | Create a test StackEvent with the given fields.
 mkEvent :: Text -> Text -> Text -> StackStatus -> Maybe UTCTime -> StackEvent
-mkEvent eid logId rtype status mTs = StackEvent
-  { seEventId              = eid
-  , seStackId              = "arn:stack"
-  , seStackName            = "test-stack"
-  , seLogicalResourceId    = logId
-  , sePhysicalResourceId   = Nothing
-  , seResourceType         = rtype
-  , seTimestamp            = mTs
-  , seResourceStatus       = status
-  , seResourceStatusReason = Nothing
-  , seResourceProperties   = Nothing
-  , seClientRequestToken   = Nothing
-  }
+mkEvent eid logId rtype status mTs =
+    StackEvent
+        { seEventId = eid
+        , seStackId = "arn:stack"
+        , seStackName = "test-stack"
+        , seLogicalResourceId = logId
+        , sePhysicalResourceId = Nothing
+        , seResourceType = rtype
+        , seTimestamp = mTs
+        , seResourceStatus = status
+        , seResourceStatusReason = Nothing
+        , seResourceProperties = Nothing
+        , seClientRequestToken = Nothing
+        }
 
 ------------------------------------------------------------------------
 -- Test data builders
 ------------------------------------------------------------------------
 
 testTokenInfo :: TokenInfo
-testTokenInfo = TokenInfo
-  { tiValue = "tok-abc123"
-  , tiSource = AutoGenerated
-  , tiOperationId = "op-001"
-  }
+testTokenInfo =
+    TokenInfo
+        { tiValue = "tok-abc123"
+        , tiSource = AutoGenerated
+        , tiOperationId = "op-001"
+        }
 
 testStackDef :: StackDefinition
-testStackDef = StackDefinition
-  { sdName = "my-stack"
-  , sdStacksetName = Nothing
-  , sdDescription = Just "Test stack"
-  , sdStatus = CreateComplete
-  , sdStatusReason = Nothing
-  , sdCapabilities = ["CAPABILITY_IAM"]
-  , sdServiceRole = Nothing
-  , sdTags = Map.fromList [("Environment", "production")]
-  , sdParameters = Map.fromList [("Env", "prod")]
-  , sdDisableRollback = False
-  , sdTerminationProtection = True
-  , sdCreationTime = Just testTimestamp
-  , sdLastUpdatedTime = Nothing
-  , sdTimeoutInMinutes = Just 30
-  , sdNotificationArns = []
-  , sdStackPolicy = Nothing
-  , sdArn = "arn:aws:cloudformation:us-east-1:123456789:stack/my-stack/guid"
-  , sdConsoleUrl = "https://console.aws.amazon.com/cloudformation/home#/stacks/my-stack"
-  , sdRegion = "us-east-1"
-  }
+testStackDef =
+    StackDefinition
+        { sdName = "my-stack"
+        , sdStacksetName = Nothing
+        , sdDescription = Just "Test stack"
+        , sdStatus = CreateComplete
+        , sdStatusReason = Nothing
+        , sdCapabilities = ["CAPABILITY_IAM"]
+        , sdServiceRole = Nothing
+        , sdTags = Map.fromList [("Environment", "production")]
+        , sdParameters = Map.fromList [("Env", "prod")]
+        , sdDisableRollback = False
+        , sdTerminationProtection = True
+        , sdCreationTime = Just testTimestamp
+        , sdLastUpdatedTime = Nothing
+        , sdTimeoutInMinutes = Just 30
+        , sdNotificationArns = []
+        , sdStackPolicy = Nothing
+        , sdArn = "arn:aws:cloudformation:us-east-1:123456789:stack/my-stack/guid"
+        , sdConsoleUrl = "https://console.aws.amazon.com/cloudformation/home#/stacks/my-stack"
+        , sdRegion = "us-east-1"
+        }
 
 testStackEvent :: StackEvent
-testStackEvent = StackEvent
-  { seEventId = "evt-001"
-  , seStackId = "arn:aws:cloudformation:us-east-1:123456789:stack/my-stack/guid"
-  , seStackName = "my-stack"
-  , seLogicalResourceId = "MyBucket"
-  , sePhysicalResourceId = Just "my-bucket-abc"
-  , seResourceType = "AWS::S3::Bucket"
-  , seTimestamp = Just testTimestamp
-  , seResourceStatus = CreateComplete
-  , seResourceStatusReason = Nothing
-  , seResourceProperties = Nothing
-  , seClientRequestToken = Just "tok-abc123"
-  }
+testStackEvent =
+    StackEvent
+        { seEventId = "evt-001"
+        , seStackId = "arn:aws:cloudformation:us-east-1:123456789:stack/my-stack/guid"
+        , seStackName = "my-stack"
+        , seLogicalResourceId = "MyBucket"
+        , sePhysicalResourceId = Just "my-bucket-abc"
+        , seResourceType = "AWS::S3::Bucket"
+        , seTimestamp = Just testTimestamp
+        , seResourceStatus = CreateComplete
+        , seResourceStatusReason = Nothing
+        , seResourceProperties = Nothing
+        , seClientRequestToken = Just "tok-abc123"
+        }
 
 testEventWithTiming :: StackEventWithTiming
-testEventWithTiming = StackEventWithTiming
-  { sewEvent = testStackEvent
-  , sewDurationSeconds = Just 45
-  }
+testEventWithTiming =
+    StackEventWithTiming
+        { sewEvent = testStackEvent
+        , sewDurationSeconds = Just 45
+        }
 
 testStatusUpdate :: StatusUpdate
-testStatusUpdate = StatusUpdate
-  { suMessage = "Stack creation in progress"
-  , suTimestamp = testTimestamp
-  , suLevel = LevelInfo
-  }
+testStatusUpdate =
+    StatusUpdate
+        { suMessage = "Stack creation in progress"
+        , suTimestamp = testTimestamp
+        , suLevel = LevelInfo
+        }
 
 testCommandResult :: CommandResult
-testCommandResult = CommandResult
-  { crSuccess = True
-  , crElapsedSeconds = 120
-  , crMessage = Just "Stack created successfully"
-  , crExitCode = 0
-  }
+testCommandResult =
+    CommandResult
+        { crSuccess = True
+        , crElapsedSeconds = 120
+        , crMessage = Just "Stack created successfully"
+        , crExitCode = 0
+        }
 
 testStackListEntry :: StackListEntry
-testStackListEntry = StackListEntry
-  { sleStackName = "my-stack"
-  , sleStackStatus = CreateComplete
-  , sleCreationTime = Just testTimestamp
-  , sleLastUpdatedTime = Nothing
-  , sleTags = Map.fromList [("Environment", "production")]
-  , sleStatusReason = Nothing
-  , sleTerminationProtection = True
-  , sleEnvironmentType = Just "production"
-  }
+testStackListEntry =
+    StackListEntry
+        { sleStackName = "my-stack"
+        , sleStackStatus = CreateComplete
+        , sleCreationTime = Just testTimestamp
+        , sleLastUpdatedTime = Nothing
+        , sleTags = Map.fromList [("Environment", "production")]
+        , sleStatusReason = Nothing
+        , sleTerminationProtection = True
+        , sleEnvironmentType = Just "production"
+        }
 
 testErrorInfo :: ErrorInfo
-testErrorInfo = ErrorInfo
-  { eiErrorType = "ValidationError"
-  , eiMessage = "Template format error"
-  , eiTimestamp = testTimestamp
-  , eiSuggestions = ["Check template syntax"]
-  , eiErrorDetails = ErrorGeneric (Just "Invalid YAML")
-  }
+testErrorInfo =
+    ErrorInfo
+        { eiErrorType = "ValidationError"
+        , eiMessage = "Template format error"
+        , eiTimestamp = testTimestamp
+        , eiSuggestions = ["Check template syntax"]
+        , eiErrorDetails = ErrorGeneric (Just "Invalid YAML")
+        }
 
 testAbsentInfo :: StackAbsentInfo
-testAbsentInfo = StackAbsentInfo
-  { saiStackName = "missing-stack"
-  , saiEnvironment = "development"
-  , saiRegion = "us-west-2"
-  , saiAccount = "123456789012"
-  , saiAuthArn = "arn:aws:iam::123456789012:user/dev"
-  }
+testAbsentInfo =
+    StackAbsentInfo
+        { saiStackName = "missing-stack"
+        , saiEnvironment = "development"
+        , saiRegion = "us-west-2"
+        , saiAccount = "123456789012"
+        , saiAuthArn = "arn:aws:iam::123456789012:user/dev"
+        }
 
 testCommandMetadata :: CommandMetadata
-testCommandMetadata = CommandMetadata
-  { cmEnvironment       = "development"
-  , cmRegion            = "us-east-1"
-  , cmProfile           = Just "dev-profile"
-  , cmCliArguments      = Map.fromList [("stack-name", "my-stack")]
-  , cmIamServiceRole    = Nothing
-  , cmCurrentIamPrincipal = "arn:aws:iam::123456789012:user/dev"
-  , cmCredentialSource  = "environment"
-  , cmVersion           = "0.1.0"
-  , cmPrimaryToken      = testTokenInfo
-  , cmDerivedTokens     = []
-  }
+testCommandMetadata =
+    CommandMetadata
+        { cmEnvironment = "development"
+        , cmRegion = "us-east-1"
+        , cmProfile = Just "dev-profile"
+        , cmCliArguments = Map.fromList [("stack-name", "my-stack")]
+        , cmIamServiceRole = Nothing
+        , cmCurrentIamPrincipal = "arn:aws:iam::123456789012:user/dev"
+        , cmCredentialSource = "environment"
+        , cmVersion = "0.1.0"
+        , cmPrimaryToken = testTokenInfo
+        , cmDerivedTokens = []
+        }
 
 testStackEventsDisplay :: StackEventsDisplay
-testStackEventsDisplay = StackEventsDisplay
-  { sedTitle     = "Recent Events"
-  , sedEvents    = [testEventWithTiming]
-  , sedMaxEvents = Just 25
-  , sedTruncated = Nothing
-  }
+testStackEventsDisplay =
+    StackEventsDisplay
+        { sedTitle = "Recent Events"
+        , sedEvents = [testEventWithTiming]
+        , sedMaxEvents = Just 25
+        , sedTruncated = Nothing
+        }
 
 testStackContents :: StackContents
-testStackContents = StackContents
-  { scResources = [StackResourceInfo
-      { sriLogicalResourceId = "MyBucket"
-      , sriPhysicalResourceId = Just "my-bucket-abc"
-      , sriResourceType = "AWS::S3::Bucket"
-      , sriResourceStatus = CreateComplete
-      , sriResourceStatusReason = Nothing
-      , sriLastUpdated = Just testTimestamp
-      }]
-  , scOutputs = [StackOutputInfo
-      { soiOutputKey = "BucketName"
-      , soiOutputValue = "my-bucket-abc"
-      , soiDescription = Just "The S3 bucket name"
-      , soiExportName = Just "MyBucketName"
-      }]
-  , scExports = []
-  , scCurrentStatus = StackStatusInfo
-      { ssiStatus = CreateComplete
-      , ssiStatusReason = Nothing
-      , ssiTimestamp = Just testTimestamp
-      }
-  , scPendingChangesets = []
-  }
+testStackContents =
+    StackContents
+        { scResources =
+            [ StackResourceInfo
+                { sriLogicalResourceId = "MyBucket"
+                , sriPhysicalResourceId = Just "my-bucket-abc"
+                , sriResourceType = "AWS::S3::Bucket"
+                , sriResourceStatus = CreateComplete
+                , sriResourceStatusReason = Nothing
+                , sriLastUpdated = Just testTimestamp
+                }
+            ]
+        , scOutputs =
+            [ StackOutputInfo
+                { soiOutputKey = "BucketName"
+                , soiOutputValue = "my-bucket-abc"
+                , soiDescription = Just "The S3 bucket name"
+                , soiExportName = Just "MyBucketName"
+                }
+            ]
+        , scExports = []
+        , scCurrentStatus =
+            StackStatusInfo
+                { ssiStatus = CreateComplete
+                , ssiStatusReason = Nothing
+                , ssiTimestamp = Just testTimestamp
+                }
+        , scPendingChangesets = []
+        }
 
 testFinalCommandSummary :: FinalCommandSummary
-testFinalCommandSummary = FinalCommandSummary
-  { fcsResult = SummarySuccess
-  , fcsElapsedSeconds = 42
-  }
+testFinalCommandSummary =
+    FinalCommandSummary
+        { fcsResult = SummarySuccess
+        , fcsElapsedSeconds = 42
+        }
 
 testStackListDisplay :: StackListDisplay
-testStackListDisplay = StackListDisplay
-  { sldStacks = [testStackListEntry]
-  , sldShowTags = True
-  , sldFiltersApplied = []
-  , sldColumns = [ColName, ColStatus, ColTags]
-  , sldQueryMode = False
-  }
+testStackListDisplay =
+    StackListDisplay
+        { sldStacks = [testStackListEntry]
+        , sldShowTags = True
+        , sldFiltersApplied = []
+        , sldColumns = [ColName, ColStatus, ColTags]
+        , sldQueryMode = False
+        }
 
 testChangeSetResult :: ChangeSetCreationResult
-testChangeSetResult = ChangeSetCreationResult
-  { csrChangesetName = "changeset-awesome-lion"
-  , csrStackName = "my-stack"
-  , csrChangesetType = "UPDATE"
-  , csrStatus = "CREATE_COMPLETE"
-  , csrConsoleUrl = "https://console.aws.amazon.com/cloudformation/home#/stacks/changesets/details?stackId=my-stack&changeSetId=changeset-awesome-lion"
-  , csrHasChanges = True
-  , csrPendingChangesets = []
-  , csrNextSteps = ["Execute the changeset to apply changes"]
-  }
+testChangeSetResult =
+    ChangeSetCreationResult
+        { csrChangesetName = "changeset-awesome-lion"
+        , csrStackName = "my-stack"
+        , csrChangesetType = "UPDATE"
+        , csrStatus = "CREATE_COMPLETE"
+        , csrConsoleUrl = "https://console.aws.amazon.com/cloudformation/home#/stacks/changesets/details?stackId=my-stack&changeSetId=changeset-awesome-lion"
+        , csrHasChanges = True
+        , csrPendingChangesets = []
+        , csrNextSteps = ["Execute the changeset to apply changes"]
+        }
 
 testStackDrift :: StackDrift
-testStackDrift = StackDrift
-  { sdrDriftedResources = [DriftedResource
-      { drLogicalResourceId = "MyBucket"
-      , drPhysicalResourceId = "my-bucket-abc"
-      , drResourceType = "AWS::S3::Bucket"
-      , drDriftStatus = "MODIFIED"
-      , drPropertyDifferences = [PropertyDifference
-          { pdPropertyPath = "/VersioningConfiguration/Status"
-          , pdExpectedValue = Just "Enabled"
-          , pdActualValue = Just "Suspended"
-          , pdDifferenceType = Just "NOT_EQUAL"
-          }]
-      }]
-  }
+testStackDrift =
+    StackDrift
+        { sdrDriftedResources =
+            [ DriftedResource
+                { drLogicalResourceId = "MyBucket"
+                , drPhysicalResourceId = "my-bucket-abc"
+                , drResourceType = "AWS::S3::Bucket"
+                , drDriftStatus = "MODIFIED"
+                , drPropertyDifferences =
+                    [ PropertyDifference
+                        { pdPropertyPath = "/VersioningConfiguration/Status"
+                        , pdExpectedValue = Just "Enabled"
+                        , pdActualValue = Just "Suspended"
+                        , pdDifferenceType = Just "NOT_EQUAL"
+                        }
+                    ]
+                }
+            ]
+        }
 
 testOperationComplete :: OperationCompleteInfo
-testOperationComplete = OperationCompleteInfo
-  { ociElapsedSeconds = 120
-  , ociOperationStartTime = testTimestamp
-  , ociSkipRemainingSections = False
-  }
+testOperationComplete =
+    OperationCompleteInfo
+        { ociElapsedSeconds = 120
+        , ociOperationStartTime = testTimestamp
+        , ociSkipRemainingSections = False
+        }
 
 testInactivityTimeout :: InactivityTimeoutInfo
-testInactivityTimeout = InactivityTimeoutInfo
-  { itiTimeoutSeconds = 180
-  , itiElapsedSeconds = 200
-  , itiOperationStartTime = testTimestamp
-  }
+testInactivityTimeout =
+    InactivityTimeoutInfo
+        { itiTimeoutSeconds = 180
+        , itiElapsedSeconds = 200
+        , itiOperationStartTime = testTimestamp
+        }
 
 testConfirmationRequest :: ConfirmationRequest
-testConfirmationRequest = ConfirmationRequest
-  { cfrMessage = "Are you sure you want to delete my-stack?"
-  , cfrKey = Just "yes"
-  }
+testConfirmationRequest =
+    ConfirmationRequest
+        { cfrMessage = "Are you sure you want to delete my-stack?"
+        , cfrKey = Just "yes"
+        }
 
 testStackChangeDetails :: StackChangeDetails
-testStackChangeDetails = StackChangeDetails
-  { scdChangeType = ChangeCreate
-  , scdStackName = "my-stack"
-  }
+testStackChangeDetails =
+    StackChangeDetails
+        { scdChangeType = ChangeCreate
+        , scdStackName = "my-stack"
+        }
 
 testCostEstimate :: CostEstimate
-testCostEstimate = CostEstimate
-  { ceInfo = CostEstimateInfo
-      { ceiUrl = "https://calculator.aws/estimate?id=abc123"
-      , ceiStackName = Just "my-stack"
-      , ceiTemplateFile = Just "template.yaml"
-      }
-  }
+testCostEstimate =
+    CostEstimate
+        { ceInfo =
+            CostEstimateInfo
+                { ceiUrl = "https://calculator.aws/estimate?id=abc123"
+                , ceiStackName = Just "my-stack"
+                , ceiTemplateFile = Just "template.yaml"
+                }
+        }
 
 testStackTemplate :: StackTemplate
-testStackTemplate = StackTemplate
-  { stStderrLines = ["Fetching template for my-stack..."]
-  , stTemplateBody = "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  MyBucket:\n    Type: AWS::S3::Bucket\n"
-  }
+testStackTemplate =
+    StackTemplate
+        { stStderrLines = ["Fetching template for my-stack..."]
+        , stTemplateBody = "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  MyBucket:\n    Type: AWS::S3::Bucket\n"
+        }
 
 testApprovalRequestResult :: ApprovalRequestResult
-testApprovalRequestResult = ApprovalRequestResult
-  { arrTemplateLocation = "s3://templates/my-stack/template.yaml"
-  , arrPendingLocation = "s3://templates/my-stack/pending.yaml"
-  , arrAlreadyApproved = False
-  , arrNextSteps = ["Review template", "Approve or reject"]
-  }
+testApprovalRequestResult =
+    ApprovalRequestResult
+        { arrTemplateLocation = "s3://templates/my-stack/template.yaml"
+        , arrPendingLocation = "s3://templates/my-stack/pending.yaml"
+        , arrAlreadyApproved = False
+        , arrNextSteps = ["Review template", "Approve or reject"]
+        }
 
 testTemplateValidation :: TemplateValidation
-testTemplateValidation = TemplateValidation
-  { tvEnabled = True
-  , tvErrors = []
-  , tvWarnings = ["Parameter Env has no default value"]
-  }
+testTemplateValidation =
+    TemplateValidation
+        { tvEnabled = True
+        , tvErrors = []
+        , tvWarnings = ["Parameter Env has no default value"]
+        }
 
 testApprovalStatus :: ApprovalStatus
-testApprovalStatus = ApprovalStatus
-  { apsPendingExists = True
-  , apsAlreadyApproved = False
-  , apsPendingLocation = "s3://templates/my-stack/pending.yaml"
-  , apsApprovedLocation = Nothing
-  }
+testApprovalStatus =
+    ApprovalStatus
+        { apsPendingExists = True
+        , apsAlreadyApproved = False
+        , apsPendingLocation = "s3://templates/my-stack/pending.yaml"
+        , apsApprovedLocation = Nothing
+        }
 
 testTemplateDiff :: TemplateDiff
-testTemplateDiff = TemplateDiff
-  { tdDiffOutput = "--- a/template.yaml\n+++ b/template.yaml\n@@ -1,3 +1,3 @@\n Resources:\n   MyBucket:\n-    Type: AWS::S3::Bucket\n+    Type: AWS::S3::Bucket\n+    Properties:\n+      VersioningConfiguration:\n+        Status: Enabled\n"
-  , tdContextLines = 3
-  , tdHasChanges = True
-  }
+testTemplateDiff =
+    TemplateDiff
+        { tdDiffOutput = "--- a/template.yaml\n+++ b/template.yaml\n@@ -1,3 +1,3 @@\n Resources:\n   MyBucket:\n-    Type: AWS::S3::Bucket\n+    Type: AWS::S3::Bucket\n+    Properties:\n+      VersioningConfiguration:\n+        Status: Enabled\n"
+        , tdContextLines = 3
+        , tdHasChanges = True
+        }
 
 testApprovalResult :: ApprovalResult
-testApprovalResult = ApprovalResult
-  { arApproved = True
-  , arApprovedLocation = Just "s3://templates/my-stack/approved.yaml"
-  , arLatestLocation = Just "s3://templates/my-stack/template.yaml"
-  , arCleanupCompleted = True
-  }
+testApprovalResult =
+    ApprovalResult
+        { arApproved = True
+        , arApprovedLocation = Just "s3://templates/my-stack/approved.yaml"
+        , arLatestLocation = Just "s3://templates/my-stack/template.yaml"
+        , arCleanupCompleted = True
+        }
 
 testRawOutput :: Text
 testRawOutput = "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n"
@@ -421,62 +465,62 @@ testRawOutput = "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n"
 
 allTestOutputData :: [OutputData]
 allTestOutputData =
-  [ OdCommandMetadata testCommandMetadata
-  , OdStackDefinition testStackDef True
-  , OdStackDefinition testStackDef False
-  , OdStackEvents testStackEventsDisplay
-  , OdStackContents testStackContents
-  , OdStatusUpdate testStatusUpdate
-  , OdCommandResult testCommandResult
-  , OdFinalCommandSummary testFinalCommandSummary
-  , OdStackList testStackListDisplay
-  , OdChangeSetResult testChangeSetResult
-  , OdStackDrift testStackDrift
-  , OdError testErrorInfo
-  , OdTokenInfo testTokenInfo
-  , OdNewStackEvents [testEventWithTiming]
-  , OdOperationComplete testOperationComplete
-  , OdInactivityTimeout testInactivityTimeout
-  , OdConfirmationPrompt testConfirmationRequest
-  , OdStackChangeDetails testStackChangeDetails
-  , OdStackAbsentInfo testAbsentInfo
-  , OdCostEstimate testCostEstimate
-  , OdStackTemplate testStackTemplate
-  , OdApprovalRequestResult testApprovalRequestResult
-  , OdTemplateValidation testTemplateValidation
-  , OdApprovalStatus testApprovalStatus
-  , OdTemplateDiff testTemplateDiff
-  , OdApprovalResult testApprovalResult
-  , OdPollingStarted "Loading live events..."
-  , OdRawOutput testRawOutput
-  ]
+    [ OdCommandMetadata testCommandMetadata
+    , OdStackDefinition testStackDef True
+    , OdStackDefinition testStackDef False
+    , OdStackEvents testStackEventsDisplay
+    , OdStackContents testStackContents
+    , OdStatusUpdate testStatusUpdate
+    , OdCommandResult testCommandResult
+    , OdFinalCommandSummary testFinalCommandSummary
+    , OdStackList testStackListDisplay
+    , OdChangeSetResult testChangeSetResult
+    , OdStackDrift testStackDrift
+    , OdError testErrorInfo
+    , OdTokenInfo testTokenInfo
+    , OdNewStackEvents [testEventWithTiming]
+    , OdOperationComplete testOperationComplete
+    , OdInactivityTimeout testInactivityTimeout
+    , OdConfirmationPrompt testConfirmationRequest
+    , OdStackChangeDetails testStackChangeDetails
+    , OdStackAbsentInfo testAbsentInfo
+    , OdCostEstimate testCostEstimate
+    , OdStackTemplate testStackTemplate
+    , OdApprovalRequestResult testApprovalRequestResult
+    , OdTemplateValidation testTemplateValidation
+    , OdApprovalStatus testApprovalStatus
+    , OdTemplateDiff testTemplateDiff
+    , OdApprovalResult testApprovalResult
+    , OdPollingStarted "Loading live events..."
+    , OdRawOutput testRawOutput
+    ]
 
 -- | Extract constructor name from OutputData for sequence testing
 odConstructorName :: OutputData -> String
-odConstructorName (OdCommandMetadata _)         = "CommandMetadata"
-odConstructorName (OdStackDefinition _ _)       = "StackDefinition"
-odConstructorName (OdStackEvents _)             = "StackEvents"
-odConstructorName (OdStackContents _)           = "StackContents"
-odConstructorName (OdStatusUpdate _)            = "StatusUpdate"
-odConstructorName (OdCommandResult _)           = "CommandResult"
-odConstructorName (OdFinalCommandSummary _)     = "FinalCommandSummary"
-odConstructorName (OdStackList _)               = "StackList"
-odConstructorName (OdChangeSetResult _)         = "ChangeSetResult"
-odConstructorName (OdStackDrift _)              = "StackDrift"
-odConstructorName (OdError _)                   = "Error"
-odConstructorName (OdTokenInfo _)               = "TokenInfo"
-odConstructorName (OdNewStackEvents _)          = "NewStackEvents"
-odConstructorName (OdOperationComplete _)       = "OperationComplete"
-odConstructorName (OdInactivityTimeout _)       = "InactivityTimeout"
-odConstructorName (OdConfirmationPrompt _)      = "ConfirmationPrompt"
-odConstructorName (OdStackChangeDetails _)      = "StackChangeDetails"
-odConstructorName (OdStackAbsentInfo _)         = "StackAbsentInfo"
-odConstructorName (OdCostEstimate _)            = "CostEstimate"
-odConstructorName (OdStackTemplate _)           = "StackTemplate"
-odConstructorName (OdApprovalRequestResult _)   = "ApprovalRequestResult"
-odConstructorName (OdTemplateValidation _)      = "TemplateValidation"
-odConstructorName (OdApprovalStatus _)          = "ApprovalStatus"
-odConstructorName (OdTemplateDiff _)            = "TemplateDiff"
-odConstructorName (OdApprovalResult _)          = "ApprovalResult"
-odConstructorName (OdPollingStarted _)          = "PollingStarted"
-odConstructorName (OdRawOutput _)               = "RawOutput"
+odConstructorName (OdCommandMetadata _) = "CommandMetadata"
+odConstructorName (OdStackDefinition _ _) = "StackDefinition"
+odConstructorName (OdStackEvents _) = "StackEvents"
+odConstructorName (OdStackContents _) = "StackContents"
+odConstructorName (OdStatusUpdate _) = "StatusUpdate"
+odConstructorName (OdCommandResult _) = "CommandResult"
+odConstructorName (OdFinalCommandSummary _) = "FinalCommandSummary"
+odConstructorName (OdStackList _) = "StackList"
+odConstructorName (OdChangeSetResult _) = "ChangeSetResult"
+odConstructorName (OdStackDrift _) = "StackDrift"
+odConstructorName (OdError _) = "Error"
+odConstructorName (OdTokenInfo _) = "TokenInfo"
+odConstructorName (OdNewStackEvents _) = "NewStackEvents"
+odConstructorName (OdOperationComplete _) = "OperationComplete"
+odConstructorName (OdInactivityTimeout _) = "InactivityTimeout"
+odConstructorName (OdConfirmationPrompt _) = "ConfirmationPrompt"
+odConstructorName (OdStackChangeDetails _) = "StackChangeDetails"
+odConstructorName (OdStackAbsentInfo _) = "StackAbsentInfo"
+odConstructorName (OdCostEstimate _) = "CostEstimate"
+odConstructorName (OdStackTemplate _) = "StackTemplate"
+odConstructorName (OdApprovalRequestResult _) = "ApprovalRequestResult"
+odConstructorName (OdTemplateValidation _) = "TemplateValidation"
+odConstructorName (OdApprovalStatus _) = "ApprovalStatus"
+odConstructorName (OdTemplateDiff _) = "TemplateDiff"
+odConstructorName (OdApprovalResult _) = "ApprovalResult"
+odConstructorName (OdPollingStarted _) = "PollingStarted"
+odConstructorName (OdRawOutput _) = "RawOutput"

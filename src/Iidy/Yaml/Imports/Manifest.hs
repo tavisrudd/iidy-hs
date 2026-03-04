@@ -1,18 +1,18 @@
-module Iidy.Yaml.Imports.Manifest
-  ( ImportManifest
-  , emptyManifest
-  , addRecord
-  , getRecords
-  , ImportStack
-  , emptyStack
-  , pushImport
-  , popImport
-  ) where
+module Iidy.Yaml.Imports.Manifest (
+    ImportManifest,
+    emptyManifest,
+    addRecord,
+    getRecords,
+    ImportStack,
+    emptyStack,
+    pushImport,
+    popImport,
+) where
 
 import Data.Set (Set)
-import qualified Data.Set as Set
+import Data.Set qualified as Set
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 import Iidy.Yaml.Imports.Types (ImportRecord)
 
 ------------------------------------------------------------------------
@@ -20,7 +20,7 @@ import Iidy.Yaml.Imports.Types (ImportRecord)
 ------------------------------------------------------------------------
 
 newtype ImportManifest = ImportManifest [ImportRecord]
-  deriving stock (Show)
+    deriving stock (Show)
 
 emptyManifest :: ImportManifest
 emptyManifest = ImportManifest []
@@ -36,28 +36,32 @@ getRecords (ImportManifest rs) = reverse rs
 ------------------------------------------------------------------------
 
 data ImportStack = ImportStack
-  { isActive :: !(Set Text)
-  , isChain  :: ![Text]
-  } deriving stock (Show)
+    { isActive :: !(Set Text)
+    , isChain :: ![Text]
+    }
+    deriving stock (Show)
 
 emptyStack :: ImportStack
 emptyStack = ImportStack Set.empty []
 
 pushImport :: Text -> ImportStack -> Either Text ImportStack
 pushImport loc stack
-  | Set.member loc (isActive stack) =
-      Left $ "Circular import detected: "
-        <> T.intercalate " → " (reverse (loc : isChain stack))
-  | otherwise =
-      Right $ ImportStack
-        { isActive = Set.insert loc (isActive stack)
-        , isChain  = loc : isChain stack
-        }
+    | Set.member loc (isActive stack) =
+        Left $
+            "Circular import detected: "
+                <> T.intercalate " → " (reverse (loc : isChain stack))
+    | otherwise =
+        Right $
+            ImportStack
+                { isActive = Set.insert loc (isActive stack)
+                , isChain = loc : isChain stack
+                }
 
 popImport :: ImportStack -> ImportStack
 popImport stack = case isChain stack of
-  [] -> stack
-  (loc : rest) -> ImportStack
-    { isActive = Set.delete loc (isActive stack)
-    , isChain  = rest
-    }
+    [] -> stack
+    (loc : rest) ->
+        ImportStack
+            { isActive = Set.delete loc (isActive stack)
+            , isChain = rest
+            }

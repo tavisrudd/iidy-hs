@@ -1,24 +1,24 @@
-module Iidy.Yaml.PathTracker
-  ( PathTracker
-  , emptyTracker
-  , pushSegment
-  , popSegment
-  , currentPath
-  , trackerLen
-  , trackerIsEmpty
-  , trackerSegments
-  , clearTracker
-  ) where
+module Iidy.Yaml.PathTracker (
+    PathTracker,
+    emptyTracker,
+    pushSegment,
+    popSegment,
+    currentPath,
+    trackerLen,
+    trackerIsEmpty,
+    trackerSegments,
+    clearTracker,
+) where
 
 import Data.Foldable (toList)
 import Data.Sequence (Seq, (|>))
-import qualified Data.Sequence as Seq
+import Data.Sequence qualified as Seq
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 
 -- | Tracks the current path through a YAML document during processing
 newtype PathTracker = PathTracker (Seq Text)
-  deriving stock (Show, Eq)
+    deriving stock (Show, Eq)
 
 emptyTracker :: PathTracker
 emptyTracker = PathTracker Seq.empty
@@ -28,8 +28,8 @@ pushSegment seg (PathTracker segs) = PathTracker (segs |> seg)
 
 popSegment :: PathTracker -> (Maybe Text, PathTracker)
 popSegment (PathTracker segs) = case Seq.viewr segs of
-  Seq.EmptyR     -> (Nothing, PathTracker Seq.empty)
-  rest Seq.:> x  -> (Just x, PathTracker rest)
+    Seq.EmptyR -> (Nothing, PathTracker Seq.empty)
+    rest Seq.:> x -> (Just x, PathTracker rest)
 
 currentPath :: PathTracker -> Text
 currentPath (PathTracker segs) = T.intercalate "." (toList segs)

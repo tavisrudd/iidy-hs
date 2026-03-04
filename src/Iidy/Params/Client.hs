@@ -1,76 +1,83 @@
 {-# LANGUAGE OverloadedRecordDot #-}
--- | SSM Parameter Store client operations.
---
--- Implements get, set, get-by-path, and get-history operations against
--- AWS SSM Parameter Store. All operations use an existing amazonka Env
--- and return Either Text results for uniform error handling.
---
--- Supports @--format simple|json|yaml@ for get, get-by-path, and get-history.
-module Iidy.Params.Client
-  ( -- * Parameter operations
-    fetchParam
-  , paramGet
-  , paramSet
-  , paramGetByPath
-  , paramGetHistory
-  , GetByPathResult(..)
+
+{- | SSM Parameter Store client operations.
+
+Implements get, set, get-by-path, and get-history operations against
+AWS SSM Parameter Store. All operations use an existing amazonka Env
+and return Either Text results for uniform error handling.
+
+Supports @--format simple|json|yaml@ for get, get-by-path, and get-history.
+-}
+module Iidy.Params.Client (
+    -- * Parameter operations
+    fetchParam,
+    paramGet,
+    paramSet,
+    paramGetByPath,
+    paramGetHistory,
+    GetByPathResult (..),
+
     -- * Output types (exported for testing)
-  , ParamOutput(..)
-  , ParamHistoryOutput(..)
-  , SimpleHistory(..)
-  , SimpleHistoryCurrent(..)
-  , SimpleHistoryPrevious(..)
-  , FullHistory(..)
+    ParamOutput (..),
+    ParamHistoryOutput (..),
+    SimpleHistory (..),
+    SimpleHistoryCurrent (..),
+    SimpleHistoryPrevious (..),
+    FullHistory (..),
+
     -- * Pure helpers (exported for testing)
-  , paramTypeToSsm
-  , formatParam
-  , formatHistoryEntry
-  , paramOutputFromParameter
-  , paramHistoryOutputFromHistory
-  , formatAsJson
-  , formatAsYaml
-  , messageTag
-  ) where
+    paramTypeToSsm,
+    formatParam,
+    formatHistoryEntry,
+    paramOutputFromParameter,
+    paramHistoryOutputFromHistory,
+    formatAsJson,
+    formatAsYaml,
+    messageTag,
+) where
 
 import Control.Exception (try)
 import Control.Monad.Trans.Resource (runResourceT)
-import Data.Aeson (ToJSON(..), Value(..), (.=), object)
-import Data.Aeson.Encode.Pretty (encodePretty', defConfig, confIndent, Indent(..))
-import qualified Data.Aeson.Key as Key
-import qualified Data.Aeson.KeyMap as KM
+import Data.Aeson (ToJSON (..), Value (..), object, (.=))
+import Data.Aeson.Encode.Pretty (Indent (..), confIndent, defConfig, encodePretty')
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KM
+import Data.ByteString.Lazy qualified as LBS
 import Data.Conduit (runConduit, (.|))
-import qualified Data.Conduit.List as CL
-import qualified Data.ByteString.Lazy as LBS
-import qualified Data.List as List
-import qualified Data.List.NonEmpty as NE
-import qualified Data.Map.Strict as Map
+import Data.Conduit.List qualified as CL
+import Data.List qualified as List
+import Data.List.NonEmpty qualified as NE
+import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes, fromMaybe)
-import Data.Scientific (isInteger, coefficient)
 import Data.Ord (comparing)
+import Data.Scientific (coefficient, isInteger)
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 import Data.Text.Encoding (decodeUtf8)
 import Data.Time (UTCTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Lens.Micro ((^.))
 
-import qualified Amazonka
-import qualified Amazonka.SSM as SSM
-import qualified Amazonka.SSM.GetParameter as GP
-import qualified Amazonka.SSM.PutParameter as PP
-import qualified Amazonka.SSM.GetParametersByPath as GPBP
-import qualified Amazonka.SSM.GetParameterHistory as GPH
-import qualified Amazonka.SSM.ListTagsForResource as LTR
-import qualified Amazonka.SSM.Types.Parameter as SSMP
-import qualified Amazonka.SSM.Types.ParameterHistory as SSMPH
-import qualified Amazonka.SSM.Types.ParameterType as SSMPT
-import qualified Amazonka.SSM.Types.ResourceTypeForTagging as RTT
-import qualified Amazonka.SSM.Types.Tag as SSMT
+import Amazonka qualified
+import Amazonka.SSM qualified as SSM
+import Amazonka.SSM.GetParameter qualified as GP
+import Amazonka.SSM.GetParameterHistory qualified as GPH
+import Amazonka.SSM.GetParametersByPath qualified as GPBP
+import Amazonka.SSM.ListTagsForResource qualified as LTR
+import Amazonka.SSM.PutParameter qualified as PP
+import Amazonka.SSM.Types.Parameter qualified as SSMP
+import Amazonka.SSM.Types.ParameterHistory qualified as SSMPH
+import Amazonka.SSM.Types.ParameterType qualified as SSMPT
+import Amazonka.SSM.Types.ResourceTypeForTagging qualified as RTT
+import Amazonka.SSM.Types.Tag qualified as SSMT
 
-import Iidy.Cli
-  ( ParamFormat(..), ParamGetArgs(..), ParamSetArgs(..)
-  , ParamGetByPathArgs(..), ParamType(..)
-  )
+import Iidy.Cli (
+    ParamFormat (..),
+    ParamGetArgs (..),
+    ParamGetByPathArgs (..),
+    ParamSetArgs (..),
+    ParamType (..),
+ )
 
 ------------------------------------------------------------------------
 -- Output data types
@@ -80,110 +87,125 @@ import Iidy.Cli
 messageTag :: Text
 messageTag = "iidy:message"
 
--- | Serializable representation of an SSM parameter for json/yaml output.
--- Field names use PascalCase matching Rust/AWS SDK conventions.
+{- | Serializable representation of an SSM parameter for json/yaml output.
+Field names use PascalCase matching Rust/AWS SDK conventions.
+-}
 data ParamOutput = ParamOutput
-  { poName             :: !(Maybe Text)
-  , poType             :: !(Maybe Text)
-  , poValue            :: !(Maybe Text)
-  , poVersion          :: !(Maybe Integer)
-  , poLastModifiedDate :: !(Maybe Text)
-  , poArn              :: !(Maybe Text)
-  , poDataType         :: !(Maybe Text)
-  , poTags             :: !(Maybe (Map.Map Text Text))
-  } deriving stock (Show, Eq)
+    { poName :: !(Maybe Text)
+    , poType :: !(Maybe Text)
+    , poValue :: !(Maybe Text)
+    , poVersion :: !(Maybe Integer)
+    , poLastModifiedDate :: !(Maybe Text)
+    , poArn :: !(Maybe Text)
+    , poDataType :: !(Maybe Text)
+    , poTags :: !(Maybe (Map.Map Text Text))
+    }
+    deriving stock (Show, Eq)
 
 instance ToJSON ParamOutput where
-  toJSON po = object $
-    [ "Name"             .= poName po
-    , "Type"             .= poType po
-    , "Value"            .= poValue po
-    , "Version"          .= poVersion po
-    , "LastModifiedDate" .= poLastModifiedDate po
-    , "ARN"              .= poArn po
-    , "DataType"         .= poDataType po
-    ] ++ catMaybes [ fmap ("Tags" .=) (poTags po) ]
+    toJSON po =
+        object $
+            [ "Name" .= poName po
+            , "Type" .= poType po
+            , "Value" .= poValue po
+            , "Version" .= poVersion po
+            , "LastModifiedDate" .= poLastModifiedDate po
+            , "ARN" .= poArn po
+            , "DataType" .= poDataType po
+            ]
+                ++ catMaybes [fmap ("Tags" .=) (poTags po)]
 
 -- | Serializable representation of an SSM parameter history entry.
 data ParamHistoryOutput = ParamHistoryOutput
-  { phoName             :: !(Maybe Text)
-  , phoType             :: !(Maybe Text)
-  , phoKeyId            :: !(Maybe Text)
-  , phoLastModifiedDate :: !(Maybe Text)
-  , phoLastModifiedUser :: !(Maybe Text)
-  , phoDescription      :: !(Maybe Text)
-  , phoValue            :: !(Maybe Text)
-  , phoVersion          :: !(Maybe Integer)
-  , phoDataType         :: !(Maybe Text)
-  , phoTags             :: !(Maybe (Map.Map Text Text))
-  } deriving stock (Show, Eq)
+    { phoName :: !(Maybe Text)
+    , phoType :: !(Maybe Text)
+    , phoKeyId :: !(Maybe Text)
+    , phoLastModifiedDate :: !(Maybe Text)
+    , phoLastModifiedUser :: !(Maybe Text)
+    , phoDescription :: !(Maybe Text)
+    , phoValue :: !(Maybe Text)
+    , phoVersion :: !(Maybe Integer)
+    , phoDataType :: !(Maybe Text)
+    , phoTags :: !(Maybe (Map.Map Text Text))
+    }
+    deriving stock (Show, Eq)
 
 instance ToJSON ParamHistoryOutput where
-  toJSON pho = object $
-    [ "Name"             .= phoName pho
-    , "Type"             .= phoType pho
-    , "LastModifiedDate" .= phoLastModifiedDate pho
-    , "LastModifiedUser" .= phoLastModifiedUser pho
-    , "Value"            .= phoValue pho
-    , "Version"          .= phoVersion pho
-    , "DataType"         .= phoDataType pho
-    ] ++ catMaybes
-    [ fmap ("KeyId" .=) (phoKeyId pho)
-    , fmap ("Description" .=) (phoDescription pho)
-    , fmap ("Tags" .=) (phoTags pho)
-    ]
+    toJSON pho =
+        object $
+            [ "Name" .= phoName pho
+            , "Type" .= phoType pho
+            , "LastModifiedDate" .= phoLastModifiedDate pho
+            , "LastModifiedUser" .= phoLastModifiedUser pho
+            , "Value" .= phoValue pho
+            , "Version" .= phoVersion pho
+            , "DataType" .= phoDataType pho
+            ]
+                ++ catMaybes
+                    [ fmap ("KeyId" .=) (phoKeyId pho)
+                    , fmap ("Description" .=) (phoDescription pho)
+                    , fmap ("Tags" .=) (phoTags pho)
+                    ]
 
 -- | Simple (default) history format: current entry with message, plus previous entries.
 data SimpleHistoryCurrent = SimpleHistoryCurrent
-  { shcValue            :: !(Maybe Text)
-  , shcLastModifiedDate :: !(Maybe Text)
-  , shcLastModifiedUser :: !(Maybe Text)
-  , shcMessage          :: !Text
-  } deriving stock (Show, Eq)
+    { shcValue :: !(Maybe Text)
+    , shcLastModifiedDate :: !(Maybe Text)
+    , shcLastModifiedUser :: !(Maybe Text)
+    , shcMessage :: !Text
+    }
+    deriving stock (Show, Eq)
 
 instance ToJSON SimpleHistoryCurrent where
-  toJSON shc = object
-    [ "Value"            .= shcValue shc
-    , "LastModifiedDate" .= shcLastModifiedDate shc
-    , "LastModifiedUser" .= shcLastModifiedUser shc
-    , "Message"          .= shcMessage shc
-    ]
+    toJSON shc =
+        object
+            [ "Value" .= shcValue shc
+            , "LastModifiedDate" .= shcLastModifiedDate shc
+            , "LastModifiedUser" .= shcLastModifiedUser shc
+            , "Message" .= shcMessage shc
+            ]
 
 data SimpleHistoryPrevious = SimpleHistoryPrevious
-  { shpValue            :: !(Maybe Text)
-  , shpLastModifiedDate :: !(Maybe Text)
-  , shpLastModifiedUser :: !(Maybe Text)
-  } deriving stock (Show, Eq)
+    { shpValue :: !(Maybe Text)
+    , shpLastModifiedDate :: !(Maybe Text)
+    , shpLastModifiedUser :: !(Maybe Text)
+    }
+    deriving stock (Show, Eq)
 
 instance ToJSON SimpleHistoryPrevious where
-  toJSON shp = object
-    [ "Value"            .= shpValue shp
-    , "LastModifiedDate" .= shpLastModifiedDate shp
-    , "LastModifiedUser" .= shpLastModifiedUser shp
-    ]
+    toJSON shp =
+        object
+            [ "Value" .= shpValue shp
+            , "LastModifiedDate" .= shpLastModifiedDate shp
+            , "LastModifiedUser" .= shpLastModifiedUser shp
+            ]
 
 data SimpleHistory = SimpleHistory
-  { shCurrent  :: !SimpleHistoryCurrent
-  , shPrevious :: ![SimpleHistoryPrevious]
-  } deriving stock (Show, Eq)
+    { shCurrent :: !SimpleHistoryCurrent
+    , shPrevious :: ![SimpleHistoryPrevious]
+    }
+    deriving stock (Show, Eq)
 
 instance ToJSON SimpleHistory where
-  toJSON sh = object
-    [ "Current"  .= shCurrent sh
-    , "Previous" .= shPrevious sh
-    ]
+    toJSON sh =
+        object
+            [ "Current" .= shCurrent sh
+            , "Previous" .= shPrevious sh
+            ]
 
 -- | Full history format for json/yaml: all fields, current entry gets tags.
 data FullHistory = FullHistory
-  { fhCurrent  :: !ParamHistoryOutput
-  , fhPrevious :: ![ParamHistoryOutput]
-  } deriving stock (Show, Eq)
+    { fhCurrent :: !ParamHistoryOutput
+    , fhPrevious :: ![ParamHistoryOutput]
+    }
+    deriving stock (Show, Eq)
 
 instance ToJSON FullHistory where
-  toJSON fh = object
-    [ "Current"  .= fhCurrent fh
-    , "Previous" .= fhPrevious fh
-    ]
+    toJSON fh =
+        object
+            [ "Current" .= fhCurrent fh
+            , "Previous" .= fhPrevious fh
+            ]
 
 ------------------------------------------------------------------------
 -- Conversion helpers
@@ -191,39 +213,41 @@ instance ToJSON FullHistory where
 
 -- | Convert an amazonka Parameter to ParamOutput.
 paramOutputFromParameter :: SSM.Parameter -> ParamOutput
-paramOutputFromParameter p = ParamOutput
-  { poName             = Just (p ^. SSMP.parameter_name)
-  , poType             = Just (SSMPT.fromParameterType (p ^. SSMP.parameter_type))
-  , poValue            = Just (p ^. SSMP.parameter_value)
-  , poVersion          = Just (p ^. SSMP.parameter_version)
-  , poLastModifiedDate = fmap formatUtcTime (p ^. SSMP.parameter_lastModifiedDate)
-  , poArn              = p ^. SSMP.parameter_arn
-  , poDataType         = p ^. SSMP.parameter_dataType
-  , poTags             = Nothing
-  }
+paramOutputFromParameter p =
+    ParamOutput
+        { poName = Just (p ^. SSMP.parameter_name)
+        , poType = Just (SSMPT.fromParameterType (p ^. SSMP.parameter_type))
+        , poValue = Just (p ^. SSMP.parameter_value)
+        , poVersion = Just (p ^. SSMP.parameter_version)
+        , poLastModifiedDate = fmap formatUtcTime (p ^. SSMP.parameter_lastModifiedDate)
+        , poArn = p ^. SSMP.parameter_arn
+        , poDataType = p ^. SSMP.parameter_dataType
+        , poTags = Nothing
+        }
 
 -- | Convert an amazonka ParameterHistory to ParamHistoryOutput.
 paramHistoryOutputFromHistory :: SSM.ParameterHistory -> ParamHistoryOutput
-paramHistoryOutputFromHistory ph = ParamHistoryOutput
-  { phoName             = ph ^. SSMPH.parameterHistory_name
-  , phoType             = fmap SSMPT.fromParameterType (ph ^. SSMPH.parameterHistory_type)
-  , phoKeyId            = ph ^. SSMPH.parameterHistory_keyId
-  , phoLastModifiedDate = fmap formatUtcTime (ph ^. SSMPH.parameterHistory_lastModifiedDate)
-  , phoLastModifiedUser = ph ^. SSMPH.parameterHistory_lastModifiedUser
-  , phoDescription      = ph ^. SSMPH.parameterHistory_description
-  , phoValue            = ph ^. SSMPH.parameterHistory_value
-  , phoVersion          = ph ^. SSMPH.parameterHistory_version
-  , phoDataType         = ph ^. SSMPH.parameterHistory_dataType
-  , phoTags             = Nothing
-  }
+paramHistoryOutputFromHistory ph =
+    ParamHistoryOutput
+        { phoName = ph ^. SSMPH.parameterHistory_name
+        , phoType = fmap SSMPT.fromParameterType (ph ^. SSMPH.parameterHistory_type)
+        , phoKeyId = ph ^. SSMPH.parameterHistory_keyId
+        , phoLastModifiedDate = fmap formatUtcTime (ph ^. SSMPH.parameterHistory_lastModifiedDate)
+        , phoLastModifiedUser = ph ^. SSMPH.parameterHistory_lastModifiedUser
+        , phoDescription = ph ^. SSMPH.parameterHistory_description
+        , phoValue = ph ^. SSMPH.parameterHistory_value
+        , phoVersion = ph ^. SSMPH.parameterHistory_version
+        , phoDataType = ph ^. SSMPH.parameterHistory_dataType
+        , phoTags = Nothing
+        }
 
 -- | Attach tags to a ParamOutput.
 withParamTags :: Map.Map Text Text -> ParamOutput -> ParamOutput
-withParamTags tags po = po { poTags = Just tags }
+withParamTags tags po = po{poTags = Just tags}
 
 -- | Attach tags to a ParamHistoryOutput.
 withHistoryTags :: Map.Map Text Text -> ParamHistoryOutput -> ParamHistoryOutput
-withHistoryTags tags pho = pho { phoTags = Just tags }
+withHistoryTags tags pho = pho{phoTags = Just tags}
 
 -- | Format a UTCTime to ISO 8601 string.
 formatUtcTime :: UTCTime -> Text
@@ -234,91 +258,119 @@ formatUtcTime = T.pack . iso8601Show
 ------------------------------------------------------------------------
 
 -- | Serialize a value as pretty-printed JSON text.
-formatAsJson :: ToJSON a => a -> Text
-formatAsJson = decodeUtf8 . LBS.toStrict . encodePretty' (defConfig { confIndent = Spaces 2 })
+formatAsJson :: (ToJSON a) => a -> Text
+formatAsJson = decodeUtf8 . LBS.toStrict . encodePretty' (defConfig{confIndent = Spaces 2})
 
--- | Serialize a value as YAML text.
--- Uses a simple Aeson Value -> YAML conversion since the project
--- uses HsYAML (parser-only) and not the yaml package (which has encode).
-formatAsYaml :: ToJSON a => a -> Text
+{- | Serialize a value as YAML text.
+Uses a simple Aeson Value -> YAML conversion since the project
+uses HsYAML (parser-only) and not the yaml package (which has encode).
+-}
+formatAsYaml :: (ToJSON a) => a -> Text
 formatAsYaml = valueToYaml . toJSON
 
--- | Convert an Aeson Value to YAML text.
--- Produces output compatible with serde_yaml (Rust).
+{- | Convert an Aeson Value to YAML text.
+Produces output compatible with serde_yaml (Rust).
+-}
 valueToYaml :: Value -> Text
 valueToYaml val = "---\n" <> renderYaml 0 val <> "\n"
 
 renderYaml :: Int -> Value -> Text
-renderYaml _ Null          = "null"
-renderYaml _ (Bool True)   = "true"
-renderYaml _ (Bool False)  = "false"
+renderYaml _ Null = "null"
+renderYaml _ (Bool True) = "true"
+renderYaml _ (Bool False) = "false"
 renderYaml _ (Number n)
-  | isInteger n = T.pack (show (coefficient n))
-  | otherwise   = T.pack (show n)
-renderYaml _ (String s)    = yamlQuoteString s
+    | isInteger n = T.pack (show (coefficient n))
+    | otherwise = T.pack (show n)
+renderYaml _ (String s) = yamlQuoteString s
 renderYaml indent (Array arr)
-  | null arr  = "[]"
-  | otherwise =
-      let items = foldMap (\v -> [renderYamlItem indent v]) arr
-      in T.intercalate "\n" items
+    | null arr = "[]"
+    | otherwise =
+        let items = foldMap (\v -> [renderYamlItem indent v]) arr
+         in T.intercalate "\n" items
   where
     renderYamlItem i v =
-      let prefix = T.replicate i " " <> "- "
-      in case v of
-        Object _ -> prefix <> renderYamlObject (i + 2) v True
-        Array _  -> prefix <> renderYaml (i + 2) v
-        _        -> prefix <> renderYaml 0 v
+        let prefix = T.replicate i " " <> "- "
+         in case v of
+                Object _ -> prefix <> renderYamlObject (i + 2) v True
+                Array _ -> prefix <> renderYaml (i + 2) v
+                _ -> prefix <> renderYaml 0 v
 renderYaml indent (Object km)
-  | KM.null km = "{}"
-  | otherwise  = renderYamlObject indent (Object km) False
+    | KM.null km = "{}"
+    | otherwise = renderYamlObject indent (Object km) False
 
 renderYamlObject :: Int -> Value -> Bool -> Text
 renderYamlObject indent (Object km) isInline =
-  let pairs = KM.toList km
-      prefix = T.replicate indent " "
-      renderPair isFirst (k, v) =
-        let keyText = Key.toText k
-            linePrefix = if isFirst && isInline then "" else prefix
-        in case v of
-          Object _ | not (KM.null (asObject v)) ->
-            linePrefix <> keyText <> ":\n" <> renderYaml (indent + 2) v
-          Array _ | not (null (asArray v)) ->
-            linePrefix <> keyText <> ":\n" <> renderYaml (indent + 2) v
-          _ ->
-            linePrefix <> keyText <> ": " <> renderYaml 0 v
-  in case pairs of
-    []     -> "{}"
-    (p:ps) -> T.intercalate "\n"
-                (renderPair True p : map (renderPair False) ps)
+    let pairs = KM.toList km
+        prefix = T.replicate indent " "
+        renderPair isFirst (k, v) =
+            let keyText = Key.toText k
+                linePrefix = if isFirst && isInline then "" else prefix
+             in case v of
+                    Object _
+                        | not (KM.null (asObject v)) ->
+                            linePrefix <> keyText <> ":\n" <> renderYaml (indent + 2) v
+                    Array _
+                        | not (null (asArray v)) ->
+                            linePrefix <> keyText <> ":\n" <> renderYaml (indent + 2) v
+                    _ ->
+                        linePrefix <> keyText <> ": " <> renderYaml 0 v
+     in case pairs of
+            [] -> "{}"
+            (p : ps) ->
+                T.intercalate
+                    "\n"
+                    (renderPair True p : map (renderPair False) ps)
 renderYamlObject _ _ _ = "{}"
 
 asObject :: Value -> KM.KeyMap Value
 asObject (Object km) = km
-asObject _           = KM.empty
+asObject _ = KM.empty
 
 asArray :: Value -> [Value]
 asArray (Array a) = foldr (:) [] a
-asArray _         = []
+asArray _ = []
 
 -- | Quote a YAML string if needed.
 yamlQuoteString :: Text -> Text
 yamlQuoteString s
-  | T.null s                    = "''"
-  | needsQuoting s              = "'" <> T.replace "'" "''" s <> "'"
-  | otherwise                   = s
+    | T.null s = "''"
+    | needsQuoting s = "'" <> T.replace "'" "''" s <> "'"
+    | otherwise = s
   where
     needsQuoting t =
-      let c = T.head t
-      in  c == '{' || c == '[' || c == '&' || c == '*'
-       || c == '?' || c == '|' || c == '>' || c == '!'
-       || c == '%' || c == '@' || c == '`' || c == '"' || c == '\''
-       || c == '#' || c == ','
-       || T.elem ':' t || T.elem '\n' t
-       || t == "true" || t == "false" || t == "null"
-       || t == "True" || t == "False" || t == "Null"
-       || t == "yes" || t == "no" || t == "Yes" || t == "No"
-       || t == "on" || t == "off" || t == "On" || t == "Off"
-       || t == "~"
+        let c = T.head t
+         in c == '{'
+                || c == '['
+                || c == '&'
+                || c == '*'
+                || c == '?'
+                || c == '|'
+                || c == '>'
+                || c == '!'
+                || c == '%'
+                || c == '@'
+                || c == '`'
+                || c == '"'
+                || c == '\''
+                || c == '#'
+                || c == ','
+                || T.elem ':' t
+                || T.elem '\n' t
+                || t == "true"
+                || t == "false"
+                || t == "null"
+                || t == "True"
+                || t == "False"
+                || t == "Null"
+                || t == "yes"
+                || t == "no"
+                || t == "Yes"
+                || t == "No"
+                || t == "on"
+                || t == "off"
+                || t == "On"
+                || t == "Off"
+                || t == "~"
 
 ------------------------------------------------------------------------
 -- ListTagsForResource
@@ -327,98 +379,108 @@ yamlQuoteString s
 -- | Fetch tags for an SSM parameter as a Map.
 listParamTags :: Amazonka.Env -> Text -> IO (Either Text (Map.Map Text Text))
 listParamTags awsEnv paramName = do
-  result <- try @Amazonka.Error $ runResourceT $ do
-    let req = LTR.newListTagsForResource
-                RTT.ResourceTypeForTagging_Parameter
-                paramName
-    resp <- Amazonka.send awsEnv req
-    let tags = fromMaybe [] resp.tagList
-    pure $ Map.fromList
-      [ (t ^. SSMT.tag_key, t ^. SSMT.tag_value) | t <- tags ]
-  case result of
-    Left ex   -> pure $ Left $ "ListTagsForResource error for " <> paramName <> ": " <> T.pack (show ex)
-    Right m   -> pure (Right m)
+    result <- try @Amazonka.Error $ runResourceT $ do
+        let req =
+                LTR.newListTagsForResource
+                    RTT.ResourceTypeForTagging_Parameter
+                    paramName
+        resp <- Amazonka.send awsEnv req
+        let tags = fromMaybe [] resp.tagList
+        pure $
+            Map.fromList
+                [(t ^. SSMT.tag_key, t ^. SSMT.tag_value) | t <- tags]
+    case result of
+        Left ex -> pure $ Left $ "ListTagsForResource error for " <> paramName <> ": " <> T.pack (show ex)
+        Right m -> pure (Right m)
 
 ------------------------------------------------------------------------
 -- paramGet
 ------------------------------------------------------------------------
 
--- | Fetch a single SSM parameter value.
--- Returns Right value on success, Left error message on failure.
--- Exported for use in other modules (e.g. Review).
+{- | Fetch a single SSM parameter value.
+Returns Right value on success, Left error message on failure.
+Exported for use in other modules (e.g. Review).
+-}
 fetchParam :: Amazonka.Env -> Text -> Bool -> IO (Either Text Text)
 fetchParam awsEnv paramName withDecryption = do
-  result <- try @Amazonka.Error $ runResourceT $ do
-    let req = (GP.newGetParameter paramName)
-                { GP.withDecryption = Just withDecryption }
-    resp <- Amazonka.send awsEnv req
-    pure (resp.parameter ^. SSMP.parameter_value)
-  case result of
-    Left ex   -> pure (Left (T.pack (show ex)))
-    Right val -> pure (Right val)
+    result <- try @Amazonka.Error $ runResourceT $ do
+        let req =
+                (GP.newGetParameter paramName)
+                    { GP.withDecryption = Just withDecryption
+                    }
+        resp <- Amazonka.send awsEnv req
+        pure (resp.parameter ^. SSMP.parameter_value)
+    case result of
+        Left ex -> pure (Left (T.pack (show ex)))
+        Right val -> pure (Right val)
 
 -- | Fetch a single SSM parameter (full Parameter object).
 fetchParameter :: Amazonka.Env -> Text -> Bool -> IO (Either Text SSM.Parameter)
 fetchParameter awsEnv paramName withDecryption = do
-  result <- try @Amazonka.Error $ runResourceT $ do
-    let req = (GP.newGetParameter paramName)
-                { GP.withDecryption = Just withDecryption }
-    resp <- Amazonka.send awsEnv req
-    pure resp.parameter
-  case result of
-    Left ex -> pure $ Left $ T.pack (show ex)
-    Right p -> pure (Right p)
+    result <- try @Amazonka.Error $ runResourceT $ do
+        let req =
+                (GP.newGetParameter paramName)
+                    { GP.withDecryption = Just withDecryption
+                    }
+        resp <- Amazonka.send awsEnv req
+        pure resp.parameter
+    case result of
+        Left ex -> pure $ Left $ T.pack (show ex)
+        Right p -> pure (Right p)
 
--- | Get a single SSM parameter, formatted according to --format.
--- For simple: bare value. For json/yaml: full ParamOutput with tags.
+{- | Get a single SSM parameter, formatted according to --format.
+For simple: bare value. For json/yaml: full ParamOutput with tags.
+-}
 paramGet :: Amazonka.Env -> ParamGetArgs -> IO (Either Text Text)
 paramGet awsEnv args = case args.pgaFormat of
-  ParamFormatSimple -> do
-    result <- fetchParam awsEnv args.pgaPath args.pgaDecrypt
-    case result of
-      Left ex  -> pure $ Left $ "SSM GetParameter error for " <> args.pgaPath <> ": " <> ex
-      Right val -> pure (Right val)
-  fmt -> do
-    result <- fetchParameter awsEnv args.pgaPath args.pgaDecrypt
-    case result of
-      Left ex -> pure $ Left $ "SSM GetParameter error for " <> args.pgaPath <> ": " <> ex
-      Right param -> do
-        tagsResult <- listParamTags awsEnv args.pgaPath
-        case tagsResult of
-          Left err -> pure (Left err)
-          Right tags -> do
-            let output = withParamTags tags (paramOutputFromParameter param)
-            pure $ Right $ formatWith fmt output
+    ParamFormatSimple -> do
+        result <- fetchParam awsEnv args.pgaPath args.pgaDecrypt
+        case result of
+            Left ex -> pure $ Left $ "SSM GetParameter error for " <> args.pgaPath <> ": " <> ex
+            Right val -> pure (Right val)
+    fmt -> do
+        result <- fetchParameter awsEnv args.pgaPath args.pgaDecrypt
+        case result of
+            Left ex -> pure $ Left $ "SSM GetParameter error for " <> args.pgaPath <> ": " <> ex
+            Right param -> do
+                tagsResult <- listParamTags awsEnv args.pgaPath
+                case tagsResult of
+                    Left err -> pure (Left err)
+                    Right tags -> do
+                        let output = withParamTags tags (paramOutputFromParameter param)
+                        pure $ Right $ formatWith fmt output
 
 ------------------------------------------------------------------------
 -- paramSet
 ------------------------------------------------------------------------
 
--- | Write a value to SSM Parameter Store.
--- Respects the overwrite flag and type from ParamSetArgs.
--- The type field maps to SSM ParameterType (String, SecureString, StringList).
+{- | Write a value to SSM Parameter Store.
+Respects the overwrite flag and type from ParamSetArgs.
+The type field maps to SSM ParameterType (String, SecureString, StringList).
+-}
 paramSet :: Amazonka.Env -> ParamSetArgs -> IO (Either Text ())
 paramSet awsEnv args = do
-  result <- try @Amazonka.Error (putParam awsEnv args)
-  case result of
-    Left ex -> pure $ Left $ "SSM PutParameter error for " <> args.psaPath <> ": " <> T.pack (show ex)
-    Right _  -> pure (Right ())
+    result <- try @Amazonka.Error (putParam awsEnv args)
+    case result of
+        Left ex -> pure $ Left $ "SSM PutParameter error for " <> args.psaPath <> ": " <> T.pack (show ex)
+        Right _ -> pure (Right ())
 
 putParam :: Amazonka.Env -> ParamSetArgs -> IO ()
 putParam awsEnv args = runResourceT $ do
-  let req = (PP.newPutParameter args.psaPath args.psaValue)
-              { PP.overwrite   = Just args.psaOverwrite
-              , PP.type'       = Just (paramTypeToSsm args.psaType)
-              , PP.description = args.psaMessage
-              }
-  _ <- Amazonka.send awsEnv req
-  pure ()
+    let req =
+            (PP.newPutParameter args.psaPath args.psaValue)
+                { PP.overwrite = Just args.psaOverwrite
+                , PP.type' = Just (paramTypeToSsm args.psaType)
+                , PP.description = args.psaMessage
+                }
+    _ <- Amazonka.send awsEnv req
+    pure ()
 
 -- | Convert a ParamType to the corresponding SSM ParameterType.
 paramTypeToSsm :: ParamType -> SSM.ParameterType
-paramTypeToSsm ParamString       = SSMPT.ParameterType_String
+paramTypeToSsm ParamString = SSMPT.ParameterType_String
 paramTypeToSsm ParamSecureString = SSMPT.ParameterType_SecureString
-paramTypeToSsm ParamStringList   = SSMPT.ParameterType_StringList
+paramTypeToSsm ParamStringList = SSMPT.ParameterType_StringList
 
 ------------------------------------------------------------------------
 -- paramGetByPath
@@ -426,121 +488,141 @@ paramTypeToSsm ParamStringList   = SSMPT.ParameterType_StringList
 
 -- | Result type for paramGetByPath: either formatted text or exit code 1 signal.
 data GetByPathResult
-  = ByPathOutput !Text    -- ^ Formatted output to print
-  | ByPathEmpty           -- ^ No parameters found (exit code 1)
+    = -- | Formatted output to print
+      ByPathOutput !Text
+    | -- | No parameters found (exit code 1)
+      ByPathEmpty
 
--- | Fetch all parameters under a path prefix, formatted according to --format.
--- Returns Right (Just text) for output, Right Nothing for "no params" (exit 1),
--- or Left on error.
+{- | Fetch all parameters under a path prefix, formatted according to --format.
+Returns Right (Just text) for output, Right Nothing for "no params" (exit 1),
+or Left on error.
+-}
 paramGetByPath :: Amazonka.Env -> ParamGetByPathArgs -> IO (Either Text GetByPathResult)
 paramGetByPath awsEnv args = do
-  result <- try @Amazonka.Error (fetchByPathRaw awsEnv args)
-  case result of
-    Left ex  -> pure $ Left $ "SSM GetParametersByPath error for " <> args.gpbPath <> ": " <> T.pack (show ex)
-    Right params
-      | null params -> pure (Right ByPathEmpty)
-      | otherwise   -> do
-          let sorted = List.sortBy (comparing (^. SSMP.parameter_name)) params
-          case args.gpbFormat of
-            ParamFormatSimple -> do
-              -- Default: sort by name, build Map name->value, print as YAML
-              let m = Map.fromList
-                        [ (p ^. SSMP.parameter_name, p ^. SSMP.parameter_value)
-                        | p <- sorted
-                        ]
-              pure $ Right $ ByPathOutput $ formatAsYaml m
-            fmt -> do
-              -- json/yaml: for each param fetch tags, build Map name->ParamOutput
-              taggedMap <- buildTaggedMap awsEnv sorted
-              case taggedMap of
-                Left err -> pure (Left err)
-                Right m  -> pure $ Right $ ByPathOutput $ formatWith fmt m
+    result <- try @Amazonka.Error (fetchByPathRaw awsEnv args)
+    case result of
+        Left ex -> pure $ Left $ "SSM GetParametersByPath error for " <> args.gpbPath <> ": " <> T.pack (show ex)
+        Right params
+            | null params -> pure (Right ByPathEmpty)
+            | otherwise -> do
+                let sorted = List.sortBy (comparing (^. SSMP.parameter_name)) params
+                case args.gpbFormat of
+                    ParamFormatSimple -> do
+                        -- Default: sort by name, build Map name->value, print as YAML
+                        let m =
+                                Map.fromList
+                                    [ (p ^. SSMP.parameter_name, p ^. SSMP.parameter_value)
+                                    | p <- sorted
+                                    ]
+                        pure $ Right $ ByPathOutput $ formatAsYaml m
+                    fmt -> do
+                        -- json/yaml: for each param fetch tags, build Map name->ParamOutput
+                        taggedMap <- buildTaggedMap awsEnv sorted
+                        case taggedMap of
+                            Left err -> pure (Left err)
+                            Right m -> pure $ Right $ ByPathOutput $ formatWith fmt m
 
 -- | Fetch raw parameters (not formatted).
 fetchByPathRaw :: Amazonka.Env -> ParamGetByPathArgs -> IO [SSM.Parameter]
 fetchByPathRaw awsEnv args = runResourceT $ do
-  let req = (GPBP.newGetParametersByPath args.gpbPath)
-              { GPBP.recursive      = Just args.gpbRecursive
-              , GPBP.withDecryption = Just args.gpbDecrypt
-              }
-  pages <- runConduit $ Amazonka.paginate awsEnv req .| CL.consume
-  pure $ concatMap (fromMaybe [] . (.parameters)) pages
+    let req =
+            (GPBP.newGetParametersByPath args.gpbPath)
+                { GPBP.recursive = Just args.gpbRecursive
+                , GPBP.withDecryption = Just args.gpbDecrypt
+                }
+    pages <- runConduit $ Amazonka.paginate awsEnv req .| CL.consume
+    pure $ concatMap (fromMaybe [] . (.parameters)) pages
 
 -- | Build a Map from parameter name to tagged ParamOutput.
 buildTaggedMap :: Amazonka.Env -> [SSM.Parameter] -> IO (Either Text (Map.Map Text ParamOutput))
 buildTaggedMap awsEnv params = go params Map.empty
   where
     go [] acc = pure (Right acc)
-    go (p:ps) acc = do
-      let name = p ^. SSMP.parameter_name
-      tagsResult <- listParamTags awsEnv name
-      case tagsResult of
-        Left err -> pure (Left err)
-        Right tags -> go ps (Map.insert name (withParamTags tags (paramOutputFromParameter p)) acc)
+    go (p : ps) acc = do
+        let name = p ^. SSMP.parameter_name
+        tagsResult <- listParamTags awsEnv name
+        case tagsResult of
+            Left err -> pure (Left err)
+            Right tags -> go ps (Map.insert name (withParamTags tags (paramOutputFromParameter p)) acc)
 
 ------------------------------------------------------------------------
 -- paramGetHistory
 ------------------------------------------------------------------------
 
--- | Fetch the version history of a single SSM parameter, formatted.
--- For simple: sort by date, split current/previous, fetch tags for message, YAML.
--- For json/yaml: FullHistory with current getting tags.
+{- | Fetch the version history of a single SSM parameter, formatted.
+For simple: sort by date, split current/previous, fetch tags for message, YAML.
+For json/yaml: FullHistory with current getting tags.
+-}
 paramGetHistory :: Amazonka.Env -> ParamGetArgs -> IO (Either Text Text)
 paramGetHistory awsEnv args = do
-  result <- try @Amazonka.Error (fetchHistoryRaw awsEnv args.pgaPath args.pgaDecrypt)
-  case result of
-    Left ex -> pure $ Left $
-      "SSM GetParameterHistory error for " <> args.pgaPath <> ": " <> T.pack (show ex)
-    Right entries -> case NE.nonEmpty entries of
-      Nothing -> pure $ Left $
-        "No history found for parameter '" <> args.pgaPath <> "'"
-      Just ne -> do
-        let sorted = NE.sortBy (comparing historyDate) ne
-            current = NE.last sorted
-            previous = NE.init sorted
-        tags <- listParamTags awsEnv args.pgaPath
-        case tags of
-          Left err -> pure (Left err)
-          Right tagMap -> pure $ Right $ formatHistory args.pgaFormat tagMap current previous
+    result <- try @Amazonka.Error (fetchHistoryRaw awsEnv args.pgaPath args.pgaDecrypt)
+    case result of
+        Left ex ->
+            pure $
+                Left $
+                    "SSM GetParameterHistory error for " <> args.pgaPath <> ": " <> T.pack (show ex)
+        Right entries -> case NE.nonEmpty entries of
+            Nothing ->
+                pure $
+                    Left $
+                        "No history found for parameter '" <> args.pgaPath <> "'"
+            Just ne -> do
+                let sorted = NE.sortBy (comparing historyDate) ne
+                    current = NE.last sorted
+                    previous = NE.init sorted
+                tags <- listParamTags awsEnv args.pgaPath
+                case tags of
+                    Left err -> pure (Left err)
+                    Right tagMap -> pure $ Right $ formatHistory args.pgaFormat tagMap current previous
   where
     historyDate :: SSM.ParameterHistory -> Maybe UTCTime
     historyDate ph = ph ^. SSMPH.parameterHistory_lastModifiedDate
 
-    formatHistory :: ParamFormat -> Map.Map Text Text
-                  -> SSM.ParameterHistory -> [SSM.ParameterHistory] -> Text
+    formatHistory ::
+        ParamFormat ->
+        Map.Map Text Text ->
+        SSM.ParameterHistory ->
+        [SSM.ParameterHistory] ->
+        Text
     formatHistory ParamFormatSimple tagMap current previous =
-      let msg = fromMaybe "" (Map.lookup messageTag tagMap)
-          sh = SimpleHistory
-            { shCurrent = SimpleHistoryCurrent
-                { shcValue            = current ^. SSMPH.parameterHistory_value
-                , shcLastModifiedDate = fmap formatUtcTime (current ^. SSMPH.parameterHistory_lastModifiedDate)
-                , shcLastModifiedUser = current ^. SSMPH.parameterHistory_lastModifiedUser
-                , shcMessage          = msg
-                }
-            , shPrevious = map mkPrevious previous
-            }
-      in formatAsYaml sh
+        let msg = fromMaybe "" (Map.lookup messageTag tagMap)
+            sh =
+                SimpleHistory
+                    { shCurrent =
+                        SimpleHistoryCurrent
+                            { shcValue = current ^. SSMPH.parameterHistory_value
+                            , shcLastModifiedDate = fmap formatUtcTime (current ^. SSMPH.parameterHistory_lastModifiedDate)
+                            , shcLastModifiedUser = current ^. SSMPH.parameterHistory_lastModifiedUser
+                            , shcMessage = msg
+                            }
+                    , shPrevious = map mkPrevious previous
+                    }
+         in formatAsYaml sh
     formatHistory fmt tagMap current previous =
-      let fh = FullHistory
-            { fhCurrent  = withHistoryTags tagMap (paramHistoryOutputFromHistory current)
-            , fhPrevious = map paramHistoryOutputFromHistory previous
-            }
-      in formatWith fmt fh
+        let fh =
+                FullHistory
+                    { fhCurrent = withHistoryTags tagMap (paramHistoryOutputFromHistory current)
+                    , fhPrevious = map paramHistoryOutputFromHistory previous
+                    }
+         in formatWith fmt fh
 
     mkPrevious :: SSM.ParameterHistory -> SimpleHistoryPrevious
-    mkPrevious ph = SimpleHistoryPrevious
-      { shpValue            = ph ^. SSMPH.parameterHistory_value
-      , shpLastModifiedDate = fmap formatUtcTime (ph ^. SSMPH.parameterHistory_lastModifiedDate)
-      , shpLastModifiedUser = ph ^. SSMPH.parameterHistory_lastModifiedUser
-      }
+    mkPrevious ph =
+        SimpleHistoryPrevious
+            { shpValue = ph ^. SSMPH.parameterHistory_value
+            , shpLastModifiedDate = fmap formatUtcTime (ph ^. SSMPH.parameterHistory_lastModifiedDate)
+            , shpLastModifiedUser = ph ^. SSMPH.parameterHistory_lastModifiedUser
+            }
 
 -- | Fetch raw ParameterHistory entries.
 fetchHistoryRaw :: Amazonka.Env -> Text -> Bool -> IO [SSM.ParameterHistory]
 fetchHistoryRaw awsEnv paramName withDecryption = runResourceT $ do
-  let req = (GPH.newGetParameterHistory paramName)
-              { GPH.withDecryption = Just withDecryption }
-  pages <- runConduit $ Amazonka.paginate awsEnv req .| CL.consume
-  pure $ concatMap (fromMaybe [] . (.parameters)) pages
+    let req =
+            (GPH.newGetParameterHistory paramName)
+                { GPH.withDecryption = Just withDecryption
+                }
+    pages <- runConduit $ Amazonka.paginate awsEnv req .| CL.consume
+    pure $ concatMap (fromMaybe [] . (.parameters)) pages
 
 ------------------------------------------------------------------------
 -- Legacy pure helpers (still exported for existing tests)
@@ -549,29 +631,30 @@ fetchHistoryRaw awsEnv paramName withDecryption = runResourceT $ do
 -- | Format a Parameter as "name=value".
 formatParam :: SSM.Parameter -> Text
 formatParam p =
-  let name  = p ^. SSMP.parameter_name
-      value = p ^. SSMP.parameter_value
-  in name <> "=" <> value
+    let name = p ^. SSMP.parameter_name
+        value = p ^. SSMP.parameter_value
+     in name <> "=" <> value
 
--- | Format a ParameterHistory entry as "version: value".
--- Skips entries where both version and value are absent.
+{- | Format a ParameterHistory entry as "version: value".
+Skips entries where both version and value are absent.
+-}
 formatHistoryEntry :: SSM.ParameterHistory -> Maybe Text
 formatHistoryEntry ph =
-  let mValue   = ph ^. SSMPH.parameterHistory_value
-      mVersion = ph ^. SSMPH.parameterHistory_version
-  in case (mVersion, mValue) of
-    (Just ver, Just val) -> Just $ "v" <> T.pack (show ver) <> ": " <> val
-    (Nothing,  Just val) -> Just val
-    _                    -> Nothing
+    let mValue = ph ^. SSMPH.parameterHistory_value
+        mVersion = ph ^. SSMPH.parameterHistory_version
+     in case (mVersion, mValue) of
+            (Just ver, Just val) -> Just $ "v" <> T.pack (show ver) <> ": " <> val
+            (Nothing, Just val) -> Just val
+            _ -> Nothing
 
 ------------------------------------------------------------------------
 -- Internal helpers
 ------------------------------------------------------------------------
 
--- | Format a value with the given ParamFormat (json or yaml).
--- Precondition: format is not ParamFormatSimple.
-formatWith :: ToJSON a => ParamFormat -> a -> Text
+{- | Format a value with the given ParamFormat (json or yaml).
+Precondition: format is not ParamFormatSimple.
+-}
+formatWith :: (ToJSON a) => ParamFormat -> a -> Text
 formatWith ParamFormatJson x = formatAsJson x
 formatWith ParamFormatYaml x = formatAsYaml x
-formatWith ParamFormatSimple  _ = ""  -- Should not be called with Raw
-
+formatWith ParamFormatSimple _ = "" -- Should not be called with Raw

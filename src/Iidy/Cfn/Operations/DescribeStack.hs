@@ -1,85 +1,94 @@
--- | Describe-stack CloudFormation operation.
---
--- Fetches the stack definition, recent events, and current contents
--- and returns them as a list of OutputData for rendering.
 {-# LANGUAGE OverloadedRecordDot #-}
-module Iidy.Cfn.Operations.DescribeStack
-  ( describeStack
-  , convertEvent
-  , convertEventWithDuration
-  , calculateEventDurations
-  , convertStack
-  , buildEventsDisplay
-  , buildConsoleUrl
-  , mkStandardPollConfig
-  , emitStackDefinition
-  ) where
+
+{- | Describe-stack CloudFormation operation.
+
+Fetches the stack definition, recent events, and current contents
+and returns them as a list of OutputData for rendering.
+-}
+module Iidy.Cfn.Operations.DescribeStack (
+    describeStack,
+    convertEvent,
+    convertEventWithDuration,
+    calculateEventDurations,
+    convertStack,
+    buildEventsDisplay,
+    buildConsoleUrl,
+    mkStandardPollConfig,
+    emitStackDefinition,
+) where
 
 import Control.Monad (join)
 import Data.List (sortBy)
-import qualified Data.Map.Strict as Map
+import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Ord (comparing)
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 
+import Amazonka qualified
+import Amazonka.CloudFormation qualified as CF
+import Amazonka.CloudFormation.Types qualified as CF
 import Data.Time (UTCTime, diffUTCTime)
-import qualified Amazonka
-import qualified Amazonka.CloudFormation as CF
-import qualified Amazonka.CloudFormation.Types as CF
 
 import Iidy.Aws.Sts (getCallerIdentity)
-import Iidy.Cfn.Context (CfnContext(..))
-import Iidy.Cfn.Status (StackStatus(..), fromCfnResourceStatus, fromCfnStackStatus, toText)
-import Iidy.Cfn.StackOperations
-  ( getStack
-  , fetchStackEventsUpTo
-  , collectStackContentsWithStack
-  , PollConfig(..)
-  , defaultPollConfig
-  , percentEncode
-  )
+import Iidy.Cfn.Context (CfnContext (..))
+import Iidy.Cfn.StackOperations (
+    PollConfig (..),
+    collectStackContentsWithStack,
+    defaultPollConfig,
+    fetchStackEventsUpTo,
+    getStack,
+    percentEncode,
+ )
+import Iidy.Cfn.Status (StackStatus (..), fromCfnResourceStatus, fromCfnStackStatus, toText)
 import Iidy.Output.Types
 
 ------------------------------------------------------------------------
 -- Main entry point
 ------------------------------------------------------------------------
 
--- | Describe a CloudFormation stack.
---
--- Fetches the stack definition, takes the first @numEvents@ events,
--- and collects current stack contents (resources, outputs, changesets).
--- Emits OdStackAbsentInfo with STS context for missing stacks.
-describeStack
-  :: CfnContext
-  -> Text          -- ^ stack name
-  -> Int           -- ^ max events
-  -> Text          -- ^ environment name
-  -> (OutputData -> IO ())  -- ^ emit function
-  -> IO (Either Text ())
+{- | Describe a CloudFormation stack.
+
+Fetches the stack definition, takes the first @numEvents@ events,
+and collects current stack contents (resources, outputs, changesets).
+Emits OdStackAbsentInfo with STS context for missing stacks.
+-}
+describeStack ::
+    CfnContext ->
+    -- | stack name
+    Text ->
+    -- | max events
+    Int ->
+    -- | environment name
+    Text ->
+    -- | emit function
+    (OutputData -> IO ()) ->
+    IO (Either Text ())
 describeStack ctx stackName numEvents env emit = do
-  let regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
-  mStack <- getStack ctx stackName
-  case mStack of
-    Nothing -> do
-      (account, authArn) <- getCallerIdentity (cfnEnv ctx)
-      emit $ OdStackAbsentInfo StackAbsentInfo
-        { saiStackName   = stackName
-        , saiEnvironment = env
-        , saiRegion      = regionText
-        , saiAccount     = account
-        , saiAuthArn     = authArn
-        }
-      pure (Right ())
-    Just cfnStack -> do
-      events    <- fetchStackEventsUpTo ctx stackName numEvents
-      contents  <- collectStackContentsWithStack ctx stackName (Just cfnStack)
-      let stackDef      = convertStack cfnStack regionText
-          eventsDisplay = buildEventsDisplay numEvents events
-      emit (OdStackDefinition stackDef True)
-      emit (OdStackEvents eventsDisplay)
-      emit (OdStackContents contents)
-      pure (Right ())
+    let regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
+    mStack <- getStack ctx stackName
+    case mStack of
+        Nothing -> do
+            (account, authArn) <- getCallerIdentity (cfnEnv ctx)
+            emit $
+                OdStackAbsentInfo
+                    StackAbsentInfo
+                        { saiStackName = stackName
+                        , saiEnvironment = env
+                        , saiRegion = regionText
+                        , saiAccount = account
+                        , saiAuthArn = authArn
+                        }
+            pure (Right ())
+        Just cfnStack -> do
+            events <- fetchStackEventsUpTo ctx stackName numEvents
+            contents <- collectStackContentsWithStack ctx stackName (Just cfnStack)
+            let stackDef = convertStack cfnStack regionText
+                eventsDisplay = buildEventsDisplay numEvents events
+            emit (OdStackDefinition stackDef True)
+            emit (OdStackEvents eventsDisplay)
+            emit (OdStackContents contents)
+            pure (Right ())
 
 ------------------------------------------------------------------------
 -- Stack definition conversion
@@ -88,41 +97,43 @@ describeStack ctx stackName numEvents env emit = do
 -- | Convert a raw CF.Stack into a StackDefinition for rendering.
 convertStack :: CF.Stack -> Text -> StackDefinition
 convertStack s regionText =
-  let stackArn     = fromMaybe "" s.stackId
-      consoleUrl   = buildConsoleUrl regionText stackArn
-      capTexts     = maybe [] (map ((.fromCapability))) s.capabilities
-      tagMap       = Map.fromList
-                       [ (t.key, t.value)
-                       | t <- fromMaybe [] s.tags
-                       ]
-      paramMap     = Map.fromList
-                       [ ( fromMaybe "" p.parameterKey
-                         , fromMaybe "" p.parameterValue
-                         )
-                       | p <- fromMaybe [] s.parameters
-                       ]
-      notifArns    = fromMaybe [] s.notificationARNs
-  in StackDefinition
-       { sdName                  = s.stackName
-       , sdStacksetName          = Map.lookup "StackSetName" tagMap
-       , sdDescription           = s.description
-       , sdStatus                = fromCfnStackStatus s.stackStatus
-       , sdStatusReason          = s.stackStatusReason
-       , sdCapabilities          = capTexts
-       , sdServiceRole           = s.roleARN
-       , sdTags                  = tagMap
-       , sdParameters            = paramMap
-       , sdDisableRollback       = fromMaybe False s.disableRollback
-       , sdTerminationProtection = fromMaybe False s.enableTerminationProtection
-       , sdCreationTime          = Just s.creationTime.fromTime
-       , sdLastUpdatedTime       = fmap (.fromTime) s.lastUpdatedTime
-       , sdTimeoutInMinutes      = fmap fromIntegral s.timeoutInMinutes
-       , sdNotificationArns      = notifArns
-       , sdStackPolicy           = Nothing
-       , sdArn                   = stackArn
-       , sdConsoleUrl            = consoleUrl
-       , sdRegion                = regionText
-       }
+    let stackArn = fromMaybe "" s.stackId
+        consoleUrl = buildConsoleUrl regionText stackArn
+        capTexts = maybe [] (map ((.fromCapability))) s.capabilities
+        tagMap =
+            Map.fromList
+                [ (t.key, t.value)
+                | t <- fromMaybe [] s.tags
+                ]
+        paramMap =
+            Map.fromList
+                [ ( fromMaybe "" p.parameterKey
+                  , fromMaybe "" p.parameterValue
+                  )
+                | p <- fromMaybe [] s.parameters
+                ]
+        notifArns = fromMaybe [] s.notificationARNs
+     in StackDefinition
+            { sdName = s.stackName
+            , sdStacksetName = Map.lookup "StackSetName" tagMap
+            , sdDescription = s.description
+            , sdStatus = fromCfnStackStatus s.stackStatus
+            , sdStatusReason = s.stackStatusReason
+            , sdCapabilities = capTexts
+            , sdServiceRole = s.roleARN
+            , sdTags = tagMap
+            , sdParameters = paramMap
+            , sdDisableRollback = fromMaybe False s.disableRollback
+            , sdTerminationProtection = fromMaybe False s.enableTerminationProtection
+            , sdCreationTime = Just s.creationTime.fromTime
+            , sdLastUpdatedTime = fmap (.fromTime) s.lastUpdatedTime
+            , sdTimeoutInMinutes = fmap fromIntegral s.timeoutInMinutes
+            , sdNotificationArns = notifArns
+            , sdStackPolicy = Nothing
+            , sdArn = stackArn
+            , sdConsoleUrl = consoleUrl
+            , sdRegion = regionText
+            }
 
 ------------------------------------------------------------------------
 -- Events display construction
@@ -131,122 +142,132 @@ convertStack s regionText =
 -- | Build a StackEventsDisplay from raw CF events, limited to @n@ entries.
 buildEventsDisplay :: Int -> [CF.StackEvent] -> StackEventsDisplay
 buildEventsDisplay numEvents events =
-  let (taken, rest) = splitAt numEvents events
-      converted  = map convertEvent taken
-      wrapped    = calculateEventDurations converted
-      truncInfo  = if not (null rest)
-                     then Just TruncationInfo { truncShown = length taken, truncTotal = length taken + length rest }
-                     else Nothing
-  in StackEventsDisplay
-       { sedTitle     = "Previous Stack Events (max " <> T.pack (show numEvents) <> "):"
-       , sedEvents    = wrapped
-       , sedMaxEvents = Just numEvents
-       , sedTruncated = truncInfo
-       }
+    let (taken, rest) = splitAt numEvents events
+        converted = map convertEvent taken
+        wrapped = calculateEventDurations converted
+        truncInfo =
+            if not (null rest)
+                then Just TruncationInfo{truncShown = length taken, truncTotal = length taken + length rest}
+                else Nothing
+     in StackEventsDisplay
+            { sedTitle = "Previous Stack Events (max " <> T.pack (show numEvents) <> "):"
+            , sedEvents = wrapped
+            , sedMaxEvents = Just numEvents
+            , sedTruncated = truncInfo
+            }
 
 -- | Convert a raw CF.StackEvent to an output StackEvent.
 convertEvent :: CF.StackEvent -> StackEvent
-convertEvent e = StackEvent
-  { seEventId              = e.eventId
-  , seStackId              = e.stackId
-  , seStackName            = e.stackName
-  , seLogicalResourceId    = fromMaybe "" e.logicalResourceId
-  , sePhysicalResourceId   = e.physicalResourceId
-  , seResourceType         = fromMaybe "" e.resourceType
-  , seTimestamp            = Just e.timestamp.fromTime
-  , seResourceStatus       = maybe CreateFailed fromCfnResourceStatus e.resourceStatus
-  , seResourceStatusReason = e.resourceStatusReason
-  , seResourceProperties   = e.resourceProperties
-  , seClientRequestToken   = e.clientRequestToken
-  }
+convertEvent e =
+    StackEvent
+        { seEventId = e.eventId
+        , seStackId = e.stackId
+        , seStackName = e.stackName
+        , seLogicalResourceId = fromMaybe "" e.logicalResourceId
+        , sePhysicalResourceId = e.physicalResourceId
+        , seResourceType = fromMaybe "" e.resourceType
+        , seTimestamp = Just e.timestamp.fromTime
+        , seResourceStatus = maybe CreateFailed fromCfnResourceStatus e.resourceStatus
+        , seResourceStatusReason = e.resourceStatusReason
+        , seResourceProperties = e.resourceProperties
+        , seClientRequestToken = e.clientRequestToken
+        }
 
--- | Calculate per-resource durations by matching IN_PROGRESS → COMPLETE/FAILED pairs.
--- Used for past/historical events (describe-stack). Sorts events chronologically
--- to properly track start/end pairs, then returns them in the original order.
+{- | Calculate per-resource durations by matching IN_PROGRESS → COMPLETE/FAILED pairs.
+Used for past/historical events (describe-stack). Sorts events chronologically
+to properly track start/end pairs, then returns them in the original order.
+-}
 calculateEventDurations :: [StackEvent] -> [StackEventWithTiming]
 calculateEventDurations events =
-  let -- Sort chronologically (oldest first) for duration tracking
-      sorted = sortBy (comparing seTimestamp) events
-      -- Track start times per resource key (logicalId/resourceType)
-      durations = go Map.empty [] sorted
-      -- Build lookup by event ID
-      durMap = Map.fromList durations
-  in map (\e -> StackEventWithTiming e (join (Map.lookup (seEventId e) durMap))) events
+    let
+        -- Sort chronologically (oldest first) for duration tracking
+        sorted = sortBy (comparing seTimestamp) events
+        -- Track start times per resource key (logicalId/resourceType)
+        durations = go Map.empty [] sorted
+        -- Build lookup by event ID
+        durMap = Map.fromList durations
+     in
+        map (\e -> StackEventWithTiming e (join (Map.lookup (seEventId e) durMap))) events
   where
     go :: Map.Map Text UTCTime -> [(Text, Maybe Int)] -> [StackEvent] -> [(Text, Maybe Int)]
     go _ acc [] = acc
-    go starts acc (e:es) =
-      let key = seLogicalResourceId e <> "/" <> seResourceType e
-          status = seResourceStatus e
-          statusText = toText status
-          (starts', dur) = case seTimestamp e of
-            Nothing -> (starts, Nothing)
-            Just ts
-              | "_IN_PROGRESS" `T.isSuffixOf` statusText ->
-                  (Map.insert key ts starts, Nothing)
-              | "_COMPLETE" `T.isSuffixOf` statusText || "_FAILED" `T.isSuffixOf` statusText ->
-                  case Map.lookup key starts of
-                    Just startTs ->
-                      let secs = max 1 (floor (diffUTCTime ts startTs)) :: Int
-                      in (starts, Just secs)
-                    Nothing -> (starts, Nothing)
-              | otherwise -> (starts, Nothing)
-      in go starts' ((seEventId e, dur) : acc) es
+    go starts acc (e : es) =
+        let key = seLogicalResourceId e <> "/" <> seResourceType e
+            status = seResourceStatus e
+            statusText = toText status
+            (starts', dur) = case seTimestamp e of
+                Nothing -> (starts, Nothing)
+                Just ts
+                    | "_IN_PROGRESS" `T.isSuffixOf` statusText ->
+                        (Map.insert key ts starts, Nothing)
+                    | "_COMPLETE" `T.isSuffixOf` statusText || "_FAILED" `T.isSuffixOf` statusText ->
+                        case Map.lookup key starts of
+                            Just startTs ->
+                                let secs = max 1 (floor (diffUTCTime ts startTs)) :: Int
+                                 in (starts, Just secs)
+                            Nothing -> (starts, Nothing)
+                    | otherwise -> (starts, Nothing)
+         in go starts' ((seEventId e, dur) : acc) es
 
--- | Convert a raw CF.StackEvent to a StackEventWithTiming using the operation start time.
--- Duration = event_time - operation_start_time (used for live events during polling).
+{- | Convert a raw CF.StackEvent to a StackEventWithTiming using the operation start time.
+Duration = event_time - operation_start_time (used for live events during polling).
+-}
 convertEventWithDuration :: UTCTime -> CF.StackEvent -> StackEventWithTiming
 convertEventWithDuration startTime e =
-  let converted = convertEvent e
-      dur = case seTimestamp converted of
-        Just ts -> Just (max 1 (floor (diffUTCTime ts startTime) :: Int))
-        Nothing -> Nothing
-  in StackEventWithTiming converted dur
+    let converted = convertEvent e
+        dur = case seTimestamp converted of
+            Just ts -> Just (max 1 (floor (diffUTCTime ts startTime) :: Int))
+            Nothing -> Nothing
+     in StackEventWithTiming converted dur
 
 ------------------------------------------------------------------------
 -- Console URL helper
 ------------------------------------------------------------------------
 
--- | Build the AWS CloudFormation console URL for a stack.
--- The stack ARN is percent-encoded as it appears in a URL query parameter value.
+{- | Build the AWS CloudFormation console URL for a stack.
+The stack ARN is percent-encoded as it appears in a URL query parameter value.
+-}
 buildConsoleUrl :: Text -> Text -> Text
 buildConsoleUrl regionText stackArn =
-  "https://"
-    <> regionText
-    <> ".console.aws.amazon.com/cloudformation/home?region="
-    <> regionText
-    <> "#/stacks/stackinfo?stackId="
-    <> percentEncode stackArn
+    "https://"
+        <> regionText
+        <> ".console.aws.amazon.com/cloudformation/home?region="
+        <> regionText
+        <> "#/stacks/stackinfo?stackId="
+        <> percentEncode stackArn
 
 ------------------------------------------------------------------------
 -- Standard poll config helper
 ------------------------------------------------------------------------
 
--- | Build a standard PollConfig with event conversion and emission callbacks.
--- Handles the common pattern of converting events with duration and emitting
--- OdNewStackEvents / OdOperationComplete.  Operations with extra fields
--- (e.g. watch-stack) should start from this and override as needed.
+{- | Build a standard PollConfig with event conversion and emission callbacks.
+Handles the common pattern of converting events with duration and emitting
+OdNewStackEvents / OdOperationComplete.  Operations with extra fields
+(e.g. watch-stack) should start from this and override as needed.
+-}
 mkStandardPollConfig :: CfnContext -> (OutputData -> IO ()) -> PollConfig
-mkStandardPollConfig ctx emit = defaultPollConfig
-  { pcStartTime = Just (cfnStartTime ctx)
-  , pcOnNewEvents = \newEvents -> do
-      let converted = map (convertEventWithDuration (cfnStartTime ctx)) newEvents
-      emit (OdNewStackEvents converted)
-  , pcOnOperationComplete = emit . OdOperationComplete
-  }
+mkStandardPollConfig ctx emit =
+    defaultPollConfig
+        { pcStartTime = Just (cfnStartTime ctx)
+        , pcOnNewEvents = \newEvents -> do
+            let converted = map (convertEventWithDuration (cfnStartTime ctx)) newEvents
+            emit (OdNewStackEvents converted)
+        , pcOnOperationComplete = emit . OdOperationComplete
+        }
 
 ------------------------------------------------------------------------
 -- Shared stack definition helper
 ------------------------------------------------------------------------
 
--- | Fetch a stack and emit its StackDefinition if found.
--- This is the common pattern used by most write operations to show the
--- stack definition before polling begins.  Does nothing if the stack
--- is not found.
+{- | Fetch a stack and emit its StackDefinition if found.
+This is the common pattern used by most write operations to show the
+stack definition before polling begins.  Does nothing if the stack
+is not found.
+-}
 emitStackDefinition :: CfnContext -> Text -> (OutputData -> IO ()) -> IO ()
 emitStackDefinition ctx stackId emit = do
-  let regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
-  mStack <- getStack ctx stackId
-  case mStack of
-    Just cfnStack -> emit (OdStackDefinition (convertStack cfnStack regionText) True)
-    Nothing -> pure ()
+    let regionText = Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
+    mStack <- getStack ctx stackId
+    case mStack of
+        Just cfnStack -> emit (OdStackDefinition (convertStack cfnStack regionText) True)
+        Nothing -> pure ()
