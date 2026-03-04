@@ -3,6 +3,7 @@ module Main (main) where
 
 import Control.Exception (SomeException, IOException, catch, finally, fromException, displayException)
 import qualified Amazonka
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -166,7 +167,7 @@ runCommand cli = case cliCommand cli of
               pure 0
 
   CmdExecChangeset args -> do
-      let stackName = maybe "" id (ecsStackName args)
+      let stackName = fromMaybe "" (ecsStackName args)
       ctx <- createSimpleContext cli OpExecuteChangeset
       dispatch <- mkOutputDispatch (cliGlobalOpts cli)
       let emit = renderOutput dispatch

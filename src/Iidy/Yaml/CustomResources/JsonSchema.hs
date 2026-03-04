@@ -166,7 +166,7 @@ validatePattern pat s
   | T.length pat > maxRegexPatternLength =
       Left $ "Regex pattern exceeds maximum length of "
         <> T.pack (show maxRegexPatternLength) <> " characters"
-  | (T.unpack s =~ T.unpack pat :: Bool) = Right ()
+  | T.unpack s =~ T.unpack pat :: Bool = Right ()
   | otherwise = Left $ "String does not match pattern: " <> pat
 
 validateMinimum :: Scientific -> Scientific -> Either Text ()

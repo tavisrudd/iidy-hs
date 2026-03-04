@@ -209,9 +209,7 @@ emitValue doSort indent parentKey currentKey val = case val of
   Array arr ->
     if V.null arr
        then "[]\n"
-       else T.concat $ map (\v ->
-         emitItem doSort indent currentKey v
-         ) (V.toList arr)
+       else T.concat $ map (emitItem doSort indent currentKey) (V.toList arr)
   _ -> inlineValue val <> "\n"
 
 emitPair :: Bool -> Int -> Text -> Text -> Key.Key -> Value -> Text
@@ -393,11 +391,11 @@ buildStackArgsYaml stackName project params tags caps mTimeout
         , if null tags then []
           else "" : "Tags:" : map formatTag tags
         , if null caps then []
-          else "" : "Capabilities:" : map (\c -> "  - " <> c) caps
+          else "" : "Capabilities:" : map ("  - " <>) caps
         , maybe [] (\t -> ["", "TimeoutInMinutes: " <> T.pack (show t)]) mTimeout
         , if termProtection then ["", "EnableTerminationProtection: true"] else []
         , if null notifArns then []
-          else "" : "NotificationARNs:" : map (\a -> "  - " <> a) notifArns
+          else "" : "NotificationARNs:" : map ("  - " <>) notifArns
         , maybe [] (\r -> ["", "RoleARN: " <> r]) mRoleArn
         , if disableRollback then ["", "DisableRollback: true"] else []
         , [""]

@@ -2,6 +2,7 @@ module Test.JsonRendererTest (jsonRendererTests) where
 
 import Data.Aeson (Value(..))
 import qualified Data.Aeson as Aeson
+import Data.Maybe (isJust)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -66,7 +67,7 @@ jsonRendererTests =
 
   , testCase "eventWithTimingToValue - wraps event with duration" $ do
       let val = eventWithTimingToValue testEventWithTiming
-      assertBool "has event" (jsonLookup "event" val /= Nothing)
+      assertBool "has event" (isJust (jsonLookup "event" val))
       assertEqual "duration" (Just (Number 45)) (jsonLookup "duration_seconds" val)
 
   , testCase "eventsDisplayToValue - has title and events" $ do
@@ -155,7 +156,7 @@ jsonRendererTests =
               ]
             }
           val = driftToValue drift
-      assertBool "has drifted_resources" (jsonLookup "drifted_resources" val /= Nothing)
+      assertBool "has drifted_resources" (isJust (jsonLookup "drifted_resources" val))
 
   , testCase "errorInfoToValue - has error fields" $ do
       let val = errorInfoToValue testErrorInfo
@@ -261,7 +262,7 @@ jsonRendererTests =
         Nothing -> assertFailure ("Failed to parse JSON envelope: " <> T.unpack encoded)
         Just v -> do
           assertEqual "type" (Just (String "status_update")) (jsonLookup "type" v)
-          assertBool "has data" (jsonLookup "data" v /= Nothing)
+          assertBool "has data" (isJust (jsonLookup "data" v))
 
   , testCase "JSON envelope without type" $ do
       let opts = defaultJsonOptions { joIncludeTimestamps = False, joIncludeType = False }
@@ -314,8 +315,8 @@ jsonRendererTests =
             , scPendingChangesets = []
             }
           val = contentsToValue contents
-      assertBool "has resources" (jsonLookup "resources" val /= Nothing)
-      assertBool "has outputs" (jsonLookup "outputs" val /= Nothing)
+      assertBool "has resources" (isJust (jsonLookup "resources" val))
+      assertBool "has outputs" (isJust (jsonLookup "outputs" val))
 
   , testCase "changesetResultToValue - has changeset fields" $ do
       let cs = ChangeSetCreationResult

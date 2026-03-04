@@ -2,6 +2,7 @@ module Test.RendererOutputTest (rendererOutputTests) where
 
 import Data.Aeson (Value(..))
 import qualified Data.Aeson as Aeson
+import Data.Maybe (isJust)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -111,9 +112,9 @@ rendererOutputTests =
             }
           val = stackListToValue display
       assertEqual "show_tags" (Just (Aeson.Bool True)) (jsonLookup "show_tags" val)
-      assertBool "has stacks" (jsonLookup "stacks" val /= Nothing)
-      assertBool "has filters" (jsonLookup "filters_applied" val /= Nothing)
-      assertBool "has columns" (jsonLookup "columns" val /= Nothing)
+      assertBool "has stacks" (isJust (jsonLookup "stacks" val))
+      assertBool "has filters" (isJust (jsonLookup "filters_applied" val))
+      assertBool "has columns" (isJust (jsonLookup "columns" val))
 
   , testCase "JSON stack definition envelope structure" $ do
       let envelope = Aeson.object
@@ -129,7 +130,7 @@ rendererOutputTests =
         Nothing -> assertFailure "Failed to parse JSON"
         Just v -> do
           assertEqual "type" (Just (String "stack_definition")) (jsonLookup "type" v)
-          assertBool "has data" (jsonLookup "data" v /= Nothing)
+          assertBool "has data" (isJust (jsonLookup "data" v))
 
   , testCase "JSON new stack events is array of event objects" $ do
       let events = Aeson.toJSON (map eventWithTimingToValue [testEventWithTiming])

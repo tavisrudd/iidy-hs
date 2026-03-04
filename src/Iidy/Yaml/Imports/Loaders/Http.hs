@@ -6,6 +6,7 @@ module Iidy.Yaml.Imports.Loaders.Http
 
 import Control.Exception (Exception, Handler(..), catches, throwIO)
 import qualified Data.ByteString as BS
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -122,8 +123,8 @@ readWithLimit br maxBytes = go 0 []
 -- Strips query strings and fragments so takeExtension works correctly.
 urlPath :: Text -> Text
 urlPath url =
-  let noScheme = maybe url id (T.stripPrefix "https://" url)
-      noScheme' = maybe noScheme id (T.stripPrefix "http://" noScheme)
+  let noScheme = fromMaybe url (T.stripPrefix "https://" url)
+      noScheme' = fromMaybe noScheme (T.stripPrefix "http://" noScheme)
       rawPath = case T.dropWhile (/= '/') noScheme' of
         p | T.null p  -> "/"
           | otherwise -> p

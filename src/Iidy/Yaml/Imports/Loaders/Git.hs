@@ -11,6 +11,7 @@ module Iidy.Yaml.Imports.Loaders.Git
 
 import Control.Exception (IOException, try)
 import Data.Aeson (Value(..))
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import System.Exit (ExitCode(..))
@@ -28,7 +29,7 @@ import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..), ImportType(..))
 -- The @baseLocation@ parameter is unused (git queries are always local).
 loadGitImport :: Text -> Text -> IO (Either ImportError ImportData)
 loadGitImport location _baseLocation = do
-  let stripped = maybe location id (T.stripPrefix "git:" location)
+  let stripped = fromMaybe location (T.stripPrefix "git:" location)
   case gitCommand stripped of
     Left err -> pure (Left err)
     Right (prog, args) -> runGit location prog args

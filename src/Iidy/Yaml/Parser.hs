@@ -359,7 +359,7 @@ parseMapLikeTag meta name mk = \case
           (mk items templ (getTextField "var" pairs) (getField "filter" pairs)) meta
       (Nothing, _) -> parseErrorAt meta ("'items' missing in " <> name <> " tag")
       (_, Nothing) -> parseErrorAt meta ("'template' missing in " <> name <> " tag")
-  _ -> parseErrorAt meta ("must be a mapping with 'items' and 'template' fields")
+  _ -> parseErrorAt meta "must be a mapping with 'items' and 'template' fields"
 
 parseLetTag :: SrcMeta -> YamlAst -> Parse YamlAst
 parseLetTag meta = \case
@@ -383,8 +383,8 @@ parseMergeMapTag meta = \case
         validateFields ["items", "template"] ["var"] pairs
         pure $ AstPreprocessingTag
           (PpMergeMap (MergeMapTag items templ (getTextField "var" pairs))) meta
-      (Nothing, _) -> parseErrorAt meta ("'items' missing in !$mergeMap tag")
-      (_, Nothing) -> parseErrorAt meta ("'template' missing in !$mergeMap tag")
+      (Nothing, _) -> parseErrorAt meta "'items' missing in !$mergeMap tag"
+      (_, Nothing) -> parseErrorAt meta "'template' missing in !$mergeMap tag"
   _ -> parseErrorAt meta "must be a mapping with 'items' and 'template' fields"
 
 parseMapValuesTag :: SrcMeta -> YamlAst -> Parse YamlAst
@@ -395,8 +395,8 @@ parseMapValuesTag meta = \case
         validateFields ["items", "template"] ["var"] pairs
         pure $ AstPreprocessingTag
           (PpMapValues (MapValuesTag items templ (getTextField "var" pairs))) meta
-      (Nothing, _) -> parseErrorAt meta ("'items' missing in !$mapValues tag")
-      (_, Nothing) -> parseErrorAt meta ("'template' missing in !$mapValues tag")
+      (Nothing, _) -> parseErrorAt meta "'items' missing in !$mapValues tag"
+      (_, Nothing) -> parseErrorAt meta "'template' missing in !$mapValues tag"
   _ -> parseErrorAt meta "must be a mapping with 'items' and 'template' fields"
 
 parseGroupByTag :: SrcMeta -> YamlAst -> Parse YamlAst
@@ -407,8 +407,8 @@ parseGroupByTag meta = \case
         validateFields ["items", "key"] ["var", "template"] pairs
         pure $ AstPreprocessingTag
           (PpGroupBy (GroupByTag items key (getTextField "var" pairs) (getField "template" pairs))) meta
-      (Nothing, _) -> parseErrorAt meta ("'items' missing in !$groupBy tag")
-      (_, Nothing) -> parseErrorAt meta ("'key' missing in !$groupBy tag")
+      (Nothing, _) -> parseErrorAt meta "'items' missing in !$groupBy tag"
+      (_, Nothing) -> parseErrorAt meta "'key' missing in !$groupBy tag"
   _ -> parseErrorAt meta "must be a mapping with 'items' and 'key' fields"
 
 parseExpandTag :: SrcMeta -> YamlAst -> Parse YamlAst
@@ -418,8 +418,8 @@ parseExpandTag meta = \case
       (Just templ, Just params) -> do
         validateFields ["template", "params"] [] pairs
         pure $ AstPreprocessingTag (PpExpand (ExpandTag templ params)) meta
-      (Nothing, _) -> parseErrorAt meta ("'template' missing in !$expand tag")
-      (_, Nothing) -> parseErrorAt meta ("'params' missing in !$expand tag")
+      (Nothing, _) -> parseErrorAt meta "'template' missing in !$expand tag"
+      (_, Nothing) -> parseErrorAt meta "'params' missing in !$expand tag"
   _ -> parseErrorAt meta "must be a mapping with 'template' and 'params' fields"
 
 ------------------------------------------------------------------------

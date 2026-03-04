@@ -89,7 +89,7 @@ convertStack :: CF.Stack -> Text -> StackDefinition
 convertStack s regionText =
   let stackArn     = fromMaybe "" s.stackId
       consoleUrl   = buildConsoleUrl regionText stackArn
-      capTexts     = map (.fromCapability) (fromMaybe [] s.capabilities)
+      capTexts     = maybe [] (map ((.fromCapability))) s.capabilities
       tagMap       = Map.fromList
                        [ (t.key, t.value)
                        | t <- fromMaybe [] s.tags
@@ -231,7 +231,7 @@ mkStandardPollConfig ctx emit = defaultPollConfig
   , pcOnNewEvents = \newEvents -> do
       let converted = map (convertEventWithDuration (cfnStartTime ctx)) newEvents
       emit (OdNewStackEvents converted)
-  , pcOnOperationComplete = \info -> emit (OdOperationComplete info)
+  , pcOnOperationComplete = emit . OdOperationComplete
   }
 
 ------------------------------------------------------------------------

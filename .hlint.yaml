@@ -1,0 +1,16 @@
+# HLint configuration
+# https://github.com/ndmitchell/hlint
+
+# Ignored hints — reviewed 2026-03-03
+
+# Partial function — violates project rules
+- ignore: {name: "Use head"}
+
+# Lens operator — not worth readability tradeoff for amazonka field setting
+- ignore: {name: "Use ?~"}
+
+# Case-by-case — deferred for manual review
+- ignore: {name: "Eta reduce"}
+- ignore: {name: "Use list comprehension"}
+- ignore: {name: "Use newtype instead of data"}
+- ignore: {name: "Use fromRight"}

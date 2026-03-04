@@ -186,7 +186,7 @@ collectStackContentsWithStack ctx sName mStack = do
        Amazonka.paginate (cfnEnv ctx) (LCS.newListChangeSets sName)
        .| CL.consume)
 
-  let resources = map convertResource (fromMaybe [] resourcesResp.stackResources)
+  let resources = maybe [] (map convertResource) resourcesResp.stackResources
       changesets = mapMaybe convertChangeSetSummary
                      (concatMap (fromMaybe [] . (.summaries)) csPages)
 

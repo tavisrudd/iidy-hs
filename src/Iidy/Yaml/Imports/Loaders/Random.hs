@@ -3,6 +3,7 @@ module Iidy.Yaml.Imports.Loaders.Random
   ) where
 
 import Data.Aeson (Value(..))
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import System.Random (randomRIO)
@@ -12,7 +13,7 @@ import Iidy.Yaml.Imports.Types (ImportData(..), ImportType(..), ImportError(..))
 -- Formats: random:dashed-name, random:name, random:int
 loadRandomImport :: Text -> IO (Either ImportError ImportData)
 loadRandomImport location = do
-  let stripped = maybe location id (T.stripPrefix "random:" location)
+  let stripped = fromMaybe location (T.stripPrefix "random:" location)
   case stripped of
     "dashed-name" -> do
       adj <- randomElement adjectives

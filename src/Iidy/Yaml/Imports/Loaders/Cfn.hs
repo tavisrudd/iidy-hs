@@ -72,7 +72,7 @@ loadCfnImport awsEnv location = do
 -- JS format: location.split(':') gives [cfn, field, ...rest], resolvedLocation = rest.join(':')
 parseCfnLocation :: Text -> Either ImportError (CfnField, Text)
 parseCfnLocation location =
-  let stripped = maybe location id (T.stripPrefix "cfn:" location)
+  let stripped = fromMaybe location (T.stripPrefix "cfn:" location)
       parts = T.splitOn ":" stripped
   in case parts of
        (fieldStr : rest)
@@ -252,12 +252,15 @@ loadCfnStack :: Amazonka.Env -> Text -> Text -> IO (Either ImportError ImportDat
 loadCfnStack awsEnv location resolvedLoc = do
   let stackName = resolvedLoc
   withStack awsEnv location stackName $ \stack -> do
-    let outputPairs = map (\o -> (fromMaybe "" o.outputKey, fromMaybe "" o.outputValue))
-                          (fromMaybe [] stack.outputs)
-        paramPairs  = map (\p -> (fromMaybe "" p.parameterKey, fromMaybe "" p.parameterValue))
-                          (fromMaybe [] stack.parameters)
-        tagPairs    = map (\t -> (t.key, t.value))
-                          (fromMaybe [] stack.tags)
+    let outputPairs = maybe
+                        []
+                        (map (\o -> (fromMaybe "" o.outputKey, fromMaybe "" o.outputValue)))
+                        stack.outputs
+        paramPairs  = maybe
+                        []
+                        (map (\p -> (fromMaybe "" p.parameterKey, fromMaybe "" p.parameterValue)))
+                        stack.parameters
+        tagPairs    = maybe [] (map (\t -> (t.key, t.value))) stack.tags
         outputsKm = pairsToKeyMap outputPairs
         paramsKm  = pairsToKeyMap paramPairs
         tagsKm    = pairsToKeyMap tagPairs

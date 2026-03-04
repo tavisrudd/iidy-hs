@@ -58,7 +58,7 @@ listStacks ctx mTagFilters showTags queryMode = do
       matched = filter (stackMatchesFilters parsed) stacks
       sorted  = sortBy (comparing (.creationTime)) matched
       entries = map convertStack sorted
-      filterLabels = map (\f -> "tag:" <> f) filters
+      filterLabels = map ("tag:" <>) filters
       display = StackListDisplay
         { sldStacks         = entries
         , sldShowTags       = showTags || not (null filters)
@@ -104,7 +104,7 @@ convertStack :: CF.Stack -> StackListEntry
 convertStack s = StackListEntry
   { sleStackName             = s.stackName
   , sleStackStatus           = fromCfnStackStatus s.stackStatus
-  , sleCreationTime          = Just (s.creationTime.fromTime)
+  , sleCreationTime          = Just s.creationTime.fromTime
   , sleLastUpdatedTime       = fmap (.fromTime) s.lastUpdatedTime
   , sleTags                  = stackTagMap s
   , sleStatusReason          = s.stackStatusReason

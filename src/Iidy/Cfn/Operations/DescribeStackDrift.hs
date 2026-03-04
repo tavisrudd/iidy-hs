@@ -199,8 +199,7 @@ convertDrift d = DriftedResource
   , drPhysicalResourceId  = fromMaybe "unknown" d.physicalResourceId
   , drResourceType        = d.resourceType
   , drDriftStatus         = CF.fromStackResourceDriftStatus d.stackResourceDriftStatus
-  , drPropertyDifferences = map convertPropDiff
-                              (fromMaybe [] d.propertyDifferences)
+  , drPropertyDifferences = maybe [] (map convertPropDiff) d.propertyDifferences
   }
 
 -- | Convert an AWS PropertyDifference to our output type.

@@ -126,7 +126,7 @@ fetchParametersByPath awsEnv paramPath = runResourceT $ do
 -- The format suffix is the part after the last colon if it is @json@ or @yaml@.
 parseSsmLocation :: Text -> Either ImportError (Text, Maybe Text)
 parseSsmLocation location =
-  let stripped = maybe location id (T.stripPrefix "ssm:" location)
+  let stripped = fromMaybe location (T.stripPrefix "ssm:" location)
   in parseFormatSuffix "SSM parameter name" location stripped
 
 -- | Parse an SSM path location into (parameterPath, Maybe formatSuffix).

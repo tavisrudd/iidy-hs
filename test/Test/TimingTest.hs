@@ -9,6 +9,7 @@ import Data.Time.Clock (UTCTime(..))
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Data.Word (Word8, Word32)
 import Test.Tasty (TestTree, testGroup)
+import Data.Maybe (isJust)
 import Test.Tasty.HUnit (testCase, (@?=), assertBool)
 
 import Iidy.Aws.Timing
@@ -108,7 +109,7 @@ packetTests =
 
   , testCase "parseNtpResponse accepts packet longer than 48 bytes" $
       -- secs must be >= ntpToUnixOffset for Just, use a valid timestamp
-      assertBool "returns Just" (parseNtpResponse (BS.pack (replicate 40 0 ++ toBigEndian knownNtpSecs ++ toBigEndian 0 ++ replicate 16 0)) /= Nothing)
+      assertBool "returns Just" (isJust (parseNtpResponse (BS.pack (replicate 40 0 ++ toBigEndian knownNtpSecs ++ toBigEndian 0 ++ replicate 16 0))))
 
   , testCase "getWord32 reads 1 big-endian at offset 0" $
       getWord32 "\x00\x00\x00\x01" 0 @?= (1 :: Word32)

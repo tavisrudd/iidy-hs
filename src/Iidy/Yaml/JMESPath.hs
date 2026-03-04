@@ -14,6 +14,7 @@ import Data.Aeson (Value(..))
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
 import Data.Char (isAlphaNum, isDigit)
+import Data.Maybe (fromMaybe)
 import Data.Scientific (Scientific)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -301,7 +302,7 @@ when False _ = Right ()
 evalJExpr :: JExpr -> Value -> Value
 evalJExpr expr val = case expr of
   JField name -> case val of
-    Object obj -> maybe Null id (KM.lookup (Key.fromText name) obj)
+    Object obj -> fromMaybe Null (KM.lookup (Key.fromText name) obj)
     _ -> Null
 
   JIndex i -> case val of
@@ -331,7 +332,7 @@ evalJExpr expr val = case expr of
 
   JFilter cond proj -> case val of
     Array arr ->
-      let filtered = V.filter (\item -> isTruthy (evalJExpr cond item)) arr
+      let filtered = V.filter (isTruthy . evalJExpr cond) arr
       in Array (V.map (evalJExpr proj) filtered)
     _ -> Null
 

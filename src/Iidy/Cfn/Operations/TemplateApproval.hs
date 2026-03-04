@@ -227,7 +227,7 @@ s3ObjectExists awsEnv bucket key = do
 uploadToS3 :: Amazonka.Env -> Text -> Text -> Text -> IO (Either Text ())
 uploadToS3 awsEnv bucket key content = do
   let body = Amazonka.toBody (TE.encodeUtf8 content)
-      req = (PO.newPutObject (S3.BucketName bucket) (S3.ObjectKey key) body)
+      req = PO.newPutObject (S3.BucketName bucket) (S3.ObjectKey key) body
   result <- try @Amazonka.Error $ runResourceT $ Amazonka.send awsEnv req
   case result of
     Left ex  -> pure (Left (T.pack (show ex)))

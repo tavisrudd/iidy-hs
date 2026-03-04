@@ -304,7 +304,7 @@ convertChange ch = do
     , ciResourceType       = rType
     , ciReplacement        = CF.fromReplacement <$> rc.replacement
     , ciScope              = fmap (map CF.fromResourceAttribute) rc.scope
-    , ciDetails            = map convertDetail (fromMaybe [] rc.details)
+    , ciDetails            = maybe [] (map convertDetail) rc.details
     }
 
 -- | Convert a CF.ResourceChangeDetail to ChangeDetail.
@@ -312,7 +312,7 @@ convertDetail :: CF.ResourceChangeDetail -> ChangeDetail
 convertDetail d =
   let targetText = case d.target of
         Nothing -> ""
-        Just t  -> fromMaybe "" (fmap CF.fromResourceAttribute t.attribute)
+        Just t  -> maybe "" CF.fromResourceAttribute t.attribute
   in ChangeDetail
        { cdTarget        = targetText
        , cdEvaluation    = CF.fromEvaluationType <$> d.evaluation

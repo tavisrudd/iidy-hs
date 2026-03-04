@@ -10,6 +10,7 @@ import Data.Bits ((.&.), (.|.), shiftL, shiftR)
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
 import Data.List (sort)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -205,7 +206,7 @@ b64EncodeBytes bs = TE.decodeUtf8 (b64Encode (BS.unpack bs))
 ------------------------------------------------------------------------
 
 stripFilePrefix :: Text -> Text
-stripFilePrefix loc = maybe loc id (T.stripPrefix "file:" loc)
+stripFilePrefix loc = fromMaybe loc (T.stripPrefix "file:" loc)
 
 isAbsolutePath :: Text -> Bool
 isAbsolutePath t = T.isPrefixOf "/" t

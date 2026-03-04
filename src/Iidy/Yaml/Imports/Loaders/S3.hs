@@ -9,6 +9,7 @@ import Control.Exception (Exception, catches, throwIO, Handler(..))
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource (ResourceT, runResourceT)
 import qualified Data.ByteString as BS
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -32,7 +33,7 @@ import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..), ImportType(..))
 -- Content-type detection is based on the object key extension.
 loadS3Import :: Amazonka.Env -> Text -> IO (Either ImportError ImportData)
 loadS3Import awsEnv location = do
-  let uri = maybe location id (T.stripPrefix "s3:" location)
+  let uri = fromMaybe location (T.stripPrefix "s3:" location)
   case parseS3Uri uri of
     Left err -> pure (Left err)
     Right (bucket, key) -> do
@@ -108,7 +109,7 @@ limitedConsume maxBytes = go 0 []
 -- Accepts @//bucket/key@ (after stripping @s3:@) or plain @bucket/key@.
 parseS3Uri :: Text -> Either ImportError (S3.BucketName, S3.ObjectKey)
 parseS3Uri uri =
-  let withoutSlashes = maybe uri id (T.stripPrefix "//" uri)
+  let withoutSlashes = fromMaybe uri (T.stripPrefix "//" uri)
   in parseBucketKey withoutSlashes
 
 -- | Parse @bucket/key@ into its components.

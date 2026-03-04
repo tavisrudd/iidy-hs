@@ -75,7 +75,7 @@ watchStack ctx stackName timeoutSeconds emit = do
                 -- Second dedup layer: filter events seen before polling started
                 let fresh = filter (\e -> Set.notMember e.eventId seenIds) newEvents
                 when (not (null fresh)) $ pcOnNewEvents baseCfg fresh
-            , pcOnInactivityTimeout    = \info -> emit (OdInactivityTimeout info)
+            , pcOnInactivityTimeout    = emit . OdInactivityTimeout
             }
       pollResult <- pollForCompletion ctx sId allTerminalStatuses pollCfg
 

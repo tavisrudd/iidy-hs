@@ -3,6 +3,7 @@ module Iidy.Yaml.Imports.Loaders.Env
   ) where
 
 import Data.Aeson (Value(..))
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import System.Environment (lookupEnv)
@@ -12,7 +13,7 @@ import Iidy.Yaml.Imports.Types (ImportData(..), ImportType(..), ImportError(..))
 -- Format: env:VAR_NAME or env:VAR_NAME:default_value
 loadEnvImport :: Text -> IO (Either ImportError ImportData)
 loadEnvImport location = do
-  let stripped = maybe location id (T.stripPrefix "env:" location)
+  let stripped = fromMaybe location (T.stripPrefix "env:" location)
       (varName, defaultVal) = parseEnvSpec stripped
   result <- lookupEnv (T.unpack varName)
   case result of

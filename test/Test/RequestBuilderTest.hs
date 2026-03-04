@@ -4,6 +4,7 @@ module Test.RequestBuilderTest (requestBuilderTests) where
 
 import qualified Data.Aeson as Aeson
 import qualified Data.Map.Strict
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -43,7 +44,7 @@ requestBuilderTests =
 
   , testCase "mapParameters: non-empty map has params" $
       let result = mapParameters (Just (Data.Map.Strict.singleton "key" "value"))
-      in assertBool "Just with params" (result /= Nothing)
+      in assertBool "Just with params" (isJust result)
 
   , testCase "mapTags: Nothing -> Nothing" $
       mapTags Nothing @?= Nothing
@@ -53,7 +54,7 @@ requestBuilderTests =
 
   , testCase "mapTags: non-empty map has tags" $
       let result = mapTags (Just (Data.Map.Strict.singleton "env" "prod"))
-      in assertBool "Just with tags" (result /= Nothing)
+      in assertBool "Just with tags" (isJust result)
 
   , testCase "toAmazonkaOnFailure: Delete" $
       toAmazonkaOnFailure Delete @?= CF.OnFailure_DELETE

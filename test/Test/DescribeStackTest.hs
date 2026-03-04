@@ -181,8 +181,8 @@ describeStackTests =
               , ST.roleARN = Just "arn:aws:iam::123:role/cfn-role"
               , ST.tags = Just [CF.newTag "Env" "prod", CF.newTag "Team" "platform"]
               , ST.parameters = Just
-                  [ (CF.newParameter) { Param.parameterKey = Just "VpcId", Param.parameterValue = Just "vpc-123" }
-                  , (CF.newParameter) { Param.parameterKey = Just "Env", Param.parameterValue = Just "prod" }
+                  [ CF.newParameter { Param.parameterKey = Just "VpcId", Param.parameterValue = Just "vpc-123" }
+                  , CF.newParameter { Param.parameterKey = Just "Env", Param.parameterValue = Just "prod" }
                   ]
               , ST.notificationARNs = Just ["arn:aws:sns:us-east-1:123:topic"]
               , ST.disableRollback = Just True
