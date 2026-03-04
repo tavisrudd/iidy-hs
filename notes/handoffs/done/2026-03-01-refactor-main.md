@@ -375,7 +375,7 @@ make a single helper awkward. The implementer should evaluate after chunks
 - [x] Chunk 5: Extract shell completion scripts to Iidy.Cli.Completion
 - [x] Chunk 6: Extract runCfnWithArgs + createSimpleContext to Iidy.Cfn.Runner
 - [x] Chunk 7: Final cleanup and import pruning
-- [ ] (Optional) Chunk 8: Compress runCommand dispatch with helpers
+- [x] (Optional) Chunk 8: Skipped — dispatch at 295 LOC is clean pattern-matching, no abstraction needed
 - [x] Build clean + all tests pass (1243 tests, zero warnings)
 
 ## Handoff Notes
