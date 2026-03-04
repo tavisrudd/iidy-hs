@@ -42,7 +42,7 @@ audit trail display (e.g., "assume-role arn:... via profile 'default'").
 | 2        | `Region` field in stack-args    | merged via `mergeAwsSettings`     |
 | 3        | `AWS_REGION` environment var    | `lookupEnv "AWS_REGION"`          |
 | 4        | `AWS_DEFAULT_REGION` env var    | `lookupEnv "AWS_DEFAULT_REGION"`  |
-| 5        | Hardcoded default: `us-east-1`  | `Amazonka.NorthVirginia`          |
+| 5        | Error (no region configured)    | `fail "No AWS region configured…"`|
 
 CLI and stack-args are merged before `resolveRegion` is called, so from
 `resolveRegion`'s perspective it sees either `Just region` (from whichever
@@ -51,7 +51,7 @@ source won) or `Nothing` (fall through to env vars / default).
 ```haskell
 resolveRegion :: Maybe Text -> IO Amazonka.Region
 resolveRegion (Just r) = pure (textToRegion r)
-resolveRegion Nothing  = ...  -- checks env vars, falls back to us-east-1
+resolveRegion Nothing  = ...  -- checks env vars, errors if none found
 ```
 
 ---
