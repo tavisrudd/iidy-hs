@@ -1,6 +1,7 @@
 module Test.ImportLoaderTest (importLoaderTests) where
 
 import Data.Aeson (Value(..))
+import Data.Char (isDigit)
 import Data.Maybe (isJust)
 import qualified Data.Text as T
 import System.Directory (findExecutable)
@@ -129,7 +130,7 @@ randomTests =
           assertBool "contains dash" (T.isInfixOf "-" val)
           let parts = T.splitOn "-" val
           assertBool "two parts" (length parts == 2)
-          assertBool "both non-empty" (all (not . T.null) parts)
+          assertBool "both non-empty" (not (any T.null parts))
 
   , testCase "random:name returns non-empty text" $ do
       result <- loadRandomImport "random:name"
@@ -228,4 +229,4 @@ dispatchTests =
 ------------------------------------------------------------------------
 
 isHexDigit :: Char -> Bool
-isHexDigit c = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+isHexDigit c = isDigit c || (c >= 'a' && c <= 'f')

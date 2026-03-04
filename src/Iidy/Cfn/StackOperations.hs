@@ -35,7 +35,7 @@ module Iidy.Cfn.StackOperations
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (concurrently)
 import Control.Exception (try, throwIO)
-import Control.Monad (when)
+import Control.Monad (unless)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Conduit (runConduit, (.|))
 import qualified Data.Conduit.List as CL
@@ -293,7 +293,7 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
         now <- getCurrentTime
         -- Filter to new events only (O(log n) per event via Set.notMember)
         let newEvents = filter (\e -> Set.notMember e.eventId lastEventSet) events
-        when (not (null newEvents)) $ do
+        unless (null newEvents) $ do
           writeIORef lastEventTimeRef now
           writeIORef hasSeenNewEventsRef True
           -- reverse: events arrive most-recent-first; emit oldest-first

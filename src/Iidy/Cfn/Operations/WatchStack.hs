@@ -7,7 +7,7 @@ module Iidy.Cfn.Operations.WatchStack
   ( watchStack
   ) where
 
-import Control.Monad (when)
+import Control.Monad (unless)
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -74,7 +74,7 @@ watchStack ctx stackName timeoutSeconds emit = do
             , pcOnNewEvents            = \newEvents -> do
                 -- Second dedup layer: filter events seen before polling started
                 let fresh = filter (\e -> Set.notMember e.eventId seenIds) newEvents
-                when (not (null fresh)) $ pcOnNewEvents baseCfg fresh
+                unless (null fresh) $ pcOnNewEvents baseCfg fresh
             , pcOnInactivityTimeout    = emit . OdInactivityTimeout
             }
       pollResult <- pollForCompletion ctx sId allTerminalStatuses pollCfg

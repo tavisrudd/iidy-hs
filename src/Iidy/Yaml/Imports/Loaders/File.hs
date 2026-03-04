@@ -7,6 +7,7 @@ import Control.Exception (IOException, try)
 import Crypto.Hash (SHA256(..), hashWith)
 import Data.Aeson (Value(..))
 import Data.Bits ((.&.), (.|.), shiftL, shiftR)
+import Data.Char (isDigit)
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
 import Data.List (sort)
@@ -163,7 +164,7 @@ hexToBytes hex = BS.pack (go (T.unpack hex))
     go (h:l:rest) = fromIntegral (hexVal h * 16 + hexVal l) : go rest
     hexVal :: Char -> Int
     hexVal c
-      | c >= '0' && c <= '9' = fromEnum c - fromEnum '0'
+      | isDigit c = fromEnum c - fromEnum '0'
       | c >= 'a' && c <= 'f' = fromEnum c - fromEnum 'a' + 10
       | c >= 'A' && c <= 'F' = fromEnum c - fromEnum 'A' + 10
       | otherwise = 0

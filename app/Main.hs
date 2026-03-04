@@ -2,6 +2,7 @@
 module Main (main) where
 
 import Control.Exception (SomeException, IOException, catch, finally, fromException, displayException)
+import Control.Monad (when)
 import qualified Amazonka
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
@@ -391,21 +392,17 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
       ctx <- createContextFromEnv awsEnv credStack operation tp token
 
       -- Emit CommandMetadata for write operations (not lint/estimate-cost)
-      if emitsCommandMetadata operation
-        then do
-          meta <- constructCommandMetadata ctx mergedAws sa' env stackNameOverride
-          emit (OdCommandMetadata meta)
-        else pure ()
+      when (emitsCommandMetadata operation)
+        $ do meta <- constructCommandMetadata ctx mergedAws sa' env stackNameOverride
+             emit (OdCommandMetadata meta)
 
       rc <- action remoteImports ctx sa' (Just argsfilePath) env emit
         `finally` cleanupOutputDispatch dispatch
 
       -- Emit FinalCommandSummary for write operations
-      if emitsCommandMetadata operation
-        then do
-          elapsed <- ctxElapsedSeconds ctx
-          emit (createFinalCommandSummary (rc == 0) elapsed)
-        else pure ()
+      when (emitsCommandMetadata operation)
+        $ do elapsed <- ctxElapsedSeconds ctx
+             emit (createFinalCommandSummary (rc == 0) elapsed)
 
       exitCode rc
 

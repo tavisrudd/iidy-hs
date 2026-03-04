@@ -11,7 +11,7 @@ import Data.Bits ((.&.), (.|.), shiftL, shiftR)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
-import Data.Char (isUpper, toUpper)
+import Data.Char (isDigit, isUpper, toUpper)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Scientific (Scientific)
@@ -243,7 +243,7 @@ urlEncode = T.concatMap encodeChar
           let bytes = TE.encodeUtf8 (T.singleton c)
           in T.concat [T.pack ('%' : hexByte b) | b <- BS.unpack bytes]
     isUnreserved c = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
-                  || (c >= '0' && c <= '9') || c `elem` ("-_.~" :: [Char])
+                  || isDigit c || c `elem` ("-_.~" :: [Char])
     hexByte b = [hexDigit (b `div` 16), hexDigit (b `mod` 16)]
     hexDigit :: Word8 -> Char
     hexDigit n

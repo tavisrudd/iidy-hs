@@ -146,7 +146,7 @@ normalizeKeyOrder x = x
 
 -- | Check if character is lowercase hex
 isLowHex :: Char -> Bool
-isLowHex c = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+isLowHex c = isDigit c || (c >= 'a' && c <= 'f')
 
 ------------------------------------------------------------------------
 -- Test list

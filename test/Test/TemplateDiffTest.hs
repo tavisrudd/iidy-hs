@@ -1,5 +1,6 @@
 module Test.TemplateDiffTest (templateDiffTests) where
 
+import Control.Monad (when)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Test.Tasty (TestTree)
@@ -171,10 +172,10 @@ assertContains haystack needle =
 -- | Assert that a text does NOT contain a given substring.
 assertNotContains :: Text -> Text -> IO ()
 assertNotContains haystack needle =
-  if needle `T.isInfixOf` haystack
-    then fail $ "Expected output to NOT contain " <> show needle
-             <> " but got:\n" <> T.unpack haystack
-    else pure ()
+  when (needle `T.isInfixOf` haystack)
+    $ fail
+        $ "Expected output to NOT contain "
+            <> show needle <> " but got:\n" <> T.unpack haystack
 
 -- | Find the index of the first line containing a given substring.
 findIndex' :: Text -> [Text] -> Maybe Int

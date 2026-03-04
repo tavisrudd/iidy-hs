@@ -1,6 +1,7 @@
 module Test.FilehashTest (filehashTests) where
 
 import Data.Aeson (Value(..))
+import Data.Char (isDigit)
 import qualified Data.ByteString as BS
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -184,4 +185,4 @@ testDispatchFile = testCase "dispatches bare paths to file loader" $
 ------------------------------------------------------------------------
 
 isHexDigit :: Char -> Bool
-isHexDigit c = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+isHexDigit c = isDigit c || (c >= 'a' && c <= 'f')

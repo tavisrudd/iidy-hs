@@ -99,7 +99,7 @@ validateType (Array types) value =
       extractType _          = False
   in if any extractType (V.toList types)
     then Right ()
-    else Left $ "Value does not match any of the expected types"
+    else Left "Value does not match any of the expected types"
 validateType _ _ = Left "Invalid schema: 'type' must be a string or array"
 
 matchesType :: Text -> Value -> Bool
@@ -123,7 +123,7 @@ valueTypeName (Array _)  = "array"
 validateEnum :: [Value] -> Value -> Either Text ()
 validateEnum allowed value
   | value `elem` allowed = Right ()
-  | otherwise = Left $ "Value not in enum"
+  | otherwise = Left "Value not in enum"
 
 validateRequired :: [Value] -> KM.KeyMap Value -> Either Text ()
 validateRequired reqs obj = mapM_ checkReq reqs

@@ -127,7 +127,7 @@ generateTypeConversionHelp expected found
 
 -- | Check if a message is a CloudFormation validation error.
 isCfnValidationMessage :: Text -> Bool
-isCfnValidationMessage msg = any (\p -> p `T.isPrefixOf` msg) cfnValidationPrefixes
+isCfnValidationMessage msg = any (`T.isPrefixOf` msg) cfnValidationPrefixes
   where
     cfnValidationPrefixes :: [Text]
     cfnValidationPrefixes =

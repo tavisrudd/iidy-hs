@@ -85,7 +85,7 @@ parameterizeStackName name project =
       digitReplaced = case T.breakOnEnd "-" envReplaced of
         ("", _) -> envReplaced
         (prefix, suffix)
-          | not (T.null suffix) && T.all (\c -> c >= '0' && c <= '9') suffix ->
+          | not (T.null suffix) && T.all (\c -> isDigit c) suffix ->
               T.dropEnd 1 prefix <> "-{{build_number}}"
           | otherwise -> envReplaced
       -- Replace project name with {{project}}

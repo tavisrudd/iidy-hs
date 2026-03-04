@@ -1,8 +1,9 @@
 module Test.IntegrationTest (integrationTests) where
 
 import Control.Exception (try, SomeException)
-import Control.Monad (forM, when)
+import Control.Monad (forM, unless)
 import Data.List (nub)
+import Data.Maybe (catMaybes)
 import System.IO (IOMode(..), withFile)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -50,8 +51,8 @@ interactiveRendererIntegrationTests =
           case result of
             Left ex -> pure (Just (show od, ex))
             Right () -> pure Nothing
-        let failures = [f | Just f <- results]
-        when (not (null failures)) $
+        let failures = catMaybes results
+        unless (null failures) $
           assertFailure $ "Renderer crashed on variants: " <>
             unlines [tag <> ": " <> show ex | (tag, ex) <- failures]
 
@@ -62,8 +63,8 @@ interactiveRendererIntegrationTests =
           case result of
             Left ex -> pure (Just (show od, ex))
             Right () -> pure Nothing
-        let failures = [f | Just f <- results]
-        when (not (null failures)) $
+        let failures = catMaybes results
+        unless (null failures) $
           assertFailure $ "Colored renderer crashed on: " <>
             unlines [tag <> ": " <> show ex | (tag, ex) <- failures]
 
@@ -158,8 +159,8 @@ jsonRendererIntegrationTests =
           case result of
             Left ex -> pure (Just (show od, ex))
             Right () -> pure Nothing
-        let failures = [f | Just f <- results]
-        when (not (null failures)) $
+        let failures = catMaybes results
+        unless (null failures) $
           assertFailure $ "JSON renderer crashed on variants: " <>
             unlines [tag <> ": " <> show ex | (tag, ex) <- failures]
 

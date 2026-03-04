@@ -5,6 +5,7 @@ module Iidy.Yaml.CustomResources.Expansion
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (maybeToList)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -107,7 +108,7 @@ extractGlobalSections prefix globals = \case
         extractSection name = case lookupO name kvs of
           Just section -> Just (name, prefixAndRewriteSection prefix globals section)
           Nothing -> Nothing
-    in Map.fromList (concatMap (maybe [] (:[]) . extractSection) sections)
+    in Map.fromList (concatMap (maybeToList . extractSection) sections)
   _ -> Map.empty
 
 -- | Prefix keys in a section and rewrite refs within values.

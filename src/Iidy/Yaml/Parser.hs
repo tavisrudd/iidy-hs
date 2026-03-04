@@ -433,7 +433,7 @@ validateFields required optional pairs =
       unknowns = [(t, astMeta k) | (k, _) <- pairs, Just t <- [getScalarText k], t `notElem` allValid]
   in case unknowns of
     ((unknown, keyMeta):_) ->
-      let optFormatted = map (\o -> o <> " (optional)") optional
+      let optFormatted = map (<> " (optional)") optional
           allFormatted = required ++ optFormatted
       in parseErrorAt keyMeta $
         "unexpected field '" <> unknown <> "'\n\nValid fields are: " <> T.intercalate ", " allFormatted

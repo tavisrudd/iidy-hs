@@ -7,7 +7,7 @@ module Iidy.Yaml.Resolution.Resolver
   , ResolveErrorKind(..)
   ) where
 
-import Control.Monad (foldM)
+import Control.Monad (foldM, when)
 import Data.Aeson (Value(..))
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Key
@@ -815,9 +815,9 @@ resolveExpand ctx meta (ExpandTag templateRefAst paramsAst) = do
   templateVal <- resolveAst ctx templateRefAst
   let templateName = oValueToText templateVal
   -- 2. Check for circular expansion
-  if Set.member templateName (tcActiveExpansions ctx)
-    then circularExpansionError meta templateName
-    else pure ()
+  when
+    (Set.member templateName (tcActiveExpansions ctx))
+    $ circularExpansionError meta templateName
   -- 3. Look up template info
   case Map.lookup templateName (tcCustomTemplateDefs ctx) of
     Nothing -> expandNotFoundError meta templateName

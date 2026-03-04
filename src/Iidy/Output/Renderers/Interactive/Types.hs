@@ -62,7 +62,7 @@ import Data.IORef
 import Data.List (sortBy)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Foldable (asum)
+import Data.Foldable (asum, for_)
 import Data.Maybe (fromMaybe)
 import Data.Ord (comparing)
 import Data.Text (Text)
@@ -235,15 +235,11 @@ stopSpinner r = mask_ $ do
   stopTimingTask r
   -- Kill tick thread
   mTid <- readTVarIO (irSpinnerThread r)
-  case mTid of
-    Just tid -> killThread tid
-    Nothing  -> pure ()
+  for_ mTid killThread
   atomically $ writeTVar (irSpinnerThread r) Nothing
   -- Clear spinner display
   mSp <- readTVarIO (irSpinner r)
-  case mSp of
-    Just sp -> spinnerFinishAndClear sp
-    Nothing -> pure ()
+  for_ mSp spinnerFinishAndClear
   atomically $ writeTVar (irSpinner r) Nothing
 
 ------------------------------------------------------------------------
@@ -294,9 +290,7 @@ timingLoop r sp = do
 stopTimingTask :: InteractiveRenderer -> IO ()
 stopTimingTask r = mask_ $ do
   mTid <- readTVarIO (irTimingThread r)
-  case mTid of
-    Just tid -> killThread tid
-    Nothing  -> pure ()
+  for_ mTid killThread
   atomically $ writeTVar (irTimingThread r) Nothing
   atomically $ writeTVar (irTimingState r) Nothing
 
@@ -409,7 +403,7 @@ prettyFormatTags tags maxTags
           Just (k, v) -> [k <> "=" <> v]
           Nothing     -> []
         otherTags = sortBy (comparing fst)
-          [(k, v) | (k, v) <- Map.toList tags, not (k `elem` envKeys)]
+          [(k, v) | (k, v) <- Map.toList tags, notElem k envKeys]
         otherFormatted = map (\(k, v) -> k <> "=" <> v) otherTags
         truncated = case maxTags of
           Nothing -> otherFormatted

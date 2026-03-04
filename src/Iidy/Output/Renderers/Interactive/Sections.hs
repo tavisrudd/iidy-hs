@@ -41,6 +41,7 @@ module Iidy.Output.Renderers.Interactive.Sections
 
 import Control.Concurrent.STM (readTVarIO, atomically, writeTVar)
 import Control.Monad (when, unless)
+import Data.Foldable (for_)
 import Data.List (sortBy)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
@@ -228,7 +229,7 @@ renderStackContents r contents = do
         )) (scOutputs contents)
   -- Exports
   unless (null (scExports contents)) $ do
-    let hasImports = any (not . null . seiImportingStacks) (scExports contents)
+    let hasImports = not (all (null . seiImportingStacks) (scExports contents))
         isComplex = length (scExports contents) > 1 || hasImports
     if isComplex
       then printSectionHeadingLn r "Stack Exports"
@@ -284,9 +285,7 @@ renderCommandResult r res = do
                    then formatSectionHeading r "SUCCESS"
                    else colorize (th r) (thError (th r)) "FAILURE" <> ":"
   rPutStrLn r (statusText <> " (" <> T.pack (show (crElapsedSeconds res)) <> "s)")
-  case crMessage res of
-    Just msg -> rPutStrLn r msg
-    Nothing  -> pure ()
+  for_ (crMessage res) (rPutStrLn r)
 
 renderFinalCommandSummary :: InteractiveRenderer -> FinalCommandSummary -> IO ()
 renderFinalCommandSummary r summ = do

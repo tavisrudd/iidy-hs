@@ -16,7 +16,7 @@ import qualified Data.Char as Char
 import Data.List (dropWhileEnd, isInfixOf, isPrefixOf, stripPrefix)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (isJust, listToMaybe)
+import Data.Maybe (isJust, listToMaybe, maybeToList)
 import qualified System.Console.ANSI as ANSI
 import qualified System.Environment
 import System.IO (Handle, stdout, stderr, hIsTerminalDevice, hPutStrLn)
@@ -498,7 +498,7 @@ commandPathFromArgs args =
     Nothing -> []
     Just (cmd, rest)
       | cmd `elem` topLevelCommands ->
-          cmd : maybe [] (:[]) (findSubcommand cmd rest)
+          cmd : maybeToList (findSubcommand cmd rest)
       | otherwise -> []
   where
     topLevelCommands = [name | (name, _) <- visibleCommandHelpRows, not (null name)] <> hiddenCommandNames
@@ -586,7 +586,7 @@ isSectionHeader line =
 
 isRowLine :: String -> Bool
 isRowLine line =
-  "  " `isPrefixOf` line && any (not . Char.isSpace) (drop 2 line)
+  "  " `isPrefixOf` line && not (all Char.isSpace (drop 2 line))
 
 -- | Check if a row line starts a new entry (option or argument) vs being a
 -- continuation of the previous entry's description.

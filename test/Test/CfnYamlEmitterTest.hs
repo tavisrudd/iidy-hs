@@ -58,7 +58,7 @@ cfnYamlEmitterTests =
 
       , testCase "float not in scientific notation" $ do
           let result = inlineValue (numFrom "0.1")
-          assertBool "no 'e' in float output" (not ('e' `elem` T.unpack result))
+          assertBool "no 'e' in float output" (notElem 'e' (T.unpack result))
 
       , testCase "1.0e2 emits as integer 100" $
           inlineValue (numFrom "1.0e2") @?= "100"

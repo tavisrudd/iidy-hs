@@ -149,7 +149,7 @@ parsePostfix lhs input
   | T.isPrefixOf ">" input = parseBinOp OpGt lhs (T.drop 1 input)
   -- Detect function call syntax: identifier followed by '('
   | T.isPrefixOf "(" input =
-      Left (JMESPathError $ "JMESPath functions are not supported in iidy (e.g., 'length(@)'). See notes/jmespath-subset.md")
+      Left (JMESPathError "JMESPath functions are not supported in iidy (e.g., 'length(@)'). See notes/jmespath-subset.md")
   | otherwise = Right (lhs, input)
 
 -- | Check if an expression is a projection that needs its RHS filled in
@@ -248,11 +248,11 @@ parseIndexOrMultiSelect input
             Just rest -> Right (JIndex n, rest)
             Nothing
               | T.isPrefixOf ":" afterNum ->
-                  Left (JMESPathError $ "JMESPath slice expressions are not supported in iidy (e.g., '[0:5]'). See notes/jmespath-subset.md")
+                  Left (JMESPathError "JMESPath slice expressions are not supported in iidy (e.g., '[0:5]'). See notes/jmespath-subset.md")
               | otherwise -> Left (JMESPathError "Expected ']' after index")
         _ -> Left (JMESPathError $ "Invalid index: " <> numStr)
   | Just (':', _) <- T.uncons input =
-      Left (JMESPathError $ "JMESPath slice expressions are not supported in iidy (e.g., '[0:5]'). See notes/jmespath-subset.md")
+      Left (JMESPathError "JMESPath slice expressions are not supported in iidy (e.g., '[0:5]'). See notes/jmespath-subset.md")
   | otherwise = do
       -- Multi-select list
       parseMultiSelectList input

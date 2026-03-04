@@ -440,7 +440,7 @@ paramGetByPath awsEnv args = do
     Right params
       | null params -> pure (Right ByPathEmpty)
       | otherwise   -> do
-          let sorted = List.sortBy (comparing (\p -> p ^. SSMP.parameter_name)) params
+          let sorted = List.sortBy (comparing (^. SSMP.parameter_name)) params
           case args.gpbFormat of
             ParamFormatSimple -> do
               -- Default: sort by name, build Map name->value, print as YAML
