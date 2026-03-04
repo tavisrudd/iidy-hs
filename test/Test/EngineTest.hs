@@ -13,7 +13,8 @@ import Test.Tasty.HUnit
 
 import Iidy.Yaml.Ast
 import Iidy.Yaml.Engine (preprocessYaml, PreprocessResult(..), PreprocessError(..))
-import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..), ImportType(..))
+import Iidy.Yaml.Imports.Manifest (getRecords)
+import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..), ImportRecord(..), ImportType(..))
 import Iidy.Yaml.Location (zeroPosition)
 import Iidy.Yaml.OValue (toValue)
 
@@ -230,5 +231,65 @@ engineTests =
                   assertEqual "should pass through plain import" "value" s
                 other -> assertFailure $ "Expected String output, got: " <> show other
               _ -> assertFailure $ "Expected Object, got: " <> show v
+    ]
+
+  , testGroup "Import manifest recording"
+    [ testCase "manifest records imports with key and location" $ do
+        let ast = AstMapping
+              [ ( AstPlainString "$imports" m
+                , AstMapping
+                    [ (AstPlainString "config" m, AstPlainString "config.yaml" m)
+                    ]
+                    m
+                )
+              ] m
+        result <- preprocessYaml alwaysSucceedLoader ast "base.yaml"
+        case result of
+          Left err -> assertFailure $ "Expected success, got: " <> show err
+          Right (PreprocessResult _val manifest) -> do
+            let records = getRecords manifest
+            assertBool "should have exactly one record" (length records == 1)
+            case records of
+              [r] -> do
+                irKey r @?= Just "config"
+                irFrom r @?= "base.yaml"
+                irImported r @?= "mock"
+                assertBool "sha256 is 64 hex chars"
+                  (T.length (irSha256Digest r) == 64)
+                assertBool "sha256 contains only hex chars"
+                  (T.all (\c -> c `elem` ("0123456789abcdef" :: [Char])) (irSha256Digest r))
+              _ -> assertFailure "Expected exactly one record"
+
+    , testCase "multiple imports create multiple manifest records" $ do
+        let ast = AstMapping
+              [ ( AstPlainString "$imports" m
+                , AstMapping
+                    [ (AstPlainString "a" m, AstPlainString "file-a.yaml" m)
+                    , (AstPlainString "b" m, AstPlainString "file-b.yaml" m)
+                    ]
+                    m
+                )
+              ] m
+        result <- preprocessYaml alwaysSucceedLoader ast "base.yaml"
+        case result of
+          Left err -> assertFailure $ "Expected success, got: " <> show err
+          Right (PreprocessResult _val manifest) -> do
+            let records = getRecords manifest
+            length records @?= 2
+            case records of
+              [r1, r2] -> do
+                irKey r1 @?= Just "a"
+                irKey r2 @?= Just "b"
+              _ -> assertFailure "Expected exactly two records"
+
+    , testCase "no imports produces empty manifest" $ do
+        let ast = AstMapping
+              [ (AstPlainString "key" m, AstPlainString "val" m)
+              ] m
+        result <- preprocessYaml alwaysSucceedLoader ast "base.yaml"
+        case result of
+          Left err -> assertFailure $ "Expected success, got: " <> show err
+          Right (PreprocessResult _val manifest) ->
+            assertBool "manifest should be empty" (null (getRecords manifest))
     ]
   ]

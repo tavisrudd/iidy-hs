@@ -7,19 +7,23 @@ module Iidy.Yaml.Engine
   ) where
 
 import Control.Monad (foldM)
+import Crypto.Hash (SHA256(..), hashWith)
 import Data.Aeson (Value(..))
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
+import qualified Data.ByteArray as BA
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import Data.Word (Word8)
 import Iidy.Yaml.Ast
 import Iidy.Yaml.Handlebars.Engine (interpolate, defaultHelpers, InterpolateError(..))
 import Iidy.Yaml.Imports.Manifest
-import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..))
+import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..), ImportRecord(..))
 import Iidy.Yaml.CustomResources.Params (parseParams)
 import Iidy.Yaml.OValue (OValue(..), toValue, fromValue)
 import Iidy.Yaml.Parser (parseYaml)
@@ -167,14 +171,22 @@ processImports loader env tmplDefs manifest stack ((keyAst, locAst):rest) baseLo
                           Map.insert importKey (TemplateInfo params (idRawData importData) (idLocation importData)) tmplDefs
                         Left _err -> tmplDefs  -- Skip malformed $params
                     _ -> tmplDefs
+              -- Record import in manifest for auditing
+              let record = ImportRecord
+                    { irKey          = Just importKey
+                    , irFrom         = baseLocation
+                    , irImported     = idLocation importData
+                    , irSha256Digest = computeSha256 (idRawData importData)
+                    }
+                  manifest' = addRecord record manifest
               -- Recursively preprocess if imported doc has $imports or $defs
-              importResult <- processImportedDoc loader (idDoc importData) (idRawData importData) (idLocation importData) env manifest stack'
+              importResult <- processImportedDoc loader (idDoc importData) (idRawData importData) (idLocation importData) env manifest' stack'
               case importResult of
                 Left err -> pure $ Left err
-                Right (importedValue, manifest', stack'') -> do
+                Right (importedValue, manifest'', stack'') -> do
                   let env' = Map.insert importKey importedValue env
                   let stackFinal = popImport stack''
-                  processImports loader env' tmplDefs' manifest' stackFinal rest baseLocation
+                  processImports loader env' tmplDefs' manifest'' stackFinal rest baseLocation
 
 ------------------------------------------------------------------------
 -- Recursive import preprocessing
@@ -262,4 +274,17 @@ extractKeyText = \case
   AstBool False _ -> "false"
   AstNull _ -> "null"
   _ -> ""
+
+-- | Compute SHA256 hex digest of text content.
+computeSha256 :: Text -> Text
+computeSha256 t =
+  let digest = hashWith SHA256 (TE.encodeUtf8 t)
+      bytes = BA.convert digest :: BS.ByteString
+  in T.pack (concatMap toHexLower (BS.unpack bytes))
+  where
+    toHexLower b = [hexDigit (b `div` 16), hexDigit (b `mod` 16)]
+    hexDigit :: Word8 -> Char
+    hexDigit n
+      | n < 10    = toEnum (fromEnum '0' + fromIntegral n)
+      | otherwise = toEnum (fromEnum 'a' + fromIntegral n - 10)
 
