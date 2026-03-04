@@ -69,14 +69,14 @@ errorClassificationTests =
             TagParsingError info -> do
                 assertEqual "tag name extracted" "!$mapp" (tpiTagName info)
                 assertEqual "span length" 6 (tpiSpanLen info)
-            _ -> pure ()
+            _other -> pure ()
     , testCase "unknown tag: !$foobarbaz" $ do
         let result = classify "'!$foobarbaz' is not a valid iidy tag"
         assertTagParsing UnknownPreprocessingTag result
         case result of
             TagParsingError info ->
                 assertEqual "tag name extracted" "!$foobarbaz" (tpiTagName info)
-            _ -> pure ()
+            _other -> pure ()
     , -- Unexpected field (ERR_4005)
       testCase "unexpected field" $ do
         let result = classify "unexpected field 'foo'\n\nValid fields are: bar, baz"
@@ -84,7 +84,7 @@ errorClassificationTests =
         case result of
             TagParsingError info ->
                 assertEqual "guidance present" (Just "check field spelling and tag documentation") (tpiGuidance info)
-            _ -> pure ()
+            _other -> pure ()
     , -- Query/jmespath mutual exclusivity (ERR_4005)
       testCase "query and jmespath mutually exclusive" $ do
         let result = classify "'query' and 'jmespath' are mutually exclusive"
@@ -93,7 +93,7 @@ errorClassificationTests =
             TagParsingError info -> do
                 assertEqual "tag name" "!$" (tpiTagName info)
                 assertEqual "suggestion" (Just "!$ variable_name") (tpiSuggestion info)
-            _ -> pure ()
+            _other -> pure ()
     , -- Variable not found (ERR_2001)
       testCase "variable not found with available vars" $ do
         let result = classify "Variable not found: myVar. Available: x, y, z"
@@ -103,7 +103,7 @@ errorClassificationTests =
                 assertEqual "errorId" VariableNotFound (vnfErrorId info)
                 assertEqual "variable name" "myVar" (vnfVariable info)
                 assertEqual "available vars" ["x", "y", "z"] (vnfAvailableVars info)
-            _ -> pure ()
+            _other -> pure ()
     , testCase "variable not found without available vars" $ do
         let result = classify "Variable not found: lonely"
         assertVarNotFound result
@@ -111,7 +111,7 @@ errorClassificationTests =
             VariableNotFoundError info -> do
                 assertEqual "variable name" "lonely" (vnfVariable info)
                 assertEqual "no available vars" [] (vnfAvailableVars info)
-            _ -> pure ()
+            _other -> pure ()
     , -- Property not found in mapping (ERR_2006)
       testCase "property not found in mapping" $ do
         let result = classify "property 'key' not found in mapping. Variable: config. Keys: a, b"
@@ -122,7 +122,7 @@ errorClassificationTests =
                 assertEqual "variable path" "config" (lqiVariablePath info)
                 assertEqual "message" "property 'key' not found in mapping" (lqiMessage info)
                 assertEqual "available keys" ["a", "b"] (lqiAvailableKeys info)
-            _ -> pure ()
+            _other -> pure ()
     , -- Type mismatch: expected X, found Y (ERR_5001)
       testCase "type mismatch: expected sequence, found string" $ do
         let result = classify "expected sequence, found string"
@@ -132,7 +132,7 @@ errorClassificationTests =
                 assertEqual "errorId" TypeMismatchInOperation (tmiErrorId info)
                 assertEqual "expected" "sequence" (tmiExpected info)
                 assertEqual "found" "string" (tmiFound info)
-            _ -> pure ()
+            _other -> pure ()
     , testCase "type mismatch: expected object, found string with help" $ do
         let result = classify "expected object, found string"
         assertTypeMismatch result
@@ -141,14 +141,14 @@ errorClassificationTests =
                 assertEqual "expected" "object" (tmiExpected info)
                 assertEqual "found" "string" (tmiFound info)
                 assertEqual "help" (Just "try using !$parseJson or !$parseYaml to parse the string") (tmiHelp info)
-            _ -> pure ()
+            _other -> pure ()
     , testCase "type mismatch: expected string, found object with help" $ do
         let result = classify "expected string, found object"
         assertTypeMismatch result
         case result of
             TypeMismatchError info -> do
                 assertEqual "help" (Just "try using !$toJsonString or !$toYamlString to serialize the object") (tmiHelp info)
-            _ -> pure ()
+            _other -> pure ()
     , testCase "type mismatch: strips context tags from found" $ do
         let result = classify "expected string, found sequence [delimiter]"
         assertTypeMismatch result
@@ -156,7 +156,7 @@ errorClassificationTests =
             TypeMismatchError info -> do
                 assertEqual "found stripped" "sequence" (tmiFound info)
                 assertEqual "clean context" "expected string, found sequence" (tmiContext info)
-            _ -> pure ()
+            _other -> pure ()
     , -- CFN validation (ERR_7001)
       testCase "cfn validation: !Ref cannot have null value" $ do
         let result = classify "!Ref cannot have null value"
@@ -165,14 +165,14 @@ errorClassificationTests =
             CfnValidationError info -> do
                 assertEqual "errorId" InvalidCloudFormationIntrinsic (cviErrorId info)
                 assertEqual "tag name" "!Ref" (cviTagName info)
-            _ -> pure ()
+            _other -> pure ()
     , testCase "cfn validation: !Join requires array" $ do
         let result = classify "!Join requires [delimiter, array] with exactly 2 elements"
         assertCfnValidation result
         case result of
             CfnValidationError info ->
                 assertEqual "tag name" "!Join" (cviTagName info)
-            _ -> pure ()
+            _other -> pure ()
     , -- Missing required field (ERR_4002)
       testCase "missing field: 'items' missing in !$map tag" $ do
         let result = classify "'items' missing in !$map tag"
@@ -181,14 +181,14 @@ errorClassificationTests =
             TagParsingError info -> do
                 assertEqual "tag name" "!$map" (tpiTagName info)
                 assertEqual "guidance" (Just "add 'items' field to !$map tag") (tpiGuidance info)
-            _ -> pure ()
+            _other -> pure ()
     , testCase "missing field: 'template' missing in !$expand tag" $ do
         let result = classify "'template' missing in !$expand tag"
         assertTagParsing MissingRequiredTagField result
         case result of
             TagParsingError info ->
                 assertEqual "tag name" "!$expand" (tpiTagName info)
-            _ -> pure ()
+            _other -> pure ()
     , -- Missing required 'in' field for !$let (ERR_4002)
       testCase "missing required 'in' field" $ do
         let result = classify "missing required 'in' field"
@@ -197,7 +197,7 @@ errorClassificationTests =
             TagParsingError info -> do
                 assertEqual "tag name" "!$let" (tpiTagName info)
                 assertEqual "guidance" (Just "add 'in' field containing the expression to evaluate") (tpiGuidance info)
-            _ -> pure ()
+            _other -> pure ()
     , -- Handlebars error (ERR_6001)
       testCase "handlebars error" $ do
         let result = classify "Handlebars error: unterminated"
@@ -205,7 +205,7 @@ errorClassificationTests =
         case result of
             YamlSyntaxError info ->
                 assertEqual "short message" "unterminated" (ysiShortMessage info)
-            _ -> pure ()
+            _other -> pure ()
     , -- JMESPath error (ERR_2006)
       testCase "jmespath error with variable" $ do
         let result = classify "Invalid JMESPath expression 'bad': parse error. Variable: data"
@@ -218,14 +218,14 @@ errorClassificationTests =
                     "display message strips variable suffix"
                     "Invalid JMESPath expression 'bad': parse error"
                     (lqiMessage info)
-            _ -> pure ()
+            _other -> pure ()
     , testCase "jmespath error without variable" $ do
         let result = classify "Invalid JMESPath expression 'x.y': unexpected token"
         assertLookupQuery result
         case result of
             LookupQueryError info -> do
                 assertEqual "variable path empty" "" (lqiVariablePath info)
-            _ -> pure ()
+            _other -> pure ()
     , -- invalid YAML structure (ERR_1001)
       testCase "invalid YAML structure" $ do
         let result = classify "invalid YAML structure"
@@ -234,7 +234,7 @@ errorClassificationTests =
             YamlSyntaxError info -> do
                 assertEqual "guidance" "tags cannot be chained - use list syntax" (ysiGuidance info)
                 assertEqual "fix hint present" (Just "put the inner tag in a list to separate it from the outer tag") (ysiFixHint info)
-            _ -> pure ()
+            _other -> pure ()
     , -- unexpected end of file (ERR_1001)
       testCase "unexpected end of file" $ do
         let result = classify "unexpected end of file"
@@ -242,7 +242,7 @@ errorClassificationTests =
         case result of
             YamlSyntaxError info ->
                 assertEqual "guidance" "missing closing quote or bracket" (ysiGuidance info)
-            _ -> pure ()
+            _other -> pure ()
     , -- Parse tag errors: !$parseYaml, !$parseJson, !$expand (ERR_1001)
       testCase "parseYaml error" $ do
         assertYamlSyntax InvalidYamlSyntax (classify "!$parseYaml: invalid input")
@@ -263,7 +263,7 @@ errorClassificationTests =
         case result of
             TagParsingError info ->
                 assertEqual "tag name" "!$eq" (tpiTagName info)
-            _ -> pure ()
+            _other -> pure ()
     , -- invalid format (ERR_4005)
       testCase "invalid format" $ do
         let result = classify "invalid format - must be string variable name"
@@ -272,7 +272,7 @@ errorClassificationTests =
             TagParsingError info -> do
                 assertEqual "tag name" "!$" (tpiTagName info)
                 assertEqual "suggestion" (Just "!$ variable_name") (tpiSuggestion info)
-            _ -> pure ()
+            _other -> pure ()
     , -- Fallback / unknown messages
       testCase "fallback: random message becomes TagSyntaxError" $ do
         let result = classify "some random error message"
@@ -282,7 +282,7 @@ errorClassificationTests =
                 assertEqual "tag name empty" "" (tpiTagName info)
                 assertEqual "message preserved" "some random error message" (tpiMessage info)
                 assertEqual "no guidance" Nothing (tpiGuidance info)
-            _ -> pure ()
+            _other -> pure ()
     , -- Location is preserved
       testCase "location is preserved in classified error" $ do
         let loc = SourceLocation "my-file.yaml" 42 7 "root.items"

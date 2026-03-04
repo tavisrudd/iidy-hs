@@ -417,7 +417,7 @@ prop_jmespath_index_inbounds = forAll genNonEmptyArray $ \arr ->
             let first = xs V.! 0
              in counterexample ("array=" <> show arr) $
                     applyJmesPath "[0]" arr === Right first
-        _ -> property True -- should not happen
+        _nonArray -> property True -- should not happen
 
 -- | [999] on a small array always returns Null (out of bounds)
 prop_jmespath_index_outofbounds :: Property

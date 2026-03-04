@@ -233,7 +233,7 @@ engineTests =
                             Just (String s) ->
                                 assertEqual "should resolve nested $defs" "hello" s
                             other -> assertFailure $ "Expected String output, got: " <> show other
-                        _ -> assertFailure $ "Expected Object, got: " <> show v
+                        _nonObject -> assertFailure $ "Expected Object, got: " <> show v
         , testCase "imported doc without $imports/$defs is not re-parsed" $ do
             -- A plain imported doc should just be converted via fromValue as before
             let plainLoader loc _base = case loc of
@@ -274,7 +274,7 @@ engineTests =
                             Just (String s) ->
                                 assertEqual "should pass through plain import" "value" s
                             other -> assertFailure $ "Expected String output, got: " <> show other
-                        _ -> assertFailure $ "Expected Object, got: " <> show v
+                        _nonObject -> assertFailure $ "Expected Object, got: " <> show v
         ]
     , testGroup
         "Import manifest recording"
@@ -307,7 +307,7 @@ engineTests =
                             assertBool
                                 "sha256 contains only hex chars"
                                 (T.all (\c -> c `elem` ("0123456789abcdef" :: [Char])) (irSha256Digest r))
-                        _ -> assertFailure "Expected exactly one record"
+                        _other -> assertFailure "Expected exactly one record"
         , testCase "multiple imports create multiple manifest records" $ do
             let ast =
                     AstMapping
@@ -331,7 +331,7 @@ engineTests =
                         [r1, r2] -> do
                             irKey r1 @?= Just "a"
                             irKey r2 @?= Just "b"
-                        _ -> assertFailure "Expected exactly two records"
+                        _other -> assertFailure "Expected exactly two records"
         , testCase "no imports produces empty manifest" $ do
             let ast =
                     AstMapping

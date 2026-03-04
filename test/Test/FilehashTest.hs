@@ -128,7 +128,7 @@ testDirectoryDeterministic = testCase "directory hash is deterministic" $
         result2 <- loadFilehashImport location "." False
         case (result1, result2) of
             (Right d1, Right d2) -> idRawData d1 @?= idRawData d2
-            _ -> fail "Expected both to succeed"
+            _other -> fail "Expected both to succeed"
 
 -- Cross-check: SHA256("hello world") is a well-known value
 testKnownHash :: TestTree

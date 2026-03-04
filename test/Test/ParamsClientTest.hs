@@ -396,9 +396,9 @@ fullHistoryJsonTests =
                                 assertBool
                                     "Previous entry should not have Tags"
                                     (not $ KM.member "Tags" prevObj)
-                            _ -> assertBool "Expected non-empty Previous array with object" False
-                    _ -> assertBool "Expected Previous key" False
-            _ -> assertBool "Expected JSON object" False
+                            _other -> assertBool "Expected non-empty Previous array with object" False
+                    _other -> assertBool "Expected Previous key" False
+            _other -> assertBool "Expected JSON object" False
     ]
 
 ------------------------------------------------------------------------

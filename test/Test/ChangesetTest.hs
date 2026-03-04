@@ -95,7 +95,7 @@ changesetTests =
             [adj, noun] -> do
                 assertBool "adjective should not be empty" (T.length adj > 0)
                 assertBool "noun should not be empty" (T.length noun > 0)
-            _ -> assertFailure "expected exactly 2 parts"
+            _other -> assertFailure "expected exactly 2 parts"
     , testCase "generateDashedName: produces non-empty name" $ do
         name <- generateDashedName
         assertBool "name should not be empty" (T.length name > 0)

@@ -126,7 +126,7 @@ templateDiffTests =
         -- Delete should come before insert
         case (deleteIdx, insertIdx) of
             (Just d, Just i) -> (d < i) @?= True
-            _ -> fail "Expected both - second and + SECOND in output"
+            _other -> fail "Expected both - second and + SECOND in output"
     , testCase "multi-line insertion in middle" $ do
         let old = "aaa\nbbb"
             new = "aaa\nx1\nx2\nx3\nbbb"

@@ -93,7 +93,7 @@ errorColorTests =
             (fl : _, el : _) -> do
                 assertBool "fix is colored" ("\ESC[38;5;75m" `T.isInfixOf` fl)
                 assertBool "example is colored" ("\ESC[38;5;75m" `T.isInfixOf` el)
-            _ -> assertFailure "expected fix and example lines"
+            _other -> assertFailure "expected fix and example lines"
     , testCase "inline description on caret line is colored grey" $ do
         let output = formatError defaultColors testSource sampleVarError
             caretLines = filter ("^" `T.isInfixOf`) (T.lines output)

@@ -105,7 +105,7 @@ watchStackTests =
             (first : second : _) -> do
                 assertEqual "first callback has evt-1" ["evt-1"] first
                 assertEqual "second callback has evt-2 only" ["evt-2"] second
-            _ -> assertFailure ("expected at least 2 callback batches, got " ++ show (length callbacks))
+            _other -> assertFailure ("expected at least 2 callback batches, got " ++ show (length callbacks))
     , testCase "pollForCompletionWith - ignores non-stack resource terminal status" $ do
         let nestedComplete =
                 [ mkResourceEvt "evt-1" "MyBucket" "AWS::S3::Bucket" CF.ResourceStatus_CREATE_COMPLETE
@@ -289,7 +289,7 @@ watchStackTests =
         -- First callback should include pre-existing event (displayed, not exit-triggering)
         case callbacks of
             (first : _) -> assertBool "first callback includes pre-existing event" ("evt-1" `elem` first)
-            _ -> assertFailure "expected at least one callback batch"
+            _other -> assertFailure "expected at least one callback batch"
     , -- isNoUpdatesError tests
       testGroup
         "isNoUpdatesError"

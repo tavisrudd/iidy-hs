@@ -172,7 +172,7 @@ mergeTests vecs =
         let base = fromValue (mvBase mv)
             overlayPairs = case fromValue (mvOverlay mv) of
                 OObject kvs -> kvs
-                _ -> error "overlay must be an object"
+                _nonObject -> error "overlay must be an object"
             result = mergeOObjects base overlayPairs
             expected = fromValue (mvExpected mv)
         result @?= expected
@@ -245,10 +245,10 @@ escapeTests = map $ \ev ->
                                 | (k, v) <- KM.toList obj
                                 ]
                          in astToValueRaw (AstMapping pairs dm)
-                    _ -> error "object escape test needs object input_value"
+                    _nonObject -> error "object escape test needs object input_value"
                 "template" -> case evInputValue ev of
                     Just (String s) -> astToValueRaw (AstTemplatedString s dm)
-                    _ -> error "template escape test needs string input_value"
+                    _nonString -> error "template escape test needs string input_value"
                 "tag" ->
                     -- Any preprocessing tag inside !$escape → sentinel "!$escaped"
                     let dummyTag = PpNot (NotTag (AstBool True dm))

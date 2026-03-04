@@ -35,7 +35,7 @@ int = Number . fromInteger
 numFrom :: String -> Value
 numFrom s = case Aeson.decode (BLC.pack ("[" <> s <> "]")) of
     Just (Array v) | not (V.null v) -> V.head v
-    _ -> error $ "numFrom: invalid number literal: " <> s
+    _other -> error $ "numFrom: invalid number literal: " <> s
 
 ------------------------------------------------------------------------
 -- Tests

@@ -253,7 +253,7 @@ prop_concat_associativity =
                 )
                 $ case (resultLeft, resultRight) of
                     (Right lv, Right rv) -> lv === rv
-                    _ -> counterexample "One or both resolves failed" (property False)
+                    _other -> counterexample "One or both resolves failed" (property False)
 
 ------------------------------------------------------------------------
 -- 5. !$let scoping: inner bindings shadow outer

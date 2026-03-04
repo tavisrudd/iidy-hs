@@ -13,7 +13,7 @@ parseCli :: [String] -> Either String Cli
 parseCli args = case execParserPure (prefs showHelpOnEmpty) cliParserInfo args of
     Success cli -> Right cli
     Failure _ -> Left "parse failure"
-    _ -> Left "unexpected result"
+    _other -> Left "unexpected result"
 
 cliParserTests :: [TestTree]
 cliParserTests =
@@ -24,7 +24,7 @@ cliParserTests =
                 CmdDescribeStack args -> do
                     daStackname args @?= "my-stack"
                     daEvents args @?= 50
-                _ -> assertFailure "Expected CmdDescribeStack"
+                _otherCmd -> assertFailure "Expected CmdDescribeStack"
     , testCase "parse describe-stack with events" $ do
         case parseCli ["describe-stack", "my-stack", "--events", "25"] of
             Left e -> assertFailure e
@@ -32,7 +32,7 @@ cliParserTests =
                 CmdDescribeStack args -> do
                     daStackname args @?= "my-stack"
                     daEvents args @?= 25
-                _ -> assertFailure "Expected CmdDescribeStack"
+                _otherCmd -> assertFailure "Expected CmdDescribeStack"
     , testCase "parse render with defaults" $ do
         case parseCli ["render", "template.yaml"] of
             Left e -> assertFailure e
@@ -43,7 +43,7 @@ cliParserTests =
                     raFormat args @?= RenderYaml
                     raOverwrite args @?= False
                     raYamlSpec args @?= YamlAuto
-                _ -> assertFailure "Expected CmdRender"
+                _otherCmd -> assertFailure "Expected CmdRender"
     , testCase "parse render with options" $ do
         case parseCli ["render", "t.yaml", "--format", "json", "--overwrite", "--yaml-spec", "1.1"] of
             Left e -> assertFailure e
@@ -52,7 +52,7 @@ cliParserTests =
                     raFormat args @?= RenderJson
                     raOverwrite args @?= True
                     raYamlSpec args @?= YamlV11
-                _ -> assertFailure "Expected CmdRender"
+                _otherCmd -> assertFailure "Expected CmdRender"
     , testCase "parse delete-stack with --yes" $ do
         case parseCli ["delete-stack", "doomed-stack", "--yes"] of
             Left e -> assertFailure e
@@ -61,7 +61,7 @@ cliParserTests =
                     delStackname args @?= "doomed-stack"
                     delYes args @?= True
                     delFailIfAbsent args @?= False
-                _ -> assertFailure "Expected CmdDeleteStack"
+                _otherCmd -> assertFailure "Expected CmdDeleteStack"
     , testCase "parse global options" $ do
         case parseCli ["-e", "staging", "--color", "never", "--theme", "light", "--debug", "explain", "ERR_2001"] of
             Left e -> assertFailure e
@@ -81,7 +81,7 @@ cliParserTests =
             Left e -> assertFailure e
             Right cli -> case cliCommand cli of
                 CmdExplain codes -> codes @?= ["ERR_2001", "ERR_3001"]
-                _ -> assertFailure "Expected CmdExplain"
+                _otherCmd -> assertFailure "Expected CmdExplain"
     , testCase "invalid command fails" $ do
         case parseCli ["nonexistent-command"] of
             Left _ -> pure ()
@@ -96,19 +96,19 @@ cliParserTests =
             Left e -> assertFailure e
             Right cli -> case cliCommand cli of
                 CmdRender args -> raFormat args @?= RenderYaml
-                _ -> assertFailure "Expected CmdRender"
+                _otherCmd -> assertFailure "Expected CmdRender"
     , testCase "render --format yml" $ do
         case parseCli ["render", "t.yaml", "--format", "yml"] of
             Left e -> assertFailure e
             Right cli -> case cliCommand cli of
                 CmdRender args -> raFormat args @?= RenderYaml
-                _ -> assertFailure "Expected CmdRender"
+                _otherCmd -> assertFailure "Expected CmdRender"
     , testCase "render --format yaml-cloudformation" $ do
         case parseCli ["render", "t.yaml", "--format", "yaml-cloudformation"] of
             Left e -> assertFailure e
             Right cli -> case cliCommand cli of
                 CmdRender args -> raFormat args @?= RenderCfnYaml
-                _ -> assertFailure "Expected CmdRender"
+                _otherCmd -> assertFailure "Expected CmdRender"
     , testCase "render --format josn (typo) is rejected" $ do
         case parseCli ["render", "t.yaml", "--format", "josn"] of
             Left _ -> pure ()
@@ -122,13 +122,13 @@ cliParserTests =
             Left e -> assertFailure e
             Right cli -> case cliCommand cli of
                 CmdGetImport args -> giaFormat args @?= RenderJson
-                _ -> assertFailure "Expected CmdGetImport"
+                _otherCmd -> assertFailure "Expected CmdGetImport"
     , testCase "get-import --format yaml (default)" $ do
         case parseCli ["get-import", "some-import"] of
             Left e -> assertFailure e
             Right cli -> case cliCommand cli of
                 CmdGetImport args -> giaFormat args @?= RenderYaml
-                _ -> assertFailure "Expected CmdGetImport"
+                _otherCmd -> assertFailure "Expected CmdGetImport"
     , testCase "get-import --format yaml-cloudformation is rejected" $ do
         case parseCli ["get-import", "some-import", "--format", "yaml-cloudformation"] of
             Left _ -> pure ()

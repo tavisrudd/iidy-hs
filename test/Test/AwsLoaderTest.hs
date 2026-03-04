@@ -167,7 +167,7 @@ ssmPathResultTests =
                     @?= Just (String "value-1")
                 KM.lookup (Key.fromText "param-15") km
                     @?= Just (String "value-15")
-            _ -> assertFailure "Expected Object"
+            _nonObject -> assertFailure "Expected Object"
     , testCase "buildResultObject with 25 params (3-page simulation)" $ do
         -- Simulate 25 params that would span 3 pages (10+10+5)
         let basePath = "/prod/settings"
@@ -187,7 +187,7 @@ ssmPathResultTests =
                 KM.lookup (Key.fromText "s11") km @?= Just (String "v11")
                 KM.lookup (Key.fromText "s20") km @?= Just (String "v20")
                 KM.lookup (Key.fromText "s25") km @?= Just (String "v25")
-            _ -> assertFailure "Expected Object"
+            _nonObject -> assertFailure "Expected Object"
     , testCase "buildResultObject with :json format and >10 params" $ do
         let basePath = "/app"
             params =
@@ -205,7 +205,7 @@ ssmPathResultTests =
                     Just (Object inner) ->
                         KM.lookup (Key.fromText "n") inner @?= Just (Number 1)
                     other -> assertFailure $ "Expected parsed JSON object, got: " <> show other
-            _ -> assertFailure "Expected Object"
+            _nonObject -> assertFailure "Expected Object"
     ]
 
 ------------------------------------------------------------------------
