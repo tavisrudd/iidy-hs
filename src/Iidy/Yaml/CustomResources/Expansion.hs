@@ -86,27 +86,27 @@ extractPrefix :: Text -> OValue -> Text
 extractPrefix defaultName = \case
     OObject kvs -> case lookupO "NamePrefix" kvs of
         Just (OString p) -> p
-        _ -> defaultName
-    _ -> defaultName
+        _notString -> defaultName
+    _nonObject -> defaultName
 
 extractProperties :: OValue -> Map Text OValue
 extractProperties = \case
     OObject kvs -> case lookupO "Properties" kvs of
         Just (OObject props) -> Map.fromList props
-        _ -> Map.empty
-    _ -> Map.empty
+        _notObject -> Map.empty
+    _nonObject -> Map.empty
 
 extractOverrides :: OValue -> Maybe OValue
 extractOverrides = \case
     OObject kvs -> lookupO "Overrides" kvs
-    _ -> Nothing
+    _nonObject -> Nothing
 
 extractResources :: OValue -> [(Text, OValue)]
 extractResources = \case
     OObject kvs -> case lookupO "Resources" kvs of
         Just (OObject res) -> res
-        _ -> []
-    _ -> []
+        _notObject -> []
+    _nonObject -> []
 
 extractGlobalSections :: Text -> Set Text -> OValue -> Map Text OValue
 extractGlobalSections prefix globals = \case
@@ -116,7 +116,7 @@ extractGlobalSections prefix globals = \case
                 Just section -> Just (name, prefixAndRewriteSection prefix globals section)
                 Nothing -> Nothing
          in Map.fromList (mapMaybe extractSection sections)
-    _ -> Map.empty
+    _nonObject -> Map.empty
 
 {- | Prefix keys in a section and rewrite refs within values.
 Keys marked with $global: true are NOT prefixed (they're shared).
@@ -138,8 +138,8 @@ prefixAndRewriteSection prefix globals = \case
 isMarkedGlobal :: OValue -> Bool
 isMarkedGlobal (OObject kvs) = case lookupO "$global" kvs of
     Just (OBool True) -> True
-    _ -> False
-isMarkedGlobal _ = False
+    _notTrue -> False
+isMarkedGlobal _nonObject = False
 
 stripGlobal :: OValue -> OValue
 stripGlobal (OObject kvs) = OObject [(k, v) | (k, v) <- kvs, k /= "$global"]

@@ -115,9 +115,9 @@ isNumericLooking :: Text -> Bool
 isNumericLooking s =
     case reads (T.unpack s) :: [(Double, String)] of
         [(_, "")] -> True
-        _ -> case reads (T.unpack s) :: [(Integer, String)] of
+        _notDouble -> case reads (T.unpack s) :: [(Integer, String)] of
             [(_, "")] -> True
-            _ -> False
+            _notInteger -> False
 
 isPlainSafeFirst :: Char -> Bool
 isPlainSafeFirst c = c `notElem` ("-?:,[]{}#&*!|>'\"%@`" :: [Char])
@@ -256,12 +256,12 @@ isTaggedKvs kvs =
     length kvs == 1
         && case kvs of
             [(k, _)] -> T.isPrefixOf "!" k
-            _ -> False
+            _notSingleton -> False
 
 emitTaggedKvs :: Int -> [(Text, OValue)] -> Text
 emitTaggedKvs indent kvs = case kvs of
     [(tag, v)] -> tag <> emitTagArgument indent v
-    _ -> "{}"
+    _notSingleton -> "{}"
 
 emitTagArgument :: Int -> OValue -> Text
 emitTagArgument indent = \case

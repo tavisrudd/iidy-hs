@@ -242,7 +242,7 @@ parseMultiSelectHash = go []
                 case T.uncons rest' of
                     Just (',', remaining) -> go (pair : acc) remaining
                     Just ('}', remaining) -> Right (JMultiSelectHash (reverse (pair : acc)), remaining)
-                    _ -> Left (JMESPathError "Expected ',' or '}' in multi-select hash")
+                    _other -> Left (JMESPathError "Expected ',' or '}' in multi-select hash")
 
 parseIndexOrMultiSelect :: Text -> Either JMESPathError (JExpr, Text)
 parseIndexOrMultiSelect input
@@ -258,7 +258,7 @@ parseIndexOrMultiSelect input
                         | T.isPrefixOf ":" afterNum ->
                             Left (JMESPathError "JMESPath slice expressions are not supported in iidy (e.g., '[0:5]'). See notes/jmespath-subset.md")
                         | otherwise -> Left (JMESPathError "Expected ']' after index")
-            _ -> Left (JMESPathError $ "Invalid index: " <> numStr)
+            _badRead -> Left (JMESPathError $ "Invalid index: " <> numStr)
     | Just (':', _) <- T.uncons input =
         Left (JMESPathError "JMESPath slice expressions are not supported in iidy (e.g., '[0:5]'). See notes/jmespath-subset.md")
     | otherwise = do
@@ -277,7 +277,7 @@ parseMultiSelectList = go []
         case T.uncons rest' of
             Just (',', remaining) -> go (expr : acc) remaining
             Just (']', remaining) -> Right (JMultiSelectList (reverse (expr : acc)), remaining)
-            _ -> Left (JMESPathError "Expected ',' or ']' in multi-select list")
+            _other -> Left (JMESPathError "Expected ',' or ']' in multi-select list")
 
 parseLiteralString :: Text -> Either JMESPathError (JExpr, Text)
 parseLiteralString input =
@@ -301,7 +301,7 @@ isIdentChar c = isAlphaNum c || c == '_'
 
 when :: Bool -> Either e () -> Either e ()
 when True e = e
-when False _ = Right ()
+when False _action = Right ()
 
 ------------------------------------------------------------------------
 -- Evaluator
@@ -311,24 +311,24 @@ evalJExpr :: JExpr -> Value -> Value
 evalJExpr expr val = case expr of
     JField name -> case val of
         Object obj -> fromMaybe Null (KM.lookup (Key.fromText name) obj)
-        _ -> Null
+        _nonObject -> Null
     JIndex i -> case val of
         Array arr
             | i >= 0 && i < V.length arr -> arr V.! i
             | i < 0 && abs i <= V.length arr -> arr V.! (V.length arr + i)
-        _ -> Null
+        _nonArray -> Null
     JSubExpr left right ->
         evalJExpr right (evalJExpr left val)
     JWildcard -> case val of
         Object obj -> Array (V.fromList (map snd (KM.toList obj)))
         Array arr -> arr `seq` Array arr
-        _ -> Null
+        _nonObjectOrArray -> Null
     JProjection source proj -> case evalJExpr source val of
         Array arr -> Array (V.map (evalJExpr proj) arr)
-        _ -> Null
+        _nonArray -> Null
     JFlatten source -> case evalJExpr source val of
         Array arr -> Array (V.concatMap flattenOne arr)
-        _ -> Null
+        _nonArray -> Null
       where
         flattenOne (Array inner) = inner
         flattenOne other = V.singleton other
@@ -336,7 +336,7 @@ evalJExpr expr val = case expr of
         Array arr ->
             let filtered = V.filter (isTruthy . evalJExpr cond) arr
              in Array (V.map (evalJExpr proj) filtered)
-        _ -> Null
+        _nonArray -> Null
     JMultiSelectHash pairs ->
         Object $ KM.fromList [(Key.fromText k, evalJExpr e val) | (k, e) <- pairs]
     JMultiSelectList exprs ->
@@ -363,7 +363,7 @@ compareValues op l r = case op of
 
 numCompare :: (Scientific -> Scientific -> Bool) -> Value -> Value -> Bool
 numCompare f (Number a) (Number b) = f a b
-numCompare _ _ _ = False
+numCompare _f _nonNumber1 _nonNumber2 = False
 
 {- | JMESPath truthiness per the JMESPath spec: all numbers are truthy.
 This differs from OValue.oIsTruthy where zero is falsy (iidy semantics).

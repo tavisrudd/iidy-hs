@@ -132,4 +132,4 @@ isLocalOnly = \case
     ImportGit -> True
     ImportFilehash -> True
     ImportFilehashBase64 -> True
-    _ -> False
+    _remoteType -> False

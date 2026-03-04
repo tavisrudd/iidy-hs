@@ -19,7 +19,7 @@ rewriteRefs prefix globals = rewrite
     rewrite val = case val of
         OObject kvs -> OObject (rewriteObject prefix globals kvs)
         OArray items -> OArray (map rewrite items)
-        _ -> val
+        _scalar -> val
 
 collectGlobalRefs :: OValue -> Set Text
 collectGlobalRefs val = case val of
@@ -27,10 +27,10 @@ collectGlobalRefs val = case val of
         let resources = maybe [] extractKvs (lookupO "Resources" kvs)
             params = maybe [] extractKvs (lookupO "Parameters" kvs)
          in Set.union (globalFromSection resources) (globalFromSection params)
-    _ -> Set.empty
+    _nonObject -> Set.empty
   where
     extractKvs (OObject o) = o
-    extractKvs _ = []
+    extractKvs _nonObject = []
 
     globalFromSection section =
         Set.fromList
@@ -41,8 +41,8 @@ collectGlobalRefs val = case val of
 
     isMarkedGlobal (OObject kvs) = case lookupO "$global" kvs of
         Just (OBool True) -> True
-        _ -> False
-    isMarkedGlobal _ = False
+        _notTrue -> False
+    isMarkedGlobal _nonObject = False
 
 ------------------------------------------------------------------------
 -- Internal rewriting
@@ -92,7 +92,7 @@ rewriteGetAtt prefix globals = \case
         | (first : rest) <- items ->
             let rewritten = case first of
                     OString s | shouldRewrite globals s -> OString (prefix <> s)
-                    _ -> first
+                    _nonString -> first
              in OArray (rewritten : rest)
         | otherwise -> OArray items
     other -> other
@@ -103,7 +103,7 @@ rewriteSub prefix globals = \case
     OArray [OString template, varsObj] ->
         let varNames = case varsObj of
                 OObject kvs -> Set.fromList (map fst kvs)
-                _ -> Set.empty
+                _nonObject -> Set.empty
             extendedGlobals = Set.union globals varNames
          in OArray
                 [ OString (rewriteSubTemplate prefix extendedGlobals template)
@@ -133,7 +133,7 @@ rewriteField :: Text -> Set Text -> Text -> OValue -> OValue
 rewriteField prefix globals key val
     | key == "Condition" = case val of
         OString s | shouldRewrite globals s -> OString (prefix <> s)
-        _ -> val
+        _nonString -> val
     | key == "DependsOn" = rewriteDependsOn prefix globals val
     | otherwise = rewriteRefs prefix globals val
 

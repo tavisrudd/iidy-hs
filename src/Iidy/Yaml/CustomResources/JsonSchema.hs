@@ -32,7 +32,7 @@ validateSchema schema value = case schema of
     Object obj -> validateObject obj value
     Bool True -> Right ()
     Bool False -> Left "Schema rejects all values"
-    _ -> Left "Invalid schema: expected object or boolean"
+    _nonSchema -> Left "Invalid schema: expected object or boolean"
 
 validateObject :: KM.KeyMap Value -> Value -> Either Text ()
 validateObject schema value = do
@@ -43,52 +43,52 @@ validateObject schema value = do
     -- enum
     case KM.lookup "enum" schema of
         Just (Array arr) -> validateEnum (V.toList arr) value
-        _ -> Right ()
+        _noEnum -> Right ()
     -- required (for objects)
     case (KM.lookup "required" schema, value) of
         (Just (Array arr), Object obj) -> validateRequired (V.toList arr) obj
-        _ -> Right ()
+        _notApplicable -> Right ()
     -- properties (for objects)
     case (KM.lookup "properties" schema, value) of
         (Just (Object props), Object obj) -> validateProperties props obj
-        _ -> Right ()
+        _notApplicable -> Right ()
     -- additionalProperties (for objects)
     case (KM.lookup "additionalProperties" schema, KM.lookup "properties" schema, value) of
         (Just ap, Just (Object props), Object obj) ->
             validateAdditionalProperties ap props obj
-        _ -> Right ()
+        _notApplicable -> Right ()
     -- items (for arrays)
     case (KM.lookup "items" schema, value) of
         (Just itemSchema, Array arr) -> validateItems itemSchema (V.toList arr)
-        _ -> Right ()
+        _notApplicable -> Right ()
     -- pattern (for strings)
     case (KM.lookup "pattern" schema, value) of
         (Just (String pat), String s) -> validatePattern pat s
-        _ -> Right ()
+        _notApplicable -> Right ()
     -- minimum (for numbers)
     case (KM.lookup "minimum" schema, value) of
         (Just (Number minVal), Number n) -> validateMinimum minVal n
-        _ -> Right ()
+        _notApplicable -> Right ()
     -- maximum (for numbers)
     case (KM.lookup "maximum" schema, value) of
         (Just (Number maxVal), Number n) -> validateMaximum maxVal n
-        _ -> Right ()
+        _notApplicable -> Right ()
     -- minItems (for arrays)
     case (KM.lookup "minItems" schema, value) of
         (Just (Number n), Array arr) -> validateMinItems n (V.length arr)
-        _ -> Right ()
+        _notApplicable -> Right ()
     -- maxItems (for arrays)
     case (KM.lookup "maxItems" schema, value) of
         (Just (Number n), Array arr) -> validateMaxItems n (V.length arr)
-        _ -> Right ()
+        _notApplicable -> Right ()
     -- minLength (for strings)
     case (KM.lookup "minLength" schema, value) of
         (Just (Number n), String s) -> validateMinLength n (T.length s)
-        _ -> Right ()
+        _notApplicable -> Right ()
     -- maxLength (for strings)
     case (KM.lookup "maxLength" schema, value) of
         (Just (Number n), String s) -> validateMaxLength n (T.length s)
-        _ -> Right ()
+        _notApplicable -> Right ()
 
 -- | Validate that a value matches the expected type(s).
 validateType :: Value -> Value -> Either Text ()

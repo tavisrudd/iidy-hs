@@ -128,7 +128,7 @@ classifyResolveError filePath source (ResolveError pos msg kind) =
             REJmesPath _expr _detail varPath ->
                 let displayMsg = case T.breakOn ". Variable: " msg of
                         (before, rest) | not (T.null rest) -> before
-                        _ -> msg
+                        _noVariableSuffix -> msg
                  in LookupQueryError
                         LookupQueryInfo
                             { lqiErrorId = LookupQueryFailed
@@ -287,7 +287,7 @@ classifyMessage' allLines loc msg
                 (_, rest)
                     | not (T.null rest) ->
                         T.splitOn ", " (fromMaybe rest (T.stripPrefix "Keys: " rest))
-                _ -> []
+                _noKeysSuffix -> []
          in LookupQueryError
                 LookupQueryInfo
                     { lqiErrorId = LookupQueryFailed
@@ -440,11 +440,11 @@ classifyMessage' allLines loc msg
                 (_, rest)
                     | not (T.null rest) ->
                         fromMaybe rest (T.stripPrefix ". Variable: " rest)
-                _ -> ""
+                _noVariableSuffix -> ""
             -- Strip the ". Variable: path" suffix for display message
             displayMsg = case T.breakOn ". Variable: " msg of
                 (before, rest) | not (T.null rest) -> before
-                _ -> msg
+                _noVariableSuffix -> msg
          in
             LookupQueryError
                 LookupQueryInfo

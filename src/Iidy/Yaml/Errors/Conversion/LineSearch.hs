@@ -56,7 +56,7 @@ findFieldColumn allLines tagLn tagText
                  , keyword `T.isInfixOf` line
                  ] of
                 ((n, Just col) : _) -> Just (n, col)
-                _ -> Nothing
+                _noMatch -> Nothing
 
 {- | Find the column for flow-style tag arguments on the same line.
 Handles !$join [delim, array] and !$split [delim, string] patterns.
@@ -148,7 +148,7 @@ safeLine :: [Text] -> Int -> Maybe Text
 safeLine lns n
     | n >= 1 = case drop (n - 1) lns of
         (x : _) -> Just x
-        _ -> Nothing
+        _empty -> Nothing
     | otherwise = Nothing
 
 -- | Find a substring in a text, return 0-based column position.
@@ -175,7 +175,7 @@ findSecondTag :: Text -> Maybe Int
 findSecondTag line =
     case findAllSubstring "!$" line of
         (_ : second : _) -> Just second
-        _ -> Nothing
+        _fewerThanTwo -> Nothing
 
 -- | Find the full tag name (e.g., "!$mapListToHash") on the source line at the given location.
 findTagOnSourceLine :: [Text] -> SourceLocation -> Maybe Text
@@ -220,4 +220,4 @@ tagExample tag = case T.toLower tag of
     "!$groupby" -> "!$groupBy\n     items: [{name: \"a\", type: \"x\"}, {name: \"b\", type: \"x\"}]\n     key: type\n     var: group\n     template: \"{{group.key}}: {{#each group.items}}{{name}}{{/each}}\""
     "!$expand" -> "!$expand\n     template: my-template\n     params: {key: value}"
     "!$eq" -> "!$eq [\"{{env}}\", \"production\"]"
-    _ -> ""
+    _unknownTag -> ""

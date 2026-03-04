@@ -201,7 +201,7 @@ parseExpr input
         let (numStr, rest) = T.span (\c -> isDigit c || c == '.' || c == '-') input
         case reads (T.unpack numStr) :: [(Scientific, String)] of
             [(n, "")] -> Right (LitNum n, rest)
-            _ -> Left (InterpolateError $ "Invalid number: " <> numStr)
+            _badRead -> Left (InterpolateError $ "Invalid number: " <> numStr)
     | T.isPrefixOf "true" input && not (isContinued (T.drop 4 input)) =
         Right (LitBool True, T.drop 4 input)
     | T.isPrefixOf "false" input && not (isContinued (T.drop 5 input)) =
@@ -257,7 +257,7 @@ isPathChar c = isIdentChar c || c == '.' || c == '@' || c == '[' || c == ']'
 
 when :: Bool -> Either e () -> Either e ()
 when True e = e
-when False _ = Right ()
+when False _action = Right ()
 
 ------------------------------------------------------------------------
 -- Renderer
@@ -322,13 +322,13 @@ renderBlock helpers ctx name condExpr body elseBody = case name of
                         )
                         entries
                 Right (T.concat texts)
-            _ -> maybe (Right "") (renderParts helpers ctx) elseBody
+            _notIterable -> maybe (Right "") (renderParts helpers ctx) elseBody
     "with" -> do
         val <- evalExpr helpers ctx condExpr
         if isTruthy val
             then renderParts helpers (mergeContext ctx val) body
             else maybe (Right "") (renderParts helpers ctx) elseBody
-    _ -> Left (InterpolateError $ "Unknown block helper: " <> name)
+    _unknownHelper -> Left (InterpolateError $ "Unknown block helper: " <> name)
 
 evalExpr :: Map Text HelperFn -> Value -> Expr -> Either InterpolateError Value
 evalExpr helpers ctx = \case
@@ -365,12 +365,12 @@ lookupPath (seg : rest) val = case val of
         , i >= 0
         , i < V.length arr ->
             lookupPath rest (arr V.! i)
-    _ -> Null
+    _nonTraversable -> Null
 
 readInt :: Text -> Maybe Int
 readInt t = case reads (T.unpack t) of
     [(i, "")] -> Just i
-    _ -> Nothing
+    _notInt -> Nothing
 
 mergeContext :: Value -> Value -> Value
 mergeContext (Object base) (Object overlay) = Object (KM.union overlay base)

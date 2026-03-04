@@ -215,7 +215,7 @@ getSourceLine :: [Text] -> Int -> Maybe Text
 getSourceLine lns n
     | n >= 1 = case drop (n - 1) lns of
         (x : _) -> Just x
-        _ -> Nothing
+        _empty -> Nothing
     | otherwise = Nothing
 
 -- | Format available variables list (trailing \n for blank line before footer).

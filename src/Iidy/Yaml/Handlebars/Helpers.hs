@@ -77,8 +77,8 @@ defaultHelpers =
 oneString :: Text -> (Text -> Value) -> HelperFn
 oneString name f = \case
     [String s] -> Right (f s)
-    [_] -> Left $ name <> " requires a string parameter"
-    _ -> Left $ name <> " requires exactly one parameter"
+    [_nonString] -> Left $ name <> " requires a string parameter"
+    _wrongArity -> Left $ name <> " requires exactly one parameter"
 
 ------------------------------------------------------------------------
 -- String case helpers
@@ -135,7 +135,7 @@ splitWords = filter (not . T.null) . go
                             | T.length uppers > 1
                             , not (isSep afterFirst) ->
                                 (uppersInit, T.cons lastUpper afterUppers)
-                        _ ->
+                        _other ->
                             let (lowers, rest) = T.span (\x -> not (isUpper x) && not (isSep x)) afterUppers
                              in (uppers <> lowers, rest)
             | otherwise ->
@@ -152,7 +152,7 @@ helperReplace = \case
     [String s, String search, String replacement] ->
         Right $ String $ T.replace search replacement s
     [_, _, _] -> Left "replace requires string parameters"
-    _ -> Left "replace requires three parameters: string, search, replacement"
+    _wrongArity -> Left "replace requires three parameters: string, search, replacement"
 
 helperSubstring :: HelperFn
 helperSubstring = \case
@@ -161,15 +161,15 @@ helperSubstring = \case
             len = sciToInt lenN
          in Right $ String $ T.take len (T.drop start s)
     [_, _, _] -> Left "substring requires (string, number, number)"
-    _ -> Left "substring requires three parameters: string, start, length"
+    _wrongArity -> Left "substring requires three parameters: string, start, length"
 
 helperLength :: HelperFn
 helperLength = \case
     [String s] -> Right $ String $ T.pack $ show (T.length s)
     [Array a] -> Right $ String $ T.pack $ show (V.length a)
     [Object o] -> Right $ String $ T.pack $ show (KM.size o)
-    [_] -> Left "length can only be used on strings, arrays, or objects"
-    _ -> Left "length requires one parameter"
+    [_nonCollection] -> Left "length can only be used on strings, arrays, or objects"
+    _wrongArity -> Left "length requires one parameter"
 
 helperPad :: HelperFn
 helperPad = \case
@@ -276,17 +276,17 @@ sha256Hex t =
 helperToJson :: HelperFn
 helperToJson = \case
     [val] -> Right $ String $ TE.decodeUtf8 $ BL.toStrict $ Aeson.encode val
-    _ -> Left "toJson requires exactly one parameter"
+    _wrongArity -> Left "toJson requires exactly one parameter"
 
 helperToJsonPretty :: HelperFn
 helperToJsonPretty = \case
     [val] -> Right $ String $ TE.decodeUtf8 $ BL.toStrict $ Pretty.encodePretty val
-    _ -> Left "toJsonPretty requires exactly one parameter"
+    _wrongArity -> Left "toJsonPretty requires exactly one parameter"
 
 helperToYaml :: HelperFn
 helperToYaml = \case
     [val] -> Right $ String $ emitYaml (fromValue val) <> "\n"
-    _ -> Left "toYaml requires exactly one parameter"
+    _wrongArity -> Left "toYaml requires exactly one parameter"
 
 ------------------------------------------------------------------------
 -- Object access helpers
@@ -301,14 +301,14 @@ helperLookup = \case
     [Array arr, String key] ->
         case reads (T.unpack key) :: [(Int, String)] of
             [(i, "")] | i >= 0 && i < V.length arr -> Right (arr V.! i)
-            _ -> Right (String "")
+            _notIndex -> Right (String "")
     [_, _] -> Left "lookup requires first parameter to be an object or array"
-    _ -> Left "lookup requires two parameters: object and key"
+    _wrongArity -> Left "lookup requires two parameters: object and key"
 
 helperEq :: HelperFn
 helperEq = \case
     [a, b] -> Right $ Bool (a == b)
-    _ -> Left "eq requires exactly two parameters"
+    _wrongArity -> Left "eq requires exactly two parameters"
 
 ------------------------------------------------------------------------
 -- Numeric helpers

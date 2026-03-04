@@ -119,16 +119,16 @@ loadImportsAndDefs loader ast baseLocation env0 tmplDefs0 manifest0 stack0 =
                 Left err -> pure $ Left err
                 Right env1 ->
                     processImports loader env1 tmplDefs0 manifest0 stack0 importsAst baseLocation
-        _ -> pure $ Right (env0, tmplDefs0, manifest0, stack0)
+        _nonMapping -> pure $ Right (env0, tmplDefs0, manifest0, stack0)
 
 findSectionPairs :: Text -> [(YamlAst, YamlAst)] -> [(YamlAst, YamlAst)]
 findSectionPairs name pairs =
     case filter (isKeyNamed name . fst) pairs of
         [(_, AstMapping subPairs _)] -> subPairs
-        _ -> []
+        _notSingleMapping -> []
   where
     isKeyNamed n (AstPlainString s _) = s == n
-    isKeyNamed _ _ = False
+    isKeyNamed _name _other = False
 
 ------------------------------------------------------------------------
 -- Process $defs (sequential let* semantics)
@@ -185,7 +185,7 @@ processImports loader env tmplDefs manifest stack ((keyAst, locAst) : rest) base
                                             Right params ->
                                                 Map.insert importKey (TemplateInfo params (idRawData importData) (idLocation importData)) tmplDefs
                                             Left _err -> tmplDefs -- Skip malformed $params
-                                    _ -> tmplDefs
+                                    _noParams -> tmplDefs
                             -- Record import in manifest for auditing
                             let record =
                                     ImportRecord
@@ -243,7 +243,7 @@ processImportedDoc loader doc rawData docLocation env manifest stack =
                                 case resolveAst ctx ast of
                                     Left reErr -> pure $ Left $ PeResolveError reErr
                                     Right resolved -> pure $ Right (resolved, manifest', stack')
-        _ -> pure $ Right (fromValue doc, manifest, stack)
+        _nonObject -> pure $ Right (fromValue doc, manifest, stack)
 
 -- | Check if a JSON object has $imports or $defs keys that need preprocessing.
 hasImportsOrDefs :: KM.KeyMap Value -> Bool
@@ -312,7 +312,7 @@ extractKeyText = \case
     AstBool True _ -> "true"
     AstBool False _ -> "false"
     AstNull _ -> "null"
-    _ -> ""
+    _other -> ""
 
 -- | Compute SHA256 hex digest of text content.
 computeSha256 :: Text -> Text

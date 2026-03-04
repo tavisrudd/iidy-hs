@@ -61,14 +61,14 @@ parseParamDef (Object obj) = do
         Nothing -> Left "$params entry: Name is required"
     let getOptText key = case KM.lookup (Key.fromText key) obj of
             Just (String s) -> Just s
-            _ -> Nothing
+            _notString -> Nothing
         getOptVal key = fmap fromValue (KM.lookup (Key.fromText key) obj)
         isGlobal = case KM.lookup "$global" obj of
             Just (Bool True) -> True
-            _ -> False
+            _notTrue -> False
         allowedValues = case KM.lookup "AllowedValues" obj of
             Just (Array vs) -> Just (map fromValue (V.toList vs))
-            _ -> Nothing
+            _notArray -> Nothing
     Right
         ParamDef
             { pdName = name
@@ -123,7 +123,7 @@ validateAllowedPattern pd val = case pdAllowedPattern pd of
             OString s
                 | (T.unpack s =~ T.unpack pat :: Bool) -> Right ()
                 | otherwise -> Left $ pdName pd <> ": value does not match AllowedPattern: " <> pat
-            _ -> Right ()
+            _nonString -> Right ()
 
 validateType :: ParamDef -> OValue -> Either Text ()
 validateType pd val = case pdType pd of

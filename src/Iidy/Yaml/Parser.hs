@@ -87,14 +87,14 @@ resolveScalar uri pos tag style text =
                     -- Local tag on scalar: resolve the scalar type first, then apply tag
                     let baseNode = case style of
                             Plain -> resolvePlainScalar meta text
-                            _ -> classifyString meta text
+                            _quotedStyle -> classifyString meta text
                      in mapLeft (\(ParseError p m) -> (unconvertPos p, T.unpack m)) $
                             classifyLocalTag meta t baseNode
-            _ ->
+            _untagged ->
                 -- Untagged or global-tagged: resolve type
                 Right $ case style of
                     Plain -> resolvePlainScalar meta text
-                    _ -> classifyString meta text
+                    _quotedStyle -> classifyString meta text
 
 resolvePlainScalar :: SrcMeta -> Text -> YamlAst
 resolvePlainScalar meta text
@@ -130,7 +130,7 @@ parseFloat t
     | t == ".nan" || t == ".NaN" || t == ".NAN" = Just (Sci.fromFloatDigits (0 / 0 :: Double))
     | hasFloatChars t = case reads (T.unpack t) :: [(Double, String)] of
         [(d, "")] -> Just (Sci.fromFloatDigits d)
-        _ -> Nothing
+        _badRead -> Nothing
     | otherwise = Nothing
   where
     hasFloatChars s = T.any (== '.') s || T.any (== 'e') s || T.any (== 'E') s
@@ -138,7 +138,7 @@ parseFloat t
 readMaybe :: (Read a) => String -> Maybe a
 readMaybe s = case reads s of
     [(a, "")] -> Just a
-    _ -> Nothing
+    _badRead -> Nothing
 
 ------------------------------------------------------------------------
 -- Tag handling
@@ -150,7 +150,7 @@ applyTag meta tag node = case tagToText tag of
         | "!" `T.isPrefixOf` t ->
             mapLeft (\(ParseError p m) -> (unconvertPos p, T.unpack m)) $
                 classifyLocalTag meta t node
-    _ -> Right node
+    _untagged -> Right node
 
 classifyLocalTag :: SrcMeta -> Text -> YamlAst -> Parse YamlAst
 classifyLocalTag meta tagName value
@@ -195,7 +195,7 @@ makeScalarMeta uri pos tag text =
     let startP = convertPos pos
         tagLen = case tagToText tag of
             Just t | "!" `T.isPrefixOf` t -> T.length t + 1 -- tag + space
-            _ -> 0
+            _untagged -> 0
         textLen = T.length text
         endP =
             startP
@@ -208,7 +208,7 @@ makeScalarMeta uri pos tag text =
 Uses the end position of the last child, or falls back to the start position.
 -}
 childrenEndPos :: Position -> [SrcMeta] -> Position
-childrenEndPos startP metas = List.foldl' (\_ x -> smEnd x) startP metas
+childrenEndPos startP metas = List.foldl' (\_acc x -> smEnd x) startP metas
 
 parseErrorAt :: SrcMeta -> Text -> Parse a
 parseErrorAt meta msg = Left (ParseError (smStart meta) msg)
@@ -281,7 +281,7 @@ makeCfnTag = \case
     "!And" -> CfnAnd
     "!Or" -> CfnOr
     "!Not" -> CfnNot
-    _ -> CfnRef -- unreachable given isCfnTagName guard
+    _unreachable -> CfnRef -- unreachable given isCfnTagName guard
 
 ------------------------------------------------------------------------
 -- Preprocessing tag parsing
@@ -313,7 +313,7 @@ parsePreprocessingTag meta tagName value = case tagName of
     "!$parseJson" -> wrapSingle meta (PpParseJson . ParseJsonTag) value
     "!$escape" -> wrapSingle meta (PpEscape . EscapeTag) value
     "!$expand" -> parseExpandTag meta value
-    _ -> parseErrorAt meta ("'" <> tagName <> "' is not a valid iidy tag")
+    _unknownTag -> parseErrorAt meta ("'" <> tagName <> "' is not a valid iidy tag")
 
 wrapSingle :: SrcMeta -> (YamlAst -> PreprocessingTag) -> YamlAst -> Parse YamlAst
 wrapSingle meta mk value = pure $ AstPreprocessingTag (mk (unwrapSingle value)) meta
@@ -332,7 +332,7 @@ parsePairTag meta name format mk = \case
                 then "must have exactly 2 elements to compare"
                 else "must be a sequence with format " <> format
             )
-    _ ->
+    _nonSequence ->
         parseErrorAt
             meta
             ( if name == "!$eq"
@@ -343,7 +343,7 @@ parsePairTag meta name format mk = \case
 parseSeqTag :: SrcMeta -> Text -> Text -> ([YamlAst] -> PreprocessingTag) -> YamlAst -> Parse YamlAst
 parseSeqTag meta _name desc mk = \case
     AstSequence items _ -> pure $ AstPreprocessingTag (mk items) meta
-    _ -> parseErrorAt meta ("must be a sequence " <> desc)
+    _nonSequence -> parseErrorAt meta ("must be a sequence " <> desc)
 
 parseVarLookupTag :: SrcMeta -> YamlAst -> Parse YamlAst
 parseVarLookupTag meta = \case
@@ -361,13 +361,13 @@ parseVarLookupTag meta = \case
                     jmespathField = getTextField "jmespath" pairs
                 case (queryField, jmespathField) of
                     (Just _, Just _) -> parseErrorAt meta "'query' and 'jmespath' are mutually exclusive"
-                    _ ->
+                    _notBothPresent ->
                         pure $
                             AstPreprocessingTag
                                 (PpVarLookup (VarLookupTag path queryField jmespathField))
                                 meta
             Nothing -> parseErrorAt meta "'path' missing in !$ tag"
-    _ -> parseErrorAt meta "invalid format - must be string variable name"
+    _nonStringOrMapping -> parseErrorAt meta "invalid format - must be string variable name"
 
 parseIfTag :: SrcMeta -> YamlAst -> Parse YamlAst
 parseIfTag meta = \case
@@ -381,7 +381,7 @@ parseIfTag meta = \case
                         meta
             (Nothing, _) -> parseErrorAt meta "'test' missing in !$if tag"
             (_, Nothing) -> parseErrorAt meta "'then' missing in !$if tag"
-    _ -> parseErrorAt meta "must be a mapping with required 'test' and 'then' fields"
+    _nonMapping -> parseErrorAt meta "must be a mapping with required 'test' and 'then' fields"
 
 type MkMapLike = YamlAst -> YamlAst -> Maybe Text -> Maybe YamlAst -> PreprocessingTag
 
@@ -406,7 +406,7 @@ parseMapLikeTag meta name mk = \case
                         meta
             (Nothing, _) -> parseErrorAt meta ("'items' missing in " <> name <> " tag")
             (_, Nothing) -> parseErrorAt meta ("'template' missing in " <> name <> " tag")
-    _ -> parseErrorAt meta "must be a mapping with 'items' and 'template' fields"
+    _nonMapping -> parseErrorAt meta "must be a mapping with 'items' and 'template' fields"
 
 parseLetTag :: SrcMeta -> YamlAst -> Parse YamlAst
 parseLetTag meta = \case
@@ -416,7 +416,7 @@ parseLetTag meta = \case
          in case expr of
                 Just e -> pure $ AstPreprocessingTag (PpLet (LetTag bindings e)) meta
                 Nothing -> parseErrorAt meta "missing required 'in' field"
-    _ -> parseErrorAt meta "must be a mapping with variable bindings and 'in' field"
+    _nonMapping -> parseErrorAt meta "must be a mapping with variable bindings and 'in' field"
 
 parseNotTag :: SrcMeta -> YamlAst -> Parse YamlAst
 parseNotTag meta value =
@@ -434,7 +434,7 @@ parseMergeMapTag meta = \case
                         meta
             (Nothing, _) -> parseErrorAt meta "'items' missing in !$mergeMap tag"
             (_, Nothing) -> parseErrorAt meta "'template' missing in !$mergeMap tag"
-    _ -> parseErrorAt meta "must be a mapping with 'items' and 'template' fields"
+    _nonMapping -> parseErrorAt meta "must be a mapping with 'items' and 'template' fields"
 
 parseMapValuesTag :: SrcMeta -> YamlAst -> Parse YamlAst
 parseMapValuesTag meta = \case
@@ -448,7 +448,7 @@ parseMapValuesTag meta = \case
                         meta
             (Nothing, _) -> parseErrorAt meta "'items' missing in !$mapValues tag"
             (_, Nothing) -> parseErrorAt meta "'template' missing in !$mapValues tag"
-    _ -> parseErrorAt meta "must be a mapping with 'items' and 'template' fields"
+    _nonMapping -> parseErrorAt meta "must be a mapping with 'items' and 'template' fields"
 
 parseGroupByTag :: SrcMeta -> YamlAst -> Parse YamlAst
 parseGroupByTag meta = \case
@@ -462,7 +462,7 @@ parseGroupByTag meta = \case
                         meta
             (Nothing, _) -> parseErrorAt meta "'items' missing in !$groupBy tag"
             (_, Nothing) -> parseErrorAt meta "'key' missing in !$groupBy tag"
-    _ -> parseErrorAt meta "must be a mapping with 'items' and 'key' fields"
+    _nonMapping -> parseErrorAt meta "must be a mapping with 'items' and 'key' fields"
 
 parseExpandTag :: SrcMeta -> YamlAst -> Parse YamlAst
 parseExpandTag meta = \case
@@ -473,7 +473,7 @@ parseExpandTag meta = \case
                 pure $ AstPreprocessingTag (PpExpand (ExpandTag templ params)) meta
             (Nothing, _) -> parseErrorAt meta "'template' missing in !$expand tag"
             (_, Nothing) -> parseErrorAt meta "'params' missing in !$expand tag"
-    _ -> parseErrorAt meta "must be a mapping with 'template' and 'params' fields"
+    _nonMapping -> parseErrorAt meta "must be a mapping with 'template' and 'params' fields"
 
 ------------------------------------------------------------------------
 -- Field validation

@@ -69,7 +69,7 @@ adjustLocationForTag source loc msg =
                         Just (ln, col)
                             | col < srcLocColumn loc ->
                                 loc{srcLocLine = ln, srcLocColumn = col}
-                        _ -> case findAnyTagInLine allLines (lineNum - 1) of
+                        _notOnCurrentLine -> case findAnyTagInLine allLines (lineNum - 1) of
                             Just (ln, col) -> loc{srcLocLine = ln, srcLocColumn = col}
                             Nothing -> loc
                 -- Type mismatch errors: use Rust-style find_tag_column logic
@@ -97,7 +97,7 @@ adjustLocationForTag source loc msg =
                 | "'query' and 'jmespath'" `T.isPrefixOf` msg ->
                     case findAnyTagInLine allLines lineNum of
                         Just (ln, col) -> loc{srcLocLine = ln, srcLocColumn = col}
-                        _ -> case findAnyTagInLine allLines (lineNum - 1) of
+                        _notOnCurrentLine -> case findAnyTagInLine allLines (lineNum - 1) of
                             Just (ln, col) -> loc{srcLocLine = ln, srcLocColumn = col}
                             Nothing -> loc
                 -- CFN validation: +1 for 1-based column
