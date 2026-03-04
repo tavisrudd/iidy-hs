@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
-# Pre-commit hook: build with -Werror + run tests in one cabal invocation
+# Pre-commit hook: format check, lint, nix deps, build with -Werror, tests
 # Skip tests with: SKIP_TESTS=1 git commit
 set -euo pipefail
+
+echo "pre-commit: fourmolu check..."
+fourmolu --mode check src/ app/ test/
+
+echo "pre-commit: hlint..."
+hlint src/ app/ test/
 
 # Check cabal deps are in flake.nix
 bash scripts/check-nix-deps.sh
