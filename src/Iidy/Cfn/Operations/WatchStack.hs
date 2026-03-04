@@ -94,7 +94,7 @@ watchStack ctx stackName timeoutSeconds emit = do
             -- event emitted by pcOnInactivityTimeout above.
             case pollResult of
                 PollSuccess DeleteComplete -> pure (Right 0)
-                _ -> do
+                _otherResult -> do
                     contents <- collectStackContents ctx stackName
                     emit (OdStackContents contents)
                     pure (Right 0)

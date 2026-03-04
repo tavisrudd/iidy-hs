@@ -224,7 +224,7 @@ emitValue doSort indent parentKey currentKey val = case val of
         if V.null arr
             then "[]\n"
             else T.concat $ map (emitItem doSort indent currentKey) (V.toList arr)
-    _ -> inlineValue val <> "\n"
+    _scalar -> inlineValue val <> "\n"
 
 emitPair :: Bool -> Int -> Text -> Text -> Key.Key -> Value -> Text
 emitPair doSort indent parentKey currentKey k v =
@@ -237,7 +237,7 @@ emitPair doSort indent parentKey currentKey k v =
             Array arr
                 | not (V.null arr) ->
                     prefix <> key <> ":\n" <> emitValue doSort (indent + 2) parentKey currentKey v
-            _ -> prefix <> key <> ": " <> inlineValue v <> "\n"
+            _scalar -> prefix <> key <> ": " <> inlineValue v <> "\n"
 
 {- | Quote a YAML key if it contains characters that make it ambiguous.
 Most CFN keys are plain identifiers, but intrinsic functions like
@@ -280,7 +280,7 @@ emitItem doSort indent parentKey v =
                                                     <> fkText
                                                     <> ":\n"
                                                     <> emitValue doSort (indent + 4) parentKey fkText firstV
-                                        _ ->
+                                        _scalar ->
                                             prefix <> "- " <> fkText <> ": " <> inlineValue firstV <> "\n"
                                     restLines =
                                         T.concat $
@@ -290,7 +290,7 @@ emitItem doSort indent parentKey v =
                                                 )
                                                 rest
                                  in firstLine <> restLines
-            _ -> prefix <> "- " <> inlineValue v <> "\n"
+            _scalar -> prefix <> "- " <> inlineValue v <> "\n"
 
 chooseWeightFn :: Text -> Text -> Text -> Int
 chooseWeightFn parentKey currentKey

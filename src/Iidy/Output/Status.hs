@@ -41,4 +41,4 @@ isStatusTerminal :: StackStatus -> Bool
 isStatusTerminal s = case categorizeStatus s of
     StatusComplete -> True
     StatusFailed -> True
-    _ -> False
+    _inProgress -> False

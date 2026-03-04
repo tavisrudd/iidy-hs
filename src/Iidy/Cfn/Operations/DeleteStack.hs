@@ -117,4 +117,4 @@ deleteStack ctx stackName skipConfirmation env emit = do
                         PollSuccess finalStatus
                             | finalStatus `elem` deleteSuccessStates -> pure (Right 0)
                             | otherwise -> pure (Right 1)
-                        _ -> pure (Right 1) -- timeout = failure
+                        _timeout -> pure (Right 1) -- timeout = failure

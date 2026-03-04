@@ -159,7 +159,7 @@ detectCredentialSources ctx = do
             (_, Just arn) -> case sources of
                 (s : rest) -> AssumeRoleCredential (AssumeRoleInfo s arn AssumeRoleStackArgs) : rest
                 [] -> [AssumeRoleCredential (AssumeRoleInfo UnknownCredentialSource arn AssumeRoleStackArgs)]
-            _ -> sources
+            _noAssumeRole -> sources
 
     pure (CredentialSourceStack withAssumeRole)
 
@@ -170,7 +170,7 @@ determineProfile ctx envProfile =
             (Just p, _, _) -> (p, ProfileCliFlag)
             (_, Just p, _) -> (p, ProfileStackArgs)
             (_, _, Just p) -> (p, ProfileAwsProfileEnvVar)
-            _ -> ("default", ProfileDefault)
+            _noProfile -> ("default", ProfileDefault)
      in ProfileInfo
             { piName = name
             , piSource = source

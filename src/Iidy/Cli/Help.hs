@@ -180,7 +180,7 @@ wrapParagraph limit paragraph = wrapWords [] (words paragraph)
     wrapWords current [] =
         case current of
             [] -> []
-            _ -> [unwords (reverse current)]
+            _words -> [unwords (reverse current)]
     wrapWords [] (w : ws)
         | length w >= limit = w : wrapWords [] ws
         | otherwise = wrapWords [w] ws
@@ -377,7 +377,7 @@ partitionRows = foldr go ([], [])
         case dropWhile (== ' ') txt of
             '-' : _ -> False
             [] -> False
-            _ -> True
+            _positional -> True
 
 ------------------------------------------------------------------------
 -- Parser failure rendering
@@ -494,7 +494,7 @@ isArgToken tok =
     case tok of
         [] -> False
         ('<' : _) -> True
-        _ ->
+        _other ->
             let letters = filter Char.isAlpha tok
              in not (null letters) && all Char.isUpper letters
 
@@ -522,7 +522,7 @@ commandPathFromArgs args =
             Just subOpts ->
                 case nextToken tokens of
                     Just (tok, _) | tok `elem` subOpts -> Just tok
-                    _ -> Nothing
+                    _noMatch -> Nothing
 
 subcommandMap :: Map String [String]
 subcommandMap =
@@ -590,7 +590,7 @@ isSectionHeader line =
     let trimmed = dropWhile Char.isSpace line
      in case reverse trimmed of
             ':' : _ -> not (isRowLine line)
-            _ -> False
+            _noColon -> False
 
 isRowLine :: String -> Bool
 isRowLine line =
@@ -607,7 +607,7 @@ isEntryStart line =
         c : cs ->
             Char.isUpper c
                 && all isMetavarChar (takeWhile (not . Char.isSpace) cs)
-        _ -> False
+        _other -> False
   where
     isMetavarChar x = Char.isUpper x || x == '_' || Char.isDigit x
 
@@ -642,4 +642,4 @@ looksLikeWrappedUsage :: String -> Bool
 looksLikeWrappedUsage line =
     case dropWhile Char.isSpace line of
         '[' : _ -> True
-        _ -> False
+        _other -> False

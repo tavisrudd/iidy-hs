@@ -77,7 +77,7 @@ mkOutputDispatch go = do
             T.ThemeHighContrast -> ThemeHighContrast
     case mode of
         OutputJson -> pure $ DispatchJson (newJsonRenderer defaultJsonOptions)
-        _ -> do
+        _interactive -> do
             -- Note: newInteractiveRenderer calls detectCapabilities internally,
             -- duplicating the check above. This is harmless (cheap I/O) but redundant.
             r <-

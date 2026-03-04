@@ -25,12 +25,12 @@ detectCapabilities = do
     let hasColor = case (noColor, forceColor) of
             (Just _, _) -> False
             (_, Just _) -> True
-            _ -> isTty
+            _noOverride -> isTty
 
         width = case columns of
             Just s -> case reads s of
                 [(n, "")] | n > 0 -> Just n
-                _ -> if isTty then Just 80 else Nothing
+                _invalid -> if isTty then Just 80 else Nothing
             Nothing -> if isTty then Just 80 else Nothing
 
     pure

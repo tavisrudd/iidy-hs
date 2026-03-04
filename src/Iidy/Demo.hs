@@ -126,10 +126,10 @@ parseDemoScript (Object obj) = do
     let files = case KM.lookup "files" obj of
             Just (Object fobj) ->
                 Map.fromList [(Key.toText k, extractText v) | (k, v) <- KM.toList fobj]
-            _ -> Map.empty
+            _noFiles -> Map.empty
     commands <- case KM.lookup "demo" obj of
         Just (Array arr) -> traverse parseCommand (V.toList arr)
-        _ -> Left "demo script must have a 'demo' key with a sequence value"
+        _missingDemo -> Left "demo script must have a 'demo' key with a sequence value"
     Right (files, commands)
 parseDemoScript _ = Left "demo script must be a mapping"
 

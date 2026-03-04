@@ -84,4 +84,4 @@ createStack ctx args argsfilePath = do
                     if finalStatus `elem` createSuccessStates
                         then pure (Right 0)
                         else pure (Right 1)
-                _ -> pure (Right 1) -- timeout = failure; skip collectStackContents (stack may be partial)
+                _timeout -> pure (Right 1) -- timeout = failure; skip collectStackContents (stack may be partial)

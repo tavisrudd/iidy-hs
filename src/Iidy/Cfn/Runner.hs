@@ -121,7 +121,7 @@ emitsCommandMetadata = \case
     OpCreateChangeset -> True
     OpTemplateApprovalRequest -> True
     OpTemplateApprovalReview -> True
-    _ -> False
+    _readOnly -> False
 
 -- | Exit with given code
 exitCode :: Int -> IO ()

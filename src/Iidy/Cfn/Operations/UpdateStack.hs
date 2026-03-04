@@ -124,7 +124,7 @@ updateStack ctx args argsfilePath = do
                             if finalStatus `elem` updateSuccessStates
                                 then pure (Right 0)
                                 else pure (Right 1)
-                        _ -> pure (Right 1) -- timeout = failure; skip collectStackContents (stack may be transitioning)
+                        _timeout -> pure (Right 1) -- timeout = failure; skip collectStackContents (stack may be transitioning)
 
 ------------------------------------------------------------------------
 -- Update stack via changeset (--changeset path)

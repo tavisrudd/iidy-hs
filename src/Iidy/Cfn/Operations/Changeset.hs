@@ -245,7 +245,7 @@ executeChangeset ctx stackName csName = do
             if finalStatus `elem` successStates
                 then pure (Right 0)
                 else pure (Right 1)
-        _ -> pure (Right 1) -- timeout = failure
+        _timeout -> pure (Right 1) -- timeout = failure
 
 ------------------------------------------------------------------------
 -- Changeset description
@@ -419,7 +419,7 @@ extractRegionFromArn :: Text -> Text
 extractRegionFromArn arn =
     case drop 3 (T.splitOn ":" arn) of
         (region : _) -> region
-        _ -> "us-east-1" -- Fallback matches Rust; ARNs from AWS are always well-formed
+        _malformedArn -> "us-east-1" -- Fallback matches Rust; ARNs from AWS are always well-formed
 
 ------------------------------------------------------------------------
 -- Shared helpers for changeset flows

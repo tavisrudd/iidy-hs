@@ -92,7 +92,7 @@ getStack ctx stackName = do
         Left e -> throwIO e -- re-throw non-existence errors
         Right resp -> pure $ case resp.stacks of
             Just (s : _) -> Just s
-            _ -> Nothing
+            _noStack -> Nothing
 
 -- | Check if an Amazonka error indicates the stack does not exist.
 isStackNotFoundError :: Amazonka.Error -> Bool
@@ -365,12 +365,12 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
                                 , itiOperationStartTime = startTime
                                 }
                         pure PollInactivityTimeout
-                _ -> do
+                _noInactivityTimeout -> do
                     -- Check overall timeout
                     let totalElapsed = round (diffUTCTime now startTime) :: Int
                     case pcTimeoutSeconds config of
                         Just t | t > 0 && totalElapsed > t -> pure PollTimeout
-                        _ -> do
+                        _noOverallTimeout -> do
                             -- Check if we hit a terminal status.
                             -- When pcWaitForStatusChange is True (watch-stack), only
                             -- consider events AFTER startTime for terminal exit.
@@ -383,7 +383,7 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
                                     | otherwise = stackEvents
                                 mCurrentStatus = case relevantStackEvents of
                                     (e : _) -> fmap fromCfnResourceStatus e.resourceStatus
-                                    _ -> Nothing
+                                    _noEvents -> Nothing
                             case mCurrentStatus of
                                 Just currentStatus | currentStatus `elem` terminalStatuses -> do
                                     let elapsed = round (diffUTCTime now startTime) :: Int
@@ -395,7 +395,7 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
                                             , ociSkipRemainingSections = currentStatus == DeleteComplete
                                             }
                                     pure (PollSuccess currentStatus)
-                                _ ->
+                                _nonTerminal ->
                                     let !newSet =
                                             Set.union
                                                 lastEventSet
@@ -419,7 +419,7 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
 stackNameFromId :: Text -> Text
 stackNameFromId sid = case T.splitOn "/" sid of
     (_ : name : _) -> name
-    _ -> sid
+    _notArn -> sid
 
 ------------------------------------------------------------------------
 -- AWS type conversion helpers

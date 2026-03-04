@@ -94,7 +94,7 @@ tryNtp :: IO (Maybe UTCTime)
 tryNtp =
     ( timeout ntpTimeoutMicros queryNtp >>= \case
         Just (Just t) -> pure (Just t)
-        _ -> pure Nothing
+        _otherTimeout -> pure Nothing
     )
         `catch` \(_ :: IOException) -> pure Nothing
 

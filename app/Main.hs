@@ -104,7 +104,7 @@ runCommand cli = case cliCommand cli of
                 -- Check stack state to determine changeset type
                 let stackName = saStackName sa
                 state <- checkStackState ctx stackName
-                let exists = case state of StackNormal -> True; _ -> False
+                let exists = case state of StackNormal -> True; _otherState -> False
                 csEither <- createChangeset ctx sa csName exists (siArgsFile input)
                 case csEither of
                     Left err -> do

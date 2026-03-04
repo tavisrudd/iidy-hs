@@ -446,7 +446,7 @@ buildHunks ctx ops =
         changeIdxs = [i | (i, op) <- indexed, isChange op]
      in case changeIdxs of
             [] -> [] -- no changes
-            _ ->
+            _hasChanges ->
                 let
                     -- Expand each change index into a range [lo..hi] with context
                     ranges =

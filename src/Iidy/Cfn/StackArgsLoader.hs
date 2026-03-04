@@ -271,9 +271,9 @@ ensureEnvironmentTag (Object obj) env =
         envKey = Key.fromText "environment"
         tags = case KM.lookup tagsKey obj of
             Just (Object t) -> t
-            _ -> KM.empty
+            _nonMapping -> KM.empty
         tags' = case KM.lookup envKey tags of
-            Just _ -> tags -- already set
+            Just _existing -> tags -- already set
             Nothing -> KM.insert envKey (String env) tags
      in Object (KM.insert tagsKey (Object tags') obj)
 ensureEnvironmentTag v _ = v
@@ -291,11 +291,11 @@ injectEnvValues (Object obj) env operation aws =
         envValues = buildEnvValues env operation aws
         existing = case KM.lookup envValuesKey obj of
             Just (Object m) -> m
-            _ -> KM.empty
+            _nonMapping -> KM.empty
         -- New values take precedence over existing
         merged = case envValues of
             Object newMap -> Object (KM.union newMap existing)
-            _ -> envValues
+            _nonObject -> envValues
      in Object (KM.insert envValuesKey merged obj)
 injectEnvValues v _ _ _ = v
 
@@ -336,7 +336,7 @@ extractAwsSettings _ = AwsSettings Nothing Nothing Nothing
 getStr :: KM.KeyMap Value -> Text -> Maybe Text
 getStr obj key = case KM.lookup (Key.fromText key) obj of
     Just (String s) -> Just s
-    _ -> Nothing
+    _other -> Nothing
 
 -- | Sentinel value: @--profile=no-profile@ clears any inherited profile.
 noProfileSentinel :: Text
@@ -407,7 +407,7 @@ validateNoUnknownKeys obj =
         unknownKeys = filter (\k -> not (Set.member k validTopLevelKeys)) allKeys
      in case unknownKeys of
             [] -> Right ()
-            _ ->
+            _unknownKeys ->
                 Left $
                     "Unknown keys in stack-args: "
                         <> T.intercalate ", " (map formatUnknownKey unknownKeys)
@@ -439,7 +439,7 @@ findSuggestion key =
             ]
      in case scored of
             [] -> Nothing
-            _ -> Just $ snd $ List.minimumBy (\a b -> compare (fst a) (fst b)) scored
+            _candidates -> Just $ snd $ List.minimumBy (\a b -> compare (fst a) (fst b)) scored
 
 ------------------------------------------------------------------------
 -- Value to StackArgs conversion
@@ -572,7 +572,7 @@ getInt obj key = case KM.lookup (Key.fromText key) obj of
 getBool :: KM.KeyMap Value -> Text -> Maybe Bool
 getBool obj key = case KM.lookup (Key.fromText key) obj of
     Just (Bool b) -> Just b
-    _ -> Nothing
+    _nonBool -> Nothing
 
 ------------------------------------------------------------------------
 -- OnFailure / Capability parsing

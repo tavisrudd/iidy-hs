@@ -162,7 +162,7 @@ pollDriftDetection ctx maxIter detectionId = go (0 :: Int)
                 s | s == CF.StackDriftDetectionStatus_DETECTION_IN_PROGRESS -> do
                     threadDelay (driftPollIntervalSecs * 1_000_000)
                     go (iteration + 1)
-                _ -> pure True
+                _done -> pure True
 
 ------------------------------------------------------------------------
 -- Drift data collection

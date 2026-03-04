@@ -42,7 +42,7 @@ parseCliOpts = do
                     | otherwise -> do
                         renderHelpForArgs args msg
                         System.Exit.exitSuccess
-                _ -> do
+                _failure -> do
                     renderParserFailure parserHelp
                     System.Exit.exitWith exitCode
         CompletionInvoked compl -> do

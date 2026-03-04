@@ -66,7 +66,7 @@ renderOutputData r od = do
         OdNewStackEvents _ -> pure () -- manages its own spinner lifecycle
         OdPollingStarted _ -> pure () -- starts spinner
         OdTokenInfo _ -> pure () -- no-op
-        _ -> stopSpinner r
+        _other -> stopSpinner r
     case od of
         OdCommandMetadata meta -> renderCommandMetadata r meta
         OdStackDefinition def showT -> renderStackDefinition r def showT

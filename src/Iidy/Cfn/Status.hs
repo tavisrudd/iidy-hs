@@ -195,7 +195,7 @@ isTerminal = \case
     ImportRollbackFailed -> True
     DeleteSkipped -> True
     ReviewInProgress -> True
-    _ -> False
+    _inProgress -> False
 
 -- | Is this a success status?
 isSuccess :: StackStatus -> Bool
@@ -204,7 +204,7 @@ isSuccess = \case
     UpdateComplete -> True
     DeleteComplete -> True
     ImportComplete -> True
-    _ -> False
+    _nonSuccess -> False
 
 -- | Is this a failure status?
 isFailed :: StackStatus -> Bool
@@ -215,7 +215,7 @@ isFailed = \case
     UpdateRollbackFailed -> True
     RollbackFailed -> True
     ImportRollbackFailed -> True
-    _ -> False
+    _nonFailure -> False
 
 -- | Is this an in-progress status?
 isInProgress :: StackStatus -> Bool
@@ -228,7 +228,7 @@ isInProgress = \case
     ImportInProgress -> True
     ImportRollbackInProgress -> True
     ReviewInProgress -> True
-    _ -> False
+    _terminal -> False
 
 -- | Is this a rollback-related status?
 isRollback :: StackStatus -> Bool
@@ -242,7 +242,7 @@ isRollback = \case
     ImportRollbackInProgress -> True
     ImportRollbackComplete -> True
     ImportRollbackFailed -> True
-    _ -> False
+    _nonRollback -> False
 
 ------------------------------------------------------------------------
 -- Status sets

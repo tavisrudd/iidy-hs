@@ -69,7 +69,7 @@ renderCommandMetadata r meta = do
     printSectionEntry r "Region:" (colorize (th r) (thPrimary (th r)) (cmRegion meta))
     case cmProfile meta of
         Just p | not (T.null p) -> printSectionEntry r "Profile:" (colorize (th r) (thPrimary (th r)) p)
-        _ -> pure ()
+        _noProfile -> pure ()
     let serviceRole = fromMaybe "None" (cmIamServiceRole meta)
     printSectionEntry r "IAM Service Role:" (colorize (th r) (thPrimary (th r)) serviceRole)
     printSectionEntry r "Current IAM Principal:" (colorize (th r) (thPrimary (th r)) (cmCurrentIamPrincipal meta))
@@ -119,7 +119,7 @@ renderStackDefinition r def showTimes = do
                 | not (T.null reason)
                 , shouldShowStatusReason (sdStatus def) ->
                     colorizeResourceStatus (th r) (sdStatus def) <> " " <> styleMuted r reason
-            _ -> colorizeResourceStatus (th r) (sdStatus def)
+            _noReason -> colorizeResourceStatus (th r) (sdStatus def)
     printSectionEntry r "Status:" statusDisplay
     -- Capabilities
     let caps = if null (sdCapabilities def) then "None" else T.intercalate ", " (sdCapabilities def)
@@ -214,12 +214,12 @@ renderSingleStackEvent r statusPad rtypePad ewt = do
             | not (T.null reason) && isFailed (seResourceStatus event) ->
                 let cleaned = case T.breakOnEnd "Initiated" reason of
                         (_, after) | not (T.null after) -> T.strip after
-                        _ -> T.strip reason
+                        _noInitiated -> T.strip reason
                     maxW = irTerminalWidth r - 2
                     -- Simple word wrap
                     wrapped = wrapText maxW cleaned
                  in mapM_ (\line -> rPutStrLn r ("  " <> colorize (th r) (thError (th r)) line)) wrapped
-        _ -> pure ()
+        _noReason -> pure ()
 
 renderStackContents :: InteractiveRenderer -> StackContents -> IO ()
 renderStackContents r contents = do
@@ -307,7 +307,7 @@ renderStackContents r contents = do
                     Just desc | not (T.null desc) -> do
                         rPutStrLn r ("  Description: " <> styleMuted r desc)
                         rPutStrLn r ""
-                    _ -> pure ()
+                    _noDescription -> pure ()
                 mapM_ (renderChangesetChange r) (csiChanges cs)
                 rPutStrLn r ""
             )
@@ -351,7 +351,7 @@ renderFinalCommandSummary r summ = do
     printSectionEntry r "Command Summary:" summaryText
     case fcsResult summ of
         SummaryFailure -> rPutStrLn r "Fix and try again."
-        _ -> pure ()
+        _success -> pure ()
 
 {- | Render stack list. The interactive renderer uses a fixed column layout
 (timestamp, status, name, tags) regardless of sldColumns/sldQueryMode/sldFiltersApplied.
@@ -417,7 +417,7 @@ renderStackList r lst = do
                             | not (T.null reason)
                             , shouldShowStatusReason (sleStackStatus stack) ->
                                 rPutStrLn r ("  " <> styleMuted r reason)
-                        _ -> pure ()
+                        _noReason -> pure ()
                 )
                 (sldStacks lst)
 
@@ -474,12 +474,12 @@ renderChangesetChange r change = do
             let (actionText, actionColor) = case ciReplacement change of
                     Just "True" -> ("Replace", thError (th r))
                     Just "Conditional" -> ("Replace?", thError (th r))
-                    _ -> ("Modify", thWarning (th r))
+                    _noReplacement -> ("Modify", thWarning (th r))
                 resInfo = ciResourceType change <> maybe "" (" " <>) (ciPhysicalResourceId change)
             let showScope = case ciReplacement change of
                     Just "True" -> False
                     Just "Conditional" -> False
-                    _ -> True
+                    _noReplacement -> True
             if showScope
                 then do
                     let scopeText = maybe "" (T.intercalate ", ") (ciScope change)

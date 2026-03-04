@@ -61,7 +61,7 @@ isReadOnlyOperation = \case
     OpDescribeStackDrift -> True
     OpConvertStackToIidy -> True
     OpLintTemplate -> True
-    _ -> False
+    _writeOp -> False
 
 data StackChangeType
     = ChangeCreate

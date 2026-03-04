@@ -293,7 +293,7 @@ renderYaml indent (Array arr)
          in case v of
                 Object _ -> prefix <> renderYamlObject (i + 2) v True
                 Array _ -> prefix <> renderYaml (i + 2) v
-                _ -> prefix <> renderYaml 0 v
+                _scalar -> prefix <> renderYaml 0 v
 renderYaml indent (Object km)
     | KM.null km = "{}"
     | otherwise = renderYamlObject indent (Object km) False
@@ -312,7 +312,7 @@ renderYamlObject indent (Object km) isInline =
                     Array _
                         | not (null (asArray v)) ->
                             linePrefix <> keyText <> ":\n" <> renderYaml (indent + 2) v
-                    _ ->
+                    _scalar ->
                         linePrefix <> keyText <> ": " <> renderYaml 0 v
      in case pairs of
             [] -> "{}"
@@ -645,7 +645,7 @@ formatHistoryEntry ph =
      in case (mVersion, mValue) of
             (Just ver, Just val) -> Just $ "v" <> T.pack (show ver) <> ": " <> val
             (Nothing, Just val) -> Just val
-            _ -> Nothing
+            _noValue -> Nothing
 
 ------------------------------------------------------------------------
 -- Internal helpers
