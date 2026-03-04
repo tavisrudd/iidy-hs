@@ -26,7 +26,7 @@ import Iidy.Cfn.StackArgsLoader (
     loadStackArgs,
     mergeAwsSettings,
  )
-import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..))
+import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), StackInput (..))
 import Iidy.Cli (AwsOpts (..), Cli (..), GlobalOpts (..), cliToAwsSettings)
 import Iidy.Errors (dieTxt)
 import Iidy.Output.Manager (cleanupOutputDispatch, mkOutputDispatch, renderOutput)
@@ -34,7 +34,8 @@ import Iidy.Output.Types (OutputData (..))
 import Iidy.Yaml.Imports.Types (RemoteImports (..))
 
 {- | Run a CFN operation that requires loading stack args from an argsfile.
-Creates an output dispatch and passes an emitter to the action callback.
+Creates an output dispatch, builds CfnContext with all session-scoped fields,
+bundles per-operation data into StackInput, and passes both to the callback.
 For write operations, emits CommandMetadata before and FinalCommandSummary after.
 -}
 runCfnWithArgs ::
@@ -44,7 +45,7 @@ runCfnWithArgs ::
     Text ->
     -- | stack name override from CLI
     Maybe Text ->
-    (RemoteImports -> CfnContext -> StackArgs -> Maybe FilePath -> Text -> (OutputData -> IO ()) -> IO Int) ->
+    (CfnContext -> StackInput -> IO Int) ->
     IO ()
 runCfnWithArgs cli operation argsfile stackNameOverride action = do
     let env = goEnvironment (cliGlobalOpts cli)
@@ -81,7 +82,8 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
                     Nothing -> sa''
             token <- generateTokenFromMaybe (aoClientRequestToken (cliAwsOpts cli))
             let tp = timeProviderForOperation operation
-            ctx <- createContextFromEnv awsEnv credStack operation tp token
+            ctx <- createContextFromEnv awsEnv credStack operation tp token env remoteImports emit
+            let input = StackInput{siArgs = sa', siArgsFile = Just argsfilePath}
 
             -- Emit CommandMetadata for write operations (not lint/estimate-cost)
             when (emitsCommandMetadata operation) $
@@ -90,7 +92,7 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
                     emit (OdCommandMetadata meta)
 
             rc <-
-                action remoteImports ctx sa' (Just argsfilePath) env emit
+                action ctx input
                     `finally` cleanupOutputDispatch dispatch
 
             -- Emit FinalCommandSummary for write operations
@@ -102,11 +104,11 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
             exitCode rc
 
 -- | Create a simple CfnContext for operations that don't load stack args
-createSimpleContext :: Cli -> CfnOperation -> IO CfnContext
-createSimpleContext cli operation = do
+createSimpleContext :: Cli -> CfnOperation -> Text -> RemoteImports -> (OutputData -> IO ()) -> IO CfnContext
+createSimpleContext cli operation env ri emit = do
     let cliAws = cliToAwsSettings cli
     token <- generateTokenFromMaybe (aoClientRequestToken (cliAwsOpts cli))
-    createContext cliAws operation (timeProviderForOperation operation) token
+    createContext cliAws operation (timeProviderForOperation operation) token env ri emit
 
 {- | Operations that emit CommandMetadata and FinalCommandSummary.
 Write operations minus lint and estimate-cost.

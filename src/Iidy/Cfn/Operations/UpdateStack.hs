@@ -49,7 +49,6 @@ import Iidy.Cfn.Status (StackStatus (..))
 import Iidy.Cfn.Types (StackArgs (..))
 import Iidy.Confirm (ConfirmResult (..))
 import Iidy.Output.Types (ChangeSetInfo (..), OutputData (..))
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
 
 -- | The CloudFormation error message returned when there are no changes to apply.
 noUpdatesMessage :: Text
@@ -76,18 +75,13 @@ updateStack ::
     StackArgs ->
     -- | argsfile path for template resolution
     Maybe FilePath ->
-    -- | environment name
-    Text ->
-    -- | output emitter for progress display
-    (OutputData -> IO ()) ->
-    -- | whether HTTP/S3 imports are allowed
-    RemoteImports ->
     IO (Either Text Int)
-updateStack ctx args argsfilePath env emit remoteImports = do
+updateStack ctx args argsfilePath = do
     let stackName = saStackName args
+        emit = cfnEmit ctx
 
     -- Step 1: Build the UpdateStack request (use primary token)
-    reqResult <- buildUpdateStackRequest ctx args True argsfilePath env remoteImports
+    reqResult <- buildUpdateStackRequest ctx args True argsfilePath
     case reqResult of
         Left err -> pure (Left err)
         Right (req, _token) -> do
@@ -154,15 +148,10 @@ updateStackWithChangeset ::
     Bool ->
     -- | argsfile path for template resolution
     Maybe FilePath ->
-    -- | environment name
-    Text ->
-    -- | output emitter for progress display
-    (OutputData -> IO ()) ->
-    -- | whether HTTP/S3 imports are allowed
-    RemoteImports ->
     IO (Either Text Int)
-updateStackWithChangeset ctx args yesFlag argsfilePath env emit remoteImports = do
+updateStackWithChangeset ctx args yesFlag argsfilePath = do
     let stackName = saStackName args
+        emit = cfnEmit ctx
 
     -- Step 1: Fetch and emit StackDefinition
     emitStackDefinition ctx stackName emit
@@ -172,7 +161,7 @@ updateStackWithChangeset ctx args yesFlag argsfilePath env emit remoteImports = 
         csName = "iidy-update-" <> tokenPrefix
 
     -- Step 3: Create the UPDATE changeset
-    csResult' <- createChangeset ctx args csName True argsfilePath env remoteImports
+    csResult' <- createChangeset ctx args csName True argsfilePath
     case csResult' of
         Left err -> pure (Left err)
         Right info -> do
@@ -191,7 +180,7 @@ updateStackWithChangeset ctx args yesFlag argsfilePath env emit remoteImports = 
                         then pure (Right 130) -- user cancelled
                         else do
                             -- Step 7: Execute changeset and watch
-                            executeChangeset ctx stackName csName emit
+                            executeChangeset ctx stackName csName
 
 ------------------------------------------------------------------------
 -- Helpers

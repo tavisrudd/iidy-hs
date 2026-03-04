@@ -42,7 +42,6 @@ import Iidy.Cfn.Types (StackArgs (..))
 import Iidy.Confirm (ConfirmResult (..), requestConfirmation)
 import Iidy.Output.Types
 import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
 
 ------------------------------------------------------------------------
 -- Template Approval Request
@@ -56,14 +55,11 @@ templateApprovalRequest ::
     Bool ->
     -- | argsfile
     Maybe FilePath ->
-    -- | environment
-    Text ->
-    -- | emit callback
-    (OutputData -> IO ()) ->
-    -- | whether HTTP/S3 imports are allowed
-    RemoteImports ->
     IO (Either Text Int)
-templateApprovalRequest ctx sa _lintTmpl argsfilePath env emit remoteImports =
+templateApprovalRequest ctx sa _lintTmpl argsfilePath = do
+    let emit = cfnEmit ctx
+        env = cfnEnvironment ctx
+        remoteImports = cfnRemoteImports ctx
     runExceptT $ do
         -- Validate required fields
         baseLocation <-
@@ -138,10 +134,9 @@ templateApprovalReview ::
     Text ->
     -- | context lines for diff
     Int ->
-    -- | emit callback
-    (OutputData -> IO ()) ->
     IO (Either Text Int)
-templateApprovalReview ctx url contextLines emit =
+templateApprovalReview ctx url contextLines = do
+    let emit = cfnEmit ctx
     runExceptT $ do
         -- Parse S3 URL
         (bucket, pendingKey) <- liftEitherT $ parseS3Url url
@@ -185,7 +180,6 @@ templateApprovalReview ctx url contextLines emit =
             else
                 reviewPendingTemplate
                     ctx
-                    emit
                     contextLines
                     bucket
                     pendingKey
@@ -196,7 +190,6 @@ templateApprovalReview ctx url contextLines emit =
 -- | Inner logic for reviewing a non-yet-approved pending template.
 reviewPendingTemplate ::
     CfnContext ->
-    (OutputData -> IO ()) ->
     -- | context lines for diff
     Int ->
     -- | S3 bucket
@@ -210,7 +203,8 @@ reviewPendingTemplate ::
     -- | approved S3 location (for result output)
     Text ->
     ExceptT Text IO Int
-reviewPendingTemplate ctx emit contextLines bucket pendingKey approvedKey latestKey approvedLoc = do
+reviewPendingTemplate ctx contextLines bucket pendingKey approvedKey latestKey approvedLoc = do
+    let emit = cfnEmit ctx
     -- Download templates
     pending <-
         liftExceptT (downloadFromS3 (cfnEnv ctx) bucket pendingKey)
@@ -248,7 +242,6 @@ reviewPendingTemplate ctx emit contextLines bucket pendingKey approvedKey latest
                 then
                     approveTemplate
                         ctx
-                        emit
                         bucket
                         pendingKey
                         approvedKey
@@ -270,7 +263,6 @@ reviewPendingTemplate ctx emit contextLines bucket pendingKey approvedKey latest
 -- | Perform the actual S3 approval: copy pending to approved and latest, delete pending.
 approveTemplate ::
     CfnContext ->
-    (OutputData -> IO ()) ->
     -- | S3 bucket
     Text ->
     -- | pending object key
@@ -284,7 +276,8 @@ approveTemplate ::
     -- | pending template body
     Text ->
     ExceptT Text IO Int
-approveTemplate ctx emit bucket pendingKey approvedKey latestKey approvedLoc pending = do
+approveTemplate ctx bucket pendingKey approvedKey latestKey approvedLoc pending = do
+    let emit = cfnEmit ctx
     liftExceptT (uploadToS3 (cfnEnv ctx) bucket approvedKey pending)
         `prefixError` "Failed to upload approved template: "
     liftExceptT (uploadToS3 (cfnEnv ctx) bucket latestKey pending)

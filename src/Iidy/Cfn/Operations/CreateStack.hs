@@ -11,6 +11,7 @@ module Iidy.Cfn.Operations.CreateStack (
 
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
+import Iidy.Output.Types (OutputData (..))
 
 import Control.Monad.Trans.Resource (runResourceT)
 
@@ -27,8 +28,6 @@ import Iidy.Cfn.StackOperations (
  )
 import Iidy.Cfn.Status (StackStatus (..))
 import Iidy.Cfn.Types (StackArgs (..))
-import Iidy.Output.Types (OutputData (..))
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
 
 ------------------------------------------------------------------------
 -- Create stack operation
@@ -50,16 +49,11 @@ createStack ::
     StackArgs ->
     -- | argsfile path for template resolution
     Maybe FilePath ->
-    -- | environment name
-    Text ->
-    -- | output emitter for progress display
-    (OutputData -> IO ()) ->
-    -- | whether HTTP/S3 imports are allowed
-    RemoteImports ->
     IO (Either Text Int)
-createStack ctx args argsfilePath env emit remoteImports = do
+createStack ctx args argsfilePath = do
+    let emit = cfnEmit ctx
     -- Step 1: Build the request (use primary token for create)
-    reqResult <- buildCreateStackRequest ctx args True argsfilePath env remoteImports
+    reqResult <- buildCreateStackRequest ctx args True argsfilePath
     case reqResult of
         Left err -> pure (Left err)
         Right (req, _token) -> do

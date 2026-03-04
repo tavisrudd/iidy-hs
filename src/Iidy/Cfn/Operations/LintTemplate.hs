@@ -19,7 +19,6 @@ import Iidy.Cfn.TemplateLoader (TemplateResult (..), loadCfnTemplate, templateMa
 import Iidy.Cfn.Types (StackArgs (..))
 import Iidy.Output.Types
 import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
 
 ------------------------------------------------------------------------
 -- Lint template operation
@@ -35,16 +34,12 @@ lintTemplate ::
     StackArgs ->
     -- | argsfile path for template resolution
     Maybe FilePath ->
-    -- | environment name
-    Text ->
-    -- | emit callback
-    (OutputData -> IO ()) ->
-    -- | whether HTTP/S3 imports are allowed
-    RemoteImports ->
     IO (Either Text Int)
-lintTemplate ctx args argsfilePath env emit remoteImports = do
+lintTemplate ctx args argsfilePath = do
+    let emit = cfnEmit ctx
+        env = cfnEnvironment ctx
     -- Load the template
-    tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (ImportConfig (Just (cfnEnv ctx)) remoteImports)
+    tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (ImportConfig (Just (cfnEnv ctx)) (cfnRemoteImports ctx))
     case tmplEither of
         Left err -> pure (Left err)
         Right tmplResult -> case trTemplateBody tmplResult of

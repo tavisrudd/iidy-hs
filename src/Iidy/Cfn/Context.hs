@@ -37,6 +37,8 @@ import Iidy.Aws.Timing (TimeProvider (..))
 import Iidy.Cfn.Status (StackStatus (..))
 import Iidy.Cfn.Status qualified as Status
 import Iidy.Cfn.Types (CfnOperation)
+import Iidy.Output.Types (OutputData)
+import Iidy.Yaml.Imports.Types (RemoteImports (..))
 
 ------------------------------------------------------------------------
 -- Context type
@@ -50,6 +52,9 @@ data CfnContext = CfnContext
     , cfnPrimaryToken :: !TokenInfo
     , cfnUsedTokens :: !(IORef [TokenInfo])
     , cfnOperation :: !CfnOperation
+    , cfnEnvironment :: !Text
+    , cfnRemoteImports :: !RemoteImports
+    , cfnEmit :: !(OutputData -> IO ())
     }
 
 ------------------------------------------------------------------------
@@ -57,10 +62,18 @@ data CfnContext = CfnContext
 ------------------------------------------------------------------------
 
 -- | Create a CfnContext from AWS settings and operation info.
-createContext :: AwsSettings -> CfnOperation -> TimeProvider -> TokenInfo -> IO CfnContext
-createContext settings operation tp token = do
-    (env, credStack) <- createAwsEnvFromSettings settings
-    createContextFromEnv env credStack operation tp token
+createContext ::
+    AwsSettings ->
+    CfnOperation ->
+    TimeProvider ->
+    TokenInfo ->
+    Text ->
+    RemoteImports ->
+    (OutputData -> IO ()) ->
+    IO CfnContext
+createContext settings operation tp token env ri emit = do
+    (awsEnv, credStack) <- createAwsEnvFromSettings settings
+    createContextFromEnv awsEnv credStack operation tp token env ri emit
 
 {- | Create a CfnContext from an already-configured Env.
 Used when the AWS config has already been set up (e.g., during stack-args loading).
@@ -71,19 +84,25 @@ createContextFromEnv ::
     CfnOperation ->
     TimeProvider ->
     TokenInfo ->
+    Text ->
+    RemoteImports ->
+    (OutputData -> IO ()) ->
     IO CfnContext
-createContextFromEnv env credStack operation tp token = do
+createContextFromEnv awsEnv credStack operation tp token env ri emit = do
     startTime <- tpStartTime tp
     tokenRef <- newIORef [token]
     pure
         CfnContext
-            { cfnEnv = env
+            { cfnEnv = awsEnv
             , cfnCredentialSources = credStack
             , cfnTimeProvider = tp
             , cfnStartTime = startTime
             , cfnPrimaryToken = token
             , cfnUsedTokens = tokenRef
             , cfnOperation = operation
+            , cfnEnvironment = env
+            , cfnRemoteImports = ri
+            , cfnEmit = emit
             }
 
 ------------------------------------------------------------------------

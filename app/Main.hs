@@ -11,7 +11,7 @@ import System.Posix.Signals (Handler (..), installHandler, sigINT)
 
 import Iidy.Aws.Config (createAwsEnvFromSettings)
 import Iidy.Cfn.CommandMetadata (constructCommandMetadata, createFinalCommandSummary)
-import Iidy.Cfn.Context (ctxElapsedSeconds)
+import Iidy.Cfn.Context (CfnContext (..), ctxElapsedSeconds)
 import Iidy.Cfn.Operations.Changeset (
     StackState (..),
     buildChangeSetCreationResult,
@@ -34,7 +34,7 @@ import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateAp
 import Iidy.Cfn.Operations.UpdateStack (updateStack, updateStackWithChangeset)
 import Iidy.Cfn.Operations.WatchStack (watchStack)
 import Iidy.Cfn.Runner (createSimpleContext, runCfnWithArgs)
-import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), emptyStackArgs)
+import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), StackInput (..), emptyStackArgs)
 import Iidy.Cli
 import Iidy.Cli.Completion (bashCompletionScript, fishCompletionScript, zshCompletionScript)
 import Iidy.Cli.Parser (parseCliOpts)
@@ -80,31 +80,32 @@ runCommand cli = case cliCommand cli of
     -- CloudFormation operations with stack-args
     CmdCreateStack args ->
         runCfnWithArgs cli OpCreateStack (csaArgsfile args) (csaStackName args) $
-            \remoteImports ctx sa fp env emit -> createStack ctx sa fp env emit remoteImports >>= handleEither
+            \ctx input -> createStack ctx (siArgs input) (siArgsFile input) >>= handleEither
     CmdUpdateStack args ->
         runCfnWithArgs cli OpUpdateStack (sfaArgsfile (usaBase args)) (sfaStackName (usaBase args)) $
-            \remoteImports ctx sa fp env emit ->
-                if usaChangeset args
-                    then updateStackWithChangeset ctx sa (usaYes args) fp env emit remoteImports >>= handleEither
-                    else updateStack ctx sa fp env emit remoteImports >>= handleEither
+            \ctx input ->
+                let sa = siArgs input; fp = siArgsFile input
+                 in if usaChangeset args
+                        then updateStackWithChangeset ctx sa (usaYes args) fp >>= handleEither
+                        else updateStack ctx sa fp >>= handleEither
     CmdCreateOrUpdate args ->
         runCfnWithArgs cli OpCreateOrUpdate (sfaArgsfile (usaBase args)) (sfaStackName (usaBase args)) $
-            \remoteImports ctx sa fp env emit -> createOrUpdate ctx sa (usaChangeset args) (usaYes args) fp env emit remoteImports >>= handleEither
+            \ctx input -> createOrUpdate ctx (siArgs input) (usaChangeset args) (usaYes args) (siArgsFile input) >>= handleEither
     CmdEstimateCost args ->
         runCfnWithArgs cli OpEstimateCost (sfaArgsfile args) (sfaStackName args) $
-            \remoteImports ctx sa fp env emit -> do
-                result <- estimateCost ctx sa fp env emit remoteImports
-                handleEither result
+            \ctx input -> estimateCost ctx (siArgs input) (siArgsFile input) >>= handleEither
     CmdCreateChangeset args ->
         runCfnWithArgs cli OpCreateChangeset (ccsArgsfile args) (ccsStackName args) $
-            \remoteImports ctx sa fp env emit -> do
+            \ctx input -> do
+                let sa = siArgs input
+                    emit = cfnEmit ctx
                 -- Determine changeset name (user-provided or random)
                 csName <- maybe generateDashedName pure (ccsChangesetName args)
                 -- Check stack state to determine changeset type
                 let stackName = saStackName sa
                 state <- checkStackState ctx stackName
                 let exists = case state of StackNormal -> True; _ -> False
-                csEither <- createChangeset ctx sa csName exists fp env remoteImports
+                csEither <- createChangeset ctx sa csName exists (siArgsFile input)
                 case csEither of
                     Left err -> do
                         emit (OdRawOutput err)
@@ -115,15 +116,16 @@ runCommand cli = case cliCommand cli of
                         pure 0
     CmdExecChangeset args -> do
         let stackName = fromMaybe "" (ecsStackName args)
-        ctx <- createSimpleContext cli OpExecuteChangeset
+            env = goEnvironment (cliGlobalOpts cli)
+            remoteImports = if goRemoteImports (cliGlobalOpts cli) then AllowRemoteImports else BlockRemoteImports
         dispatch <- mkOutputDispatch (cliGlobalOpts cli)
         let emit = renderOutput dispatch
-            env = goEnvironment (cliGlobalOpts cli)
+        ctx <- createSimpleContext cli OpExecuteChangeset env remoteImports emit
         -- Emit CommandMetadata before operation
         meta <- constructCommandMetadata ctx (cliToAwsSettings cli) emptyStackArgs env Nothing
         emit (OdCommandMetadata meta)
         result <-
-            executeChangeset ctx stackName (ecsChangesetName args) emit
+            executeChangeset ctx stackName (ecsChangesetName args)
                 `finally` cleanupOutputDispatch dispatch
         case result of
             Left err -> dieTxt err
@@ -134,17 +136,17 @@ runCommand cli = case cliCommand cli of
 
     -- Read-only CloudFormation operations
     CmdDescribeStack args -> do
-        ctx <- createSimpleContext cli OpDescribeStack
-        dispatch <- mkOutputDispatch (cliGlobalOpts cli)
         let env = goEnvironment (cliGlobalOpts cli)
-            emit = renderOutput dispatch
+        dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+        let emit = renderOutput dispatch
+        ctx <- createSimpleContext cli OpDescribeStack env BlockRemoteImports emit
         result <- describeStack ctx (daStackname args) (daEvents args) env emit
         case result of
             Left err -> dieTxt err
             Right () -> pure ()
     CmdWatchStack args -> do
-        ctx <- createSimpleContext cli OpWatchStack
         dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+        ctx <- createSimpleContext cli OpWatchStack "" BlockRemoteImports (renderOutput dispatch)
         result <-
             watchStack ctx (waStackname args) (waInactivityTimeout args) (renderOutput dispatch)
                 `finally` cleanupOutputDispatch dispatch
@@ -152,17 +154,17 @@ runCommand cli = case cliCommand cli of
             Left err -> dieTxt err
             Right rc -> exitCode rc
     CmdDescribeStackDrift args -> do
-        ctx <- createSimpleContext cli OpDescribeStackDrift
         dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+        ctx <- createSimpleContext cli OpDescribeStackDrift "" BlockRemoteImports (renderOutput dispatch)
         result <- describeStackDrift ctx (drfStackname args) (drfDriftCache args) (renderOutput dispatch)
         case result of
             Left err -> dieTxt err
             Right () -> pure ()
     CmdDeleteStack args -> do
-        ctx <- createSimpleContext cli OpDeleteStack
-        dispatch <- mkOutputDispatch (cliGlobalOpts cli)
         let env = goEnvironment (cliGlobalOpts cli)
-            emit = renderOutput dispatch
+        dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+        let emit = renderOutput dispatch
+        ctx <- createSimpleContext cli OpDeleteStack env BlockRemoteImports emit
         -- Emit CommandMetadata before operation
         meta <- constructCommandMetadata ctx (cliToAwsSettings cli) emptyStackArgs env Nothing
         emit (OdCommandMetadata meta)
@@ -177,16 +179,16 @@ runCommand cli = case cliCommand cli of
                 emit (createFinalCommandSummary (rc == 0 || rc == 130) elapsed)
                 exitCode rc
     CmdGetStackTemplate args -> do
-        ctx <- createSimpleContext cli OpGetStackTemplate
         dispatch <- mkOutputDispatch (cliGlobalOpts cli)
         let emit = renderOutput dispatch
+        ctx <- createSimpleContext cli OpGetStackTemplate "" BlockRemoteImports emit
         result <- getStackTemplate ctx (gtaStackname args)
         case result of
             Left err -> dieTxt err
             Right tpl -> emit (OdRawOutput (tpl <> "\n"))
     CmdListStacks args -> do
-        ctx <- createSimpleContext cli OpListStacks
         dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+        ctx <- createSimpleContext cli OpListStacks "" BlockRemoteImports (renderOutput dispatch)
         let tagFilters = if null (laTagFilter args) then Nothing else Just (laTagFilter args)
             hasQuery = case laQuery args of Just _ -> True; Nothing -> False
         result <- listStacks ctx tagFilters (laTags args) hasQuery
@@ -241,13 +243,15 @@ runCommand cli = case cliCommand cli of
     CmdTemplateApproval acmd -> case acmd of
         ApprovalRequest args ->
             runCfnWithArgs cli OpTemplateApprovalRequest (araArgsfile args) Nothing $
-                \remoteImports ctx sa fp env emit -> do
-                    result <- templateApprovalRequest ctx sa (araLintTemplate args) fp env emit remoteImports
+                \ctx input -> do
+                    result <- templateApprovalRequest ctx (siArgs input) (araLintTemplate args) (siArgsFile input)
                     handleEither result
         ApprovalReview args -> do
-            ctx <- createSimpleContext cli OpTemplateApprovalReview
             dispatch <- mkOutputDispatch (cliGlobalOpts cli)
-            result <- templateApprovalReview ctx (arvUrl args) (arvContext args) (renderOutput dispatch)
+            let emit = renderOutput dispatch
+                ri = if goRemoteImports (cliGlobalOpts cli) then AllowRemoteImports else BlockRemoteImports
+            ctx <- createSimpleContext cli OpTemplateApprovalReview "" ri emit
+            result <- templateApprovalReview ctx (arvUrl args) (arvContext args)
             case result of
                 Left err -> dieTxt err
                 Right rc -> exitCode rc
@@ -259,11 +263,9 @@ runCommand cli = case cliCommand cli of
          in runDemo (daDemoscript args) (daTimescaling args) (daMaskSecrets args) ri >>= exitCode
     CmdLintTemplate args ->
         runCfnWithArgs cli OpLintTemplate (ltaArgsfile args) Nothing $
-            \remoteImports ctx sa fp env emit -> do
-                result <- lintTemplate ctx sa fp env emit remoteImports
-                handleEither result
+            \ctx input -> lintTemplate ctx (siArgs input) (siArgsFile input) >>= handleEither
     CmdConvertStackToIidy args -> do
-        ctx <- createSimpleContext cli OpConvertStackToIidy
+        ctx <- createSimpleContext cli OpConvertStackToIidy "" BlockRemoteImports (\_ -> pure ())
         result <-
             convertStackToIidy
                 ctx

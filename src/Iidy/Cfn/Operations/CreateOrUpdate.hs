@@ -35,7 +35,6 @@ import Iidy.Cfn.StackOperations (stackExists)
 import Iidy.Cfn.Types (StackArgs (..))
 import Iidy.Confirm (ConfirmResult (..))
 import Iidy.Output.Types (ChangeSetInfo (..), OutputData (..))
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
 
 ------------------------------------------------------------------------
 -- Create-or-update operation
@@ -55,27 +54,21 @@ createOrUpdate ::
     Bool ->
     -- | argsfile path for template resolution
     Maybe FilePath ->
-    -- | environment name
-    Text ->
-    -- | output emitter for progress display
-    (OutputData -> IO ()) ->
-    -- | whether HTTP/S3 imports are allowed
-    RemoteImports ->
     IO (Either Text Int)
-createOrUpdate ctx args useChangeset yesFlag argsfilePath env emit remoteImports = do
+createOrUpdate ctx args useChangeset yesFlag argsfilePath = do
     let stackName = saStackName args
 
     exists <- stackExists ctx stackName
 
     case (exists, useChangeset) of
         -- Path 1 & 2: Stack exists, no changeset → direct update
-        (True, False) -> updateStack ctx args argsfilePath env emit remoteImports
+        (True, False) -> updateStack ctx args argsfilePath
         -- Path 3: Stack exists + changeset → UPDATE changeset → confirm → execute
-        (True, True) -> updateWithChangeset ctx args yesFlag argsfilePath env emit remoteImports
+        (True, True) -> updateWithChangeset ctx args yesFlag argsfilePath
         -- Path 4: Stack doesn't exist, no changeset → direct create
-        (False, False) -> createStack ctx args argsfilePath env emit remoteImports
+        (False, False) -> createStack ctx args argsfilePath
         -- Path 5: Stack doesn't exist + changeset → CREATE changeset → confirm → execute
-        (False, True) -> createWithChangeset ctx args yesFlag argsfilePath env emit remoteImports
+        (False, True) -> createWithChangeset ctx args yesFlag argsfilePath
 
 ------------------------------------------------------------------------
 -- Changeset path: update existing stack
@@ -91,15 +84,10 @@ updateWithChangeset ::
     Bool ->
     -- | argsfile path
     Maybe FilePath ->
-    -- | environment name
-    Text ->
-    -- | output emitter
-    (OutputData -> IO ()) ->
-    -- | whether HTTP/S3 imports are allowed
-    RemoteImports ->
     IO (Either Text Int)
-updateWithChangeset ctx args yesFlag argsfilePath env emit remoteImports = do
+updateWithChangeset ctx args yesFlag argsfilePath = do
     let stackName = saStackName args
+        emit = cfnEmit ctx
 
     -- Fetch and emit StackDefinition
     emitStackDefinition ctx stackName emit
@@ -109,7 +97,7 @@ updateWithChangeset ctx args yesFlag argsfilePath env emit remoteImports = do
         csName = "iidy-create-or-update-" <> tokenPrefix
 
     -- Create UPDATE changeset
-    csResult' <- createChangeset ctx args csName True argsfilePath env remoteImports
+    csResult' <- createChangeset ctx args csName True argsfilePath
     case csResult' of
         Left err -> pure (Left err)
         Right info -> do
@@ -125,7 +113,7 @@ updateWithChangeset ctx args yesFlag argsfilePath env emit remoteImports = do
                     result <- confirmChangesetExecution yesFlag
                     if result == Declined
                         then pure (Right 130)
-                        else executeChangeset ctx stackName csName emit
+                        else executeChangeset ctx stackName csName
 
 ------------------------------------------------------------------------
 -- Changeset path: create new stack
@@ -142,21 +130,16 @@ createWithChangeset ::
     Bool ->
     -- | argsfile path
     Maybe FilePath ->
-    -- | environment name
-    Text ->
-    -- | output emitter
-    (OutputData -> IO ()) ->
-    -- | whether HTTP/S3 imports are allowed
-    RemoteImports ->
     IO (Either Text Int)
-createWithChangeset ctx args yesFlag argsfilePath env emit remoteImports = do
+createWithChangeset ctx args yesFlag argsfilePath = do
     let stackName = saStackName args
+        emit = cfnEmit ctx
 
     -- Generate random changeset name (docker-style)
     csName <- generateDashedName
 
     -- Create CREATE changeset (stack doesn't exist yet)
-    csResult' <- createChangeset ctx args csName False argsfilePath env remoteImports
+    csResult' <- createChangeset ctx args csName False argsfilePath
     case csResult' of
         Left err -> pure (Left err)
         Right info -> do
@@ -176,4 +159,4 @@ createWithChangeset ctx args yesFlag argsfilePath env emit remoteImports = do
                     result <- confirmChangesetExecution yesFlag
                     if result == Declined
                         then pure (Right 130)
-                        else executeChangeset ctx stackName csName emit
+                        else executeChangeset ctx stackName csName

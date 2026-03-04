@@ -83,7 +83,6 @@ import Iidy.Output.Types (
     ChangeSetInfo (..),
     OutputData (..),
  )
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
 
 ------------------------------------------------------------------------
 -- Changeset creation
@@ -111,12 +110,8 @@ createChangeset ::
     Bool ->
     -- | argsfile path for template resolution
     Maybe FilePath ->
-    -- | environment name
-    Text ->
-    -- | whether HTTP/S3 imports are allowed
-    RemoteImports ->
     IO (Either Text ChangeSetInfo)
-createChangeset ctx args csName stackExists' argsfilePath env remoteImports = do
+createChangeset ctx args csName stackExists' argsfilePath = do
     let csType =
             if stackExists'
                 then CF.ChangeSetType_UPDATE
@@ -124,7 +119,7 @@ createChangeset ctx args csName stackExists' argsfilePath env remoteImports = do
         stackName' = saStackName args
 
     -- Step 1 & 2: Build and send the CreateChangeSet request
-    reqResult <- buildCreateChangeSetRequest ctx args csName csType argsfilePath env remoteImports
+    reqResult <- buildCreateChangeSetRequest ctx args csName csType argsfilePath
     case reqResult of
         Left err -> pure (Left err)
         Right (req, _token) -> do
@@ -209,10 +204,9 @@ executeChangeset ::
     Text ->
     -- | changeset name
     Text ->
-    -- | output emitter for progress display
-    (OutputData -> IO ()) ->
     IO (Either Text Int)
-executeChangeset ctx stackName csName emit = do
+executeChangeset ctx stackName csName = do
+    let emit = cfnEmit ctx
     -- Step 1: Build and send ExecuteChangeSet request
     token <- ctxDeriveToken ctx "execute-changeset"
     let baseReq = ECS.newExecuteChangeSet csName

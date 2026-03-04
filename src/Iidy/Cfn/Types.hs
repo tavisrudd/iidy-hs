@@ -6,6 +6,7 @@ module Iidy.Cfn.Types (
     OnFailure (..),
     Capability (..),
     StackArgs (..),
+    StackInput (..),
     emptyStackArgs,
 ) where
 
@@ -75,6 +76,13 @@ data OnFailure = DoNothing | Rollback | Delete
 
 -- | CloudFormation capability declaration.
 data Capability = CapIAM | CapNamedIAM | CapAutoExpand
+    deriving stock (Show, Eq)
+
+-- | Bundled per-operation inputs (stack args + argsfile path).
+data StackInput = StackInput
+    { siArgs :: !StackArgs
+    , siArgsFile :: !(Maybe FilePath)
+    }
     deriving stock (Show, Eq)
 
 -- | Parsed stack-args.yaml configuration

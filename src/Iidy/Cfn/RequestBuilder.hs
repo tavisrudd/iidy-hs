@@ -42,7 +42,6 @@ import Iidy.Cfn.Context (CfnContext (..), ctxDeriveToken)
 import Iidy.Cfn.TemplateLoader (TemplateResult (..), loadCfnTemplate)
 import Iidy.Cfn.Types (Capability (..), OnFailure (..), StackArgs (..))
 import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
 
 ------------------------------------------------------------------------
 -- Request builders
@@ -58,14 +57,11 @@ buildCreateStackRequest ::
     Bool ->
     -- | argsfile path for template resolution
     Maybe FilePath ->
-    -- | environment name
-    Text ->
-    -- | whether HTTP/S3 imports are allowed
-    RemoteImports ->
     IO (Either Text (CF.CreateStack, TokenInfo))
-buildCreateStackRequest ctx args usePrimary argsfilePath env remoteImports = do
+buildCreateStackRequest ctx args usePrimary argsfilePath = do
     let sName = saStackName args
-        importCfg = ImportConfig{icAwsEnv = Just (cfnEnv ctx), icRemoteImports = remoteImports}
+        env = cfnEnvironment ctx
+        importCfg = ImportConfig{icAwsEnv = Just (cfnEnv ctx), icRemoteImports = cfnRemoteImports ctx}
     token <-
         if usePrimary
             then pure (cfnPrimaryToken ctx)
@@ -102,14 +98,11 @@ buildUpdateStackRequest ::
     Bool ->
     -- | argsfile path
     Maybe FilePath ->
-    -- | environment name
-    Text ->
-    -- | whether HTTP/S3 imports are allowed
-    RemoteImports ->
     IO (Either Text (CF.UpdateStack, TokenInfo))
-buildUpdateStackRequest ctx args usePrimary argsfilePath env remoteImports = do
+buildUpdateStackRequest ctx args usePrimary argsfilePath = do
     let sName = saStackName args
-        importCfg = ImportConfig{icAwsEnv = Just (cfnEnv ctx), icRemoteImports = remoteImports}
+        env = cfnEnvironment ctx
+        importCfg = ImportConfig{icAwsEnv = Just (cfnEnv ctx), icRemoteImports = cfnRemoteImports ctx}
     token <-
         if usePrimary
             then pure (cfnPrimaryToken ctx)
@@ -155,15 +148,13 @@ buildCreateChangeSetRequest ::
     Text ->
     -- | CREATE or UPDATE
     CF.ChangeSetType ->
+    -- | argsfile path for template resolution
     Maybe FilePath ->
-    -- | environment
-    Text ->
-    -- | whether HTTP/S3 imports are allowed
-    RemoteImports ->
     IO (Either Text (CF.CreateChangeSet, TokenInfo))
-buildCreateChangeSetRequest ctx args csName csType argsfilePath env remoteImports = do
+buildCreateChangeSetRequest ctx args csName csType argsfilePath = do
     let sName = saStackName args
-        importCfg = ImportConfig{icAwsEnv = Just (cfnEnv ctx), icRemoteImports = remoteImports}
+        env = cfnEnvironment ctx
+        importCfg = ImportConfig{icAwsEnv = Just (cfnEnv ctx), icRemoteImports = cfnRemoteImports ctx}
     token <- ctxDeriveToken ctx "create-changeset"
     tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env importCfg
     case tmplEither of
