@@ -333,7 +333,7 @@ printSectionHeadingLn r text = do
 
 -- | Format a section label (muted color)
 formatSectionLabel :: InteractiveRenderer -> Text -> Text
-formatSectionLabel r text = colorize (th r) (thMuted (th r)) text
+formatSectionLabel r = colorize (th r) (thMuted (th r))
 
 -- | Format a section entry: " label           value\n"
 formatSectionEntry :: InteractiveRenderer -> Text -> Text -> Text

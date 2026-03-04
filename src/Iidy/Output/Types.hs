@@ -373,8 +373,8 @@ data StackAbsentInfo = StackAbsentInfo
 -- Drift
 ------------------------------------------------------------------------
 
-data StackDrift = StackDrift
-  { sdrDriftedResources :: ![DriftedResource]
+newtype StackDrift = StackDrift
+  { sdrDriftedResources :: [DriftedResource]
   } deriving stock (Show, Eq)
 
 data DriftedResource = DriftedResource

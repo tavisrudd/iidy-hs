@@ -11,6 +11,7 @@ module Iidy.Params.Review
 
 import Control.Exception (try)
 import Control.Monad.Trans.Resource (runResourceT)
+import Data.Either (fromRight)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -52,7 +53,7 @@ paramReview awsEnv path = do
 
       -- 2. Fetch current parameter
       currentResult <- fetchParam awsEnv path True
-      let currentValue = either (const "(not set)") id currentResult
+      let currentValue = fromRight "(not set)" currentResult
 
       -- 3. Display values
       TIO.putStrLn ""

@@ -186,4 +186,4 @@ checkTemplateSize body =
 
 -- | Check if text contains $imports: key (suggesting preprocessing is needed)
 hasImportsKey :: Text -> Bool
-hasImportsKey t = T.isInfixOf "$imports:" t
+hasImportsKey = T.isInfixOf "$imports:"

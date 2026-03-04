@@ -22,6 +22,7 @@ module Iidy.Yaml.Imports.ContentParsing
 import Data.Aeson (Value(..))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
+import Data.Either (fromRight)
 import qualified Data.ByteString.Lazy as BL
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -94,7 +95,7 @@ parseByFormatSuffix (Just _) val =
 parseByFormatSuffixLenient :: Maybe Text -> Text -> Value
 parseByFormatSuffixLenient Nothing val = String val
 parseByFormatSuffixLenient (Just "json") val =
-  either (const (String val)) id (parseJsonContent (TE.encodeUtf8 val))
+  fromRight (String val) (parseJsonContent (TE.encodeUtf8 val))
 parseByFormatSuffixLenient (Just "yaml") val =
-  either (const (String val)) id (parseYamlContent val)
+  fromRight (String val) (parseYamlContent val)
 parseByFormatSuffixLenient (Just _) val = String val

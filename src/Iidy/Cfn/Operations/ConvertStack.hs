@@ -232,7 +232,7 @@ quoteYamlKey k
   | otherwise = k
   where
     needsKeyQuoting :: Text -> Bool
-    needsKeyQuoting t = T.any (`elem` [':' :: Char, '{', '}', '[', ']', ',', '#', '&', '*', '?', '|', '>', '!', '%', '@', '`']) t
+    needsKeyQuoting = T.any (`elem` [':' :: Char, '{', '}', '[', ']', ',', '#', '&', '*', '?', '|', '>', '!', '%', '@', '`'])
 
 emitItem :: Bool -> Int -> Text -> Value -> Text
 emitItem doSort indent parentKey v =
@@ -304,7 +304,7 @@ quoteYamlString s
   | needsQuoting s = "'" <> T.replace "'" "''" s <> "'"
   | otherwise = s
   where
-    hasControlChars t = T.any (< ' ') t
+    hasControlChars = T.any (< ' ')
 
     escapeForDoubleQuote = T.concatMap $ \c -> case c of
       '\n' -> "\\n"
@@ -378,9 +378,7 @@ buildStackArgsYaml stackName project params tags caps mTimeout
           , "$imports:"
           , "  build_number: 'env:build_number:0'"
           ]
-        , if not (null ssmParamKeys)
-          then [ "  ssmParams: 'ssm-path:/{{environment}}/{{project}}/'" ]
-          else []
+        , [ "  ssmParams: 'ssm-path:/{{environment}}/{{project}}/'" | not (null ssmParamKeys) ]
         , [ ""
           , "Template: ./cfn-template.yaml"
           , "StackName: " <> parameterizeStackName stackName project

@@ -65,7 +65,7 @@ loadS3Import awsEnv location = do
 ------------------------------------------------------------------------
 
 -- | Thrown when the S3 response body exceeds the maximum allowed size.
-data S3SizeLimitExceeded = S3SizeLimitExceeded Int
+newtype S3SizeLimitExceeded = S3SizeLimitExceeded Int
   deriving stock (Show)
 
 instance Exception S3SizeLimitExceeded

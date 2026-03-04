@@ -15,7 +15,7 @@ import Iidy.Yaml.OValue
 
 -- | Emit an OValue as iidy-js-compatible YAML.
 emitYaml :: OValue -> Text
-emitYaml val = emitValue 0 True val
+emitYaml = emitValue 0 True
 
 ------------------------------------------------------------------------
 -- Core emission

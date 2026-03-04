@@ -85,7 +85,7 @@ spinnerFrame sp = do
 
 -- | Set the spinner message
 spinnerSetMessage :: Spinner -> Text -> IO ()
-spinnerSetMessage sp msg = atomicWriteIORef (spMessage sp) msg
+spinnerSetMessage sp = atomicWriteIORef (spMessage sp)
 
 -- | Render the spinner to the configured handle (overwriting current line with \r)
 spinnerRender :: Spinner -> Text -> IO ()

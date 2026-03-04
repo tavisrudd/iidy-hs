@@ -30,10 +30,10 @@ import Iidy.Yaml.Handlebars.Helpers (defaultHelpers, HelperFn)
 -- Types
 ------------------------------------------------------------------------
 
-data InterpolateError = InterpolateError !Text
+newtype InterpolateError = InterpolateError Text
   deriving stock (Show, Eq)
 
-data Template = Template [TemplatePart]
+newtype Template = Template [TemplatePart]
   deriving stock (Show)
 
 data TemplatePart

@@ -15,6 +15,7 @@ import Control.Exception (try)
 import Control.Monad.Trans.Resource (runResourceT)
 import qualified Data.Array as Array
 import qualified Data.ByteString as BS
+import Data.Either (fromRight)
 import qualified Data.List as List
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -156,7 +157,7 @@ templateApprovalReview ctx url contextLines emit = do
                   case pendingTemplate of
                     Left err -> pure (Left ("Failed to download pending template: " <> err))
                     Right pending -> do
-                      let latest = either (const "") id latestTemplate
+                      let latest = fromRight "" latestTemplate
 
                       -- Generate and emit diff
                       let diffOutput = generateDiff contextLines latest pending

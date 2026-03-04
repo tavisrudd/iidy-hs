@@ -210,7 +210,7 @@ stripFilePrefix :: Text -> Text
 stripFilePrefix loc = fromMaybe loc (T.stripPrefix "file:" loc)
 
 isAbsolutePath :: Text -> Bool
-isAbsolutePath t = T.isPrefixOf "/" t
+isAbsolutePath = T.isPrefixOf "/"
 
 isAbsolutePathStr :: FilePath -> Bool
 isAbsolutePathStr ('/':_) = True

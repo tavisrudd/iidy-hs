@@ -34,7 +34,7 @@ import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..), ImportType(..))
 ------------------------------------------------------------------------
 
 -- | Thrown when the HTTP response body exceeds 'httpMaxResponseBytes'.
-data HttpSizeLimitExceeded = HttpSizeLimitExceeded Int
+newtype HttpSizeLimitExceeded = HttpSizeLimitExceeded Int
   deriving stock (Show)
 
 instance Exception HttpSizeLimitExceeded

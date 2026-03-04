@@ -108,8 +108,7 @@ mkParam name val =
   SSMP.newParameter name SSMPT.ParameterType_String val 1
 
 mkParamFull :: Text -> SSMPT.ParameterType -> Text -> Integer -> SSM.Parameter
-mkParamFull name pType val ver =
-  SSMP.newParameter name pType val ver
+mkParamFull = SSMP.newParameter
 
 formatParamTests :: [TestTree]
 formatParamTests =

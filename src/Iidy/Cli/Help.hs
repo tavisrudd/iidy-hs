@@ -105,7 +105,7 @@ colorEnabledFor h = do
   pure (isTty && supportsAnsi && isNothing noColor)
 
 headingLine :: Bool -> String -> String
-headingLine useColor label = applyColor useColor headingColorCode label
+headingLine useColor = applyColor useColor headingColorCode
 
 colorTitle, colorSubtitle, colorCommand, colorItem :: Bool -> String -> String
 colorTitle useColor = applyColor useColor titleColorCode
@@ -458,7 +458,7 @@ formatUsageLine line =
       (cleaned, hadOptions) = removeOptionalSegments rest
       tokens = words cleaned
       (cmdTokens, argTokens) = splitCommandArgs tokens
-      optionsToken = if hadOptions then ["[OPTIONS]"] else []
+      optionsToken = ["[OPTIONS]" | hadOptions]
       rebuilt = unwords (cmdTokens ++ optionsToken ++ argTokens)
   in rebuilt
 

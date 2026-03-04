@@ -288,8 +288,8 @@ data DemoArgs = DemoArgs
   , daMaskSecrets :: !Bool
   } deriving stock (Show, Eq)
 
-data LintTemplateArgs = LintTemplateArgs
-  { ltaArgsfile :: !Text
+newtype LintTemplateArgs = LintTemplateArgs
+  { ltaArgsfile :: Text
   } deriving stock (Show, Eq)
 
 data ConvertArgs = ConvertArgs

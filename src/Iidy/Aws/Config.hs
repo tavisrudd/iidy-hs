@@ -128,9 +128,7 @@ detectCredentialSources ctx = do
         -- 1. Static/temporary env var credentials (highest priority)
         [ if hasAccessKey && hasSecretKey && hasSessionToken
           then [EnvironmentVariablesTemporary]
-          else if hasAccessKey && hasSecretKey
-          then [EnvironmentVariablesStatic]
-          else []
+          else [EnvironmentVariablesStatic | hasAccessKey && hasSecretKey]
         -- 2. Web identity token
         , [WebIdentityToken | hasWebIdentity]
         -- 3. Container credentials

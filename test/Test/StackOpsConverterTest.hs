@@ -53,7 +53,7 @@ stackOpsConverterTests =
         sriLastUpdated result @?= Just epoch
 
     , testCase "various resource statuses" $ do
-        let mkRes st = SR.newStackResource "R" "AWS::EC2::Instance" epoch st
+        let mkRes = SR.newStackResource "R" "AWS::EC2::Instance" epoch
         sriResourceStatus (convertResource (mkRes CF.ResourceStatus_UPDATE_COMPLETE)) @?= UpdateComplete
         sriResourceStatus (convertResource (mkRes CF.ResourceStatus_CREATE_FAILED)) @?= CreateFailed
         sriResourceStatus (convertResource (mkRes CF.ResourceStatus_UPDATE_IN_PROGRESS)) @?= UpdateInProgress
