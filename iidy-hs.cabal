@@ -88,6 +88,7 @@ library
     Iidy.Cfn.Status
     Iidy.Cfn.CommandMetadata
     Iidy.Cfn.Context
+    Iidy.Cfn.Env
     Iidy.Cfn.RequestBuilder
     Iidy.Cfn.TemplateHash
     Iidy.Cfn.TemplateLoader

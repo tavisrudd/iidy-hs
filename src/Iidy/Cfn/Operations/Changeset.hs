@@ -35,6 +35,7 @@ module Iidy.Cfn.Operations.Changeset (
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (catch)
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Conduit (runConduit, (.|))
 import Data.Conduit.List qualified as CL
@@ -61,6 +62,7 @@ import Iidy.Cfn.Context (
     ctxDeriveToken,
     updateSuccessStates,
  )
+import Iidy.Cfn.Env (CfnM, askContext)
 import Iidy.Cfn.Operations.DescribeStack (buildEventsDisplay, emitStackDefinition, mkStandardPollConfig)
 import Iidy.Cfn.RequestBuilder (buildCreateChangeSetRequest)
 import Iidy.Cfn.StackOperations (
@@ -83,7 +85,6 @@ import Iidy.Output.Types (
     ChangeSetInfo (..),
     OutputData (..),
  )
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
 
 ------------------------------------------------------------------------
 -- Changeset creation
@@ -103,7 +104,6 @@ Exceptions from the AWS API propagate to the caller; this function does not
 wrap them in Either.
 -}
 createChangeset ::
-    CfnContext ->
     StackArgs ->
     -- | changeset name
     Text ->
@@ -111,12 +111,9 @@ createChangeset ::
     Bool ->
     -- | argsfile path for template resolution
     Maybe FilePath ->
-    -- | environment name
-    Text ->
-    -- | whether HTTP/S3 imports are allowed
-    RemoteImports ->
-    IO (Either Text ChangeSetInfo)
-createChangeset ctx args csName stackExists' argsfilePath env remoteImports = do
+    CfnM (Either Text ChangeSetInfo)
+createChangeset args csName stackExists' argsfilePath = do
+    ctx <- askContext
     let csType =
             if stackExists'
                 then CF.ChangeSetType_UPDATE
@@ -124,10 +121,10 @@ createChangeset ctx args csName stackExists' argsfilePath env remoteImports = do
         stackName' = saStackName args
 
     -- Step 1 & 2: Build and send the CreateChangeSet request
-    reqResult <- buildCreateChangeSetRequest ctx args csName csType argsfilePath env remoteImports
+    reqResult <- buildCreateChangeSetRequest args csName csType argsfilePath
     case reqResult of
         Left err -> pure (Left err)
-        Right (req, _token) -> do
+        Right (req, _token) -> liftIO $ do
             resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
 
             -- Step 3: Extract the changeset ARN/ID (fall back to name for polling).
