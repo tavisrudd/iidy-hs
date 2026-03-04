@@ -95,5 +95,11 @@ Before wrapping up, verify ALL of these:
 - Sub-agents on main (research or direct coding): NO git write operations at all.
 - Use worktree isolation when >2 parallel code-changing sub-agents might have file collisions.
 
+## Worktree Isolation (enforced by hooks)
+- A **PreToolUse hook** (`scripts/enforce-worktree-isolation.sh`) blocks Edit/Write/NotebookEdit operations that target files outside the worktree when cwd is in `.claude/worktrees/`. This is enforced automatically — worktree sub-agents cannot write to the main repo.
+- A **WorktreeCreate hook** (`scripts/worktree-setup.sh`) ensures `core.hooksPath=.githooks` and `commit.gpgsign=false` in every new worktree.
+- **Pre-commit hooks run in worktrees**: `core.hooksPath=.githooks` is in shared git config, and `.githooks/` is tracked, so the pre-commit hook (fourmolu, hlint, build+test) runs on every commit in every worktree.
+- When spawning worktree sub-agents, you do NOT need to manually configure git — the hooks handle it.
+
 ## Ralph?
 If you are running in headless -p mode read @RALPH.md and check ./.msgs/ frequently.
