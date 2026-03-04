@@ -1,6 +1,6 @@
 # Wire AWS imports end-to-end in stack-args loading
 
-## Status: TODO
+## Status: DONE
 
 ## Context
 
@@ -42,3 +42,21 @@ The fix requires a two-pass approach or restructuring in `runCfnWithArgs`
 - Modify `runCfnWithArgs` in `app/Main.hs`
 - Possibly restructure `loadStackArgs` in `src/Iidy/Cfn/StackArgsLoader.hs`
 - Add integration tests with mock AWS env for SSM/CFN imports in stack-args
+
+## Implementation (completed)
+
+Used a variant of Option B: extract raw AWS settings from the parsed (but not
+preprocessed) YAML AST, merge with CLI settings, create a bootstrap AWS env,
+then pass it to `loadStackArgs`.
+
+**Key changes:**
+- `StackArgsLoader.extractRawAwsFromFile`: parses YAML and extracts
+  Profile/Region/AssumeRoleARN from the raw AST (handles plain strings and
+  environment maps)
+- `runCfnWithArgs`: creates bootstrap env from merged raw+CLI settings before
+  calling `loadStackArgs`; falls back to `Nothing` on any failure (graceful
+  degradation)
+- 6 new tests for `extractRawAwsFromAst` covering plain strings, env maps,
+  missing/null fields, non-mapping AST, and missing env in map
+
+**Commit:** `8391836`
