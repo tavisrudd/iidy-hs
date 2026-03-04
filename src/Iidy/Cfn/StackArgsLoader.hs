@@ -48,6 +48,7 @@ import Iidy.Yaml.Engine
   ( preprocessYaml11
   , PreprocessResult(..)
   )
+import qualified Amazonka
 import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, ImportConfig(..))
 import Iidy.Yaml.Imports.Types (RemoteImports(..))
 import Iidy.Yaml.OValue (toValue)
@@ -71,14 +72,20 @@ data LoadedStackArgs = LoadedStackArgs
 -- | Load and preprocess an argsfile into StackArgs.
 -- Uses YAML 1.1 spec (CloudFormation compatibility).
 -- Resolves environment maps, injects $envValues, deserializes.
+--
+-- The optional 'Amazonka.Env' enables AWS import types (ssm:, cfn:,
+-- ssm-path:) during preprocessing.  Pass 'Nothing' for the first pass
+-- (before AWS credentials are available) and @'Just' env@ for the
+-- second pass once credentials have been established.
 loadStackArgs
-  :: FilePath        -- ^ argsfile path
-  -> Text            -- ^ environment name
-  -> CfnOperation    -- ^ operation being performed
-  -> AwsSettings     -- ^ CLI-provided AWS settings
-  -> RemoteImports   -- ^ whether HTTP/S3 imports are allowed
+  :: FilePath              -- ^ argsfile path
+  -> Text                  -- ^ environment name
+  -> CfnOperation          -- ^ operation being performed
+  -> AwsSettings           -- ^ CLI-provided AWS settings
+  -> RemoteImports         -- ^ whether HTTP/S3 imports are allowed
+  -> Maybe Amazonka.Env    -- ^ optional AWS env for imports
   -> IO (Either Text LoadedStackArgs)
-loadStackArgs argsfile environment operation cliAws remoteImports = do
+loadStackArgs argsfile environment operation cliAws remoteImports mAwsEnv = do
   content <- BL.readFile argsfile
   let baseLocation = T.pack argsfile
 
@@ -89,7 +96,7 @@ loadStackArgs argsfile environment operation cliAws remoteImports = do
 
     Right ast -> do
       -- Preprocess (YAML 1.1 for CFN compatibility)
-      let importCfg = ImportConfig { icAwsEnv = Nothing, icRemoteImports = remoteImports }
+      let importCfg = ImportConfig { icAwsEnv = mAwsEnv, icRemoteImports = remoteImports }
       result <- preprocessYaml11 (mkFullDispatcher importCfg) ast baseLocation
       case result of
         Left err ->

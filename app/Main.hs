@@ -360,7 +360,7 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
   dispatch <- mkOutputDispatch (cliGlobalOpts cli)
   let emit = renderOutput dispatch
 
-  result <- loadStackArgs argsfilePath env operation cliAws remoteImports
+  result <- loadStackArgs argsfilePath env operation cliAws remoteImports Nothing
   case result of
     Left err -> dieTxt err
     Right (LoadedStackArgs sa mergedAws detectionCtx) -> do

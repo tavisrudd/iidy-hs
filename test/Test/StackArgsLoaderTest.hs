@@ -19,7 +19,7 @@ import Test.Shared (noAwsSettings)
 stackArgsLoaderTests :: [TestTree]
 stackArgsLoaderTests =
   [ testCase "load basic stack args" $ do
-      result <- loadStackArgs "test-fixtures/test-stack-args.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports
+      result <- loadStackArgs "test-fixtures/test-stack-args.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports Nothing
       case result of
         Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
         Right (LoadedStackArgs sa _aws _ctx) -> do
@@ -28,7 +28,7 @@ stackArgsLoaderTests =
           saRegion sa @?= Just "us-east-1"
 
   , testCase "stack args tags include environment" $ do
-      result <- loadStackArgs "test-fixtures/test-stack-args.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports
+      result <- loadStackArgs "test-fixtures/test-stack-args.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports Nothing
       case result of
         Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
         Right (LoadedStackArgs sa _aws _ctx) -> do
@@ -39,14 +39,14 @@ stackArgsLoaderTests =
                 any (\(k, _) -> k == "environment") (Data.Map.Strict.toList tags)
 
   , testCase "stack args capabilities" $ do
-      result <- loadStackArgs "test-fixtures/test-stack-args.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports
+      result <- loadStackArgs "test-fixtures/test-stack-args.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports Nothing
       case result of
         Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
         Right (LoadedStackArgs sa _aws _ctx) -> do
           saCapabilities sa @?= Just [CapIAM, CapNamedIAM]
 
   , testCase "stack args parameters" $ do
-      result <- loadStackArgs "test-fixtures/test-stack-args.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports
+      result <- loadStackArgs "test-fixtures/test-stack-args.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports Nothing
       case result of
         Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
         Right (LoadedStackArgs sa _aws _ctx) -> do
@@ -57,7 +57,7 @@ stackArgsLoaderTests =
               Data.Map.Strict.lookup "Version" params @?= Just "1.0"
 
   , testCase "environment map resolution" $ do
-      result <- loadStackArgs "test-fixtures/test-stack-args-envmap.yaml" "prod" OpUpdateStack noAwsSettings AllowRemoteImports
+      result <- loadStackArgs "test-fixtures/test-stack-args-envmap.yaml" "prod" OpUpdateStack noAwsSettings AllowRemoteImports Nothing
       case result of
         Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
         Right (LoadedStackArgs sa _aws _ctx) -> do
@@ -65,7 +65,7 @@ stackArgsLoaderTests =
           saProfile sa @?= Just "prod-profile"
 
   , testCase "environment map dev" $ do
-      result <- loadStackArgs "test-fixtures/test-stack-args-envmap.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports
+      result <- loadStackArgs "test-fixtures/test-stack-args-envmap.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports Nothing
       case result of
         Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
         Right (LoadedStackArgs sa _aws _ctx) -> do
@@ -74,7 +74,7 @@ stackArgsLoaderTests =
 
   , testCase "CLI AWS settings override argsfile" $ do
       let cliAws = AwsSettings (Just "cli-profile") (Just "eu-west-1") Nothing
-      result <- loadStackArgs "test-fixtures/test-stack-args.yaml" "dev" OpCreateStack cliAws AllowRemoteImports
+      result <- loadStackArgs "test-fixtures/test-stack-args.yaml" "dev" OpCreateStack cliAws AllowRemoteImports Nothing
       case result of
         Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
         Right (LoadedStackArgs _sa aws _ctx) -> do
@@ -83,7 +83,7 @@ stackArgsLoaderTests =
 
   , testCase "missing argsfile throws" $ do
       result <- try @SomeException $
-        loadStackArgs "nonexistent.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports
+        loadStackArgs "nonexistent.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports Nothing
       case result of
         Left _ex  -> pure ()
         Right _   -> assertFailure "Expected exception for missing file"
@@ -149,7 +149,7 @@ stackArgsLoaderTests =
 
   , testCase "env map: missing env via loadStackArgs" $ do
       -- Use existing envmap fixture with an environment not in the map
-      result <- loadStackArgs "test-fixtures/test-stack-args-envmap.yaml" "staging" OpCreateStack noAwsSettings AllowRemoteImports
+      result <- loadStackArgs "test-fixtures/test-stack-args-envmap.yaml" "staging" OpCreateStack noAwsSettings AllowRemoteImports Nothing
       case result of
         Left err ->
           assertBool "error mentions environment name" $
@@ -194,7 +194,7 @@ stackArgsLoaderTests =
 
     -- Stack args loading with OnFailure
   , testCase "load stack args with OnFailure" $ do
-      result <- loadStackArgs "test-fixtures/test-stack-args-onfailure.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports
+      result <- loadStackArgs "test-fixtures/test-stack-args-onfailure.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports Nothing
       case result of
         Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
         Right (LoadedStackArgs sa _aws _ctx) ->
@@ -202,20 +202,20 @@ stackArgsLoaderTests =
 
     -- Error on unrecognized values
   , testCase "load stack args rejects unknown OnFailure" $ do
-      result <- loadStackArgs "test-fixtures/test-stack-args-bad-onfailure.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports
+      result <- loadStackArgs "test-fixtures/test-stack-args-bad-onfailure.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports Nothing
       case result of
         Left err -> assertBool "error mentions unrecognized" (T.isInfixOf "unrecognized" err)
         Right _  -> assertFailure "Expected error for unknown OnFailure value"
 
   , testCase "load stack args rejects unknown Capability" $ do
-      result <- loadStackArgs "test-fixtures/test-stack-args-bad-capability.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports
+      result <- loadStackArgs "test-fixtures/test-stack-args-bad-capability.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports Nothing
       case result of
         Left err -> assertBool "error mentions unrecognized" (T.isInfixOf "unrecognized" err)
         Right _  -> assertFailure "Expected error for unknown Capability value"
 
     -- Missing StackName validation
   , testCase "load stack args rejects missing StackName" $ do
-      result <- loadStackArgs "test-fixtures/test-stack-args-no-name.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports
+      result <- loadStackArgs "test-fixtures/test-stack-args-no-name.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports Nothing
       case result of
         Left err -> assertBool "error mentions StackName is required" (T.isInfixOf "StackName is required" err)
         Right _  -> assertFailure "Expected error for missing StackName"
@@ -302,7 +302,7 @@ stackArgsLoaderTests =
       validateNoUnknownKeys obj @?= Right ()
 
   , testCase "loadStackArgs: unknown key fixture errors with suggestion" $ do
-      result <- loadStackArgs "test-fixtures/test-stack-args-unknown-key.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports
+      result <- loadStackArgs "test-fixtures/test-stack-args-unknown-key.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports Nothing
       case result of
         Left err -> do
           assertBool "error mentions Paramters" (T.isInfixOf "Paramters" err)
