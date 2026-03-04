@@ -368,15 +368,15 @@ make a single helper awkward. The implementer should evaluate after chunks
 ## Progress
 
 - [x] Plan: read Main.hs, design module boundaries, write chunks
-- [ ] Chunk 1: Extract error utilities to Iidy.Errors
-- [ ] Chunk 2: Move cliToAwsSettings + detectShellType into Iidy.Cli
-- [ ] Chunk 3: Move generateToken to Iidy.Aws.ClientReqToken
-- [ ] Chunk 4: Move timeProviderForOperation to Iidy.Aws.Timing
-- [ ] Chunk 5: Extract shell completion scripts to Iidy.Cli.Completion
-- [ ] Chunk 6: Extract runCfnWithArgs + createSimpleContext to Iidy.Cfn.Runner
-- [ ] Chunk 7: Final cleanup and import pruning
+- [x] Chunk 1: Extract error utilities to Iidy.Errors
+- [x] Chunk 2: Move cliToAwsSettings + detectShellType into Iidy.Cli
+- [x] Chunk 3: Move generateToken to Iidy.Aws.ClientReqToken
+- [x] Chunk 4: Move timeProviderForOperation to Iidy.Aws.Timing
+- [x] Chunk 5: Extract shell completion scripts to Iidy.Cli.Completion
+- [x] Chunk 6: Extract runCfnWithArgs + createSimpleContext to Iidy.Cfn.Runner
+- [x] Chunk 7: Final cleanup and import pruning
 - [ ] (Optional) Chunk 8: Compress runCommand dispatch with helpers
-- [ ] Build clean + all tests pass
+- [x] Build clean + all tests pass (1243 tests, zero warnings)
 
 ## Handoff Notes
 
@@ -400,5 +400,8 @@ make a single helper awkward. The implementer should evaluate after chunks
    Without it, Main.hs lands around ~310 LOC. Whether to pursue chunk 8 depends
    on how clean the remaining dispatch looks after chunk 7.
 
-**What was NOT changed**: No Haskell source files were modified. This is a
-planning-only document update.
+**Implementation session**: 2026-03-03, Opus 4.6. Session 2026-03-03--19.
+All chunks 1-7 implemented in a single commit (12d7d87). Main.hs went from
+564 LOC to 295 LOC. Chunk 8 (dispatch compression) not pursued — the remaining
+runCommand dispatch is clean pattern-matching that doesn't benefit from
+further abstraction.
