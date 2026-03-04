@@ -3,15 +3,19 @@
 module Test.EngineTest (engineTests) where
 
 import Data.Aeson (Value(..))
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KM
+import Data.IORef (newIORef, modifyIORef, readIORef)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
 import Iidy.Yaml.Ast
-import Iidy.Yaml.Engine (preprocessYaml, PreprocessError(..))
+import Iidy.Yaml.Engine (preprocessYaml, PreprocessResult(..), PreprocessError(..))
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..), ImportType(..))
 import Iidy.Yaml.Location (zeroPosition)
+import Iidy.Yaml.OValue (toValue)
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -105,5 +109,126 @@ engineTests =
             assertBool "contains arrow separator" (T.isInfixOf "\x2192" err)
           Left other -> assertFailure $ "Expected cycle error, got: " <> show other
           Right _ -> assertFailure "Expected cycle error when importing self"
+    ]
+
+  , testGroup "Recursive import preprocessing"
+    [ testCase "recursively preprocesses imported doc with nested $imports" $ do
+        -- Track which locations the loader is called with
+        callsRef <- newIORef ([] :: [Text])
+        -- outer.yaml has $imports that reference inner.yaml
+        let nestedLoader loc _base = do
+              modifyIORef callsRef (loc :)
+              case loc of
+                "outer.yaml" ->
+                  pure $ Right $ ImportData
+                    { idType = ImportFile
+                    , idLocation = "outer.yaml"
+                    , idRawData = "$imports:\n  nested: inner.yaml\nvalue: from-outer"
+                    , idDoc = Object $ KM.fromList
+                        [ (Key.fromText "$imports", Object $ KM.fromList
+                            [(Key.fromText "nested", String "inner.yaml")])
+                        , (Key.fromText "value", String "from-outer")
+                        ]
+                    }
+                "inner.yaml" ->
+                  pure $ Right $ ImportData
+                    { idType = ImportFile
+                    , idLocation = "inner.yaml"
+                    , idRawData = "hello"
+                    , idDoc = String "hello"
+                    }
+                other ->
+                  pure $ Left $ ImportError $ "Unknown: " <> other
+
+        -- Main document imports outer.yaml
+        let ast = AstMapping
+              [ ( AstPlainString "$imports" m
+                , AstMapping
+                    [ (AstPlainString "data" m, AstPlainString "outer.yaml" m)
+                    ]
+                    m
+                )
+              ] m
+        result <- preprocessYaml nestedLoader ast "test.yaml"
+        case result of
+          Left err -> assertFailure $ "Expected success, got: " <> show err
+          Right _ -> do
+            calls <- readIORef callsRef
+            -- Verify inner.yaml was loaded (proving recursion into outer.yaml's $imports)
+            assertBool "inner.yaml should have been loaded via recursive preprocessing"
+              ("inner.yaml" `elem` calls)
+
+    , testCase "recursively resolves $defs in imported doc" $ do
+        -- outer.yaml has $defs that define a variable used in the doc
+        let defsLoader loc _base = case loc of
+              "with-defs.yaml" ->
+                pure $ Right $ ImportData
+                  { idType = ImportFile
+                  , idLocation = "with-defs.yaml"
+                  , idRawData = "$defs:\n  greeting: hello\nresult: \"{{greeting}}\""
+                  , idDoc = Object $ KM.fromList
+                      [ (Key.fromText "$defs", Object $ KM.fromList
+                          [(Key.fromText "greeting", String "hello")])
+                      , (Key.fromText "result", String "{{greeting}}")
+                      ]
+                  }
+              other ->
+                pure $ Left $ ImportError $ "Unknown: " <> other
+
+        let ast = AstMapping
+              [ ( AstPlainString "$imports" m
+                , AstMapping
+                    [ (AstPlainString "data" m, AstPlainString "with-defs.yaml" m)
+                    ]
+                    m
+                )
+              , (AstPlainString "output" m, AstTemplatedString "{{data.result}}" m)
+              ] m
+        result <- preprocessYaml defsLoader ast "test.yaml"
+        case result of
+          Left err -> assertFailure $ "Expected success, got: " <> show err
+          Right (PreprocessResult val _manifest) -> do
+            let v = toValue val
+            case v of
+              Object obj -> case KM.lookup (Key.fromText "output") obj of
+                Just (String s) ->
+                  assertEqual "should resolve nested $defs" "hello" s
+                other -> assertFailure $ "Expected String output, got: " <> show other
+              _ -> assertFailure $ "Expected Object, got: " <> show v
+
+    , testCase "imported doc without $imports/$defs is not re-parsed" $ do
+        -- A plain imported doc should just be converted via fromValue as before
+        let plainLoader loc _base = case loc of
+              "plain.yaml" ->
+                pure $ Right $ ImportData
+                  { idType = ImportFile
+                  , idLocation = "plain.yaml"
+                  , idRawData = "key: value"
+                  , idDoc = Object $ KM.fromList
+                      [(Key.fromText "key", String "value")]
+                  }
+              other ->
+                pure $ Left $ ImportError $ "Unknown: " <> other
+
+        let ast = AstMapping
+              [ ( AstPlainString "$imports" m
+                , AstMapping
+                    [ (AstPlainString "data" m, AstPlainString "plain.yaml" m)
+                    ]
+                    m
+                )
+              , (AstPlainString "output" m, AstTemplatedString "{{data.key}}" m)
+              ] m
+        result <- preprocessYaml plainLoader ast "test.yaml"
+        case result of
+          Left err -> assertFailure $ "Expected success, got: " <> show err
+          Right (PreprocessResult val _manifest) -> do
+            let v = toValue val
+            case v of
+              Object obj -> case KM.lookup (Key.fromText "output") obj of
+                Just (String s) ->
+                  assertEqual "should pass through plain import" "value" s
+                other -> assertFailure $ "Expected String output, got: " <> show other
+              _ -> assertFailure $ "Expected Object, got: " <> show v
     ]
   ]

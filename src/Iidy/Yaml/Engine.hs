@@ -10,16 +10,19 @@ import Control.Monad (foldM)
 import Data.Aeson (Value(..))
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KM
+import qualified Data.ByteString.Lazy as BL
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import Iidy.Yaml.Ast
 import Iidy.Yaml.Handlebars.Engine (interpolate, defaultHelpers, InterpolateError(..))
 import Iidy.Yaml.Imports.Manifest
 import Iidy.Yaml.Imports.Types (ImportData(..), ImportError(..))
 import Iidy.Yaml.CustomResources.Params (parseParams)
 import Iidy.Yaml.OValue (OValue(..), toValue, fromValue)
+import Iidy.Yaml.Parser (parseYaml)
 import Iidy.Yaml.Resolution.Context
 
 import Iidy.Yaml.Resolution.Resolver (resolveAst, ResolveError(..))
@@ -164,11 +167,53 @@ processImports loader env tmplDefs manifest stack ((keyAst, locAst):rest) baseLo
                           Map.insert importKey (TemplateInfo params (idRawData importData) (idLocation importData)) tmplDefs
                         Left _err -> tmplDefs  -- Skip malformed $params
                     _ -> tmplDefs
-              -- Add imported value to environment (convert from Value to OValue)
-              let env' = Map.insert importKey (fromValue (idDoc importData)) env
-              -- Pop after processing this import, continue with rest
-              let stack'' = popImport stack'
-              processImports loader env' tmplDefs' manifest stack'' rest baseLocation
+              -- Recursively preprocess if imported doc has $imports or $defs
+              importResult <- processImportedDoc loader (idDoc importData) (idRawData importData) (idLocation importData) env manifest stack'
+              case importResult of
+                Left err -> pure $ Left err
+                Right (importedValue, manifest', stack'') -> do
+                  let env' = Map.insert importKey importedValue env
+                  let stackFinal = popImport stack''
+                  processImports loader env' tmplDefs' manifest' stackFinal rest baseLocation
+
+------------------------------------------------------------------------
+-- Recursive import preprocessing
+------------------------------------------------------------------------
+
+-- | Recursively preprocess an imported document if it contains $imports or $defs.
+-- Matches Rust's process_imported_document behavior (engine.rs:380-442).
+processImportedDoc
+  :: LoadImportFn -> Value -> Text -> Text
+  -> Map Text OValue -> ImportManifest -> ImportStack
+  -> IO (Either PreprocessError (OValue, ImportManifest, ImportStack))
+processImportedDoc loader doc rawData docLocation env manifest stack =
+  case doc of
+    Object obj
+      | hasImportsOrDefs obj -> do
+          -- Re-parse to AST and recursively preprocess
+          case parseYaml (BL.fromStrict (TE.encodeUtf8 rawData)) docLocation of
+            Left _parseErr ->
+              -- If re-parse fails, fall back to raw value
+              pure $ Right (fromValue doc, manifest, stack)
+            Right ast -> do
+              result <- loadImportsAndDefs loader ast docLocation env Map.empty manifest stack
+              case result of
+                Left err -> pure $ Left err
+                Right (docEnv, _docTmplDefs, manifest', stack') -> do
+                  -- Resolve AST with the document's own environment
+                  let ctx = emptyContext
+                        { tcVariables = docEnv
+                        , tcInputUri = Just docLocation
+                        }
+                  case resolveAst ctx ast of
+                    Left reErr -> pure $ Left $ PeResolveError reErr
+                    Right resolved -> pure $ Right (resolved, manifest', stack')
+    _ -> pure $ Right (fromValue doc, manifest, stack)
+
+-- | Check if a JSON object has $imports or $defs keys that need preprocessing.
+hasImportsOrDefs :: KM.KeyMap Value -> Bool
+hasImportsOrDefs obj =
+  KM.member (Key.fromText "$imports") obj || KM.member (Key.fromText "$defs") obj
 
 ------------------------------------------------------------------------
 -- Handlebars interpolation for import locations

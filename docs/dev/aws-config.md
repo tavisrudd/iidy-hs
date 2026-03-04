@@ -186,15 +186,32 @@ The argsfile can specify three AWS-related fields at the top level:
 | `AssumeRoleARN`  | `AwsSettings.awsAssumeRoleArn`|
 
 These are extracted by `extractAwsSettings` and merged with CLI settings via
-`mergeAwsSettings` (CLI wins on conflict):
+`mergeAwsSettings`. CLI flags always take priority over argsfile fields. The
+special sentinel values `--profile=no-profile` and `--assume-role-arn=no-role`
+clear any inherited value from stack-args, forcing use of environment-based
+credentials:
 
 ```haskell
+-- | Sentinel value: --profile=no-profile clears any inherited profile
+noProfileSentinel :: Text
+noProfileSentinel = "no-profile"
+
+-- | Sentinel value: --assume-role-arn=no-role clears any inherited role
+noRoleSentinel :: Text
+noRoleSentinel = "no-role"
+
 mergeAwsSettings :: AwsSettings -> AwsSettings -> AwsSettings
 mergeAwsSettings cli argsfile = AwsSettings
-  { awsProfile       = awsProfile cli <|> awsProfile argsfile
+  { awsProfile       = mergeSentinel noProfileSentinel (awsProfile cli) (awsProfile argsfile)
   , awsRegion        = awsRegion cli <|> awsRegion argsfile
-  , awsAssumeRoleArn = awsAssumeRoleArn cli <|> awsAssumeRoleArn argsfile
+  , awsAssumeRoleArn = mergeSentinel noRoleSentinel (awsAssumeRoleArn cli) (awsAssumeRoleArn argsfile)
   }
+
+-- | Merge with sentinel support: if CLI value is the sentinel, return Nothing.
+mergeSentinel :: Text -> Maybe Text -> Maybe Text -> Maybe Text
+mergeSentinel sentinel (Just val) _
+  | val == sentinel = Nothing
+mergeSentinel _ cli argsfile = cli <|> argsfile
 ```
 
 ---
