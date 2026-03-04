@@ -11,7 +11,7 @@ import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
 import Iidy.Aws.CredentialSource (AwsSettings(..))
-import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..), getStrListValidated, resolveEnvMaps, parseOnFailureText, parseCapabilityText, validateNoUnknownKeys, mergeAwsSettings, mergeSentinel, noProfileSentinel, noRoleSentinel)
+import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..), getStrListValidated, getInt, resolveEnvMaps, parseOnFailureText, parseCapabilityText, validateNoUnknownKeys, mergeAwsSettings, mergeSentinel, noProfileSentinel, noRoleSentinel)
 import Iidy.Cfn.Types (CfnOperation(..), Capability(..), OnFailure(..), StackArgs(..))
 import Iidy.Yaml.Imports.Types (RemoteImports(..))
 import Test.Shared (noAwsSettings)
@@ -337,4 +337,30 @@ stackArgsLoaderTests =
 
   , testCase "mergeSentinel: Nothing falls through to argsfile" $
       mergeSentinel "no-profile" Nothing (Just "inherited") @?= Just "inherited"
+
+    -- getInt validation tests (no silent rounding of floats)
+  , testCase "getInt: integer value succeeds" $ do
+      let obj = KM.fromList [(Key.fromText "TimeoutInMinutes", Number 30)]
+      getInt obj "TimeoutInMinutes" @?= Right (Just 30)
+
+  , testCase "getInt: float value errors" $ do
+      let obj = KM.fromList [(Key.fromText "TimeoutInMinutes", Number 30.5)]
+      case getInt obj "TimeoutInMinutes" of
+        Left err -> do
+          assertBool "mentions float" (T.isInfixOf "float" err)
+          assertBool "mentions 30.5" (T.isInfixOf "30.5" err)
+        Right _ -> assertFailure "Expected error for float TimeoutInMinutes"
+
+  , testCase "getInt: absent key returns Nothing" $
+      getInt KM.empty "TimeoutInMinutes" @?= Right Nothing
+
+  , testCase "getInt: null returns Nothing" $ do
+      let obj = KM.fromList [(Key.fromText "TimeoutInMinutes", Null)]
+      getInt obj "TimeoutInMinutes" @?= Right Nothing
+
+  , testCase "loadStackArgs rejects float TimeoutInMinutes" $ do
+      result <- loadStackArgs "test-fixtures/test-stack-args-float-timeout.yaml" "dev" OpCreateStack noAwsSettings AllowRemoteImports Nothing
+      case result of
+        Left err -> assertBool "error mentions float" (T.isInfixOf "float" err)
+        Right _ -> assertFailure "Expected error for float TimeoutInMinutes"
   ]

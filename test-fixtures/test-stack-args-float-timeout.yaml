@@ -1,0 +1,3 @@
+StackName: test-stack
+Template: template.yaml
+TimeoutInMinutes: 30.5

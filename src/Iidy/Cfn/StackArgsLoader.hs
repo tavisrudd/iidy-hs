@@ -13,6 +13,7 @@ module Iidy.Cfn.StackArgsLoader
   -- * Internal (exported for testing)
   , getStrListValidated
   , getStrMapValidated
+  , getInt
   , resolveEnvMaps
   , parseOnFailureText
   , parseCapabilityText
@@ -33,6 +34,7 @@ import qualified Data.List as List
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
+import Data.Scientific (isInteger)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -334,6 +336,7 @@ valueToStackArgs (Object obj) = do
   resourceTypes   <- getStrListValidated obj "ResourceTypes"
   usePrevParams   <- getStrListValidated obj "UsePreviousParameterValues"
   commandsBefore  <- getStrListValidated obj "CommandsBefore"
+  timeoutMins     <- getInt obj "TimeoutInMinutes"
   pure StackArgs
     { saStackName                   = stackName
     , saTemplate                    = getStr obj "Template"
@@ -347,7 +350,7 @@ valueToStackArgs (Object obj) = do
     , saAssumeRoleArn               = getStr obj "AssumeRoleARN"
     , saServiceRoleArn              = getStr obj "ServiceRoleARN"
     , saRoleArn                     = getStr obj "RoleARN"
-    , saTimeoutInMinutes            = getInt obj "TimeoutInMinutes"
+    , saTimeoutInMinutes            = timeoutMins
     , saOnFailure                   = onFail
     , saDisableRollback             = getBool obj "DisableRollback"
     , saEnableTerminationProtection = getBool obj "EnableTerminationProtection"
@@ -410,10 +413,19 @@ describeValue (Object _) = "a mapping"
 describeValue Null       = "null"
 describeValue (String s) = "string `" <> s <> "`"
 
-getInt :: KM.KeyMap Value -> Text -> Maybe Int
+-- | Extract an integer value, rejecting non-integer numbers.
+-- Uses Data.Scientific.isInteger to detect floats.
+getInt :: KM.KeyMap Value -> Text -> Either Text (Maybe Int)
 getInt obj key = case KM.lookup (Key.fromText key) obj of
-  Just (Number n) -> Just (round n)
-  _               -> Nothing
+  Just (Number n)
+    | isInteger n -> Right $ Just (round n)
+    | otherwise   -> Left $ "invalid type for " <> key
+                          <> ": expected an integer, got float `"
+                          <> T.pack (show n) <> "`"
+  Just Null -> Right Nothing
+  Nothing   -> Right Nothing
+  Just v    -> Left $ "invalid type for " <> key
+                    <> ": expected an integer, got " <> describeType v
 
 getBool :: KM.KeyMap Value -> Text -> Maybe Bool
 getBool obj key = case KM.lookup (Key.fromText key) obj of
