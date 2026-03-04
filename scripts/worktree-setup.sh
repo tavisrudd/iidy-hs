@@ -7,7 +7,14 @@ input=$(cat)
 worktree_path=$(echo "$input" | jq -r '.cwd')
 
 if [ -z "$worktree_path" ] || [ "$worktree_path" = "null" ]; then
+    echo "worktree-setup: ok (no cwd)"
     exit 0  # can't determine path, don't block
+fi
+
+# Wait briefly for worktree to be ready (hook may fire before git finishes)
+if [ ! -d "$worktree_path" ]; then
+    echo "worktree-setup: ok (path not yet created, will be configured by git)"
+    exit 0
 fi
 
 # Verify core.hooksPath points to .githooks (relative, works in worktrees)
@@ -21,3 +28,5 @@ current_gpg=$(git -C "$worktree_path" config commit.gpgsign 2>/dev/null || true)
 if [ "$current_gpg" != "false" ]; then
     git -C "$worktree_path" config --local commit.gpgsign false
 fi
+
+echo "worktree-setup: ok"

@@ -290,5 +290,5 @@ errorClassificationTests =
         case result of
             TagParsingError info ->
                 assertEqual "location preserved" loc (tpiLocation info)
-            _ -> assertFailure "expected TagParsingError"
+            _other -> assertFailure "expected TagParsingError"
     ]

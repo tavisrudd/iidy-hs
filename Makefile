@@ -50,7 +50,7 @@ lint:
 	hlint src/ app/ test/
 
 lint-stan:
-	stan --hiedir=.hie
+	@STAN_USE_DEFAULT_CONFIG=True stan --hiedir=.hie -s --hide-solution 2>&1 | grep -E 'OBS-' || echo "No observations."
 
 format:
 	fourmolu --mode inplace src/ app/ test/

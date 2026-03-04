@@ -65,3 +65,60 @@
   id = "STAN-0012"  # toEnum
   scope = "all"
   type = "Exclude"
+
+# Per-file ignores — safe in context, verified manually
+
+# !! in tests: indexing known-length lists in assertions
+[[check]]
+  id = "STAN-0005"
+  type = "Exclude"
+  file = "test/Test/RendererTest.hs"
+
+[[check]]
+  id = "STAN-0005"
+  type = "Exclude"
+  file = "test/Test/Phase14FixTest.hs"
+
+[[check]]
+  id = "STAN-0005"
+  type = "Exclude"
+  file = "test/Test/DescribeStackTest.hs"
+
+# nub in tests: small known lists
+[[check]]
+  id = "STAN-0209"
+  type = "Exclude"
+  file = "test/Test/ChangesetTest.hs"
+
+[[check]]
+  id = "STAN-0209"
+  type = "Exclude"
+  file = "test/Test/IntegrationTest.hs"
+
+# read/unsafe in test fixture parsing
+[[check]]
+  id = "STAN-0009"
+  type = "Exclude"
+  file = "test/Test/ImportLoaderTest.hs"
+
+[[check]]
+  id = "STAN-0212"
+  type = "Exclude"
+  file = "test/Test/ImportLoaderTest.hs"
+
+# maximum always called on (0 : ...) — non-empty by construction
+[[check]]
+  id = "STAN-0013"
+  type = "Exclude"
+  file = "src/Iidy/Output/Renderers/Interactive/Types.hs"
+
+[[check]]
+  id = "STAN-0013"
+  type = "Exclude"
+  file = "src/Iidy/Cli/Help.hs"
+
+# minimumBy guarded by null check in caller
+[[check]]
+  id = "STAN-0016"
+  type = "Exclude"
+  file = "src/Iidy/Cfn/StackArgsLoader.hs"
