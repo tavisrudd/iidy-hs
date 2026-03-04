@@ -32,6 +32,8 @@ module Iidy.Cfn.StackArgsLoader (
 
 import Control.Applicative ((<|>))
 import Control.Monad (foldM, zipWithM)
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.Except (ExceptT (..), runExceptT, throwE)
 import Data.Aeson (Value (..))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
@@ -102,54 +104,65 @@ loadStackArgs ::
     -- | optional AWS env for imports
     Maybe Amazonka.Env ->
     IO (Either Text LoadedStackArgs)
-loadStackArgs argsfile environment operation cliAws remoteImports mAwsEnv = do
-    content <- BL.readFile argsfile
-    let baseLocation = T.pack argsfile
+loadStackArgs argsfile environment operation cliAws remoteImports mAwsEnv =
+    runExceptT $ do
+        content <- lift $ BL.readFile argsfile
+        let baseLocation = T.pack argsfile
 
-    -- Parse YAML
-    case parseYaml content baseLocation of
-        Left (ParseError _pos msg) ->
-            pure $ Left $ "Parse error in " <> baseLocation <> ": " <> msg
-        Right ast -> do
-            -- Preprocess (YAML 1.1 for CFN compatibility)
-            let importCfg = ImportConfig{icAwsEnv = mAwsEnv, icRemoteImports = remoteImports}
-            result <- preprocessYaml11 (mkFullDispatcher importCfg) ast baseLocation
-            case result of
+        -- Parse YAML
+        ast <- case parseYaml content baseLocation of
+            Left (ParseError _pos msg) ->
+                throwE $ "Parse error in " <> baseLocation <> ": " <> msg
+            Right a -> pure a
+
+        -- Preprocess (YAML 1.1 for CFN compatibility)
+        let importCfg = ImportConfig{icAwsEnv = mAwsEnv, icRemoteImports = remoteImports}
+        preprocessResult <- ExceptT $ do
+            r <- preprocessYaml11 (mkFullDispatcher importCfg) ast baseLocation
+            pure $ case r of
                 Left err ->
-                    pure $ Left $ "Preprocess error in " <> baseLocation <> ": " <> T.pack (show err)
-                Right (PreprocessResult val _manifest) -> do
-                    let jsonVal = toValue val
-                    -- Resolve environment maps (can fail if env not found in map)
-                    case resolveEnvMaps jsonVal environment of
-                        Left err ->
-                            pure $ Left $ "Environment map error in " <> baseLocation <> ": " <> err
-                        Right resolved -> do
-                            let withEnvTag = ensureEnvironmentTag resolved environment
-                                withEnvValues = injectEnvValues withEnvTag environment operation cliAws
+                    Left $
+                        "Preprocess error in "
+                            <> baseLocation
+                            <> ": "
+                            <> T.pack (show err)
+                Right ok -> Right ok
 
-                            -- Extract AWS settings from argsfile
-                            let argsfileAws = extractAwsSettings withEnvValues
-                                mergedAws = mergeAwsSettings cliAws argsfileAws
-                                detectionCtx =
-                                    CredentialDetectionContext
-                                        { cdcCliProfile = awsProfile cliAws
-                                        , cdcStackArgsProfile = awsProfile argsfileAws
-                                        , cdcCliAssumeRoleArn = awsAssumeRoleArn cliAws
-                                        , cdcStackArgsAssumeRoleArn = awsAssumeRoleArn argsfileAws
-                                        }
+        let jsonVal = toValue (prValue preprocessResult)
 
-                            -- Deserialize to StackArgs
-                            case valueToStackArgs withEnvValues of
-                                Left err ->
-                                    pure $ Left $ "Failed to parse stack args from " <> baseLocation <> ": " <> err
-                                Right stackArgs ->
-                                    pure $
-                                        Right $
-                                            LoadedStackArgs
-                                                { lsaStackArgs = stackArgs
-                                                , lsaMergedAws = mergedAws
-                                                , lsaDetectionCtx = detectionCtx
-                                                }
+        -- Resolve environment maps (can fail if env not found in map)
+        resolved <- case resolveEnvMaps jsonVal environment of
+            Left err ->
+                throwE $ "Environment map error in " <> baseLocation <> ": " <> err
+            Right v -> pure v
+
+        let withEnvTag = ensureEnvironmentTag resolved environment
+            withEnvValues = injectEnvValues withEnvTag environment operation cliAws
+
+        -- Extract AWS settings from argsfile
+        let argsfileAws = extractAwsSettings withEnvValues
+            mergedAws = mergeAwsSettings cliAws argsfileAws
+            detectionCtx =
+                CredentialDetectionContext
+                    { cdcCliProfile = awsProfile cliAws
+                    , cdcStackArgsProfile = awsProfile argsfileAws
+                    , cdcCliAssumeRoleArn = awsAssumeRoleArn cliAws
+                    , cdcStackArgsAssumeRoleArn = awsAssumeRoleArn argsfileAws
+                    }
+
+        -- Deserialize to StackArgs
+        stackArgs <- case valueToStackArgs withEnvValues of
+            Left err ->
+                throwE $
+                    "Failed to parse stack args from " <> baseLocation <> ": " <> err
+            Right sa -> pure sa
+
+        pure
+            LoadedStackArgs
+                { lsaStackArgs = stackArgs
+                , lsaMergedAws = mergedAws
+                , lsaDetectionCtx = detectionCtx
+                }
 
 ------------------------------------------------------------------------
 -- Raw AWS settings extraction (pre-preprocessing bootstrap)

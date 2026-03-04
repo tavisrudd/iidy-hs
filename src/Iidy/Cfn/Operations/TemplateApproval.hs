@@ -14,6 +14,9 @@ module Iidy.Cfn.Operations.TemplateApproval (
 ) where
 
 import Control.Exception (try)
+import Control.Monad (unless)
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.Except (ExceptT (..), runExceptT, throwE)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Array qualified as Array
 import Data.ByteString qualified as BS
@@ -60,57 +63,69 @@ templateApprovalRequest ::
     -- | whether HTTP/S3 imports are allowed
     RemoteImports ->
     IO (Either Text Int)
-templateApprovalRequest ctx sa _lintTmpl argsfilePath env emit remoteImports = do
-    -- Validate required fields
-    case saApprovedTemplateLocation sa of
-        Nothing -> pure (Left "ApprovedTemplateLocation is required in stack-args.yaml")
-        Just baseLocation -> do
-            case saTemplate sa of
-                Nothing -> pure (Left "Template is required in stack-args.yaml")
-                Just _tmplSpec -> do
-                    -- Load template
-                    tmplEither <- loadCfnTemplate (saTemplate sa) argsfilePath env (ImportConfig (Just (cfnEnv ctx)) remoteImports)
-                    case tmplEither of
-                        Left err -> pure (Left err)
-                        Right tmplResult -> case trTemplateBody tmplResult of
-                            Nothing -> pure (Left "Failed to load template body")
-                            Just body -> do
-                                -- Generate versioned location
-                                let tmplPath = maybe "template.yaml" T.unpack (saTemplate sa)
-                                case generateVersionedLocation baseLocation body (T.pack tmplPath) of
-                                    Left err' -> pure (Left err')
-                                    Right (bucket, key) -> do
-                                        let s3Loc = "s3://" <> bucket <> "/" <> key
-                                        -- Check if already approved
-                                        alreadyApproved <- s3ObjectExists (cfnEnv ctx) bucket key
-                                        if alreadyApproved
-                                            then do
-                                                emit $
-                                                    OdApprovalRequestResult
-                                                        ApprovalRequestResult
-                                                            { arrTemplateLocation = s3Loc
-                                                            , arrPendingLocation = s3Loc
-                                                            , arrAlreadyApproved = True
-                                                            , arrNextSteps = ["Template has already been approved"]
-                                                            }
-                                                pure (Right 0)
-                                            else do
-                                                -- Upload pending template
-                                                let pendingKey = key <> ".pending"
-                                                    pendingLoc = "s3://" <> bucket <> "/" <> pendingKey
-                                                uploadResult <- uploadToS3 (cfnEnv ctx) bucket pendingKey body
-                                                case uploadResult of
-                                                    Left uploadErr -> pure (Left ("Failed to upload pending template: " <> uploadErr))
-                                                    Right () -> do
-                                                        emit $
-                                                            OdApprovalRequestResult
-                                                                ApprovalRequestResult
-                                                                    { arrTemplateLocation = s3Loc
-                                                                    , arrPendingLocation = pendingLoc
-                                                                    , arrAlreadyApproved = False
-                                                                    , arrNextSteps = ["Review with: iidy-hs template-approval review " <> pendingLoc]
-                                                                    }
-                                                        pure (Right 0)
+templateApprovalRequest ctx sa _lintTmpl argsfilePath env emit remoteImports =
+    runExceptT $ do
+        -- Validate required fields
+        baseLocation <-
+            liftMaybe
+                "ApprovedTemplateLocation is required in stack-args.yaml"
+                (saApprovedTemplateLocation sa)
+        _tmplSpec <-
+            liftMaybe
+                "Template is required in stack-args.yaml"
+                (saTemplate sa)
+
+        -- Load template
+        tmplResult <-
+            liftExceptT $
+                loadCfnTemplate
+                    (saTemplate sa)
+                    argsfilePath
+                    env
+                    (ImportConfig (Just (cfnEnv ctx)) remoteImports)
+        body <- liftMaybe "Failed to load template body" (trTemplateBody tmplResult)
+
+        -- Generate versioned location
+        let tmplPath = maybe "template.yaml" T.unpack (saTemplate sa)
+        (bucket, key) <-
+            liftEitherT $
+                generateVersionedLocation baseLocation body (T.pack tmplPath)
+
+        let s3Loc = "s3://" <> bucket <> "/" <> key
+
+        -- Check if already approved
+        alreadyApproved <- lift $ s3ObjectExists (cfnEnv ctx) bucket key
+        if alreadyApproved
+            then do
+                lift $
+                    emit $
+                        OdApprovalRequestResult
+                            ApprovalRequestResult
+                                { arrTemplateLocation = s3Loc
+                                , arrPendingLocation = s3Loc
+                                , arrAlreadyApproved = True
+                                , arrNextSteps = ["Template has already been approved"]
+                                }
+                pure 0
+            else do
+                -- Upload pending template
+                let pendingKey = key <> ".pending"
+                    pendingLoc = "s3://" <> bucket <> "/" <> pendingKey
+                liftExceptT (uploadToS3 (cfnEnv ctx) bucket pendingKey body)
+                    `prefixError` "Failed to upload pending template: "
+                lift $
+                    emit $
+                        OdApprovalRequestResult
+                            ApprovalRequestResult
+                                { arrTemplateLocation = s3Loc
+                                , arrPendingLocation = pendingLoc
+                                , arrAlreadyApproved = False
+                                , arrNextSteps =
+                                    [ "Review with: iidy-hs template-approval review "
+                                        <> pendingLoc
+                                    ]
+                                }
+                pure 0
 
 ------------------------------------------------------------------------
 -- Template Approval Review
@@ -126,115 +141,193 @@ templateApprovalReview ::
     -- | emit callback
     (OutputData -> IO ()) ->
     IO (Either Text Int)
-templateApprovalReview ctx url contextLines emit = do
-    -- Parse S3 URL
-    case parseS3Url url of
-        Left err -> pure (Left err)
-        Right (bucket, pendingKey) -> do
-            -- Validate .pending suffix
-            if not (T.isSuffixOf ".pending" pendingKey)
-                then pure (Left "URL must end with .pending suffix")
+templateApprovalReview ctx url contextLines emit =
+    runExceptT $ do
+        -- Parse S3 URL
+        (bucket, pendingKey) <- liftEitherT $ parseS3Url url
+
+        -- Validate .pending suffix
+        unless (T.isSuffixOf ".pending" pendingKey) $
+            throwE "URL must end with .pending suffix"
+
+        let approvedKey = T.dropEnd 8 pendingKey -- remove ".pending"
+            parentDir = case T.breakOnEnd "/" pendingKey of
+                ("", _) -> ""
+                (dir, _) -> T.dropEnd 1 dir
+            latestKey =
+                if T.null parentDir
+                    then "latest"
+                    else parentDir <> "/latest"
+            approvedLoc = "s3://" <> bucket <> "/" <> approvedKey
+
+        -- Check pending exists
+        pendingExists <- lift $ s3ObjectExists (cfnEnv ctx) bucket pendingKey
+        unless pendingExists $
+            throwE ("Pending template not found at " <> url)
+
+        -- Check if already approved
+        alreadyApproved <- lift $ s3ObjectExists (cfnEnv ctx) bucket approvedKey
+
+        -- Emit approval status
+        lift $
+            emit $
+                OdApprovalStatus
+                    ApprovalStatus
+                        { apsPendingExists = pendingExists
+                        , apsAlreadyApproved = alreadyApproved
+                        , apsPendingLocation = url
+                        , apsApprovedLocation =
+                            if alreadyApproved then Just approvedLoc else Nothing
+                        }
+
+        if alreadyApproved
+            then pure 0
+            else
+                reviewPendingTemplate
+                    ctx
+                    emit
+                    contextLines
+                    bucket
+                    pendingKey
+                    approvedKey
+                    latestKey
+                    approvedLoc
+
+-- | Inner logic for reviewing a non-yet-approved pending template.
+reviewPendingTemplate ::
+    CfnContext ->
+    (OutputData -> IO ()) ->
+    -- | context lines for diff
+    Int ->
+    -- | S3 bucket
+    Text ->
+    -- | pending object key
+    Text ->
+    -- | approved object key
+    Text ->
+    -- | latest object key
+    Text ->
+    -- | approved S3 location (for result output)
+    Text ->
+    ExceptT Text IO Int
+reviewPendingTemplate ctx emit contextLines bucket pendingKey approvedKey latestKey approvedLoc = do
+    -- Download templates
+    pending <-
+        liftExceptT (downloadFromS3 (cfnEnv ctx) bucket pendingKey)
+            `prefixError` "Failed to download pending template: "
+    latest <- lift $ fromRight "" <$> downloadFromS3 (cfnEnv ctx) bucket latestKey
+
+    -- Generate and emit diff
+    let diffOutput = generateDiff contextLines latest pending
+        hasChanges = not (T.null diffOutput)
+    lift $
+        emit $
+            OdTemplateDiff
+                TemplateDiff
+                    { tdDiffOutput = diffOutput
+                    , tdContextLines = contextLines
+                    , tdHasChanges = hasChanges
+                    }
+
+    if not hasChanges
+        then do
+            lift $
+                emit $
+                    OdApprovalResult
+                        ApprovalResult
+                            { arApproved = True
+                            , arApprovedLocation = Just approvedLoc
+                            , arLatestLocation =
+                                Just ("s3://" <> bucket <> "/" <> latestKey)
+                            , arCleanupCompleted = False
+                            }
+            pure 0
+        else do
+            result <- lift $ requestConfirmation "Would you like to approve these changes?"
+            if result == Confirmed
+                then
+                    approveTemplate
+                        ctx
+                        emit
+                        bucket
+                        pendingKey
+                        approvedKey
+                        latestKey
+                        approvedLoc
+                        pending
                 else do
-                    let approvedKey = T.dropEnd 8 pendingKey -- remove ".pending"
-                    -- Derive latest key from parent directory
-                        parentDir = case T.breakOnEnd "/" pendingKey of
-                            ("", _) -> ""
-                            (dir, _) -> T.dropEnd 1 dir
-                        latestKey =
-                            if T.null parentDir
-                                then "latest"
-                                else parentDir <> "/latest"
-                        approvedLoc = "s3://" <> bucket <> "/" <> approvedKey
+                    lift $
+                        emit $
+                            OdApprovalResult
+                                ApprovalResult
+                                    { arApproved = False
+                                    , arApprovedLocation = Nothing
+                                    , arLatestLocation = Nothing
+                                    , arCleanupCompleted = False
+                                    }
+                    pure 1
 
-                    -- Check pending exists
-                    pendingExists <- s3ObjectExists (cfnEnv ctx) bucket pendingKey
-                    if not pendingExists
-                        then pure (Left ("Pending template not found at " <> url))
-                        else do
-                            -- Check if already approved
-                            alreadyApproved <- s3ObjectExists (cfnEnv ctx) bucket approvedKey
+-- | Perform the actual S3 approval: copy pending to approved and latest, delete pending.
+approveTemplate ::
+    CfnContext ->
+    (OutputData -> IO ()) ->
+    -- | S3 bucket
+    Text ->
+    -- | pending object key
+    Text ->
+    -- | approved object key
+    Text ->
+    -- | latest object key
+    Text ->
+    -- | approved S3 location (for result output)
+    Text ->
+    -- | pending template body
+    Text ->
+    ExceptT Text IO Int
+approveTemplate ctx emit bucket pendingKey approvedKey latestKey approvedLoc pending = do
+    liftExceptT (uploadToS3 (cfnEnv ctx) bucket approvedKey pending)
+        `prefixError` "Failed to upload approved template: "
+    liftExceptT (uploadToS3 (cfnEnv ctx) bucket latestKey pending)
+        `prefixError` "Failed to upload latest template: "
+    liftExceptT (deleteFromS3 (cfnEnv ctx) bucket pendingKey)
+        `prefixError` "Failed to delete pending template: "
+    lift $
+        emit $
+            OdApprovalResult
+                ApprovalResult
+                    { arApproved = True
+                    , arApprovedLocation = Just approvedLoc
+                    , arLatestLocation =
+                        Just ("s3://" <> bucket <> "/" <> latestKey)
+                    , arCleanupCompleted = True
+                    }
+    pure 0
 
-                            -- Emit approval status
-                            emit $
-                                OdApprovalStatus
-                                    ApprovalStatus
-                                        { apsPendingExists = pendingExists
-                                        , apsAlreadyApproved = alreadyApproved
-                                        , apsPendingLocation = url
-                                        , apsApprovedLocation = if alreadyApproved then Just approvedLoc else Nothing
-                                        }
+------------------------------------------------------------------------
+-- ExceptT helpers
+------------------------------------------------------------------------
 
-                            if alreadyApproved
-                                then pure (Right 0)
-                                else do
-                                    -- Download templates
-                                    pendingTemplate <- downloadFromS3 (cfnEnv ctx) bucket pendingKey
-                                    latestTemplate <- downloadFromS3 (cfnEnv ctx) bucket latestKey
+-- | Lift an IO (Either Text a) into ExceptT Text IO.
+liftExceptT :: IO (Either Text a) -> ExceptT Text IO a
+liftExceptT = ExceptT
 
-                                    case pendingTemplate of
-                                        Left err -> pure (Left ("Failed to download pending template: " <> err))
-                                        Right pending -> do
-                                            let latest = fromRight "" latestTemplate
+-- | Lift a pure Either Text into ExceptT Text IO.
+liftEitherT :: Either Text a -> ExceptT Text IO a
+liftEitherT (Left e) = throwE e
+liftEitherT (Right x) = pure x
 
-                                            -- Generate and emit diff
-                                            let diffOutput = generateDiff contextLines latest pending
-                                                hasChanges = not (T.null diffOutput)
-                                            emit $
-                                                OdTemplateDiff
-                                                    TemplateDiff
-                                                        { tdDiffOutput = diffOutput
-                                                        , tdContextLines = contextLines
-                                                        , tdHasChanges = hasChanges
-                                                        }
+-- | Lift a Maybe into ExceptT, failing with the given error on Nothing.
+liftMaybe :: Text -> Maybe a -> ExceptT Text IO a
+liftMaybe err Nothing = throwE err
+liftMaybe _ (Just x) = pure x
 
-                                            if not hasChanges
-                                                then do
-                                                    emit $
-                                                        OdApprovalResult
-                                                            ApprovalResult
-                                                                { arApproved = True
-                                                                , arApprovedLocation = Just approvedLoc
-                                                                , arLatestLocation = Just ("s3://" <> bucket <> "/" <> latestKey)
-                                                                , arCleanupCompleted = False
-                                                                }
-                                                    pure (Right 0)
-                                                else do
-                                                    -- Request confirmation
-                                                    result <- requestConfirmation "Would you like to approve these changes?"
-                                                    if result == Confirmed
-                                                        then do
-                                                            -- Approve: copy pending to approved and latest, delete pending
-                                                            uploadApproved <- uploadToS3 (cfnEnv ctx) bucket approvedKey pending
-                                                            case uploadApproved of
-                                                                Left err -> pure (Left ("Failed to upload approved template: " <> err))
-                                                                Right () -> do
-                                                                    uploadLatest <- uploadToS3 (cfnEnv ctx) bucket latestKey pending
-                                                                    case uploadLatest of
-                                                                        Left err -> pure (Left ("Failed to upload latest template: " <> err))
-                                                                        Right () -> do
-                                                                            deleteResult <- deleteFromS3 (cfnEnv ctx) bucket pendingKey
-                                                                            case deleteResult of
-                                                                                Left err -> pure (Left ("Failed to delete pending template: " <> err))
-                                                                                Right () -> do
-                                                                                    emit $
-                                                                                        OdApprovalResult
-                                                                                            ApprovalResult
-                                                                                                { arApproved = True
-                                                                                                , arApprovedLocation = Just approvedLoc
-                                                                                                , arLatestLocation = Just ("s3://" <> bucket <> "/" <> latestKey)
-                                                                                                , arCleanupCompleted = True
-                                                                                                }
-                                                                                    pure (Right 0)
-                                                        else do
-                                                            emit $
-                                                                OdApprovalResult
-                                                                    ApprovalResult
-                                                                        { arApproved = False
-                                                                        , arApprovedLocation = Nothing
-                                                                        , arLatestLocation = Nothing
-                                                                        , arCleanupCompleted = False
-                                                                        }
-                                                            pure (Right 1)
+-- | Prefix the error message of an ExceptT action.
+prefixError :: ExceptT Text IO a -> Text -> ExceptT Text IO a
+prefixError action prefix = ExceptT $ do
+    result <- runExceptT action
+    pure $ case result of
+        Left err -> Left (prefix <> err)
+        Right x -> Right x
 
 ------------------------------------------------------------------------
 -- S3 helpers
