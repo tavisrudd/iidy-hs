@@ -10,7 +10,11 @@
 module Iidy.Cfn.StackArgsLoader
   ( loadStackArgs
   , LoadedStackArgs(..)
+  -- * AWS settings bootstrap (for pre-import credential creation)
+  , extractRawAwsFromFile
+  , mergeAwsSettings
   -- * Internal (exported for testing)
+  , extractRawAwsFromAst
   , getStrListValidated
   , getStrMapValidated
   , getInt
@@ -18,7 +22,6 @@ module Iidy.Cfn.StackArgsLoader
   , parseOnFailureText
   , parseCapabilityText
   , validateNoUnknownKeys
-  , mergeAwsSettings
   , mergeSentinel
   , noProfileSentinel
   , noRoleSentinel
@@ -46,6 +49,7 @@ import Iidy.Aws.CredentialSource
   , CredentialDetectionContext(..)
   )
 import Iidy.Cfn.Types (CfnOperation, Capability(..), OnFailure(..), StackArgs(..), cfnOperationStr)
+import Iidy.Yaml.Ast (YamlAst(..))
 import Iidy.Yaml.Engine
   ( preprocessYaml11
   , PreprocessResult(..)
@@ -134,6 +138,62 @@ loadStackArgs argsfile environment operation cliAws remoteImports mAwsEnv = do
                     , lsaMergedAws = mergedAws
                     , lsaDetectionCtx = detectionCtx
                     }
+
+------------------------------------------------------------------------
+-- Raw AWS settings extraction (pre-preprocessing bootstrap)
+------------------------------------------------------------------------
+
+-- | Extract AWS settings from a raw argsfile before preprocessing.
+-- Parses the YAML and extracts Profile\/Region\/AssumeRoleARN from the
+-- top-level mapping, handling both plain strings and environment maps.
+-- Returns empty settings on any parse failure (callers should proceed
+-- to 'loadStackArgs' which will report the error properly).
+extractRawAwsFromFile :: FilePath -> Text -> IO AwsSettings
+extractRawAwsFromFile argsfile environment = do
+  content <- BL.readFile argsfile
+  let baseLocation = T.pack argsfile
+  case parseYaml content baseLocation of
+    Left _  -> pure (AwsSettings Nothing Nothing Nothing)
+    Right ast -> pure (extractRawAwsFromAst ast environment)
+
+-- | Extract AWS settings from a raw 'YamlAst' top-level mapping.
+-- Resolves environment maps (e.g. @Region: {dev: us-east-1, prod: eu-west-1}@)
+-- using the given environment name.
+extractRawAwsFromAst :: YamlAst -> Text -> AwsSettings
+extractRawAwsFromAst (AstMapping pairs _) environment = AwsSettings
+  { awsProfile       = resolveRawField "Profile" pairs environment
+  , awsRegion        = resolveRawField "Region" pairs environment
+  , awsAssumeRoleArn = resolveRawField "AssumeRoleARN" pairs environment
+  }
+extractRawAwsFromAst _ _ = AwsSettings Nothing Nothing Nothing
+
+-- | Resolve a field from raw AST pairs, handling plain strings and env maps.
+resolveRawField :: Text -> [(YamlAst, YamlAst)] -> Text -> Maybe Text
+resolveRawField name pairs environment =
+  case lookupAstField name pairs of
+    Nothing                      -> Nothing
+    Just (AstNull _)             -> Nothing
+    Just (AstPlainString t _)    -> Just t
+    Just (AstTemplatedString t _) -> Just t
+    Just (AstMapping envMap _)   -> lookupAstTextField environment envMap
+    Just _                       -> Nothing
+
+-- | Look up a field by name in AST mapping pairs.
+lookupAstField :: Text -> [(YamlAst, YamlAst)] -> Maybe YamlAst
+lookupAstField name pairs =
+  case [v | (k, v) <- pairs, astScalarText k == Just name] of
+    (v:_) -> Just v
+    []    -> Nothing
+
+-- | Look up a text field by name in AST mapping pairs.
+lookupAstTextField :: Text -> [(YamlAst, YamlAst)] -> Maybe Text
+lookupAstTextField name pairs = lookupAstField name pairs >>= astScalarText
+
+-- | Extract text from a scalar AST node.
+astScalarText :: YamlAst -> Maybe Text
+astScalarText (AstPlainString t _)    = Just t
+astScalarText (AstTemplatedString t _) = Just t
+astScalarText _                        = Nothing
 
 ------------------------------------------------------------------------
 -- Environment map resolution

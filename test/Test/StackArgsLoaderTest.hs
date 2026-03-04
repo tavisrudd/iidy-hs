@@ -11,9 +11,11 @@ import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
 import Iidy.Aws.CredentialSource (AwsSettings(..))
-import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..), getStrListValidated, getInt, resolveEnvMaps, parseOnFailureText, parseCapabilityText, validateNoUnknownKeys, mergeAwsSettings, mergeSentinel, noProfileSentinel, noRoleSentinel)
+import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..), extractRawAwsFromAst, getStrListValidated, getInt, resolveEnvMaps, parseOnFailureText, parseCapabilityText, validateNoUnknownKeys, mergeAwsSettings, mergeSentinel, noProfileSentinel, noRoleSentinel)
 import Iidy.Cfn.Types (CfnOperation(..), Capability(..), OnFailure(..), StackArgs(..))
+import Iidy.Yaml.Ast (YamlAst(..), SrcMeta(..))
 import Iidy.Yaml.Imports.Types (RemoteImports(..))
+import Iidy.Yaml.Location (zeroPosition)
 import Test.Shared (noAwsSettings)
 
 stackArgsLoaderTests :: [TestTree]
@@ -363,4 +365,72 @@ stackArgsLoaderTests =
       case result of
         Left err -> assertBool "error mentions float" (T.isInfixOf "float" err)
         Right _ -> assertFailure "Expected error for float TimeoutInMinutes"
+
+    -- extractRawAwsFromAst tests (pre-preprocessing bootstrap)
+  , testCase "extractRawAwsFromAst: plain string fields" $ do
+      let ast = AstMapping
+            [ (AstPlainString "StackName" m, AstPlainString "test" m)
+            , (AstPlainString "Region" m, AstPlainString "us-east-1" m)
+            , (AstPlainString "Profile" m, AstPlainString "my-profile" m)
+            , (AstPlainString "AssumeRoleARN" m, AstPlainString "arn:aws:iam::123:role/Foo" m)
+            ] m
+          result = extractRawAwsFromAst ast "dev"
+      awsRegion result @?= Just "us-east-1"
+      awsProfile result @?= Just "my-profile"
+      awsAssumeRoleArn result @?= Just "arn:aws:iam::123:role/Foo"
+
+  , testCase "extractRawAwsFromAst: environment map resolution" $ do
+      let ast = AstMapping
+            [ (AstPlainString "StackName" m, AstPlainString "test" m)
+            , (AstPlainString "Region" m, AstMapping
+                [ (AstPlainString "dev" m, AstPlainString "us-east-1" m)
+                , (AstPlainString "prod" m, AstPlainString "us-west-2" m)
+                ] m)
+            , (AstPlainString "Profile" m, AstMapping
+                [ (AstPlainString "dev" m, AstPlainString "dev-profile" m)
+                , (AstPlainString "prod" m, AstPlainString "prod-profile" m)
+                ] m)
+            ] m
+      let dev = extractRawAwsFromAst ast "dev"
+      awsRegion dev @?= Just "us-east-1"
+      awsProfile dev @?= Just "dev-profile"
+      let prod = extractRawAwsFromAst ast "prod"
+      awsRegion prod @?= Just "us-west-2"
+      awsProfile prod @?= Just "prod-profile"
+
+  , testCase "extractRawAwsFromAst: missing fields return Nothing" $ do
+      let ast = AstMapping
+            [ (AstPlainString "StackName" m, AstPlainString "test" m)
+            ] m
+          result = extractRawAwsFromAst ast "dev"
+      awsRegion result @?= Nothing
+      awsProfile result @?= Nothing
+      awsAssumeRoleArn result @?= Nothing
+
+  , testCase "extractRawAwsFromAst: null fields return Nothing" $ do
+      let ast = AstMapping
+            [ (AstPlainString "Region" m, AstNull m)
+            , (AstPlainString "Profile" m, AstNull m)
+            ] m
+          result = extractRawAwsFromAst ast "dev"
+      awsRegion result @?= Nothing
+      awsProfile result @?= Nothing
+
+  , testCase "extractRawAwsFromAst: non-mapping AST returns empty" $ do
+      let result = extractRawAwsFromAst (AstPlainString "not-a-mapping" m) "dev"
+      awsRegion result @?= Nothing
+      awsProfile result @?= Nothing
+      awsAssumeRoleArn result @?= Nothing
+
+  , testCase "extractRawAwsFromAst: env map missing env returns Nothing" $ do
+      let ast = AstMapping
+            [ (AstPlainString "Region" m, AstMapping
+                [ (AstPlainString "dev" m, AstPlainString "us-east-1" m)
+                ] m)
+            ] m
+          result = extractRawAwsFromAst ast "staging"
+      awsRegion result @?= Nothing
   ]
+  where
+    m :: SrcMeta
+    m = SrcMeta "" zeroPosition zeroPosition

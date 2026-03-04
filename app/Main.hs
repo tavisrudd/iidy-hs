@@ -38,7 +38,10 @@ import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateAp
 import Iidy.Cfn.Operations.UpdateStack (updateStack, updateStackWithChangeset)
 import Iidy.Cfn.Operations.WatchStack (watchStack)
 import Iidy.Cfn.GlobalConfig (applyGlobalConfiguration)
-import Iidy.Cfn.StackArgsLoader (loadStackArgs, LoadedStackArgs(..))
+import Iidy.Cfn.StackArgsLoader
+  ( loadStackArgs, LoadedStackArgs(..)
+  , extractRawAwsFromFile, mergeAwsSettings
+  )
 import Iidy.Cfn.Types (CfnOperation(..), StackArgs(..), emptyStackArgs, isReadOnlyOperation)
 import Iidy.Cli
 import Iidy.Cli.Parser (parseCliOpts)
@@ -360,7 +363,18 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
   dispatch <- mkOutputDispatch (cliGlobalOpts cli)
   let emit = renderOutput dispatch
 
-  result <- loadStackArgs argsfilePath env operation cliAws remoteImports Nothing
+  -- Bootstrap AWS env for import processing.
+  -- Extracts raw Profile/Region/AssumeRoleARN from the argsfile YAML
+  -- (before preprocessing) and merges with CLI settings to create an env
+  -- that SSM/CFN/S3 import loaders can use during preprocessing.
+  -- Falls back to Nothing on any failure (loadStackArgs will report errors).
+  bootstrapEnv <- (do
+    rawAws <- extractRawAwsFromFile argsfilePath env
+    let merged = mergeAwsSettings cliAws rawAws
+    Just . fst <$> createAwsEnvFromSettings merged
+    ) `catch` (\(_ :: SomeException) -> pure Nothing)
+
+  result <- loadStackArgs argsfilePath env operation cliAws remoteImports bootstrapEnv
   case result of
     Left err -> dieTxt err
     Right (LoadedStackArgs sa mergedAws detectionCtx) -> do
