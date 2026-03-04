@@ -1,5 +1,4 @@
 -- | Lint (validate) a CloudFormation template via the AWS API.
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Iidy.Cfn.Operations.LintTemplate
   ( lintTemplate

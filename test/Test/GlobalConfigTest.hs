@@ -7,7 +7,7 @@
 --      stderr (not silent), while async exceptions propagate.
 module Test.GlobalConfigTest (globalConfigTests) where
 
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isNothing)
 import qualified Data.Text as T
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=), assertBool)
@@ -126,7 +126,7 @@ errorHandlingTests =
 
   , testCase "saNotificationArns stays Nothing when no ARN param present" $ do
       let sa = emptyStackArgs
-      assertBool "starts as Nothing" (saNotificationArns sa == Nothing)
+      assertBool "starts as Nothing" (isNothing (saNotificationArns sa))
 
   , testCase "saApprovedTemplateLocation preserved when no disable param" $ do
       let sa = emptyStackArgs { saApprovedTemplateLocation = Just "s3://bucket/approved.yaml" }

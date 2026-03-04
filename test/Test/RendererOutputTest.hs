@@ -133,7 +133,7 @@ rendererOutputTests =
           assertBool "has data" (isJust (jsonLookup "data" v))
 
   , testCase "JSON new stack events is array of event objects" $ do
-      let events = Aeson.toJSON (map eventWithTimingToValue [testEventWithTiming])
+      let events = Aeson.toJSON [eventWithTimingToValue testEventWithTiming]
           encoded = encodeValue defaultJsonOptions events
           parsed = Aeson.decode (BL.fromStrict (TE.encodeUtf8 encoded)) :: Maybe Value
       case parsed of

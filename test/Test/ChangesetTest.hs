@@ -104,7 +104,7 @@ changesetTests =
       assertBool "name should contain a dash" (T.isInfixOf "-" name)
 
   , testCase "generateDashedName: different calls can produce different names" $ do
-      names <- mapM (\_ -> generateDashedName) [(1::Int)..10]
+      names <- mapM (const generateDashedName) [(1::Int)..10]
       let uniqueNames = length (nub names)
       assertBool "should produce some variety" (uniqueNames > 1)
 

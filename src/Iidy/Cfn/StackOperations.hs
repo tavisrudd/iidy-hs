@@ -187,8 +187,9 @@ collectStackContentsWithStack ctx sName mStack = do
        .| CL.consume)
 
   let resources = maybe [] (map convertResource) resourcesResp.stackResources
-      changesets = mapMaybe convertChangeSetSummary
-                     (concatMap (fromMaybe [] . (.summaries)) csPages)
+      changesets = concatMap
+                     (mapMaybe convertChangeSetSummary . fromMaybe [] . (.summaries))
+                     csPages
 
   let outputs = case mStack of
         Nothing -> []

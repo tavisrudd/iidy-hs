@@ -61,7 +61,7 @@ templateApprovalRequest ctx sa _lintTmpl argsfilePath env emit remoteImports = d
         Nothing -> pure (Left "Template is required in stack-args.yaml")
         Just _tmplSpec -> do
           -- Load template
-          tmplEither <- loadCfnTemplate (saTemplate sa) (fmap id argsfilePath) env (ImportConfig (Just (cfnEnv ctx)) remoteImports)
+          tmplEither <- loadCfnTemplate (saTemplate sa) argsfilePath env (ImportConfig (Just (cfnEnv ctx)) remoteImports)
           case tmplEither of
             Left err -> pure (Left err)
             Right tmplResult -> case trTemplateBody tmplResult of

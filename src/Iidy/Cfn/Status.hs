@@ -27,6 +27,7 @@ module Iidy.Cfn.Status
   , isRollbackStatus
   ) where
 
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 
@@ -128,9 +129,8 @@ fromCfnStackStatus = \case
   CF.StackStatus_IMPORT_ROLLBACK_FAILED      -> ImportRollbackFailed
   CF.StackStatus_REVIEW_IN_PROGRESS          -> ReviewInProgress
   -- Catch-all for any future amazonka constructors; fall back to the text representation
-  other -> case fromText (CF.fromStackStatus other) of
-    Just s  -> s
-    Nothing -> CreateFailed  -- defensive fallback, should never happen
+  other -> fromMaybe
+    CreateFailed (fromText (CF.fromStackStatus other))  -- defensive fallback, should never happen
 
 -- | Convert from amazonka's CF.ResourceStatus to our StackStatus.
 -- Resource statuses are a subset of stack statuses.
@@ -158,9 +158,8 @@ fromCfnResourceStatus = \case
   CF.ResourceStatus_UPDATE_ROLLBACK_COMPLETE    -> UpdateRollbackComplete
   CF.ResourceStatus_UPDATE_ROLLBACK_FAILED      -> UpdateRollbackFailed
   -- Catch-all for any future amazonka constructors
-  other -> case fromText (CF.fromResourceStatus other) of
-    Just s  -> s
-    Nothing -> CreateFailed  -- defensive fallback
+  other -> fromMaybe
+    CreateFailed (fromText (CF.fromResourceStatus other))  -- defensive fallback
 
 ------------------------------------------------------------------------
 -- Predicates

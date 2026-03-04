@@ -2,6 +2,7 @@ module Iidy.Explain
   ( explainErrors
   ) where
 
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -49,9 +50,7 @@ lookupErrorCode raw = Map.lookup (normaliseCode raw) errorMap
 normaliseCode :: Text -> Text
 normaliseCode t =
   let upper = T.toUpper t
-      digits = case T.stripPrefix "ERR_" upper of
-                 Just d  -> d
-                 Nothing -> upper
+      digits = fromMaybe upper (T.stripPrefix "ERR_" upper)
       padded = T.justifyRight 4 '0' digits
   in "ERR_" <> padded
 

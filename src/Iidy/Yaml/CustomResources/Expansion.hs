@@ -3,9 +3,10 @@ module Iidy.Yaml.CustomResources.Expansion
   , ExpansionResult(..)
   ) where
 
+import Data.Bifunctor (bimap)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (maybeToList)
+import Data.Maybe (mapMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -61,7 +62,7 @@ expandCustomResource name resourceDef templateInfo reparse additionalGlobals = d
   let resources = extractResources withOverrides
 
   -- Rewrite refs with prefix
-  let rewrittenResources = map (\(k, v) -> (prefix <> k, rewriteRefs prefix allGlobals v)) resources
+  let rewrittenResources = map (bimap (prefix <>) (rewriteRefs prefix allGlobals)) resources
 
   -- Collect global sections (Parameters, Outputs, etc.)
   let globalSections = extractGlobalSections prefix allGlobals withOverrides
@@ -108,7 +109,7 @@ extractGlobalSections prefix globals = \case
         extractSection name = case lookupO name kvs of
           Just section -> Just (name, prefixAndRewriteSection prefix globals section)
           Nothing -> Nothing
-    in Map.fromList (concatMap (maybeToList . extractSection) sections)
+    in Map.fromList (mapMaybe extractSection sections)
   _ -> Map.empty
 
 -- | Prefix keys in a section and rewrite refs within values.

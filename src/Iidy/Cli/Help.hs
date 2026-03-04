@@ -12,11 +12,12 @@ module Iidy.Cli.Help
   ) where
 
 import Control.Monad (unless)
+import Data.Bifunctor (first)
 import qualified Data.Char as Char
 import Data.List (dropWhileEnd, isInfixOf, isPrefixOf, stripPrefix)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (isJust, listToMaybe, maybeToList)
+import Data.Maybe (isNothing, listToMaybe, maybeToList)
 import qualified System.Console.ANSI as ANSI
 import qualified System.Environment
 import System.IO (Handle, stdout, stderr, hIsTerminalDevice, hPutStrLn)
@@ -79,7 +80,7 @@ renderHelpForArgs args defaultMsg = do
         Just parsed -> do
           let sections = phSections parsed
               normalized = map normalizeSection sections
-              existingTitles = map (map Char.toLower) (map fst normalized)
+              existingTitles = map (map Char.toLower . fst) normalized
               extras =
                 [ (title, rows)
                 | (title, rows) <- [("Global Options", globalOptionHelpRows), ("AWS Options", awsOptionHelpRows)]
@@ -101,7 +102,7 @@ colorEnabledFor h = do
   isTty <- hIsTerminalDevice h
   supportsAnsi <- ANSI.hSupportsANSIColor h
   noColor <- System.Environment.lookupEnv "NO_COLOR"
-  pure (isTty && supportsAnsi && not (isJust noColor))
+  pure (isTty && supportsAnsi && isNothing noColor)
 
 headingLine :: Bool -> String -> String
 headingLine useColor label = applyColor useColor headingColorCode label
@@ -129,7 +130,7 @@ formatRows wrapWidth stylize rows
   | null rows = []
   | otherwise = concatMap renderRow formatted
   where
-    formatted = map (\(name, desc) -> (formatEntryName name, desc)) rows
+    formatted = map (first formatEntryName) rows
     nameWidth = maximum (0 : [length name | (name, _) <- formatted, not (null name)])
     availableWidth = max 20 (wrapWidth - nameWidth - 4)
     renderRow ("", "") = [""]
@@ -604,7 +605,7 @@ isEntryStart line =
 parseRow :: String -> (String, String)
 parseRow line =
   let trimmed = dropWhile Char.isSpace line
-      (namePart, rest) = span (not . Char.isSpace) trimmed
+      (namePart, rest) = break Char.isSpace trimmed
       desc = trim (dropWhile Char.isSpace rest)
   in (namePart, desc)
 

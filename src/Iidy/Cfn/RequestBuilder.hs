@@ -2,7 +2,6 @@
 --
 -- Converts StackArgs + CfnContext into properly formatted CloudFormation
 -- API requests with template loading, parameter mapping, and token injection.
-{-# LANGUAGE OverloadedRecordDot #-}
 module Iidy.Cfn.RequestBuilder
   ( -- * Request building
     buildCreateStackRequest

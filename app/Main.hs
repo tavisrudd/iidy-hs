@@ -12,7 +12,7 @@ import Data.UUID.V4 (nextRandom)
 import qualified Data.UUID as UUID
 import Foreign.C.Types (CInt(..))
 import System.Environment (lookupEnv)
-import System.Exit (exitWith, ExitCode(..))
+import System.Exit (exitSuccess, exitWith, ExitCode(..))
 import System.IO (hPutStrLn, stderr)
 import System.Posix.Signals (installHandler, sigINT, Handler(..))
 
@@ -150,9 +150,7 @@ runCommand cli = case cliCommand cli of
     runCfnWithArgs cli OpCreateChangeset (ccsArgsfile args) (ccsStackName args)
       $ \remoteImports ctx sa fp env emit -> do
           -- Determine changeset name (user-provided or random)
-          csName <- case ccsChangesetName args of
-            Just name -> pure name
-            Nothing   -> generateDashedName
+          csName <- maybe generateDashedName pure (ccsChangesetName args)
           -- Check stack state to determine changeset type
           let stackName = saStackName sa
           state <- checkStackState ctx stackName
@@ -463,7 +461,7 @@ handleEither (Right rc) = pure rc
 
 -- | Exit with given code
 exitCode :: Int -> IO ()
-exitCode 0 = exitWith ExitSuccess
+exitCode 0 = exitSuccess
 exitCode n = exitWith (ExitFailure n)
 
 -- | Detect shell type from a shell name string.

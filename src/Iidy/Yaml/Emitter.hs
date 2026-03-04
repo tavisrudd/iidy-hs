@@ -103,7 +103,7 @@ isNumericLooking s =
       _ -> False
 
 isPlainSafeFirst :: Char -> Bool
-isPlainSafeFirst c = notElem c ("-?:,[]{}#&*!|>'\"%@`" :: [Char])
+isPlainSafeFirst c = c `notElem` ("-?:,[]{}#&*!|>'\"%@`" :: [Char])
 
 quoteString :: Text -> Text
 quoteString s

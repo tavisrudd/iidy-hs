@@ -205,8 +205,11 @@ astScalarText _                        = Nothing
 -- or if the resolved value is not a string (matching Rust behavior).
 resolveEnvMaps :: Value -> Text -> Either Text Value
 resolveEnvMaps (Object obj) env =
-  fmap Object $ foldM (\acc key -> resolveEnvMapField acc key env) obj
-    ["Profile", "AssumeRoleARN", "Region"]
+  Object
+  <$>
+    foldM
+      (\acc key -> resolveEnvMapField acc key env) obj
+      ["Profile", "AssumeRoleARN", "Region"]
 resolveEnvMaps v _ = Right v
 
 resolveEnvMapField :: KM.KeyMap Value -> Text -> Text -> Either Text (KM.KeyMap Value)

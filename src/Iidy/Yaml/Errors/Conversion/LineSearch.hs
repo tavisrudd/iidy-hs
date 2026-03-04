@@ -20,7 +20,7 @@ module Iidy.Yaml.Errors.Conversion.LineSearch
   , tagExample
   ) where
 
-import Data.Maybe (maybeToList)
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -196,7 +196,7 @@ findTagInNearbyLines allLines lineNum =
         let rest = T.drop col line
             tag = T.takeWhile (\c -> c /= ' ' && c /= '\n' && c /= '\t' && c /= '{' && c /= '[' && c /= ':') rest
         if T.length tag > 2 then Just tag else Nothing
-  in case concatMap (maybeToList . findTag) searchRange of
+  in case mapMaybe findTag searchRange of
     (t:_) -> let ex = tagExample t in if T.null ex then Nothing else Just ex
     [] -> Nothing
 

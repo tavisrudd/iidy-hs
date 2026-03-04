@@ -15,6 +15,7 @@ module Iidy.Cfn.Operations.DescribeStack
   , emitStackDefinition
   ) where
 
+import Control.Monad (join)
 import Data.List (sortBy)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
@@ -170,7 +171,7 @@ calculateEventDurations events =
       durations = go Map.empty [] sorted
       -- Build lookup by event ID
       durMap = Map.fromList durations
-  in map (\e -> StackEventWithTiming e (Map.lookup (seEventId e) durMap >>= id)) events
+  in map (\e -> StackEventWithTiming e (join (Map.lookup (seEventId e) durMap))) events
   where
     go :: Map.Map Text UTCTime -> [(Text, Maybe Int)] -> [StackEvent] -> [(Text, Maybe Int)]
     go _ acc [] = acc

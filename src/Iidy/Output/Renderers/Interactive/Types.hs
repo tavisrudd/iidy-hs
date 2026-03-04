@@ -403,7 +403,7 @@ prettyFormatTags tags maxTags
           Just (k, v) -> [k <> "=" <> v]
           Nothing     -> []
         otherTags = sortBy (comparing fst)
-          [(k, v) | (k, v) <- Map.toList tags, notElem k envKeys]
+          [(k, v) | (k, v) <- Map.toList tags, k `notElem` envKeys]
         otherFormatted = map (\(k, v) -> k <> "=" <> v) otherTags
         truncated = case maxTags of
           Nothing -> otherFormatted

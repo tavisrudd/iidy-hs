@@ -71,9 +71,7 @@ reliableNow = do
     Just t  -> pure t
     Nothing -> do
       r2 <- tryNtp
-      case r2 of
-        Just t  -> pure t
-        Nothing -> getCurrentTime
+      maybe getCurrentTime pure r2
 
 -- | Attempt a single NTP query with 2-second timeout.
 tryNtp :: IO (Maybe UTCTime)

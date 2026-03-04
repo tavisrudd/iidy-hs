@@ -133,7 +133,7 @@ computePathHash path = do
     then do
       files <- listFilesRecursive path
       let sortedFiles = sort files
-      hashes <- mapM (\f -> sha256Bytes <$> BS.readFile f) sortedFiles
+      hashes <- mapM (fmap sha256Bytes . BS.readFile) sortedFiles
       let combined = T.intercalate "," hashes
       pure $ sha256Bytes (TE.encodeUtf8 combined)
     else sha256Bytes <$> BS.readFile path

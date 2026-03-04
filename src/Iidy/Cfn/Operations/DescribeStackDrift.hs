@@ -15,7 +15,7 @@ import qualified Data.Text as T
 import Data.Time (UTCTime, getCurrentTime, diffUTCTime)
 import Data.Coerce (coerce)
 import Control.Concurrent (threadDelay)
-import Control.Monad (when)
+import Control.Monad (unless, when)
 
 import Control.Monad.Trans.Resource (runResourceT)
 
@@ -77,7 +77,7 @@ describeStackDrift ctx stackName driftCacheSecs emit = do
 
           -- Step 4: Poll for completion
           completed <- pollDriftDetection ctx driftPollMaxIterations detectionId
-          when (not completed) $ do
+          unless completed $ do
               let timeoutMins = (driftPollMaxIterations * driftPollIntervalSecs) `div` 60
               now2 <- getCurrentTime
               emit (OdStatusUpdate StatusUpdate
