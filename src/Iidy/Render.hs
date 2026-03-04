@@ -2,6 +2,7 @@ module Iidy.Render (
     runRender,
 ) where
 
+import Control.Monad.Trans.Except (ExceptT (..), runExceptT)
 import Data.Aeson.Encode.Pretty qualified as Pretty
 import Data.ByteString.Lazy qualified as BL
 import Data.Text (Text)
@@ -16,9 +17,11 @@ import System.IO (stderr)
 import Iidy.Cli (GlobalOpts (..), RenderArgs (..), RenderFormat (..))
 import Iidy.Output.Types (OutputData (..))
 import Iidy.Types (YamlSpec (..))
+import Iidy.Yaml.Ast (YamlAst)
 import Iidy.Yaml.Detection (detectYamlSpec, shouldUseYaml11Compatibility)
 import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.Engine (
+    PreprocessError,
     PreprocessResult (..),
     preprocessYaml,
     preprocessYaml11,
@@ -26,9 +29,20 @@ import Iidy.Yaml.Engine (
 import Iidy.Yaml.Errors.Conversion (formatParseErrorEnhanced, formatPreprocessErrorEnhanced)
 import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
 import Iidy.Yaml.Imports.Types (RemoteImports (..))
-import Iidy.Yaml.JMESPath (applyJmesPath)
+import Iidy.Yaml.JMESPath (JMESPathError (..), applyJmesPath)
+import Iidy.Yaml.Location (Position)
 import Iidy.Yaml.OValue (OValue, fromValue, toValue)
 import Iidy.Yaml.Parser (ParseError (..), parseYaml)
+
+------------------------------------------------------------------------
+-- Error type
+------------------------------------------------------------------------
+
+data RenderError
+    = ParseFailed !Position !Text
+    | PreprocessFailed !PreprocessError
+    | InvalidQuery !Text !JMESPathError
+    | OutputFileExists !Text
 
 ------------------------------------------------------------------------
 -- Public API
@@ -39,82 +53,90 @@ The emitter callback is used to send stdout output through the output pipeline.
 -}
 runRender :: (OutputData -> IO ()) -> RenderArgs -> GlobalOpts -> IO Int
 runRender emit args gopts = do
-    let templatePath = T.unpack (raTemplate args)
+    (content, baseLocation) <- readTemplate args
+    let source = TE.decodeUtf8 (BL.toStrict content)
+        importCfg =
+            ImportConfig
+                { icAwsEnv = Nothing
+                , icRemoteImports = if goRemoteImports gopts then AllowRemoteImports else BlockRemoteImports
+                }
+    result <- runExceptT $ do
+        ast <- ExceptT . pure $ parseStep content baseLocation
+        val <- ExceptT $ preprocessStep source importCfg ast
+        outputVal <- ExceptT . pure $ queryStep val
+        ExceptT $ writeStep outputVal
+    either (reportError baseLocation source) pure result
+  where
+    parseStep :: BL.ByteString -> Text -> Either RenderError YamlAst
+    parseStep content baseLocation =
+        case parseYaml content baseLocation of
+            Left (ParseError pos msg) -> Left (ParseFailed pos msg)
+            Right ast -> Right ast
 
-    -- Read input: "-" means stdin, otherwise treat as a file path.
-    content <-
-        if templatePath == "-"
-            then BL.getContents
-            else BL.readFile templatePath
+    preprocessStep :: Text -> ImportConfig -> YamlAst -> IO (Either RenderError OValue)
+    preprocessStep source importCfg ast = do
+        let useYaml11 = case raYamlSpec args of
+                YamlV11 -> True
+                YamlV12 -> False
+                YamlAuto -> shouldUseYaml11Compatibility (detectYamlSpec source)
+            preprocess = if useYaml11 then preprocessYaml11 else preprocessYaml
+        result <- preprocess (mkFullDispatcher importCfg) ast (raTemplate args)
+        pure $ case result of
+            Left err -> Left (PreprocessFailed err)
+            Right (PreprocessResult val _manifest) -> Right val
 
-    let baseLocation = raTemplate args
+    queryStep :: OValue -> Either RenderError OValue
+    queryStep val =
+        case raQuery args of
+            Nothing -> Right val
+            Just query -> case applyJmesPath query (toValue val) of
+                Left err -> Left (InvalidQuery query err)
+                Right filt -> Right (fromValue filt)
 
-    -- Parse YAML
-    case parseYaml content baseLocation of
-        Left (ParseError pos msg) -> do
-            let source = TE.decodeUtf8 (BL.toStrict content)
+    writeStep :: OValue -> IO (Either RenderError Int)
+    writeStep outputVal = do
+        let rendered = case raFormat args of
+                RenderJson -> formatJson outputVal
+                RenderYaml -> emitYaml outputVal
+                RenderCfnYaml -> emitYaml outputVal
+            outPath = raOutfile args
+        if isStdoutTarget outPath
+            then emit (OdRawOutput (rendered <> "\n")) >> pure (Right 0)
+            else do
+                exists <- doesFileExist (T.unpack outPath)
+                if exists && not (raOverwrite args)
+                    then pure (Left (OutputFileExists outPath))
+                    else do
+                        TIO.writeFile (T.unpack outPath) rendered
+                        pure (Right 0)
+
+    reportError :: Text -> Text -> RenderError -> IO Int
+    reportError baseLocation source = \case
+        ParseFailed pos msg -> do
             formatted <- formatParseErrorEnhanced (goColor gopts) baseLocation source pos msg
             TIO.hPutStr stderr formatted
             pure 1
-        Right ast -> do
-            -- Select YAML spec (1.1 vs 1.2)
-            let source = TE.decodeUtf8 (BL.toStrict content)
-                useYaml11 = case raYamlSpec args of
-                    YamlV11 -> True
-                    YamlV12 -> False
-                    YamlAuto -> shouldUseYaml11Compatibility (detectYamlSpec source)
-                preprocess = if useYaml11 then preprocessYaml11 else preprocessYaml
-
-            let importCfg =
-                    ImportConfig
-                        { icAwsEnv = Nothing
-                        , icRemoteImports = if goRemoteImports gopts then AllowRemoteImports else BlockRemoteImports
-                        }
-            result <- preprocess (mkFullDispatcher importCfg) ast baseLocation
-            case result of
-                Left err -> do
-                    formatted <- formatPreprocessErrorEnhanced (goColor gopts) baseLocation source err
-                    TIO.hPutStr stderr formatted
-                    pure 1
-                Right (PreprocessResult val _manifest) -> do
-                    -- Apply JMESPath query if provided
-                    let queryResult = case raQuery args of
-                            Nothing -> Right val
-                            Just query -> case applyJmesPath query (toValue val) of
-                                Left _err -> Left query
-                                Right filtered -> Right (fromValue filtered)
-                    case queryResult of
-                        Left query -> do
-                            TIO.hPutStrLn stderr ("Invalid JMESPath query: " <> query)
-                            pure 1
-                        Right outputVal -> do
-                            -- Format output (exhaustive match — no wildcard)
-                            let rendered = case raFormat args of
-                                    RenderJson -> formatJson outputVal
-                                    RenderYaml -> emitYaml outputVal
-                                    RenderCfnYaml -> emitYaml outputVal
-
-                            -- Write output: "-" or "stdout" means stdout, otherwise write to file.
-                            let outPath = T.unpack (raOutfile args)
-                            if outPath == "-" || outPath == "stdout"
-                                then do
-                                    emit (OdRawOutput (rendered <> "\n"))
-                                    pure 0
-                                else do
-                                    -- Check overwrite protection
-                                    exists <- doesFileExist outPath
-                                    if exists && not (raOverwrite args)
-                                        then do
-                                            TIO.hPutStrLn stderr ("Output file '" <> T.pack outPath <> "' exists. Use --overwrite to overwrite it.")
-                                            pure 1
-                                        else do
-                                            TIO.writeFile outPath rendered
-                                            TIO.hPutStrLn stderr ("Template rendered to: " <> T.pack outPath)
-                                            pure 0
+        PreprocessFailed err -> do
+            formatted <- formatPreprocessErrorEnhanced (goColor gopts) baseLocation source err
+            TIO.hPutStr stderr formatted
+            pure 1
+        InvalidQuery query (JMESPathError msg) ->
+            TIO.hPutStrLn stderr ("Invalid JMESPath query '" <> query <> "': " <> msg) >> pure 1
+        OutputFileExists p ->
+            TIO.hPutStrLn stderr ("Output file '" <> p <> "' exists. Use --overwrite to overwrite it.") >> pure 1
 
 ------------------------------------------------------------------------
--- Output formatting
+-- Helpers
 ------------------------------------------------------------------------
+
+readTemplate :: RenderArgs -> IO (BL.ByteString, Text)
+readTemplate args = do
+    let path = raTemplate args
+    content <- if path == "-" then BL.getContents else BL.readFile (T.unpack path)
+    pure (content, path)
+
+isStdoutTarget :: Text -> Bool
+isStdoutTarget t = t == "-" || t == "stdout"
 
 formatJson :: OValue -> Text
 formatJson val =
