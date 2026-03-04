@@ -371,18 +371,21 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
                     case pcTimeoutSeconds config of
                         Just t | t > 0 && totalElapsed > t -> pure PollTimeout
                         _ -> do
-                            -- Check if we hit a terminal status
+                            -- Check if we hit a terminal status.
+                            -- When pcWaitForStatusChange is True (watch-stack), only
+                            -- consider events AFTER startTime for terminal exit.
+                            -- Pre-existing terminal events are displayed but don't
+                            -- trigger exit — matching iidy-js (ev.Timestamp > startTime).
                             let stackEvents = filter isStackEvent events
-                                mCurrentStatus = case stackEvents of
+                                relevantStackEvents
+                                    | pcWaitForStatusChange config =
+                                        filter (\e -> e.timestamp.fromTime > startTime) stackEvents
+                                    | otherwise = stackEvents
+                                mCurrentStatus = case relevantStackEvents of
                                     (e : _) -> fmap fromCfnResourceStatus e.resourceStatus
                                     _ -> Nothing
-                            -- When pcWaitForStatusChange is True, only exit on terminal
-                            -- status after we've seen new events (i.e., a new operation started)
-                            let shouldCheckTerminal =
-                                    not (pcWaitForStatusChange config)
-                                        || hasSeenNewEvents
                             case mCurrentStatus of
-                                Just currentStatus | shouldCheckTerminal && currentStatus `elem` terminalStatuses -> do
+                                Just currentStatus | currentStatus `elem` terminalStatuses -> do
                                     let elapsed = round (diffUTCTime now startTime) :: Int
                                     pcOnOperationComplete
                                         config

@@ -201,6 +201,95 @@ watchStackTests =
                     }
                 )
         result @?= PollInactivityTimeout
+    , testCase "pollForCompletionWith - ignores pre-existing terminal when pcWaitForStatusChange" $ do
+        -- Bug fix: watch-stack should not exit on a stack already in terminal state.
+        -- Only events AFTER startTime should trigger terminal exit.
+        let startTime = addUTCTime 100 epoch
+            -- Pre-existing: terminal event BEFORE startTime
+            preExisting = [mkStackEvtAt (addUTCTime (-10) epoch) "evt-1" CF.ResourceStatus_CREATE_COMPLETE]
+            -- New batch: includes a terminal event AFTER startTime
+            withNew =
+                [ mkStackEvtAt (addUTCTime 200 epoch) "evt-2" CF.ResourceStatus_UPDATE_COMPLETE
+                , mkStackEvtAt (addUTCTime (-10) epoch) "evt-1" CF.ResourceStatus_CREATE_COMPLETE
+                ]
+        eventsRef <- newIORef [preExisting, withNew]
+        pollCount <- newIORef (0 :: Int)
+        let fetchEvents = do
+                modifyIORef' pollCount (+ 1)
+                batches <- readIORef eventsRef
+                case batches of
+                    (b : rest) -> writeIORef eventsRef rest >> pure b
+                    [] -> pure withNew
+        result <-
+            pollForCompletionWith
+                fetchEvents
+                "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
+                allTerminalStatuses
+                ( testPollConfig
+                    { pcOnNewEvents = const (pure ())
+                    , pcStartTime = Just startTime
+                    , pcWaitForStatusChange = True
+                    }
+                )
+        result @?= PollSuccess UpdateComplete
+        polls <- readIORef pollCount
+        assertBool "should poll at least twice (pre-existing terminal ignored)" (polls >= 2)
+    , testCase "pollForCompletionWith - exits on terminal regardless of timestamp when not waiting" $ do
+        -- Write operations (pcWaitForStatusChange = False) should still detect
+        -- terminal status on any event, regardless of timestamp.
+        let startTime = addUTCTime 100 epoch
+            events = [mkStackEvtAt epoch "evt-1" CF.ResourceStatus_CREATE_COMPLETE]
+        eventsRef <- newIORef [events]
+        let fetchEvents = do
+                batches <- readIORef eventsRef
+                case batches of
+                    (b : rest) -> writeIORef eventsRef rest >> pure b
+                    [] -> pure events
+        result <-
+            pollForCompletionWith
+                fetchEvents
+                "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
+                allTerminalStatuses
+                ( testPollConfig
+                    { pcOnNewEvents = const (pure ())
+                    , pcStartTime = Just startTime
+                    , pcWaitForStatusChange = False
+                    }
+                )
+        result @?= PollSuccess CreateComplete
+    , testCase "pollForCompletionWith - displays pre-existing events but doesn't exit on them" $ do
+        -- Pre-existing terminal events should be emitted via pcOnNewEvents
+        -- but should NOT trigger exit when pcWaitForStatusChange is True.
+        let startTime = addUTCTime 100 epoch
+            preExisting = [mkStackEvtAt epoch "evt-1" CF.ResourceStatus_CREATE_COMPLETE]
+            withNew =
+                [ mkStackEvtAt (addUTCTime 200 epoch) "evt-2" CF.ResourceStatus_UPDATE_COMPLETE
+                , mkStackEvtAt epoch "evt-1" CF.ResourceStatus_CREATE_COMPLETE
+                ]
+        eventsRef <- newIORef [preExisting, withNew]
+        callbackEvents <- newIORef ([] :: [[Text]])
+        let fetchEvents = do
+                batches <- readIORef eventsRef
+                case batches of
+                    (b : rest) -> writeIORef eventsRef rest >> pure b
+                    [] -> pure withNew
+            onNew evts = modifyIORef' callbackEvents (++ [map SE.eventId evts])
+        _ <-
+            pollForCompletionWith
+                fetchEvents
+                "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
+                allTerminalStatuses
+                ( testPollConfig
+                    { pcOnNewEvents = onNew
+                    , pcStartTime = Just startTime
+                    , pcWaitForStatusChange = True
+                    }
+                )
+        callbacks <- readIORef callbackEvents
+        -- First callback should include pre-existing event (displayed, not exit-triggering)
+        case callbacks of
+            (first : _) -> assertBool "first callback includes pre-existing event" ("evt-1" `elem` first)
+            _ -> assertFailure "expected at least one callback batch"
     , -- isNoUpdatesError tests
       testGroup
         "isNoUpdatesError"
@@ -242,6 +331,14 @@ watchStackTests =
     mkStackEvt :: Text -> CF.ResourceStatus -> SE.StackEvent
     mkStackEvt evtId status =
         (SE.newStackEvent "arn:aws:cloudformation:us-east-1:123:stack/demo/guid" evtId "demo" epoch)
+            { SE.logicalResourceId = Just "demo"
+            , SE.resourceType = Just "AWS::CloudFormation::Stack"
+            , SE.resourceStatus = Just status
+            }
+
+    mkStackEvtAt :: UTCTime -> Text -> CF.ResourceStatus -> SE.StackEvent
+    mkStackEvtAt ts evtId status =
+        (SE.newStackEvent "arn:aws:cloudformation:us-east-1:123:stack/demo/guid" evtId "demo" ts)
             { SE.logicalResourceId = Just "demo"
             , SE.resourceType = Just "AWS::CloudFormation::Stack"
             , SE.resourceStatus = Just status
