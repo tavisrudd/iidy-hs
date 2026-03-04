@@ -43,10 +43,15 @@ module Iidy.Cli (
     ParamType (..),
     ParamFormat (..),
     ShellType (..),
+
+    -- * CLI conversion helpers
+    cliToAwsSettings,
+    detectShellType,
 ) where
 
 import Data.Text (Text)
 import Iidy.Aws.ClientReqToken (TokenInfo)
+import Iidy.Aws.CredentialSource (AwsSettings (..))
 import Iidy.Types (ColorChoice, OutputMode, Theme, YamlSpec)
 
 ------------------------------------------------------------------------
@@ -338,3 +343,24 @@ data InitStackArgs = InitStackArgs
     , isaForceCfnTemplate :: !Bool
     }
     deriving stock (Show, Eq)
+
+------------------------------------------------------------------------
+-- CLI conversion helpers
+------------------------------------------------------------------------
+
+-- | Convert CLI AWS options to AwsSettings
+cliToAwsSettings :: Cli -> AwsSettings
+cliToAwsSettings cli =
+    AwsSettings
+        { awsProfile = aoProfile (cliAwsOpts cli)
+        , awsRegion = aoRegion (cliAwsOpts cli)
+        , awsAssumeRoleArn = aoAssumeRoleArn (cliAwsOpts cli)
+        }
+
+{- | Detect shell type from a shell name string.
+Falls back to ShellBash for unknown values.
+-}
+detectShellType :: String -> ShellType
+detectShellType "zsh" = ShellZsh
+detectShellType "fish" = ShellFish
+detectShellType _ = ShellBash

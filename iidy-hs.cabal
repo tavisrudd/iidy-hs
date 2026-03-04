@@ -110,6 +110,9 @@ library
     Iidy.Cfn.Operations.WatchStack
     Iidy.Params.Client
     Iidy.Params.Review
+    Iidy.Errors
+    Iidy.Cli.Completion
+    Iidy.Cfn.Runner
   build-depends:
       base >= 4.17 && < 5
     , aeson
@@ -150,6 +153,7 @@ library
     , vector
     , aeson-pretty
     , edit-distance
+    , uuid
 
 executable iidy-hs
   import:           warnings

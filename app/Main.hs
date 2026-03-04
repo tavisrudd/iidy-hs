@@ -1,29 +1,17 @@
-{-# LANGUAGE OverloadedRecordDot #-}
-
 module Main (main) where
 
-import Amazonka qualified
-import Control.Exception (IOException, SomeException, catch, displayException, finally, fromException)
-import Control.Monad (when)
+import Control.Exception (catch, finally)
 import Data.Maybe (fromMaybe)
-import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text.IO qualified as TIO
-import Data.UUID qualified as UUID
-import Data.UUID.V4 (nextRandom)
 import Foreign.C.Types (CInt (..))
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..), exitSuccess, exitWith)
 import System.IO (hPutStrLn, stderr)
 import System.Posix.Signals (Handler (..), installHandler, sigINT)
 
-import Iidy.Aws.ClientReqToken (TokenInfo (..), TokenSource (..))
-import Iidy.Aws.Config (createAwsEnv, createAwsEnvFromSettings)
-import Iidy.Aws.CredentialSource (AwsSettings (..))
-import Iidy.Aws.Timing (TimeProvider, reliableTimeProvider, systemTimeProvider)
+import Iidy.Aws.Config (createAwsEnvFromSettings)
 import Iidy.Cfn.CommandMetadata (constructCommandMetadata, createFinalCommandSummary)
-import Iidy.Cfn.Context (CfnContext, createContext, createContextFromEnv, ctxElapsedSeconds)
-import Iidy.Cfn.GlobalConfig (applyGlobalConfiguration)
+import Iidy.Cfn.Context (ctxElapsedSeconds)
 import Iidy.Cfn.Operations.Changeset (
     StackState (..),
     buildChangeSetCreationResult,
@@ -45,16 +33,13 @@ import Iidy.Cfn.Operations.ListStacks (listStacks)
 import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateApprovalReview)
 import Iidy.Cfn.Operations.UpdateStack (updateStack, updateStackWithChangeset)
 import Iidy.Cfn.Operations.WatchStack (watchStack)
-import Iidy.Cfn.StackArgsLoader (
-    LoadedStackArgs (..),
-    extractRawAwsFromFile,
-    loadStackArgs,
-    mergeAwsSettings,
- )
-import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), emptyStackArgs, isReadOnlyOperation)
+import Iidy.Cfn.Runner (createSimpleContext, runCfnWithArgs)
+import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), emptyStackArgs)
 import Iidy.Cli
+import Iidy.Cli.Completion (bashCompletionScript, fishCompletionScript, zshCompletionScript)
 import Iidy.Cli.Parser (parseCliOpts)
 import Iidy.Demo (runDemo)
+import Iidy.Errors (dieTxt, handleEither, handleUncaughtException)
 import Iidy.Explain (explainErrors)
 import Iidy.GetImport (runGetImport)
 import Iidy.InitStackArgs (runInitStackArgs)
@@ -81,48 +66,6 @@ main = do
             runCommand cli
         )
         `catch` handleUncaughtException
-
-{- | Format unhandled exceptions matching Rust's error output style.
-Strips GHC backtrace noise and formats IO errors cleanly.
-Amazonka ServiceErrors get the message extracted; other errors get best-effort formatting.
--}
-handleUncaughtException :: SomeException -> IO ()
-handleUncaughtException e
-    | Just ec <- fromException e = exitWith (ec :: ExitCode)
-    | Just awsErr <- fromException e = do
-        handleAwsError (awsErr :: Amazonka.Error)
-        exitWith (ExitFailure 1)
-    | Just ioe <- fromException e = do
-        -- IO exceptions: format like Rust's "No such file or directory (os error 2)"
-        let msg = displayException (ioe :: IOException)
-        hPutStrLn stderr $ "ERROR: " <> firstLine msg
-        hPutStrLn stderr "  \x2022 Check the AWS CloudFormation console for more details"
-        exitWith (ExitFailure 1)
-    | otherwise = do
-        let msg = firstLine (displayException e)
-        hPutStrLn stderr $ "ERROR: " <> msg
-        hPutStrLn stderr "  \x2022 Check the AWS CloudFormation console for more details"
-        exitWith (ExitFailure 1)
-  where
-    firstLine s = case lines s of
-        (l : _) -> l
-        [] -> s
-
--- | Format an Amazonka error with the service error message extracted.
-handleAwsError :: Amazonka.Error -> IO ()
-handleAwsError (Amazonka.ServiceError se) = do
-    let Amazonka.ErrorCode code = se.code
-        msg = maybe "" Amazonka.fromErrorMessage se.message
-        errMsg = T.unpack (code <> ": " <> msg)
-    hPutStrLn stderr $ "ERROR: " <> errMsg
-    hPutStrLn stderr "  \x2022 Check the AWS CloudFormation console for more details"
-handleAwsError err = do
-    hPutStrLn stderr $ "ERROR: " <> firstLine' (displayException err)
-    hPutStrLn stderr "  \x2022 Check the AWS CloudFormation console for more details"
-  where
-    firstLine' s = case lines s of
-        (l : _) -> l
-        [] -> s
 
 ------------------------------------------------------------------------
 -- Command dispatch
@@ -346,218 +289,7 @@ runCommand cli = case cliCommand cli of
             ShellZsh -> putStrLn zshCompletionScript
             ShellFish -> putStrLn fishCompletionScript
 
-------------------------------------------------------------------------
--- Helpers
-------------------------------------------------------------------------
-
-{- | Run a CFN operation that requires loading stack args from an argsfile.
-Creates an output dispatch and passes an emitter to the action callback.
-For write operations, emits CommandMetadata before and FinalCommandSummary after.
--}
-runCfnWithArgs ::
-    Cli ->
-    CfnOperation ->
-    -- | argsfile path
-    Text ->
-    -- | stack name override from CLI
-    Maybe Text ->
-    (RemoteImports -> CfnContext -> StackArgs -> Maybe FilePath -> Text -> (OutputData -> IO ()) -> IO Int) ->
-    IO ()
-runCfnWithArgs cli operation argsfile stackNameOverride action = do
-    let env = goEnvironment (cliGlobalOpts cli)
-        cliAws = cliToAwsSettings cli
-        argsfilePath = T.unpack argsfile
-        remoteImports = if goRemoteImports (cliGlobalOpts cli) then AllowRemoteImports else BlockRemoteImports
-
-    dispatch <- mkOutputDispatch (cliGlobalOpts cli)
-    let emit = renderOutput dispatch
-
-    -- Bootstrap AWS env for import processing.
-    -- Extracts raw Profile/Region/AssumeRoleARN from the argsfile YAML
-    -- (before preprocessing) and merges with CLI settings to create an env
-    -- that SSM/CFN/S3 import loaders can use during preprocessing.
-    -- Falls back to Nothing on any failure (loadStackArgs will report errors).
-    bootstrapEnv <-
-        ( do
-            rawAws <- extractRawAwsFromFile argsfilePath env
-            let merged = mergeAwsSettings cliAws rawAws
-            Just . fst <$> createAwsEnvFromSettings merged
-        )
-            `catch` (\(_ :: SomeException) -> pure Nothing)
-
-    result <- loadStackArgs argsfilePath env operation cliAws remoteImports bootstrapEnv
-    case result of
-        Left err -> dieTxt err
-        Right (LoadedStackArgs sa mergedAws detectionCtx) -> do
-            -- Create AWS env with merged settings
-            (awsEnv, credStack) <- createAwsEnv detectionCtx mergedAws
-            -- Apply global SSM configuration (silently ignored on error)
-            sa'' <- applyGlobalConfiguration awsEnv sa
-            let sa' = case stackNameOverride of
-                    Just sn -> sa''{saStackName = sn}
-                    Nothing -> sa''
-            token <- generateToken cli
-            let tp = timeProviderForOperation operation
-            ctx <- createContextFromEnv awsEnv credStack operation tp token
-
-            -- Emit CommandMetadata for write operations (not lint/estimate-cost)
-            when (emitsCommandMetadata operation) $
-                do
-                    meta <- constructCommandMetadata ctx mergedAws sa' env stackNameOverride
-                    emit (OdCommandMetadata meta)
-
-            rc <-
-                action remoteImports ctx sa' (Just argsfilePath) env emit
-                    `finally` cleanupOutputDispatch dispatch
-
-            -- Emit FinalCommandSummary for write operations
-            when (emitsCommandMetadata operation) $
-                do
-                    elapsed <- ctxElapsedSeconds ctx
-                    emit (createFinalCommandSummary (rc == 0) elapsed)
-
-            exitCode rc
-
--- | Create a simple CfnContext for operations that don't load stack args
-createSimpleContext :: Cli -> CfnOperation -> IO CfnContext
-createSimpleContext cli operation = do
-    let cliAws = cliToAwsSettings cli
-    token <- generateToken cli
-    createContext cliAws operation (timeProviderForOperation operation) token
-
--- | Select NTP-backed provider for write ops, system time for read-only.
-timeProviderForOperation :: CfnOperation -> TimeProvider
-timeProviderForOperation op
-    | isReadOnlyOperation op = systemTimeProvider
-    | otherwise = reliableTimeProvider
-
--- | Convert CLI AWS options to AwsSettings
-cliToAwsSettings :: Cli -> AwsSettings
-cliToAwsSettings cli =
-    AwsSettings
-        { awsProfile = aoProfile (cliAwsOpts cli)
-        , awsRegion = aoRegion (cliAwsOpts cli)
-        , awsAssumeRoleArn = aoAssumeRoleArn (cliAwsOpts cli)
-        }
-
--- | Generate a client request token (user-provided or auto-generated UUID)
-generateToken :: Cli -> IO TokenInfo
-generateToken cli = case aoClientRequestToken (cliAwsOpts cli) of
-    Just t ->
-        pure
-            TokenInfo
-                { tiValue = t
-                , tiSource = UserProvided
-                , tiOperationId = t
-                }
-    Nothing -> do
-        uuid <- nextRandom
-        let val = T.pack (UUID.toString uuid)
-        pure
-            TokenInfo
-                { tiValue = val
-                , tiSource = AutoGenerated
-                , tiOperationId = val
-                }
-
-{- | Operations that emit CommandMetadata and FinalCommandSummary.
-Write operations minus lint and estimate-cost.
--}
-emitsCommandMetadata :: CfnOperation -> Bool
-emitsCommandMetadata = \case
-    OpCreateStack -> True
-    OpUpdateStack -> True
-    OpCreateOrUpdate -> True
-    OpCreateChangeset -> True
-    OpTemplateApprovalRequest -> True
-    OpTemplateApprovalReview -> True
-    _ -> False
-
--- | Handle Either Text Int result
-handleEither :: Either Text Int -> IO Int
-handleEither (Left err) = dieTxt err
-handleEither (Right rc) = pure rc
-
 -- | Exit with given code
 exitCode :: Int -> IO ()
 exitCode 0 = exitSuccess
 exitCode n = exitWith (ExitFailure n)
-
-{- | Detect shell type from a shell name string.
-Falls back to ShellBash for unknown values.
--}
-detectShellType :: String -> ShellType
-detectShellType "zsh" = ShellZsh
-detectShellType "fish" = ShellFish
-detectShellType _ = ShellBash
-
--- | Print error to stderr and exit with code 1
-dieTxt :: Text -> IO a
-dieTxt msg = do
-    TIO.hPutStrLn stderr $ "iidy-hs: " <> msg
-    exitWith (ExitFailure 1)
-
-------------------------------------------------------------------------
--- Shell completion scripts
-------------------------------------------------------------------------
-
-bashCompletionScript :: String
-bashCompletionScript =
-    unlines
-        [ "_iidy_hs()"
-        , "{"
-        , "    local CMDLINE"
-        , "    local IFS=$'\\n'"
-        , "    CMDLINE=(--bash-completion-index $COMP_CWORD)"
-        , ""
-        , "    for arg in ${COMP_WORDS[@]}; do"
-        , "        CMDLINE=(${CMDLINE[@]} --bash-completion-word $arg)"
-        , "    done"
-        , ""
-        , "    COMPREPLY=( $(iidy-hs \"${CMDLINE[@]}\") )"
-        , "}"
-        , ""
-        , "complete -o filenames -F _iidy_hs iidy-hs"
-        ]
-
-zshCompletionScript :: String
-zshCompletionScript =
-    unlines
-        [ "#compdef iidy-hs"
-        , ""
-        , "_iidy_hs()"
-        , "{"
-        , "    local CMDLINE"
-        , "    local IFS=$'\\n'"
-        , "    CMDLINE=(--bash-completion-index $((CURRENT-1)))"
-        , ""
-        , "    for arg in ${words[@]}; do"
-        , "        CMDLINE=(${CMDLINE[@]} --bash-completion-word $arg)"
-        , "    done"
-        , ""
-        , "    local completions"
-        , "    completions=($(iidy-hs \"${CMDLINE[@]}\"))"
-        , ""
-        , "    compadd -a completions"
-        , "}"
-        , ""
-        , "compdef _iidy_hs iidy-hs"
-        ]
-
-fishCompletionScript :: String
-fishCompletionScript =
-    unlines
-        [ "function _iidy_hs"
-        , "    set -l cl (commandline --tokenize --current-process)"
-        , "    set -l cn (count $cl)"
-        , "    set -l tmpline --bash-completion-index $cn"
-        , "    for arg in $cl"
-        , "        set tmpline $tmpline --bash-completion-word $arg"
-        , "    end"
-        , "    for opt in (iidy-hs $tmpline)"
-        , "        echo -E \"$opt\""
-        , "    end"
-        , "end"
-        , ""
-        , "complete -c iidy-hs -f -a '(_iidy_hs)'"
-        ]

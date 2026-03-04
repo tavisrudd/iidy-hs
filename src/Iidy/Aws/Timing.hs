@@ -20,6 +20,7 @@ module Iidy.Aws.Timing (
     systemTimeProvider,
     reliableTimeProvider,
     mockTimeProvider,
+    timeProviderForOperation,
 
     -- * Internal functions exposed for testing
     parseNtpResponse,
@@ -35,6 +36,7 @@ import Data.ByteString qualified as BS
 import Data.Time (UTCTime, addUTCTime, getCurrentTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Data.Word (Word32, Word8)
+import Iidy.Cfn.Types (CfnOperation, isReadOnlyOperation)
 import Network.Socket (
     AddrInfo (..),
     SocketType (Datagram),
@@ -155,6 +157,12 @@ getWord32 bs off =
   where
     fromByte :: Word8 -> Word32
     fromByte = fromIntegral
+
+-- | Select NTP-backed provider for write ops, system time for read-only.
+timeProviderForOperation :: CfnOperation -> TimeProvider
+timeProviderForOperation op
+    | isReadOnlyOperation op = systemTimeProvider
+    | otherwise = reliableTimeProvider
 
 -- | Mock time provider for testing.
 mockTimeProvider :: UTCTime -> TimeProvider
