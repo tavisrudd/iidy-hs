@@ -148,21 +148,27 @@ processImports loader env tmplDefs manifest stack ((keyAst, locAst):rest) baseLo
   case interpolateLocation env locationText of
     Left err -> pure $ Left $ PeHandlebarsError err
     Right resolvedLoc -> do
-      result <- loader resolvedLoc baseLocation
-      case result of
-        Left err -> pure $ Left $ PeImportError err
-        Right importData -> do
-          -- Check for $params and store as template def if found
-          let tmplDefs' = case idDoc importData of
-                Object obj | Just paramsVal <- KM.lookup "$params" obj ->
-                  case parseParams paramsVal of
-                    Right params ->
-                      Map.insert importKey (TemplateInfo params (idRawData importData) (idLocation importData)) tmplDefs
-                    Left _err -> tmplDefs  -- Skip malformed $params
-                _ -> tmplDefs
-          -- Add imported value to environment (convert from Value to OValue)
-          let env' = Map.insert importKey (fromValue (idDoc importData)) env
-          processImports loader env' tmplDefs' manifest stack rest baseLocation
+      -- Cycle detection: push import location onto stack
+      case pushImport resolvedLoc stack of
+        Left cycleErr -> pure $ Left $ PeCycleError cycleErr
+        Right stack' -> do
+          result <- loader resolvedLoc baseLocation
+          case result of
+            Left err -> pure $ Left $ PeImportError err
+            Right importData -> do
+              -- Check for $params and store as template def if found
+              let tmplDefs' = case idDoc importData of
+                    Object obj | Just paramsVal <- KM.lookup "$params" obj ->
+                      case parseParams paramsVal of
+                        Right params ->
+                          Map.insert importKey (TemplateInfo params (idRawData importData) (idLocation importData)) tmplDefs
+                        Left _err -> tmplDefs  -- Skip malformed $params
+                    _ -> tmplDefs
+              -- Add imported value to environment (convert from Value to OValue)
+              let env' = Map.insert importKey (fromValue (idDoc importData)) env
+              -- Pop after processing this import, continue with rest
+              let stack'' = popImport stack'
+              processImports loader env' tmplDefs' manifest stack'' rest baseLocation
 
 ------------------------------------------------------------------------
 -- Handlebars interpolation for import locations

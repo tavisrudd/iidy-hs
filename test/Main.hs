@@ -46,6 +46,7 @@ import Test.PreprocessingPropertyTest (preprocessingPropertyTests)
 import Test.ErrorContentTest (errorContentTests)
 import Test.TemplateDiffTest (templateDiffTests)
 import Test.SpecConformanceTest (specConformanceTests)
+import Test.EngineTest (engineTests)
 
 main :: IO ()
 main = do
@@ -97,4 +98,5 @@ main = do
     , testGroup "ErrorContent"     errorContentTests
     , testGroup "TemplateDiff"    templateDiffTests
     , testGroup "SpecConformance" conformanceTests
+    , testGroup "Engine"         engineTests
     ]

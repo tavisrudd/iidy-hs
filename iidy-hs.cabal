@@ -220,6 +220,7 @@ test-suite iidy-hs-test
     Test.ErrorContentTest
     Test.TemplateDiffTest
     Test.SpecConformanceTest
+    Test.EngineTest
   default-language: GHC2021
   default-extensions:
     LambdaCase
