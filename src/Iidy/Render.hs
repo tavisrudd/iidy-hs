@@ -15,6 +15,7 @@ import System.Directory (doesFileExist)
 import System.IO (stderr)
 
 import Iidy.Cli (GlobalOpts (..), RenderArgs (..), RenderFormat (..))
+import Iidy.Errors.JMESPath (formatJMESPathQueryError)
 import Iidy.Output.Types (OutputData (..))
 import Iidy.Types (YamlSpec (..))
 import Iidy.Yaml.Ast (YamlAst)
@@ -29,7 +30,7 @@ import Iidy.Yaml.Engine (
 import Iidy.Yaml.Errors.Conversion (formatParseErrorEnhanced, formatPreprocessErrorEnhanced)
 import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
 import Iidy.Yaml.Imports.Types (RemoteImports (..))
-import Iidy.Yaml.JMESPath (JMESPathError (..), applyJmesPath)
+import Iidy.Yaml.JMESPath (JMESPathError, applyJmesPath)
 import Iidy.Yaml.Location (Position)
 import Iidy.Yaml.OValue (OValue, fromValue, toValue)
 import Iidy.Yaml.Parser (ParseError (..), parseYaml)
@@ -120,8 +121,10 @@ runRender emit args gopts = do
             formatted <- formatPreprocessErrorEnhanced (goColor gopts) baseLocation source err
             TIO.hPutStr stderr formatted
             pure 1
-        InvalidQuery query (JMESPathError msg) ->
-            TIO.hPutStrLn stderr ("Invalid JMESPath query '" <> query <> "': " <> msg) >> pure 1
+        InvalidQuery query err -> do
+            formatted <- formatJMESPathQueryError (goColor gopts) query err
+            TIO.hPutStr stderr formatted
+            pure 1
         OutputFileExists p ->
             TIO.hPutStrLn stderr ("Output file '" <> p <> "' exists. Use --overwrite to overwrite it.") >> pure 1
 

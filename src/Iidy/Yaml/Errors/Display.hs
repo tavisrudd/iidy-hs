@@ -5,6 +5,8 @@ module Iidy.Yaml.Errors.Display (
     defaultColors,
     noColors,
     detectErrorColors,
+    formatGuidance,
+    formatFooter,
 ) where
 
 import Data.Text (Text)

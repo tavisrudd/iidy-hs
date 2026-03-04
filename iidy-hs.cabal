@@ -74,6 +74,7 @@ library
     Iidy.Cli.Help
     Iidy.Cli.Parser
     Iidy.Demo
+    Iidy.Errors.JMESPath
     Iidy.Explain
     Iidy.Render
     Iidy.GetImport
