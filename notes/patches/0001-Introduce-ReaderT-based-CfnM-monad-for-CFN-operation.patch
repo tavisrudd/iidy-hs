@@ -1,0 +1,1551 @@
+From f81cd5346a88065a0fedc034e23013bb881cb9d4 Mon Sep 17 00:00:00 2001
+From: Tavis Rudd <tavis@damnsimple.com>
+Date: Wed, 4 Mar 2026 08:35:13 -0800
+Subject: [PATCH 1/2] Introduce ReaderT-based CfnM monad for CFN operation
+ threading
+
+Replace explicit 6-parameter threading (CfnContext, env name,
+RemoteImports, emit callback, StackArgs, argsfile path) with a
+ReaderT CfnEnv IO monad. Session-scoped read-only context (CfnContext,
+environment name, RemoteImports, emitter) lives in CfnEnv; per-operation
+data (StackArgs, Maybe FilePath) stays as explicit parameters.
+
+Converted: all Tier 1 operations (createStack, updateStack,
+createOrUpdate, createChangeset, estimateCost, lintTemplate,
+templateApprovalRequest), RequestBuilder build functions, and the
+Runner callback type. Tier 2 operations (deleteStack, watchStack,
+describeStack, etc.) remain in IO for now.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+---
+ app/Main.hs                                   |  37 +-
+ iidy-hs.cabal                                 |   1 +
+ .../handoffs/2026-03-03-reader-env-pattern.md | 356 +++++++++++++++---
+ src/Iidy/Cfn/Env.hs                           |  73 ++++
+ src/Iidy/Cfn/Operations/Changeset.hs          |  17 +-
+ src/Iidy/Cfn/Operations/CreateOrUpdate.hs     |  73 ++--
+ src/Iidy/Cfn/Operations/CreateStack.hs        |  33 +-
+ src/Iidy/Cfn/Operations/EstimateCost.hs       |  24 +-
+ src/Iidy/Cfn/Operations/LintTemplate.hs       |  79 ++--
+ src/Iidy/Cfn/Operations/TemplateApproval.hs   |  27 +-
+ src/Iidy/Cfn/Operations/UpdateStack.hs        |  68 ++--
+ src/Iidy/Cfn/RequestBuilder.hs                |  66 ++--
+ src/Iidy/Cfn/Runner.hs                        |  14 +-
+ 13 files changed, 579 insertions(+), 289 deletions(-)
+ create mode 100644 src/Iidy/Cfn/Env.hs
+
+diff --git a/app/Main.hs b/app/Main.hs
+index 1df4e09..d110b5d 100644
+--- a/app/Main.hs
++++ b/app/Main.hs
+@@ -1,6 +1,7 @@
+ module Main (main) where
+ 
+ import Control.Exception (catch, finally)
++import Control.Monad.IO.Class (liftIO)
+ import Data.Maybe (fromMaybe)
+ import Data.Text qualified as T
+ import Foreign.C.Types (CInt (..))
+@@ -12,6 +13,7 @@ import System.Posix.Signals (Handler (..), installHandler, sigINT)
+ import Iidy.Aws.Config (createAwsEnvFromSettings)
+ import Iidy.Cfn.CommandMetadata (constructCommandMetadata, createFinalCommandSummary)
+ import Iidy.Cfn.Context (ctxElapsedSeconds)
++import Iidy.Cfn.Env (askContext, emitOutput)
+ import Iidy.Cfn.Operations.Changeset (
+     StackState (..),
+     buildChangeSetCreationResult,
+@@ -80,38 +82,37 @@ runCommand cli = case cliCommand cli of
+     -- CloudFormation operations with stack-args
+     CmdCreateStack args ->
+         runCfnWithArgs cli OpCreateStack (csaArgsfile args) (csaStackName args) $
+-            \remoteImports ctx sa fp env emit -> createStack ctx sa fp env emit remoteImports >>= handleEither
++            \sa fp -> createStack sa fp >>= liftIO . handleEither
+     CmdUpdateStack args ->
+         runCfnWithArgs cli OpUpdateStack (sfaArgsfile (usaBase args)) (sfaStackName (usaBase args)) $
+-            \remoteImports ctx sa fp env emit ->
++            \sa fp ->
+                 if usaChangeset args
+-                    then updateStackWithChangeset ctx sa (usaYes args) fp env emit remoteImports >>= handleEither
+-                    else updateStack ctx sa fp env emit remoteImports >>= handleEither
++                    then updateStackWithChangeset sa (usaYes args) fp >>= liftIO . handleEither
++                    else updateStack sa fp >>= liftIO . handleEither
+     CmdCreateOrUpdate args ->
+         runCfnWithArgs cli OpCreateOrUpdate (sfaArgsfile (usaBase args)) (sfaStackName (usaBase args)) $
+-            \remoteImports ctx sa fp env emit -> createOrUpdate ctx sa (usaChangeset args) (usaYes args) fp env emit remoteImports >>= handleEither
++            \sa fp -> createOrUpdate sa (usaChangeset args) (usaYes args) fp >>= liftIO . handleEither
+     CmdEstimateCost args ->
+         runCfnWithArgs cli OpEstimateCost (sfaArgsfile args) (sfaStackName args) $
+-            \remoteImports ctx sa fp env emit -> do
+-                result <- estimateCost ctx sa fp env emit remoteImports
+-                handleEither result
++            \sa fp -> estimateCost sa fp >>= liftIO . handleEither
+     CmdCreateChangeset args ->
+         runCfnWithArgs cli OpCreateChangeset (ccsArgsfile args) (ccsStackName args) $
+-            \remoteImports ctx sa fp env emit -> do
++            \sa fp -> do
++                ctx <- askContext
+                 -- Determine changeset name (user-provided or random)
+-                csName <- maybe generateDashedName pure (ccsChangesetName args)
++                csName <- liftIO $ maybe generateDashedName pure (ccsChangesetName args)
+                 -- Check stack state to determine changeset type
+                 let stackName = saStackName sa
+-                state <- checkStackState ctx stackName
++                state <- liftIO $ checkStackState ctx stackName
+                 let exists = case state of StackNormal -> True; _ -> False
+-                csEither <- createChangeset ctx sa csName exists fp env remoteImports
++                csEither <- createChangeset sa csName exists fp
+                 case csEither of
+                     Left err -> do
+-                        emit (OdRawOutput err)
++                        emitOutput (OdRawOutput err)
+                         pure 1
+                     Right info -> do
+                         let csResult = buildChangeSetCreationResult info exists (ccsArgsfile args)
+-                        emit (OdChangeSetResult csResult)
++                        emitOutput (OdChangeSetResult csResult)
+                         pure 0
+     CmdExecChangeset args -> do
+         let stackName = fromMaybe "" (ecsStackName args)
+@@ -241,9 +242,7 @@ runCommand cli = case cliCommand cli of
+     CmdTemplateApproval acmd -> case acmd of
+         ApprovalRequest args ->
+             runCfnWithArgs cli OpTemplateApprovalRequest (araArgsfile args) Nothing $
+-                \remoteImports ctx sa fp env emit -> do
+-                    result <- templateApprovalRequest ctx sa (araLintTemplate args) fp env emit remoteImports
+-                    handleEither result
++                \sa fp -> templateApprovalRequest sa (araLintTemplate args) fp >>= liftIO . handleEither
+         ApprovalReview args -> do
+             ctx <- createSimpleContext cli OpTemplateApprovalReview
+             dispatch <- mkOutputDispatch (cliGlobalOpts cli)
+@@ -259,9 +258,7 @@ runCommand cli = case cliCommand cli of
+          in runDemo (daDemoscript args) (daTimescaling args) (daMaskSecrets args) ri >>= exitCode
+     CmdLintTemplate args ->
+         runCfnWithArgs cli OpLintTemplate (ltaArgsfile args) Nothing $
+-            \remoteImports ctx sa fp env emit -> do
+-                result <- lintTemplate ctx sa fp env emit remoteImports
+-                handleEither result
++            \sa fp -> lintTemplate sa fp >>= liftIO . handleEither
+     CmdConvertStackToIidy args -> do
+         ctx <- createSimpleContext cli OpConvertStackToIidy
+         result <-
+diff --git a/iidy-hs.cabal b/iidy-hs.cabal
+index 9ae0010..d13e7c0 100644
+--- a/iidy-hs.cabal
++++ b/iidy-hs.cabal
+@@ -88,6 +88,7 @@ library
+     Iidy.Cfn.Status
+     Iidy.Cfn.CommandMetadata
+     Iidy.Cfn.Context
++    Iidy.Cfn.Env
+     Iidy.Cfn.RequestBuilder
+     Iidy.Cfn.TemplateHash
+     Iidy.Cfn.TemplateLoader
+diff --git a/notes/handoffs/2026-03-03-reader-env-pattern.md b/notes/handoffs/2026-03-03-reader-env-pattern.md
+index 988f32b..463e109 100644
+--- a/notes/handoffs/2026-03-03-reader-env-pattern.md
++++ b/notes/handoffs/2026-03-03-reader-env-pattern.md
+@@ -1,71 +1,323 @@
+-# Investigate ReaderT / RIO Pattern for Threading Configuration
++# ReaderT Pattern for CFN Operation Threading
+ 
+-**Date**: 2026-03-03
+-**Purpose**: Evaluate whether a ReaderT/RIO pattern would reduce parameter threading boilerplate in iidy-hs.
++**Date**: 2026-03-03 (research), 2026-03-04 (proposal)
++**Decision**: Use `ReaderT CfnEnv IO` (concrete, no Has-classes, no mtl/rio deps)
+ 
+ ---
+ 
+-## Context
++## Audit Summary
+ 
+-The codebase currently threads configuration through explicit function parameters. Recent additions (e.g., `RemoteImports`, `ImportConfig`) have deepened the threading chains — a flag added to `GlobalOpts` must be manually plumbed through 10+ files (Main → runCfnWithArgs → operation → request builder → template loader → dispatcher).
++### The 6-Parameter Callback
+ 
+-A ReaderT or RIO-style pattern could bundle shared read-only context (AWS env, remote import policy, environment name, debug flag, etc.) into an environment that's implicitly available, eliminating most of the parameter passing.
++Every CFN operation dispatched through `runCfnWithArgs` receives:
+ 
+-## Scope
++```haskell
++(RemoteImports -> CfnContext -> StackArgs -> Maybe FilePath -> Text -> (OutputData -> IO ()) -> IO Int)
++```
+ 
+-- **In scope**: Evaluate ReaderT / Has-class / RIO patterns for the CFN operation call chain and import dispatcher
+-- **In scope**: Prototype on one vertical slice (e.g., create-stack path) to assess ergonomics
+-- **Out of scope**: Rewriting the entire codebase; this is a feasibility study first
+-- **Out of scope**: Adding new dependencies (prefer `transformers` ReaderT which is already a transitive dep)
++| Pos | Type                    | Name             | Read-only? | Scope        |
++|-----|-------------------------|------------------|------------|--------------|
++| 1   | `RemoteImports`         | remoteImports    | Yes        | Session      |
++| 2   | `CfnContext`            | ctx              | Yes*       | Session      |
++| 3   | `StackArgs`             | sa               | Yes        | Per-operation|
++| 4   | `Maybe FilePath`        | argsfilePath     | Yes        | Per-operation|
++| 5   | `Text`                  | env              | Yes        | Session      |
++| 6   | `OutputData -> IO ()`   | emit             | Yes        | Session      |
+ 
+-## Work Items
++\* `CfnContext.cfnUsedTokens` is an `IORef` — mutated via `ctxDeriveToken` but that's fine inside ReaderT.
+ 
+-1. **Audit current threading patterns** — catalog what's being threaded through the CFN operation chain:
+-   - `CfnContext` (AWS env, tokens, timing)
+-   - `RemoteImports` (new)
+-   - `StackArgs`
+-   - `Maybe FilePath` (argsfile path)
+-   - `Text` (environment name)
+-   - `OutputData -> IO ()` (emitter)
+-   - Identify which are truly read-only vs. modified
++### What Goes in the ReaderT Env
+ 
+-2. **Design candidate environment type** — e.g.:
+-   ```haskell
+-   data AppEnv = AppEnv
+-     { aeAwsEnv        :: !(Maybe Amazonka.Env)
+-     , aeRemoteImports :: !RemoteImports
+-     , aeEnvironment   :: !Text
+-     , aeEmit          :: !(OutputData -> IO ())
+-     , aeDebug         :: !Bool
+-     }
+-   ```
++4 of 6 params are **session-scoped** (same for entire CLI invocation). These go into the env:
++- `CfnContext` — AWS client, tokens, timing
++- `Text` (environment name) — from `--environment` flag
++- `RemoteImports` — from `--no-remote-imports` flag
++- `OutputData -> IO ()` — output emitter closure
+ 
+-3. **Evaluate trade-offs**:
+-   - Explicit params: verbose but grep-friendly, no monad transformer overhead
+-   - ReaderT: less boilerplate but harder to trace data flow, adds `MonadReader` constraint
+-   - RIO: opinionated but well-documented pattern
+-   - Has-class: flexible but more typeclass machinery
++2 of 6 params are **per-operation** and stay as explicit args:
++- `StackArgs` — loaded from argsfile, unique per invocation
++- `Maybe FilePath` — argsfile path for template resolution
+ 
+-4. **Prototype** on one path (create-stack) and compare before/after
++### Threading Depth
+ 
+-## Codebase Reference
++```
++Runner.runCfnWithArgs
++  └─ operation (createStack, updateStack, ...)     ← 6 params
++       └─ RequestBuilder (build*Request)           ← 6 params (same set)
++            └─ TemplateLoader.loadCfnTemplate      ← ImportConfig (built from env)
++                 └─ Engine.preprocessYaml11         ← LoadImportFn (closure, stays in IO)
++```
+ 
+-| What                          | Where                                              |
+-|-------------------------------|----------------------------------------------------|
+-| Main dispatch / runCfnWithArgs | `app/Main.hs:344`                                 |
+-| Import dispatcher config      | `src/Iidy/Yaml/Imports/Loaders/Dispatch.hs`        |
+-| CFN operation examples         | `src/Iidy/Cfn/Operations/CreateStack.hs`           |
+-| Request builder (deep threading) | `src/Iidy/Cfn/RequestBuilder.hs`                 |
+-| Template loader                | `src/Iidy/Cfn/TemplateLoader.hs`                   |
++Only 2 levels of pure passthrough (operation → RequestBuilder). But the benefit is in extensibility — adding a new env field requires 0 signature changes vs. 10+ files today.
+ 
+-## Principles / Constraints
++### Two Tiers of Operations
+ 
+-- `transformers` is already available (transitive dep). Prefer it over adding `mtl` or `rio`.
+-- Keep `-Wall -Wcompat` clean
+-- The YAML engine (`preprocessYaml`) uses `LoadImportFn = Text -> Text -> IO (Either ImportError ImportData)` — any reader pattern must be compatible with this callback type (likely by `runReaderT` at the boundary)
++**Tier 1 — via `runCfnWithArgs`** (all get the uniform 6-param bundle):
++createStack, updateStack, createOrUpdate, createChangeset, estimateCost, lintTemplate, templateApprovalRequest
+ 
+-## Delegation
++**Tier 2 — via `createSimpleContext`** (ad-hoc params, no StackArgs):
++deleteStack, describeStack, watchStack, describeStackDrift, listStacks, getStackTemplate, convertStackToIidy, templateApprovalReview, executeChangeset
+ 
+-- **Can delegate to sub-agent?** Yes (research phase)
+-- **Model**: Opus (architectural evaluation)
+-- **Notes**: Research only — no code changes until approach is approved
++Both tiers benefit from `CfnM` — Tier 2 operations that take `ctx + emit` drop to just their unique params.
++
++---
++
++## Concrete Design
++
++### New Module: `src/Iidy/Cfn/Env.hs`
++
++```haskell
++module Iidy.Cfn.Env (
++    CfnEnv (..),
++    CfnM,
++    runCfnM,
++    askContext,
++    askEnvName,
++    askRemoteImports,
++    emitOutput,
++    mkImportConfig,
++) where
++
++import Control.Monad.IO.Class (liftIO)
++import Control.Monad.Trans.Reader (ReaderT, asks, runReaderT)
++import Data.Text (Text)
++
++import Iidy.Cfn.Context (CfnContext (..))
++import Iidy.Output.Types (OutputData)
++import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
++import Iidy.Yaml.Imports.Types (RemoteImports)
++
++data CfnEnv = CfnEnv
++    { ceContext       :: !CfnContext
++    , ceEnvironment   :: !Text
++    , ceRemoteImports :: !RemoteImports
++    , ceEmit          :: !(OutputData -> IO ())
++    }
++
++type CfnM = ReaderT CfnEnv IO
++
++runCfnM :: CfnEnv -> CfnM a -> IO a
++runCfnM = flip runReaderT
++
++askContext :: CfnM CfnContext
++askContext = asks ceContext
++
++askEnvName :: CfnM Text
++askEnvName = asks ceEnvironment
++
++askRemoteImports :: CfnM RemoteImports
++askRemoteImports = asks ceRemoteImports
++
++emitOutput :: OutputData -> CfnM ()
++emitOutput od = do
++    f <- asks ceEmit
++    liftIO (f od)
++
++mkImportConfig :: CfnM ImportConfig
++mkImportConfig = do
++    ctx <- askContext
++    ri  <- askRemoteImports
++    pure ImportConfig { icAwsEnv = Just (cfnEnv ctx), icRemoteImports = ri }
++```
++
++### Before / After: `createStack`
++
++**Before (6 params):**
++```haskell
++createStack ::
++    CfnContext -> StackArgs -> Maybe FilePath -> Text ->
++    (OutputData -> IO ()) -> RemoteImports -> IO (Either Text Int)
++createStack ctx args argsfilePath env emit remoteImports = do
++    reqResult <- buildCreateStackRequest ctx args True argsfilePath env remoteImports
++    case reqResult of
++        Left err -> pure (Left err)
++        Right (req, _token) -> do
++            resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
++            let stackName = saStackName args
++                stackId = fromMaybe stackName resp.stackId
++            emitStackDefinition ctx stackId emit
++            emit (OdPollingStarted "Loading live events...")
++            ...
++```
++
++**After (2 params):**
++```haskell
++createStack :: StackArgs -> Maybe FilePath -> CfnM (Either Text Int)
++createStack args argsfilePath = do
++    reqResult <- buildCreateStackRequest args True argsfilePath
++    case reqResult of
++        Left err -> pure (Left err)
++        Right (req, _token) -> do
++            ctx <- askContext
++            resp <- liftIO $ runResourceT $ Amazonka.send (cfnEnv ctx) req
++            let stackName = saStackName args
++                stackId = fromMaybe stackName resp.stackId
++            liftIO $ emitStackDefinition ctx stackId  -- or convert emitStackDefinition too
++            emitOutput (OdPollingStarted "Loading live events...")
++            ...
++```
++
++### Before / After: `buildCreateStackRequest`
++
++**Before (6 params):**
++```haskell
++buildCreateStackRequest ::
++    CfnContext -> StackArgs -> Bool -> Maybe FilePath -> Text ->
++    RemoteImports -> IO (Either Text (CF.CreateStack, TokenInfo))
++buildCreateStackRequest ctx args usePrimary argsfilePath env remoteImports = do
++    let importCfg = ImportConfig{icAwsEnv = Just (cfnEnv ctx), icRemoteImports = remoteImports}
++    token <- if usePrimary then pure (cfnPrimaryToken ctx) else ctxDeriveToken ctx "create-stack"
++    tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env importCfg
++    ...
++```
++
++**After (3 params):**
++```haskell
++buildCreateStackRequest ::
++    StackArgs -> Bool -> Maybe FilePath -> CfnM (Either Text (CF.CreateStack, TokenInfo))
++buildCreateStackRequest args usePrimary argsfilePath = do
++    ctx       <- askContext
++    env       <- askEnvName
++    importCfg <- mkImportConfig
++    token <- liftIO $
++        if usePrimary then pure (cfnPrimaryToken ctx) else ctxDeriveToken ctx "create-stack"
++    tmplEither <- liftIO $ loadCfnTemplate (saTemplate args) argsfilePath env importCfg
++    ...
++```
++
++### Before / After: `runCfnWithArgs` callback type
++
++**Before:**
++```haskell
++(RemoteImports -> CfnContext -> StackArgs -> Maybe FilePath -> Text -> (OutputData -> IO ()) -> IO Int)
++```
++
++**After:**
++```haskell
++(StackArgs -> Maybe FilePath -> CfnM Int)
++```
++
++### Before / After: Runner dispatch
++
++**Before:**
++```haskell
++rc <- action remoteImports ctx sa' (Just argsfilePath) env emit
++    `finally` cleanupOutputDispatch dispatch
++```
++
++**After:**
++```haskell
++let cfnEnv = CfnEnv
++        { ceContext       = ctx
++        , ceEnvironment   = env
++        , ceRemoteImports = remoteImports
++        , ceEmit          = emit
++        }
++rc <- runCfnM cfnEnv (action sa' (Just argsfilePath))
++    `finally` cleanupOutputDispatch dispatch
++```
++
++### Tier 2 Operations (Simple Context)
++
++Operations using `createSimpleContext` construct a `CfnEnv` directly:
++
++```haskell
++-- In Main.hs dispatch for CmdDeleteStack:
++ctx <- createSimpleContext cli OpDeleteStack
++dispatch <- mkOutputDispatch (cliGlobalOpts cli)
++let cfnEnv = CfnEnv
++        { ceContext       = ctx
++        , ceEnvironment   = goEnvironment (cliGlobalOpts cli)
++        , ceRemoteImports = BlockRemoteImports  -- unused by delete
++        , ceEmit          = renderOutput dispatch
++        }
++runCfnM cfnEnv (deleteStack stackName skipConfirm)
++```
++
++### Boundary: YAML Engine stays in IO
++
++`TemplateLoader.loadCfnTemplate` stays in `IO` — it takes `ImportConfig` (built from env) and returns `IO (Either Text TemplateResult)`. The Engine below it uses `LoadImportFn` closures. No need for ReaderT there.
++
++```
++CfnM ──── runCfnM boundary ────
++  │
++  ├── Operations (CfnM)
++  │     └── RequestBuilder (CfnM)
++  │           └── loadCfnTemplate (IO, via liftIO)
++  │                 └── preprocessYaml11 (IO, LoadImportFn closure)
++  │
++  └── StackOperations (IO, called via liftIO)
++        └── pollForCompletion, collectStackContents, etc.
++```
++
++Functions like `pollForCompletion`, `collectStackContents` can stay in IO and be called via `liftIO`, or be converted to `CfnM` incrementally. Not all need conversion in the first pass.
++
++---
++
++## Trade-offs
++
++| Aspect                    | Explicit params (current)                | ReaderT CfnEnv (proposed)                    |
++|---------------------------|------------------------------------------|----------------------------------------------|
++| Adding a new env field    | Touch 10+ function signatures            | Add field to CfnEnv, `asks` where needed     |
++| Data flow visibility      | grep-friendly, all params in signature   | Must check CfnEnv definition + `asks` calls  |
++| Boilerplate per operation | 6-param signature + passthrough          | 2-param signature, env implicit              |
++| Testing                   | Pass 6 args to each function             | Construct CfnEnv once, `runCfnM`             |
++| Dependencies              | None (already have transformers)         | None (use transformers ReaderT directly)      |
++| Monad constraints         | Pure IO                                  | CfnM (= ReaderT CfnEnv IO), liftIO needed   |
++| Migration effort          | N/A                                      | ~15 files, mechanical refactor               |
++
++---
++
++## Implementation Plan
++
++### Phase 1: Core + CreateStack vertical slice
++1. Create `src/Iidy/Cfn/Env.hs` with `CfnEnv`, `CfnM`, helpers
++2. Convert `RequestBuilder.buildCreateStackRequest` to `CfnM`
++3. Convert `Operations/CreateStack.hs` to `CfnM`
++4. Update `Runner.runCfnWithArgs` — construct `CfnEnv`, `runCfnM`
++5. Update `app/Main.hs` dispatch for `CmdCreateStack`
++6. Fix tests — green commit
++
++### Phase 2: Remaining Tier 1 operations
++7. Convert `buildUpdateStackRequest`, `buildCreateChangeSetRequest`
++8. Convert UpdateStack, CreateOrUpdate, Changeset, EstimateCost, LintTemplate, TemplateApproval
++9. Green commit
++
++### Phase 3: Tier 2 operations (optional, incremental)
++10. Convert deleteStack, describeStack, watchStack, etc.
++11. Convert `createSimpleContext` callers in Main.hs
++12. Green commit
++
++### Phase 4: Cleanup
++13. Remove unused parameter-threading helpers
++14. Update tests for `CfnEnv` construction patterns
++
++---
++
++## Files Changed
++
++| File                                         | Change                                          |
++|----------------------------------------------|-------------------------------------------------|
++| `src/Iidy/Cfn/Env.hs`                       | **NEW** — CfnEnv, CfnM, helpers                |
++| `src/Iidy/Cfn/Runner.hs`                    | Construct CfnEnv, callback type change          |
++| `src/Iidy/Cfn/RequestBuilder.hs`            | All build* → CfnM (except buildDeleteStackReq)  |
++| `src/Iidy/Cfn/Operations/CreateStack.hs`    | CfnM                                            |
++| `src/Iidy/Cfn/Operations/UpdateStack.hs`    | CfnM                                            |
++| `src/Iidy/Cfn/Operations/CreateOrUpdate.hs` | CfnM                                            |
++| `src/Iidy/Cfn/Operations/Changeset.hs`      | CfnM (createChangeset, describeChangeset)        |
++| `src/Iidy/Cfn/Operations/EstimateCost.hs`   | CfnM                                            |
++| `src/Iidy/Cfn/Operations/LintTemplate.hs`   | CfnM                                            |
++| `src/Iidy/Cfn/Operations/TemplateApproval.hs`| CfnM                                           |
++| `src/Iidy/Cfn/Operations/DeleteStack.hs`    | CfnM (Phase 3)                                  |
++| `src/Iidy/Cfn/Operations/DescribeStack.hs`  | CfnM (Phase 3, helpers used by Tier 1)          |
++| `src/Iidy/Cfn/Operations/WatchStack.hs`     | CfnM (Phase 3)                                  |
++| `app/Main.hs`                                | Dispatch updates, CfnEnv construction            |
++| `iidy-hs.cabal`                              | Expose new module                                |
++| `test/` (multiple)                           | CfnEnv construction in test harnesses            |
++
++### Unchanged
++- `src/Iidy/Yaml/Engine.hs` — stays in IO
++- `src/Iidy/Yaml/Imports/` — stays in IO (LoadImportFn closure boundary)
++- `src/Iidy/Cfn/TemplateLoader.hs` — stays in IO (takes ImportConfig)
++- `src/Iidy/Cfn/StackOperations.hs` — stays in IO (poll/collect helpers)
++- `src/Iidy/Cfn/Context.hs` — CfnContext type unchanged
+diff --git a/src/Iidy/Cfn/Env.hs b/src/Iidy/Cfn/Env.hs
+new file mode 100644
+index 0000000..b033e15
+--- /dev/null
++++ b/src/Iidy/Cfn/Env.hs
+@@ -0,0 +1,73 @@
++{- | CFN operation environment and monad.
++
++CfnEnv bundles the read-only context that's uniform across all
++CloudFormation operations dispatched from runCfnWithArgs: AWS context,
++environment name, remote-import policy, and the output emitter.
++
++CfnM is ReaderT CfnEnv IO — operations use 'asks' to access context
++instead of threading 4 extra parameters through every call.
++-}
++module Iidy.Cfn.Env (
++    CfnEnv (..),
++    CfnM,
++    runCfnM,
++    askContext,
++    askEnvName,
++    askRemoteImports,
++    askEmit,
++    emitOutput,
++    mkImportConfig,
++) where
++
++import Control.Monad.IO.Class (liftIO)
++import Control.Monad.Trans.Reader (ReaderT, asks, runReaderT)
++import Data.Text (Text)
++
++import Iidy.Cfn.Context (CfnContext (..))
++import Iidy.Output.Types (OutputData)
++import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
++import Iidy.Yaml.Imports.Types (RemoteImports)
++
++-- | Read-only environment for CFN operations.
++data CfnEnv = CfnEnv
++    { ceContext :: !CfnContext
++    , ceEnvironment :: !Text
++    , ceRemoteImports :: !RemoteImports
++    , ceEmit :: !(OutputData -> IO ())
++    }
++
++-- | Monad for CFN operations. Concrete ReaderT over IO.
++type CfnM = ReaderT CfnEnv IO
++
++-- | Run a CfnM action with the given environment.
++runCfnM :: CfnEnv -> CfnM a -> IO a
++runCfnM = flip runReaderT
++
++-- | Get the CfnContext from the environment.
++askContext :: CfnM CfnContext
++askContext = asks ceContext
++
++-- | Get the environment name (e.g. \"production\", \"staging\").
++askEnvName :: CfnM Text
++askEnvName = asks ceEnvironment
++
++-- | Get the remote-import policy.
++askRemoteImports :: CfnM RemoteImports
++askRemoteImports = asks ceRemoteImports
++
++-- | Get the raw emitter function (for passing to IO helpers).
++askEmit :: CfnM (OutputData -> IO ())
++askEmit = asks ceEmit
++
++-- | Emit output data through the configured emitter.
++emitOutput :: OutputData -> CfnM ()
++emitOutput od = do
++    f <- asks ceEmit
++    liftIO (f od)
++
++-- | Build an ImportConfig from the environment.
++mkImportConfig :: CfnM ImportConfig
++mkImportConfig = do
++    ctx <- askContext
++    ri <- askRemoteImports
++    pure ImportConfig{icAwsEnv = Just (cfnEnv ctx), icRemoteImports = ri}
+diff --git a/src/Iidy/Cfn/Operations/Changeset.hs b/src/Iidy/Cfn/Operations/Changeset.hs
+index 185a71c..a9164cb 100644
+--- a/src/Iidy/Cfn/Operations/Changeset.hs
++++ b/src/Iidy/Cfn/Operations/Changeset.hs
+@@ -35,6 +35,7 @@ module Iidy.Cfn.Operations.Changeset (
+ 
+ import Control.Concurrent (threadDelay)
+ import Control.Exception (catch)
++import Control.Monad.IO.Class (liftIO)
+ import Control.Monad.Trans.Resource (runResourceT)
+ import Data.Conduit (runConduit, (.|))
+ import Data.Conduit.List qualified as CL
+@@ -61,6 +62,7 @@ import Iidy.Cfn.Context (
+     ctxDeriveToken,
+     updateSuccessStates,
+  )
++import Iidy.Cfn.Env (CfnM, askContext)
+ import Iidy.Cfn.Operations.DescribeStack (buildEventsDisplay, emitStackDefinition, mkStandardPollConfig)
+ import Iidy.Cfn.RequestBuilder (buildCreateChangeSetRequest)
+ import Iidy.Cfn.StackOperations (
+@@ -83,7 +85,6 @@ import Iidy.Output.Types (
+     ChangeSetInfo (..),
+     OutputData (..),
+  )
+-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+ 
+ ------------------------------------------------------------------------
+ -- Changeset creation
+@@ -103,7 +104,6 @@ Exceptions from the AWS API propagate to the caller; this function does not
+ wrap them in Either.
+ -}
+ createChangeset ::
+-    CfnContext ->
+     StackArgs ->
+     -- | changeset name
+     Text ->
+@@ -111,12 +111,9 @@ createChangeset ::
+     Bool ->
+     -- | argsfile path for template resolution
+     Maybe FilePath ->
+-    -- | environment name
+-    Text ->
+-    -- | whether HTTP/S3 imports are allowed
+-    RemoteImports ->
+-    IO (Either Text ChangeSetInfo)
+-createChangeset ctx args csName stackExists' argsfilePath env remoteImports = do
++    CfnM (Either Text ChangeSetInfo)
++createChangeset args csName stackExists' argsfilePath = do
++    ctx <- askContext
+     let csType =
+             if stackExists'
+                 then CF.ChangeSetType_UPDATE
+@@ -124,10 +121,10 @@ createChangeset ctx args csName stackExists' argsfilePath env remoteImports = do
+         stackName' = saStackName args
+ 
+     -- Step 1 & 2: Build and send the CreateChangeSet request
+-    reqResult <- buildCreateChangeSetRequest ctx args csName csType argsfilePath env remoteImports
++    reqResult <- buildCreateChangeSetRequest args csName csType argsfilePath
+     case reqResult of
+         Left err -> pure (Left err)
+-        Right (req, _token) -> do
++        Right (req, _token) -> liftIO $ do
+             resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
+ 
+             -- Step 3: Extract the changeset ARN/ID (fall back to name for polling).
+diff --git a/src/Iidy/Cfn/Operations/CreateOrUpdate.hs b/src/Iidy/Cfn/Operations/CreateOrUpdate.hs
+index 90eb01e..b0930c7 100644
+--- a/src/Iidy/Cfn/Operations/CreateOrUpdate.hs
++++ b/src/Iidy/Cfn/Operations/CreateOrUpdate.hs
+@@ -15,12 +15,14 @@ module Iidy.Cfn.Operations.CreateOrUpdate (
+     createOrUpdate,
+ ) where
+ 
++import Control.Monad.IO.Class (liftIO)
+ import Data.Maybe (fromMaybe)
+ import Data.Text (Text)
+ import Data.Text qualified as T
+ 
+ import Iidy.Aws.ClientReqToken (TokenInfo (..))
+ import Iidy.Cfn.Context (CfnContext (..))
++import Iidy.Cfn.Env (CfnM, askContext, askEmit, emitOutput)
+ import Iidy.Cfn.Operations.Changeset (
+     buildChangeSetCreationResult,
+     confirmChangesetExecution,
+@@ -35,7 +37,6 @@ import Iidy.Cfn.StackOperations (stackExists)
+ import Iidy.Cfn.Types (StackArgs (..))
+ import Iidy.Confirm (ConfirmResult (..))
+ import Iidy.Output.Types (ChangeSetInfo (..), OutputData (..))
+-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+ 
+ ------------------------------------------------------------------------
+ -- Create-or-update operation
+@@ -47,7 +48,6 @@ When @useChangeset@ is False, dispatches to direct create or update.
+ When @useChangeset@ is True, uses changeset-based paths for both cases.
+ -}
+ createOrUpdate ::
+-    CfnContext ->
+     StackArgs ->
+     -- | useChangeset flag
+     Bool ->
+@@ -55,27 +55,22 @@ createOrUpdate ::
+     Bool ->
+     -- | argsfile path for template resolution
+     Maybe FilePath ->
+-    -- | environment name
+-    Text ->
+-    -- | output emitter for progress display
+-    (OutputData -> IO ()) ->
+-    -- | whether HTTP/S3 imports are allowed
+-    RemoteImports ->
+-    IO (Either Text Int)
+-createOrUpdate ctx args useChangeset yesFlag argsfilePath env emit remoteImports = do
++    CfnM (Either Text Int)
++createOrUpdate args useChangeset yesFlag argsfilePath = do
++    ctx <- askContext
+     let stackName = saStackName args
+ 
+-    exists <- stackExists ctx stackName
++    exists <- liftIO $ stackExists ctx stackName
+ 
+     case (exists, useChangeset) of
+         -- Path 1 & 2: Stack exists, no changeset → direct update
+-        (True, False) -> updateStack ctx args argsfilePath env emit remoteImports
++        (True, False) -> updateStack args argsfilePath
+         -- Path 3: Stack exists + changeset → UPDATE changeset → confirm → execute
+-        (True, True) -> updateWithChangeset ctx args yesFlag argsfilePath env emit remoteImports
++        (True, True) -> updateWithChangeset args yesFlag argsfilePath
+         -- Path 4: Stack doesn't exist, no changeset → direct create
+-        (False, False) -> createStack ctx args argsfilePath env emit remoteImports
++        (False, False) -> createStack args argsfilePath
+         -- Path 5: Stack doesn't exist + changeset → CREATE changeset → confirm → execute
+-        (False, True) -> createWithChangeset ctx args yesFlag argsfilePath env emit remoteImports
++        (False, True) -> createWithChangeset args yesFlag argsfilePath
+ 
+ ------------------------------------------------------------------------
+ -- Changeset path: update existing stack
+@@ -85,47 +80,42 @@ createOrUpdate ctx args useChangeset yesFlag argsfilePath env emit remoteImports
+ Creates an UPDATE changeset, shows result, confirms, then executes.
+ -}
+ updateWithChangeset ::
+-    CfnContext ->
+     StackArgs ->
+     -- | skip confirmation (--yes flag)
+     Bool ->
+     -- | argsfile path
+     Maybe FilePath ->
+-    -- | environment name
+-    Text ->
+-    -- | output emitter
+-    (OutputData -> IO ()) ->
+-    -- | whether HTTP/S3 imports are allowed
+-    RemoteImports ->
+-    IO (Either Text Int)
+-updateWithChangeset ctx args yesFlag argsfilePath env emit remoteImports = do
++    CfnM (Either Text Int)
++updateWithChangeset args yesFlag argsfilePath = do
++    ctx <- askContext
++    emitFn <- askEmit
+     let stackName = saStackName args
+ 
+     -- Fetch and emit StackDefinition
+-    emitStackDefinition ctx stackName emit
++    liftIO $ emitStackDefinition ctx stackName emitFn
+ 
+     -- Generate deterministic changeset name from token
+     let tokenPrefix = T.take 8 (tiValue (cfnPrimaryToken ctx))
+         csName = "iidy-create-or-update-" <> tokenPrefix
+ 
+     -- Create UPDATE changeset
+-    csResult' <- createChangeset ctx args csName True argsfilePath env remoteImports
++    csResult' <- createChangeset args csName True argsfilePath
+     case csResult' of
+         Left err -> pure (Left err)
+         Right info -> do
+             let argsfileText = maybe "" T.pack argsfilePath
+                 csResult = buildChangeSetCreationResult info True argsfileText
+-            emit (OdChangeSetResult csResult)
++            emitOutput (OdChangeSetResult csResult)
+ 
+             -- Check if changeset failed (e.g. invalid parameters)
+             if csiStatus info == "FAILED"
+                 then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
+                 else do
+                     -- Confirm execution
+-                    result <- confirmChangesetExecution yesFlag
++                    result <- liftIO $ confirmChangesetExecution yesFlag
+                     if result == Declined
+                         then pure (Right 130)
+-                        else executeChangeset ctx stackName csName emit
++                        else liftIO $ executeChangeset ctx stackName csName emitFn
+ 
+ ------------------------------------------------------------------------
+ -- Changeset path: create new stack
+@@ -136,44 +126,39 @@ Creates a CREATE changeset, fetches the new stack definition (now in
+ REVIEW_IN_PROGRESS), shows changeset result, confirms, then executes.
+ -}
+ createWithChangeset ::
+-    CfnContext ->
+     StackArgs ->
+     -- | skip confirmation (--yes flag)
+     Bool ->
+     -- | argsfile path
+     Maybe FilePath ->
+-    -- | environment name
+-    Text ->
+-    -- | output emitter
+-    (OutputData -> IO ()) ->
+-    -- | whether HTTP/S3 imports are allowed
+-    RemoteImports ->
+-    IO (Either Text Int)
+-createWithChangeset ctx args yesFlag argsfilePath env emit remoteImports = do
++    CfnM (Either Text Int)
++createWithChangeset args yesFlag argsfilePath = do
++    ctx <- askContext
++    emitFn <- askEmit
+     let stackName = saStackName args
+ 
+     -- Generate random changeset name (docker-style)
+-    csName <- generateDashedName
++    csName <- liftIO generateDashedName
+ 
+     -- Create CREATE changeset (stack doesn't exist yet)
+-    csResult' <- createChangeset ctx args csName False argsfilePath env remoteImports
++    csResult' <- createChangeset args csName False argsfilePath
+     case csResult' of
+         Left err -> pure (Left err)
+         Right info -> do
+             -- Stack now exists in REVIEW_IN_PROGRESS — fetch and show definition
+-            emitStackDefinition ctx stackName emit
++            liftIO $ emitStackDefinition ctx stackName emitFn
+ 
+             -- Show changeset result
+             let argsfileText = maybe "" T.pack argsfilePath
+                 csResult = buildChangeSetCreationResult info False argsfileText
+-            emit (OdChangeSetResult csResult)
++            emitOutput (OdChangeSetResult csResult)
+ 
+             -- Check if changeset failed (e.g. invalid parameters)
+             if csiStatus info == "FAILED"
+                 then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
+                 else do
+                     -- Confirm execution
+-                    result <- confirmChangesetExecution yesFlag
++                    result <- liftIO $ confirmChangesetExecution yesFlag
+                     if result == Declined
+                         then pure (Right 130)
+-                        else executeChangeset ctx stackName csName emit
++                        else liftIO $ executeChangeset ctx stackName csName emitFn
+diff --git a/src/Iidy/Cfn/Operations/CreateStack.hs b/src/Iidy/Cfn/Operations/CreateStack.hs
+index 16a276b..d813f40 100644
+--- a/src/Iidy/Cfn/Operations/CreateStack.hs
++++ b/src/Iidy/Cfn/Operations/CreateStack.hs
+@@ -9,6 +9,7 @@ module Iidy.Cfn.Operations.CreateStack (
+     createStack,
+ ) where
+ 
++import Control.Monad.IO.Class (liftIO)
+ import Data.Maybe (fromMaybe)
+ import Data.Text (Text)
+ 
+@@ -18,6 +19,7 @@ import Amazonka qualified
+ import Amazonka.CloudFormation.CreateStack qualified as CS
+ 
+ import Iidy.Cfn.Context (CfnContext (..), createSuccessStates, createTerminalStatuses)
++import Iidy.Cfn.Env (CfnM, askContext, askEmit, emitOutput)
+ import Iidy.Cfn.Operations.DescribeStack (emitStackDefinition, mkStandardPollConfig)
+ import Iidy.Cfn.RequestBuilder (buildCreateStackRequest)
+ import Iidy.Cfn.StackOperations (
+@@ -28,7 +30,6 @@ import Iidy.Cfn.StackOperations (
+ import Iidy.Cfn.Status (StackStatus (..))
+ import Iidy.Cfn.Types (StackArgs (..))
+ import Iidy.Output.Types (OutputData (..))
+-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+ 
+ ------------------------------------------------------------------------
+ -- Create stack operation
+@@ -46,45 +47,41 @@ Steps:
+   7. Return 0 if the final status is in CREATE_SUCCESS_STATES, 1 otherwise.
+ -}
+ createStack ::
+-    CfnContext ->
+     StackArgs ->
+     -- | argsfile path for template resolution
+     Maybe FilePath ->
+-    -- | environment name
+-    Text ->
+-    -- | output emitter for progress display
+-    (OutputData -> IO ()) ->
+-    -- | whether HTTP/S3 imports are allowed
+-    RemoteImports ->
+-    IO (Either Text Int)
+-createStack ctx args argsfilePath env emit remoteImports = do
++    CfnM (Either Text Int)
++createStack args argsfilePath = do
+     -- Step 1: Build the request (use primary token for create)
+-    reqResult <- buildCreateStackRequest ctx args True argsfilePath env remoteImports
++    reqResult <- buildCreateStackRequest args True argsfilePath
+     case reqResult of
+         Left err -> pure (Left err)
+         Right (req, _token) -> do
++            ctx <- askContext
++            emitFn <- askEmit
++
+             -- Step 2: Send the CreateStack request
+-            resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
++            resp <- liftIO $ runResourceT $ Amazonka.send (cfnEnv ctx) req
+ 
+             -- Step 3: Extract stack ID from response
+             let stackName = saStackName args
+                 stackId = fromMaybe stackName resp.stackId
+ 
+             -- Step 3b: Fetch and emit StackDefinition
+-            emitStackDefinition ctx stackId emit
++            liftIO $ emitStackDefinition ctx stackId emitFn
+ 
+             -- Step 4: Poll for completion, emitting events through renderer
+-            emit (OdPollingStarted "Loading live events...")
+-            let pollCfg = mkStandardPollConfig ctx emit
+-            pollResult <- pollForCompletion ctx stackId createTerminalStatuses pollCfg
++            emitOutput (OdPollingStarted "Loading live events...")
++            let pollCfg = mkStandardPollConfig ctx emitFn
++            pollResult <- liftIO $ pollForCompletion ctx stackId createTerminalStatuses pollCfg
+ 
+             -- Step 5: Handle DELETE_COMPLETE (rollback caused stack deletion)
+             case pollResult of
+                 PollSuccess DeleteComplete -> pure (Right 1)
+                 PollSuccess finalStatus -> do
+                     -- Step 6: Collect and emit stack contents
+-                    contents <- collectStackContents ctx stackName
+-                    emit (OdStackContents contents)
++                    contents <- liftIO $ collectStackContents ctx stackName
++                    emitOutput (OdStackContents contents)
+ 
+                     -- Step 7: Return exit code based on success/failure
+                     if finalStatus `elem` createSuccessStates
+diff --git a/src/Iidy/Cfn/Operations/EstimateCost.hs b/src/Iidy/Cfn/Operations/EstimateCost.hs
+index 9722899..9c99b03 100644
+--- a/src/Iidy/Cfn/Operations/EstimateCost.hs
++++ b/src/Iidy/Cfn/Operations/EstimateCost.hs
+@@ -9,6 +9,7 @@ module Iidy.Cfn.Operations.EstimateCost (
+     estimateCost,
+ ) where
+ 
++import Control.Monad.IO.Class (liftIO)
+ import Data.Maybe (fromMaybe)
+ import Data.Text (Text)
+ 
+@@ -18,11 +19,10 @@ import Amazonka qualified
+ import Amazonka.CloudFormation.EstimateTemplateCost qualified as ETC
+ 
+ import Iidy.Cfn.Context (CfnContext (..))
++import Iidy.Cfn.Env (CfnM, askContext, askEnvName, emitOutput, mkImportConfig)
+ import Iidy.Cfn.TemplateLoader (TemplateResult (..), loadCfnTemplate)
+ import Iidy.Cfn.Types (StackArgs (..))
+ import Iidy.Output.Types
+-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
+-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+ 
+ ------------------------------------------------------------------------
+ -- Estimate cost operation
+@@ -33,20 +33,16 @@ import Iidy.Yaml.Imports.Types (RemoteImports (..))
+ Emits OdCostEstimate via the output pipeline.
+ -}
+ estimateCost ::
+-    CfnContext ->
+     StackArgs ->
+     -- | argsfile path for template resolution
+     Maybe FilePath ->
+-    -- | environment name
+-    Text ->
+-    -- | emit callback
+-    (OutputData -> IO ()) ->
+-    -- | whether HTTP/S3 imports are allowed
+-    RemoteImports ->
+-    IO (Either Text Int)
+-estimateCost ctx args argsfilePath env emit remoteImports = do
++    CfnM (Either Text Int)
++estimateCost args argsfilePath = do
++    ctx <- askContext
++    env <- askEnvName
++    importCfg <- mkImportConfig
+     -- Step 1: Load the template
+-    tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (ImportConfig (Just (cfnEnv ctx)) remoteImports)
++    tmplEither <- liftIO $ loadCfnTemplate (saTemplate args) argsfilePath env importCfg
+     case tmplEither of
+         Left err -> pure (Left err)
+         Right tmplResult -> do
+@@ -58,7 +54,7 @@ estimateCost ctx args argsfilePath env emit remoteImports = do
+                         }
+ 
+             -- Step 3: Send the request
+-            resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
++            resp <- liftIO $ runResourceT $ Amazonka.send (cfnEnv ctx) req
+ 
+             -- Step 4: Emit CostEstimate via output pipeline
+             let url = fromMaybe "" resp.url
+@@ -68,5 +64,5 @@ estimateCost ctx args argsfilePath env emit remoteImports = do
+                         , ceiStackName = Just (saStackName args)
+                         , ceiTemplateFile = saTemplate args
+                         }
+-            emit (OdCostEstimate (CostEstimate{ceInfo = costInfo}))
++            emitOutput (OdCostEstimate (CostEstimate{ceInfo = costInfo}))
+             pure $ Right 0
+diff --git a/src/Iidy/Cfn/Operations/LintTemplate.hs b/src/Iidy/Cfn/Operations/LintTemplate.hs
+index 6b267d7..211d5cf 100644
+--- a/src/Iidy/Cfn/Operations/LintTemplate.hs
++++ b/src/Iidy/Cfn/Operations/LintTemplate.hs
+@@ -6,6 +6,7 @@ module Iidy.Cfn.Operations.LintTemplate (
+ ) where
+ 
+ import Control.Exception (try)
++import Control.Monad.IO.Class (liftIO)
+ import Data.Text (Text)
+ import Data.Text qualified as T
+ 
+@@ -15,11 +16,10 @@ import Amazonka qualified
+ import Amazonka.CloudFormation.ValidateTemplate qualified as VT
+ 
+ import Iidy.Cfn.Context (CfnContext (..))
++import Iidy.Cfn.Env (CfnM, askContext, askEnvName, emitOutput, mkImportConfig)
+ import Iidy.Cfn.TemplateLoader (TemplateResult (..), loadCfnTemplate, templateMaxBytes)
+ import Iidy.Cfn.Types (StackArgs (..))
+ import Iidy.Output.Types
+-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
+-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+ 
+ ------------------------------------------------------------------------
+ -- Lint template operation
+@@ -31,55 +31,52 @@ Constructs a TemplateValidation and emits it via the output pipeline.
+ Returns 0 if valid, 1 if validation errors were found.
+ -}
+ lintTemplate ::
+-    CfnContext ->
+     StackArgs ->
+     -- | argsfile path for template resolution
+     Maybe FilePath ->
+-    -- | environment name
+-    Text ->
+-    -- | emit callback
+-    (OutputData -> IO ()) ->
+-    -- | whether HTTP/S3 imports are allowed
+-    RemoteImports ->
+-    IO (Either Text Int)
+-lintTemplate ctx args argsfilePath env emit remoteImports = do
++    CfnM (Either Text Int)
++lintTemplate args argsfilePath = do
++    ctx <- askContext
++    env <- askEnvName
++    importCfg <- mkImportConfig
+     -- Load the template
+-    tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (ImportConfig (Just (cfnEnv ctx)) remoteImports)
++    tmplEither <- liftIO $ loadCfnTemplate (saTemplate args) argsfilePath env importCfg
+     case tmplEither of
+         Left err -> pure (Left err)
+         Right tmplResult -> case trTemplateBody tmplResult of
+             Nothing -> pure (Left "Failed to load template body")
+             Just body -> do
+                 validation <-
+-                    if T.length body > templateMaxBytes
+-                        then
+-                            -- Template too large for inline validation
+-                            pure
+-                                TemplateValidation
+-                                    { tvEnabled = True
+-                                    , tvErrors = []
+-                                    , tvWarnings = ["Template exceeds 51200 bytes; skipping CFN validation (will be validated on deploy)"]
+-                                    }
+-                        else do
+-                            let req =
+-                                    VT.newValidateTemplate
+-                                        { VT.templateBody = Just body
++                    liftIO $
++                        if T.length body > templateMaxBytes
++                            then
++                                -- Template too large for inline validation
++                                pure
++                                    TemplateValidation
++                                        { tvEnabled = True
++                                        , tvErrors = []
++                                        , tvWarnings = ["Template exceeds 51200 bytes; skipping CFN validation (will be validated on deploy)"]
+                                         }
+-                            result <- try @Amazonka.Error $ runResourceT $ Amazonka.send (cfnEnv ctx) req
+-                            case result of
+-                                Left e ->
+-                                    pure
+-                                        TemplateValidation
+-                                            { tvEnabled = True
+-                                            , tvErrors = ["Template validation failed: " <> T.pack (show e)]
+-                                            , tvWarnings = []
++                            else do
++                                let req =
++                                        VT.newValidateTemplate
++                                            { VT.templateBody = Just body
+                                             }
+-                                Right _resp ->
+-                                    pure
+-                                        TemplateValidation
+-                                            { tvEnabled = True
+-                                            , tvErrors = []
+-                                            , tvWarnings = []
+-                                            }
+-                emit (OdTemplateValidation validation)
++                                result <- try @Amazonka.Error $ runResourceT $ Amazonka.send (cfnEnv ctx) req
++                                case result of
++                                    Left e ->
++                                        pure
++                                            TemplateValidation
++                                                { tvEnabled = True
++                                                , tvErrors = ["Template validation failed: " <> T.pack (show e)]
++                                                , tvWarnings = []
++                                                }
++                                    Right _resp ->
++                                        pure
++                                            TemplateValidation
++                                                { tvEnabled = True
++                                                , tvErrors = []
++                                                , tvWarnings = []
++                                                }
++                emitOutput (OdTemplateValidation validation)
+                 pure $ Right $ if null (tvErrors validation) then 0 else 1
+diff --git a/src/Iidy/Cfn/Operations/TemplateApproval.hs b/src/Iidy/Cfn/Operations/TemplateApproval.hs
+index 13b2294..2f45c3c 100644
+--- a/src/Iidy/Cfn/Operations/TemplateApproval.hs
++++ b/src/Iidy/Cfn/Operations/TemplateApproval.hs
+@@ -15,6 +15,7 @@ module Iidy.Cfn.Operations.TemplateApproval (
+ 
+ import Control.Exception (try)
+ import Control.Monad (unless)
++import Control.Monad.IO.Class (liftIO)
+ import Control.Monad.Trans.Class (lift)
+ import Control.Monad.Trans.Except (ExceptT (..), runExceptT, throwE)
+ import Control.Monad.Trans.Resource (runResourceT)
+@@ -36,13 +37,12 @@ import Amazonka.S3.PutObject qualified as PO
+ import Data.Conduit.List qualified as CL
+ 
+ import Iidy.Cfn.Context (CfnContext (..))
++import Iidy.Cfn.Env (CfnM, askContext, askEmit, askEnvName, mkImportConfig)
+ import Iidy.Cfn.TemplateHash (generateVersionedLocation, parseS3Url)
+ import Iidy.Cfn.TemplateLoader (TemplateResult (..), loadCfnTemplate)
+ import Iidy.Cfn.Types (StackArgs (..))
+ import Iidy.Confirm (ConfirmResult (..), requestConfirmation)
+ import Iidy.Output.Types
+-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
+-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+ 
+ ------------------------------------------------------------------------
+ -- Template Approval Request
+@@ -50,21 +50,18 @@ import Iidy.Yaml.Imports.Types (RemoteImports (..))
+ 
+ -- | Request approval for a template by uploading it as .pending to S3.
+ templateApprovalRequest ::
+-    CfnContext ->
+     StackArgs ->
+     -- | lint template
+     Bool ->
+     -- | argsfile
+     Maybe FilePath ->
+-    -- | environment
+-    Text ->
+-    -- | emit callback
+-    (OutputData -> IO ()) ->
+-    -- | whether HTTP/S3 imports are allowed
+-    RemoteImports ->
+-    IO (Either Text Int)
+-templateApprovalRequest ctx sa _lintTmpl argsfilePath env emit remoteImports =
+-    runExceptT $ do
++    CfnM (Either Text Int)
++templateApprovalRequest sa _lintTmpl argsfilePath = do
++    ctx <- askContext
++    env <- askEnvName
++    importCfg <- mkImportConfig
++    emitFn <- askEmit
++    liftIO $ runExceptT $ do
+         -- Validate required fields
+         baseLocation <-
+             liftMaybe
+@@ -82,7 +79,7 @@ templateApprovalRequest ctx sa _lintTmpl argsfilePath env emit remoteImports =
+                     (saTemplate sa)
+                     argsfilePath
+                     env
+-                    (ImportConfig (Just (cfnEnv ctx)) remoteImports)
++                    importCfg
+         body <- liftMaybe "Failed to load template body" (trTemplateBody tmplResult)
+ 
+         -- Generate versioned location
+@@ -98,7 +95,7 @@ templateApprovalRequest ctx sa _lintTmpl argsfilePath env emit remoteImports =
+         if alreadyApproved
+             then do
+                 lift $
+-                    emit $
++                    emitFn $
+                         OdApprovalRequestResult
+                             ApprovalRequestResult
+                                 { arrTemplateLocation = s3Loc
+@@ -114,7 +111,7 @@ templateApprovalRequest ctx sa _lintTmpl argsfilePath env emit remoteImports =
+                 liftExceptT (uploadToS3 (cfnEnv ctx) bucket pendingKey body)
+                     `prefixError` "Failed to upload pending template: "
+                 lift $
+-                    emit $
++                    emitFn $
+                         OdApprovalRequestResult
+                             ApprovalRequestResult
+                                 { arrTemplateLocation = s3Loc
+diff --git a/src/Iidy/Cfn/Operations/UpdateStack.hs b/src/Iidy/Cfn/Operations/UpdateStack.hs
+index 36a11db..9109a73 100644
+--- a/src/Iidy/Cfn/Operations/UpdateStack.hs
++++ b/src/Iidy/Cfn/Operations/UpdateStack.hs
+@@ -20,6 +20,7 @@ module Iidy.Cfn.Operations.UpdateStack (
+ ) where
+ 
+ import Control.Exception (throwIO, try)
++import Control.Monad.IO.Class (liftIO)
+ import Data.Maybe (fromMaybe)
+ import Data.Text (Text)
+ import Data.Text qualified as T
+@@ -31,6 +32,7 @@ import Amazonka.CloudFormation.UpdateStack qualified as US
+ 
+ import Iidy.Aws.ClientReqToken (TokenInfo (..))
+ import Iidy.Cfn.Context (CfnContext (..), updateSuccessStates, updateTerminalStatuses)
++import Iidy.Cfn.Env (CfnM, askContext, askEmit, emitOutput)
+ import Iidy.Cfn.Operations.Changeset (
+     buildChangeSetCreationResult,
+     confirmChangesetExecution,
+@@ -49,7 +51,6 @@ import Iidy.Cfn.Status (StackStatus (..))
+ import Iidy.Cfn.Types (StackArgs (..))
+ import Iidy.Confirm (ConfirmResult (..))
+ import Iidy.Output.Types (ChangeSetInfo (..), OutputData (..))
+-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+ 
+ -- | The CloudFormation error message returned when there are no changes to apply.
+ noUpdatesMessage :: Text
+@@ -72,61 +73,59 @@ Steps:
+   7. Return 0 if the final status is in UPDATE_SUCCESS_STATES, 1 otherwise.
+ -}
+ updateStack ::
+-    CfnContext ->
+     StackArgs ->
+     -- | argsfile path for template resolution
+     Maybe FilePath ->
+-    -- | environment name
+-    Text ->
+-    -- | output emitter for progress display
+-    (OutputData -> IO ()) ->
+-    -- | whether HTTP/S3 imports are allowed
+-    RemoteImports ->
+-    IO (Either Text Int)
+-updateStack ctx args argsfilePath env emit remoteImports = do
++    CfnM (Either Text Int)
++updateStack args argsfilePath = do
+     let stackName = saStackName args
+ 
+     -- Step 1: Build the UpdateStack request (use primary token)
+-    reqResult <- buildUpdateStackRequest ctx args True argsfilePath env remoteImports
++    reqResult <- buildUpdateStackRequest args True argsfilePath
+     case reqResult of
+         Left err -> pure (Left err)
+         Right (req, _token) -> do
++            ctx <- askContext
++            emitFn <- askEmit
++
+             -- Step 2 & 3: Send the request, catching the "No updates" case
+             sendResult <-
+-                try (runResourceT $ Amazonka.send (cfnEnv ctx) req) ::
+-                    IO (Either Amazonka.Error US.UpdateStackResponse)
++                liftIO
++                    ( try (runResourceT $ Amazonka.send (cfnEnv ctx) req) ::
++                        IO (Either Amazonka.Error US.UpdateStackResponse)
++                    )
+ 
+             case sendResult of
+                 Left awsErr
+                     | isNoUpdatesError awsErr -> do
+                         -- Show Stack Details before re-throwing, matching Rust behavior
+-                        emitStackDefinition ctx stackName emit
++                        liftIO $ emitStackDefinition ctx stackName emitFn
+                         -- Re-throw so the error handler displays the ValidationError
+-                        throwIO awsErr
++                        liftIO $ throwIO awsErr
+                     | otherwise ->
+-                        throwIO awsErr
++                        liftIO $ throwIO awsErr
+                 Right resp -> do
+                     -- Step 4: Get stack ID (prefer the response, fall back to DescribeStacks)
+-                    mStackId <- case resp.stackId of
++                    mStackId <- liftIO $ case resp.stackId of
+                         Just sid -> pure (Just sid)
+                         Nothing -> getStackId ctx stackName
+ 
+                     let stackId = fromMaybe stackName mStackId
+ 
+                     -- Step 4b: Fetch and emit StackDefinition
+-                    emitStackDefinition ctx stackId emit
++                    liftIO $ emitStackDefinition ctx stackId emitFn
+ 
+                     -- Step 5: Poll for completion, emitting events through renderer
+-                    emit (OdPollingStarted "Loading live events...")
+-                    let pollCfg = mkStandardPollConfig ctx emit
+-                    pollResult <- pollForCompletion ctx stackId updateTerminalStatuses pollCfg
++                    emitOutput (OdPollingStarted "Loading live events...")
++                    let pollCfg = mkStandardPollConfig ctx emitFn
++                    pollResult <- liftIO $ pollForCompletion ctx stackId updateTerminalStatuses pollCfg
+ 
+                     -- Step 6: Return exit code based on success/failure
+                     case pollResult of
+                         PollSuccess DeleteComplete -> pure (Right 1)
+                         PollSuccess finalStatus -> do
+-                            contents <- collectStackContents ctx stackName
+-                            emit (OdStackContents contents)
++                            contents <- liftIO $ collectStackContents ctx stackName
++                            emitOutput (OdStackContents contents)
+                             if finalStatus `elem` updateSuccessStates
+                                 then pure (Right 0)
+                                 else pure (Right 1)
+@@ -148,50 +147,45 @@ Steps:
+   6. Execute the changeset and watch for completion.
+ -}
+ updateStackWithChangeset ::
+-    CfnContext ->
+     StackArgs ->
+     -- | skip confirmation (--yes flag)
+     Bool ->
+     -- | argsfile path for template resolution
+     Maybe FilePath ->
+-    -- | environment name
+-    Text ->
+-    -- | output emitter for progress display
+-    (OutputData -> IO ()) ->
+-    -- | whether HTTP/S3 imports are allowed
+-    RemoteImports ->
+-    IO (Either Text Int)
+-updateStackWithChangeset ctx args yesFlag argsfilePath env emit remoteImports = do
++    CfnM (Either Text Int)
++updateStackWithChangeset args yesFlag argsfilePath = do
+     let stackName = saStackName args
++    ctx <- askContext
++    emitFn <- askEmit
+ 
+     -- Step 1: Fetch and emit StackDefinition
+-    emitStackDefinition ctx stackName emit
++    liftIO $ emitStackDefinition ctx stackName emitFn
+ 
+     -- Step 2: Generate deterministic changeset name from token
+     let tokenPrefix = T.take 8 (tiValue (cfnPrimaryToken ctx))
+         csName = "iidy-update-" <> tokenPrefix
+ 
+     -- Step 3: Create the UPDATE changeset
+-    csResult' <- createChangeset ctx args csName True argsfilePath env remoteImports
++    csResult' <- createChangeset args csName True argsfilePath
+     case csResult' of
+         Left err -> pure (Left err)
+         Right info -> do
+             -- Step 4: Emit ChangeSetResult
+             let argsfileText = maybe "" T.pack argsfilePath
+                 csResult = buildChangeSetCreationResult info True argsfileText
+-            emit (OdChangeSetResult csResult)
++            emitOutput (OdChangeSetResult csResult)
+ 
+             -- Step 5: Check if changeset failed (e.g. invalid parameters)
+             if csiStatus info == "FAILED"
+                 then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
+                 else do
+                     -- Step 6: Confirm execution
+-                    result <- confirmChangesetExecution yesFlag
++                    result <- liftIO $ confirmChangesetExecution yesFlag
+                     if result == Declined
+                         then pure (Right 130) -- user cancelled
+                         else do
+                             -- Step 7: Execute changeset and watch
+-                            executeChangeset ctx stackName csName emit
++                            liftIO $ executeChangeset ctx stackName csName emitFn
+ 
+ ------------------------------------------------------------------------
+ -- Helpers
+diff --git a/src/Iidy/Cfn/RequestBuilder.hs b/src/Iidy/Cfn/RequestBuilder.hs
+index 3846e73..7b9cf6f 100644
+--- a/src/Iidy/Cfn/RequestBuilder.hs
++++ b/src/Iidy/Cfn/RequestBuilder.hs
+@@ -20,6 +20,7 @@ module Iidy.Cfn.RequestBuilder (
+ ) where
+ 
+ import Control.Applicative ((<|>))
++import Control.Monad.IO.Class (liftIO)
+ import Data.Map.Strict (Map)
+ import Data.Map.Strict qualified as Map
+ import Data.Text (Text)
+@@ -39,10 +40,9 @@ import Amazonka.CloudFormation.UpdateStack qualified as US
+ 
+ import Iidy.Aws.ClientReqToken (TokenInfo (..))
+ import Iidy.Cfn.Context (CfnContext (..), ctxDeriveToken)
++import Iidy.Cfn.Env (CfnM, askContext, askEnvName, mkImportConfig)
+ import Iidy.Cfn.TemplateLoader (TemplateResult (..), loadCfnTemplate)
+ import Iidy.Cfn.Types (Capability (..), OnFailure (..), StackArgs (..))
+-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
+-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+ 
+ ------------------------------------------------------------------------
+ -- Request builders
+@@ -52,25 +52,23 @@ import Iidy.Yaml.Imports.Types (RemoteImports (..))
+ Returns the request and the token used, or a descriptive error.
+ -}
+ buildCreateStackRequest ::
+-    CfnContext ->
+     StackArgs ->
+     -- | use primary token (vs derived)
+     Bool ->
+     -- | argsfile path for template resolution
+     Maybe FilePath ->
+-    -- | environment name
+-    Text ->
+-    -- | whether HTTP/S3 imports are allowed
+-    RemoteImports ->
+-    IO (Either Text (CF.CreateStack, TokenInfo))
+-buildCreateStackRequest ctx args usePrimary argsfilePath env remoteImports = do
++    CfnM (Either Text (CF.CreateStack, TokenInfo))
++buildCreateStackRequest args usePrimary argsfilePath = do
++    ctx <- askContext
++    env <- askEnvName
++    importCfg <- mkImportConfig
+     let sName = saStackName args
+-        importCfg = ImportConfig{icAwsEnv = Just (cfnEnv ctx), icRemoteImports = remoteImports}
+     token <-
+-        if usePrimary
+-            then pure (cfnPrimaryToken ctx)
+-            else ctxDeriveToken ctx "create-stack"
+-    tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env importCfg
++        liftIO $
++            if usePrimary
++                then pure (cfnPrimaryToken ctx)
++                else ctxDeriveToken ctx "create-stack"
++    tmplEither <- liftIO $ loadCfnTemplate (saTemplate args) argsfilePath env importCfg
+     case tmplEither of
+         Left err -> pure (Left err)
+         Right tmplResult -> do
+@@ -96,25 +94,23 @@ buildCreateStackRequest ctx args usePrimary argsfilePath env remoteImports = do
+ 
+ -- | Build an UpdateStack request from StackArgs.
+ buildUpdateStackRequest ::
+-    CfnContext ->
+     StackArgs ->
+     -- | use primary token
+     Bool ->
+     -- | argsfile path
+     Maybe FilePath ->
+-    -- | environment name
+-    Text ->
+-    -- | whether HTTP/S3 imports are allowed
+-    RemoteImports ->
+-    IO (Either Text (CF.UpdateStack, TokenInfo))
+-buildUpdateStackRequest ctx args usePrimary argsfilePath env remoteImports = do
++    CfnM (Either Text (CF.UpdateStack, TokenInfo))
++buildUpdateStackRequest args usePrimary argsfilePath = do
++    ctx <- askContext
++    env <- askEnvName
++    importCfg <- mkImportConfig
+     let sName = saStackName args
+-        importCfg = ImportConfig{icAwsEnv = Just (cfnEnv ctx), icRemoteImports = remoteImports}
+     token <-
+-        if usePrimary
+-            then pure (cfnPrimaryToken ctx)
+-            else ctxDeriveToken ctx "update-stack"
+-    tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env importCfg
++        liftIO $
++            if usePrimary
++                then pure (cfnPrimaryToken ctx)
++                else ctxDeriveToken ctx "update-stack"
++    tmplEither <- liftIO $ loadCfnTemplate (saTemplate args) argsfilePath env importCfg
+     case tmplEither of
+         Left err -> pure (Left err)
+         Right tmplResult -> do
+@@ -149,23 +145,21 @@ buildDeleteStackRequest ctx sName = do
+ 
+ -- | Build a CreateChangeSet request.
+ buildCreateChangeSetRequest ::
+-    CfnContext ->
+     StackArgs ->
+     -- | changeset name
+     Text ->
+     -- | CREATE or UPDATE
+     CF.ChangeSetType ->
++    -- | argsfile path for template resolution
+     Maybe FilePath ->
+-    -- | environment
+-    Text ->
+-    -- | whether HTTP/S3 imports are allowed
+-    RemoteImports ->
+-    IO (Either Text (CF.CreateChangeSet, TokenInfo))
+-buildCreateChangeSetRequest ctx args csName csType argsfilePath env remoteImports = do
++    CfnM (Either Text (CF.CreateChangeSet, TokenInfo))
++buildCreateChangeSetRequest args csName csType argsfilePath = do
++    ctx <- askContext
++    env <- askEnvName
++    importCfg <- mkImportConfig
+     let sName = saStackName args
+-        importCfg = ImportConfig{icAwsEnv = Just (cfnEnv ctx), icRemoteImports = remoteImports}
+-    token <- ctxDeriveToken ctx "create-changeset"
+-    tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env importCfg
++    token <- liftIO $ ctxDeriveToken ctx "create-changeset"
++    tmplEither <- liftIO $ loadCfnTemplate (saTemplate args) argsfilePath env importCfg
+     case tmplEither of
+         Left err -> pure (Left err)
+         Right tmplResult -> do
+diff --git a/src/Iidy/Cfn/Runner.hs b/src/Iidy/Cfn/Runner.hs
+index 6a12616..541cbde 100644
+--- a/src/Iidy/Cfn/Runner.hs
++++ b/src/Iidy/Cfn/Runner.hs
+@@ -19,6 +19,7 @@ import Iidy.Aws.Config (createAwsEnv, createAwsEnvFromSettings)
+ import Iidy.Aws.Timing (timeProviderForOperation)
+ import Iidy.Cfn.CommandMetadata (constructCommandMetadata, createFinalCommandSummary)
+ import Iidy.Cfn.Context (CfnContext, createContext, createContextFromEnv, ctxElapsedSeconds)
++import Iidy.Cfn.Env (CfnEnv (..), CfnM, runCfnM)
+ import Iidy.Cfn.GlobalConfig (applyGlobalConfiguration)
+ import Iidy.Cfn.StackArgsLoader (
+     LoadedStackArgs (..),
+@@ -44,7 +45,7 @@ runCfnWithArgs ::
+     Text ->
+     -- | stack name override from CLI
+     Maybe Text ->
+-    (RemoteImports -> CfnContext -> StackArgs -> Maybe FilePath -> Text -> (OutputData -> IO ()) -> IO Int) ->
++    (StackArgs -> Maybe FilePath -> CfnM Int) ->
+     IO ()
+ runCfnWithArgs cli operation argsfile stackNameOverride action = do
+     let env = goEnvironment (cliGlobalOpts cli)
+@@ -83,6 +84,15 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
+             let tp = timeProviderForOperation operation
+             ctx <- createContextFromEnv awsEnv credStack operation tp token
+ 
++            -- Construct CfnEnv
++            let cfnEnv =
++                    CfnEnv
++                        { ceContext = ctx
++                        , ceEnvironment = env
++                        , ceRemoteImports = remoteImports
++                        , ceEmit = emit
++                        }
++
+             -- Emit CommandMetadata for write operations (not lint/estimate-cost)
+             when (emitsCommandMetadata operation) $
+                 do
+@@ -90,7 +100,7 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
+                     emit (OdCommandMetadata meta)
+ 
+             rc <-
+-                action remoteImports ctx sa' (Just argsfilePath) env emit
++                runCfnM cfnEnv (action sa' (Just argsfilePath))
+                     `finally` cleanupOutputDispatch dispatch
+ 
+             -- Emit FinalCommandSummary for write operations
+-- 
+2.51.2
+

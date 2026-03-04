@@ -1,7 +1,6 @@
 module Main (main) where
 
 import Control.Exception (catch, finally)
-import Control.Monad.IO.Class (liftIO)
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as T
 import Foreign.C.Types (CInt (..))
@@ -13,7 +12,6 @@ import System.Posix.Signals (Handler (..), installHandler, sigINT)
 import Iidy.Aws.Config (createAwsEnvFromSettings)
 import Iidy.Cfn.CommandMetadata (constructCommandMetadata, createFinalCommandSummary)
 import Iidy.Cfn.Context (ctxElapsedSeconds)
-import Iidy.Cfn.Env (askContext, emitOutput)
 import Iidy.Cfn.Operations.Changeset (
     StackState (..),
     buildChangeSetCreationResult,
@@ -82,37 +80,38 @@ runCommand cli = case cliCommand cli of
     -- CloudFormation operations with stack-args
     CmdCreateStack args ->
         runCfnWithArgs cli OpCreateStack (csaArgsfile args) (csaStackName args) $
-            \sa fp -> createStack sa fp >>= liftIO . handleEither
+            \remoteImports ctx sa fp env emit -> createStack ctx sa fp env emit remoteImports >>= handleEither
     CmdUpdateStack args ->
         runCfnWithArgs cli OpUpdateStack (sfaArgsfile (usaBase args)) (sfaStackName (usaBase args)) $
-            \sa fp ->
+            \remoteImports ctx sa fp env emit ->
                 if usaChangeset args
-                    then updateStackWithChangeset sa (usaYes args) fp >>= liftIO . handleEither
-                    else updateStack sa fp >>= liftIO . handleEither
+                    then updateStackWithChangeset ctx sa (usaYes args) fp env emit remoteImports >>= handleEither
+                    else updateStack ctx sa fp env emit remoteImports >>= handleEither
     CmdCreateOrUpdate args ->
         runCfnWithArgs cli OpCreateOrUpdate (sfaArgsfile (usaBase args)) (sfaStackName (usaBase args)) $
-            \sa fp -> createOrUpdate sa (usaChangeset args) (usaYes args) fp >>= liftIO . handleEither
+            \remoteImports ctx sa fp env emit -> createOrUpdate ctx sa (usaChangeset args) (usaYes args) fp env emit remoteImports >>= handleEither
     CmdEstimateCost args ->
         runCfnWithArgs cli OpEstimateCost (sfaArgsfile args) (sfaStackName args) $
-            \sa fp -> estimateCost sa fp >>= liftIO . handleEither
+            \remoteImports ctx sa fp env emit -> do
+                result <- estimateCost ctx sa fp env emit remoteImports
+                handleEither result
     CmdCreateChangeset args ->
         runCfnWithArgs cli OpCreateChangeset (ccsArgsfile args) (ccsStackName args) $
-            \sa fp -> do
-                ctx <- askContext
+            \remoteImports ctx sa fp env emit -> do
                 -- Determine changeset name (user-provided or random)
-                csName <- liftIO $ maybe generateDashedName pure (ccsChangesetName args)
+                csName <- maybe generateDashedName pure (ccsChangesetName args)
                 -- Check stack state to determine changeset type
                 let stackName = saStackName sa
-                state <- liftIO $ checkStackState ctx stackName
+                state <- checkStackState ctx stackName
                 let exists = case state of StackNormal -> True; _ -> False
-                csEither <- createChangeset sa csName exists fp
+                csEither <- createChangeset ctx sa csName exists fp env remoteImports
                 case csEither of
                     Left err -> do
-                        emitOutput (OdRawOutput err)
+                        emit (OdRawOutput err)
                         pure 1
                     Right info -> do
                         let csResult = buildChangeSetCreationResult info exists (ccsArgsfile args)
-                        emitOutput (OdChangeSetResult csResult)
+                        emit (OdChangeSetResult csResult)
                         pure 0
     CmdExecChangeset args -> do
         let stackName = fromMaybe "" (ecsStackName args)
@@ -242,7 +241,9 @@ runCommand cli = case cliCommand cli of
     CmdTemplateApproval acmd -> case acmd of
         ApprovalRequest args ->
             runCfnWithArgs cli OpTemplateApprovalRequest (araArgsfile args) Nothing $
-                \sa fp -> templateApprovalRequest sa (araLintTemplate args) fp >>= liftIO . handleEither
+                \remoteImports ctx sa fp env emit -> do
+                    result <- templateApprovalRequest ctx sa (araLintTemplate args) fp env emit remoteImports
+                    handleEither result
         ApprovalReview args -> do
             ctx <- createSimpleContext cli OpTemplateApprovalReview
             dispatch <- mkOutputDispatch (cliGlobalOpts cli)
@@ -258,7 +259,9 @@ runCommand cli = case cliCommand cli of
          in runDemo (daDemoscript args) (daTimescaling args) (daMaskSecrets args) ri >>= exitCode
     CmdLintTemplate args ->
         runCfnWithArgs cli OpLintTemplate (ltaArgsfile args) Nothing $
-            \sa fp -> lintTemplate sa fp >>= liftIO . handleEither
+            \remoteImports ctx sa fp env emit -> do
+                result <- lintTemplate ctx sa fp env emit remoteImports
+                handleEither result
     CmdConvertStackToIidy args -> do
         ctx <- createSimpleContext cli OpConvertStackToIidy
         result <-

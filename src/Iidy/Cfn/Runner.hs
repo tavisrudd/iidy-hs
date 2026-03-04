@@ -19,7 +19,6 @@ import Iidy.Aws.Config (createAwsEnv, createAwsEnvFromSettings)
 import Iidy.Aws.Timing (timeProviderForOperation)
 import Iidy.Cfn.CommandMetadata (constructCommandMetadata, createFinalCommandSummary)
 import Iidy.Cfn.Context (CfnContext, createContext, createContextFromEnv, ctxElapsedSeconds)
-import Iidy.Cfn.Env (CfnEnv (..), CfnM, runCfnM)
 import Iidy.Cfn.GlobalConfig (applyGlobalConfiguration)
 import Iidy.Cfn.StackArgsLoader (
     LoadedStackArgs (..),
@@ -45,7 +44,7 @@ runCfnWithArgs ::
     Text ->
     -- | stack name override from CLI
     Maybe Text ->
-    (StackArgs -> Maybe FilePath -> CfnM Int) ->
+    (RemoteImports -> CfnContext -> StackArgs -> Maybe FilePath -> Text -> (OutputData -> IO ()) -> IO Int) ->
     IO ()
 runCfnWithArgs cli operation argsfile stackNameOverride action = do
     let env = goEnvironment (cliGlobalOpts cli)
@@ -84,15 +83,6 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
             let tp = timeProviderForOperation operation
             ctx <- createContextFromEnv awsEnv credStack operation tp token
 
-            -- Construct CfnEnv
-            let cfnEnv =
-                    CfnEnv
-                        { ceContext = ctx
-                        , ceEnvironment = env
-                        , ceRemoteImports = remoteImports
-                        , ceEmit = emit
-                        }
-
             -- Emit CommandMetadata for write operations (not lint/estimate-cost)
             when (emitsCommandMetadata operation) $
                 do
@@ -100,7 +90,7 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
                     emit (OdCommandMetadata meta)
 
             rc <-
-                runCfnM cfnEnv (action sa' (Just argsfilePath))
+                action remoteImports ctx sa' (Just argsfilePath) env emit
                     `finally` cleanupOutputDispatch dispatch
 
             -- Emit FinalCommandSummary for write operations

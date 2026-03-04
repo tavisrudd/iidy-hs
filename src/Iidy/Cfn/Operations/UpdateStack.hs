@@ -20,7 +20,6 @@ module Iidy.Cfn.Operations.UpdateStack (
 ) where
 
 import Control.Exception (throwIO, try)
-import Control.Monad.IO.Class (liftIO)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -32,7 +31,6 @@ import Amazonka.CloudFormation.UpdateStack qualified as US
 
 import Iidy.Aws.ClientReqToken (TokenInfo (..))
 import Iidy.Cfn.Context (CfnContext (..), updateSuccessStates, updateTerminalStatuses)
-import Iidy.Cfn.Env (CfnM, askContext, askEmit, emitOutput)
 import Iidy.Cfn.Operations.Changeset (
     buildChangeSetCreationResult,
     confirmChangesetExecution,
@@ -51,6 +49,7 @@ import Iidy.Cfn.Status (StackStatus (..))
 import Iidy.Cfn.Types (StackArgs (..))
 import Iidy.Confirm (ConfirmResult (..))
 import Iidy.Output.Types (ChangeSetInfo (..), OutputData (..))
+import Iidy.Yaml.Imports.Types (RemoteImports (..))
 
 -- | The CloudFormation error message returned when there are no changes to apply.
 noUpdatesMessage :: Text
@@ -73,59 +72,61 @@ Steps:
   7. Return 0 if the final status is in UPDATE_SUCCESS_STATES, 1 otherwise.
 -}
 updateStack ::
+    CfnContext ->
     StackArgs ->
     -- | argsfile path for template resolution
     Maybe FilePath ->
-    CfnM (Either Text Int)
-updateStack args argsfilePath = do
+    -- | environment name
+    Text ->
+    -- | output emitter for progress display
+    (OutputData -> IO ()) ->
+    -- | whether HTTP/S3 imports are allowed
+    RemoteImports ->
+    IO (Either Text Int)
+updateStack ctx args argsfilePath env emit remoteImports = do
     let stackName = saStackName args
 
     -- Step 1: Build the UpdateStack request (use primary token)
-    reqResult <- buildUpdateStackRequest args True argsfilePath
+    reqResult <- buildUpdateStackRequest ctx args True argsfilePath env remoteImports
     case reqResult of
         Left err -> pure (Left err)
         Right (req, _token) -> do
-            ctx <- askContext
-            emitFn <- askEmit
-
             -- Step 2 & 3: Send the request, catching the "No updates" case
             sendResult <-
-                liftIO
-                    ( try (runResourceT $ Amazonka.send (cfnEnv ctx) req) ::
-                        IO (Either Amazonka.Error US.UpdateStackResponse)
-                    )
+                try (runResourceT $ Amazonka.send (cfnEnv ctx) req) ::
+                    IO (Either Amazonka.Error US.UpdateStackResponse)
 
             case sendResult of
                 Left awsErr
                     | isNoUpdatesError awsErr -> do
                         -- Show Stack Details before re-throwing, matching Rust behavior
-                        liftIO $ emitStackDefinition ctx stackName emitFn
+                        emitStackDefinition ctx stackName emit
                         -- Re-throw so the error handler displays the ValidationError
-                        liftIO $ throwIO awsErr
+                        throwIO awsErr
                     | otherwise ->
-                        liftIO $ throwIO awsErr
+                        throwIO awsErr
                 Right resp -> do
                     -- Step 4: Get stack ID (prefer the response, fall back to DescribeStacks)
-                    mStackId <- liftIO $ case resp.stackId of
+                    mStackId <- case resp.stackId of
                         Just sid -> pure (Just sid)
                         Nothing -> getStackId ctx stackName
 
                     let stackId = fromMaybe stackName mStackId
 
                     -- Step 4b: Fetch and emit StackDefinition
-                    liftIO $ emitStackDefinition ctx stackId emitFn
+                    emitStackDefinition ctx stackId emit
 
                     -- Step 5: Poll for completion, emitting events through renderer
-                    emitOutput (OdPollingStarted "Loading live events...")
-                    let pollCfg = mkStandardPollConfig ctx emitFn
-                    pollResult <- liftIO $ pollForCompletion ctx stackId updateTerminalStatuses pollCfg
+                    emit (OdPollingStarted "Loading live events...")
+                    let pollCfg = mkStandardPollConfig ctx emit
+                    pollResult <- pollForCompletion ctx stackId updateTerminalStatuses pollCfg
 
                     -- Step 6: Return exit code based on success/failure
                     case pollResult of
                         PollSuccess DeleteComplete -> pure (Right 1)
                         PollSuccess finalStatus -> do
-                            contents <- liftIO $ collectStackContents ctx stackName
-                            emitOutput (OdStackContents contents)
+                            contents <- collectStackContents ctx stackName
+                            emit (OdStackContents contents)
                             if finalStatus `elem` updateSuccessStates
                                 then pure (Right 0)
                                 else pure (Right 1)
@@ -147,45 +148,50 @@ Steps:
   6. Execute the changeset and watch for completion.
 -}
 updateStackWithChangeset ::
+    CfnContext ->
     StackArgs ->
     -- | skip confirmation (--yes flag)
     Bool ->
     -- | argsfile path for template resolution
     Maybe FilePath ->
-    CfnM (Either Text Int)
-updateStackWithChangeset args yesFlag argsfilePath = do
+    -- | environment name
+    Text ->
+    -- | output emitter for progress display
+    (OutputData -> IO ()) ->
+    -- | whether HTTP/S3 imports are allowed
+    RemoteImports ->
+    IO (Either Text Int)
+updateStackWithChangeset ctx args yesFlag argsfilePath env emit remoteImports = do
     let stackName = saStackName args
-    ctx <- askContext
-    emitFn <- askEmit
 
     -- Step 1: Fetch and emit StackDefinition
-    liftIO $ emitStackDefinition ctx stackName emitFn
+    emitStackDefinition ctx stackName emit
 
     -- Step 2: Generate deterministic changeset name from token
     let tokenPrefix = T.take 8 (tiValue (cfnPrimaryToken ctx))
         csName = "iidy-update-" <> tokenPrefix
 
     -- Step 3: Create the UPDATE changeset
-    csResult' <- createChangeset args csName True argsfilePath
+    csResult' <- createChangeset ctx args csName True argsfilePath env remoteImports
     case csResult' of
         Left err -> pure (Left err)
         Right info -> do
             -- Step 4: Emit ChangeSetResult
             let argsfileText = maybe "" T.pack argsfilePath
                 csResult = buildChangeSetCreationResult info True argsfileText
-            emitOutput (OdChangeSetResult csResult)
+            emit (OdChangeSetResult csResult)
 
             -- Step 5: Check if changeset failed (e.g. invalid parameters)
             if csiStatus info == "FAILED"
                 then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
                 else do
                     -- Step 6: Confirm execution
-                    result <- liftIO $ confirmChangesetExecution yesFlag
+                    result <- confirmChangesetExecution yesFlag
                     if result == Declined
                         then pure (Right 130) -- user cancelled
                         else do
                             -- Step 7: Execute changeset and watch
-                            liftIO $ executeChangeset ctx stackName csName emitFn
+                            executeChangeset ctx stackName csName emit
 
 ------------------------------------------------------------------------
 -- Helpers

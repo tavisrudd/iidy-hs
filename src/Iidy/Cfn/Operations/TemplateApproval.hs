@@ -15,7 +15,6 @@ module Iidy.Cfn.Operations.TemplateApproval (
 
 import Control.Exception (try)
 import Control.Monad (unless)
-import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT (..), runExceptT, throwE)
 import Control.Monad.Trans.Resource (runResourceT)
@@ -37,12 +36,13 @@ import Amazonka.S3.PutObject qualified as PO
 import Data.Conduit.List qualified as CL
 
 import Iidy.Cfn.Context (CfnContext (..))
-import Iidy.Cfn.Env (CfnM, askContext, askEmit, askEnvName, mkImportConfig)
 import Iidy.Cfn.TemplateHash (generateVersionedLocation, parseS3Url)
 import Iidy.Cfn.TemplateLoader (TemplateResult (..), loadCfnTemplate)
 import Iidy.Cfn.Types (StackArgs (..))
 import Iidy.Confirm (ConfirmResult (..), requestConfirmation)
 import Iidy.Output.Types
+import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
+import Iidy.Yaml.Imports.Types (RemoteImports (..))
 
 ------------------------------------------------------------------------
 -- Template Approval Request
@@ -50,18 +50,21 @@ import Iidy.Output.Types
 
 -- | Request approval for a template by uploading it as .pending to S3.
 templateApprovalRequest ::
+    CfnContext ->
     StackArgs ->
     -- | lint template
     Bool ->
     -- | argsfile
     Maybe FilePath ->
-    CfnM (Either Text Int)
-templateApprovalRequest sa _lintTmpl argsfilePath = do
-    ctx <- askContext
-    env <- askEnvName
-    importCfg <- mkImportConfig
-    emitFn <- askEmit
-    liftIO $ runExceptT $ do
+    -- | environment
+    Text ->
+    -- | emit callback
+    (OutputData -> IO ()) ->
+    -- | whether HTTP/S3 imports are allowed
+    RemoteImports ->
+    IO (Either Text Int)
+templateApprovalRequest ctx sa _lintTmpl argsfilePath env emit remoteImports =
+    runExceptT $ do
         -- Validate required fields
         baseLocation <-
             liftMaybe
@@ -79,7 +82,7 @@ templateApprovalRequest sa _lintTmpl argsfilePath = do
                     (saTemplate sa)
                     argsfilePath
                     env
-                    importCfg
+                    (ImportConfig (Just (cfnEnv ctx)) remoteImports)
         body <- liftMaybe "Failed to load template body" (trTemplateBody tmplResult)
 
         -- Generate versioned location
@@ -95,7 +98,7 @@ templateApprovalRequest sa _lintTmpl argsfilePath = do
         if alreadyApproved
             then do
                 lift $
-                    emitFn $
+                    emit $
                         OdApprovalRequestResult
                             ApprovalRequestResult
                                 { arrTemplateLocation = s3Loc
@@ -111,7 +114,7 @@ templateApprovalRequest sa _lintTmpl argsfilePath = do
                 liftExceptT (uploadToS3 (cfnEnv ctx) bucket pendingKey body)
                     `prefixError` "Failed to upload pending template: "
                 lift $
-                    emitFn $
+                    emit $
                         OdApprovalRequestResult
                             ApprovalRequestResult
                                 { arrTemplateLocation = s3Loc

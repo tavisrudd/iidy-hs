@@ -9,7 +9,6 @@ module Iidy.Cfn.Operations.CreateStack (
     createStack,
 ) where
 
-import Control.Monad.IO.Class (liftIO)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 
@@ -19,7 +18,6 @@ import Amazonka qualified
 import Amazonka.CloudFormation.CreateStack qualified as CS
 
 import Iidy.Cfn.Context (CfnContext (..), createSuccessStates, createTerminalStatuses)
-import Iidy.Cfn.Env (CfnM, askContext, askEmit, emitOutput)
 import Iidy.Cfn.Operations.DescribeStack (emitStackDefinition, mkStandardPollConfig)
 import Iidy.Cfn.RequestBuilder (buildCreateStackRequest)
 import Iidy.Cfn.StackOperations (
@@ -30,6 +28,7 @@ import Iidy.Cfn.StackOperations (
 import Iidy.Cfn.Status (StackStatus (..))
 import Iidy.Cfn.Types (StackArgs (..))
 import Iidy.Output.Types (OutputData (..))
+import Iidy.Yaml.Imports.Types (RemoteImports (..))
 
 ------------------------------------------------------------------------
 -- Create stack operation
@@ -47,41 +46,45 @@ Steps:
   7. Return 0 if the final status is in CREATE_SUCCESS_STATES, 1 otherwise.
 -}
 createStack ::
+    CfnContext ->
     StackArgs ->
     -- | argsfile path for template resolution
     Maybe FilePath ->
-    CfnM (Either Text Int)
-createStack args argsfilePath = do
+    -- | environment name
+    Text ->
+    -- | output emitter for progress display
+    (OutputData -> IO ()) ->
+    -- | whether HTTP/S3 imports are allowed
+    RemoteImports ->
+    IO (Either Text Int)
+createStack ctx args argsfilePath env emit remoteImports = do
     -- Step 1: Build the request (use primary token for create)
-    reqResult <- buildCreateStackRequest args True argsfilePath
+    reqResult <- buildCreateStackRequest ctx args True argsfilePath env remoteImports
     case reqResult of
         Left err -> pure (Left err)
         Right (req, _token) -> do
-            ctx <- askContext
-            emitFn <- askEmit
-
             -- Step 2: Send the CreateStack request
-            resp <- liftIO $ runResourceT $ Amazonka.send (cfnEnv ctx) req
+            resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
 
             -- Step 3: Extract stack ID from response
             let stackName = saStackName args
                 stackId = fromMaybe stackName resp.stackId
 
             -- Step 3b: Fetch and emit StackDefinition
-            liftIO $ emitStackDefinition ctx stackId emitFn
+            emitStackDefinition ctx stackId emit
 
             -- Step 4: Poll for completion, emitting events through renderer
-            emitOutput (OdPollingStarted "Loading live events...")
-            let pollCfg = mkStandardPollConfig ctx emitFn
-            pollResult <- liftIO $ pollForCompletion ctx stackId createTerminalStatuses pollCfg
+            emit (OdPollingStarted "Loading live events...")
+            let pollCfg = mkStandardPollConfig ctx emit
+            pollResult <- pollForCompletion ctx stackId createTerminalStatuses pollCfg
 
             -- Step 5: Handle DELETE_COMPLETE (rollback caused stack deletion)
             case pollResult of
                 PollSuccess DeleteComplete -> pure (Right 1)
                 PollSuccess finalStatus -> do
                     -- Step 6: Collect and emit stack contents
-                    contents <- liftIO $ collectStackContents ctx stackName
-                    emitOutput (OdStackContents contents)
+                    contents <- collectStackContents ctx stackName
+                    emit (OdStackContents contents)
 
                     -- Step 7: Return exit code based on success/failure
                     if finalStatus `elem` createSuccessStates

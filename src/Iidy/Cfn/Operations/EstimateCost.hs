@@ -9,7 +9,6 @@ module Iidy.Cfn.Operations.EstimateCost (
     estimateCost,
 ) where
 
-import Control.Monad.IO.Class (liftIO)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 
@@ -19,10 +18,11 @@ import Amazonka qualified
 import Amazonka.CloudFormation.EstimateTemplateCost qualified as ETC
 
 import Iidy.Cfn.Context (CfnContext (..))
-import Iidy.Cfn.Env (CfnM, askContext, askEnvName, emitOutput, mkImportConfig)
 import Iidy.Cfn.TemplateLoader (TemplateResult (..), loadCfnTemplate)
 import Iidy.Cfn.Types (StackArgs (..))
 import Iidy.Output.Types
+import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
+import Iidy.Yaml.Imports.Types (RemoteImports (..))
 
 ------------------------------------------------------------------------
 -- Estimate cost operation
@@ -33,16 +33,20 @@ import Iidy.Output.Types
 Emits OdCostEstimate via the output pipeline.
 -}
 estimateCost ::
+    CfnContext ->
     StackArgs ->
     -- | argsfile path for template resolution
     Maybe FilePath ->
-    CfnM (Either Text Int)
-estimateCost args argsfilePath = do
-    ctx <- askContext
-    env <- askEnvName
-    importCfg <- mkImportConfig
+    -- | environment name
+    Text ->
+    -- | emit callback
+    (OutputData -> IO ()) ->
+    -- | whether HTTP/S3 imports are allowed
+    RemoteImports ->
+    IO (Either Text Int)
+estimateCost ctx args argsfilePath env emit remoteImports = do
     -- Step 1: Load the template
-    tmplEither <- liftIO $ loadCfnTemplate (saTemplate args) argsfilePath env importCfg
+    tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (ImportConfig (Just (cfnEnv ctx)) remoteImports)
     case tmplEither of
         Left err -> pure (Left err)
         Right tmplResult -> do
@@ -54,7 +58,7 @@ estimateCost args argsfilePath = do
                         }
 
             -- Step 3: Send the request
-            resp <- liftIO $ runResourceT $ Amazonka.send (cfnEnv ctx) req
+            resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
 
             -- Step 4: Emit CostEstimate via output pipeline
             let url = fromMaybe "" resp.url
@@ -64,5 +68,5 @@ estimateCost args argsfilePath = do
                         , ceiStackName = Just (saStackName args)
                         , ceiTemplateFile = saTemplate args
                         }
-            emitOutput (OdCostEstimate (CostEstimate{ceInfo = costInfo}))
+            emit (OdCostEstimate (CostEstimate{ceInfo = costInfo}))
             pure $ Right 0
