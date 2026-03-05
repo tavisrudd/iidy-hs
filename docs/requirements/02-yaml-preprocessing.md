@@ -21,6 +21,49 @@ artifacts.
 
 ### Two-Phase Pipeline
 
+```pseudocode
+preprocess(ast, baseLocation, yaml11Compat):
+  -- Phase 1: I/O-bound
+  importStack = pushImport(baseLocation, emptyStack)
+  (env, templateDefs, manifest) = loadImportsAndDefs(ast, baseLocation, {}, {}, emptyManifest, importStack)
+
+  -- Phase 2: Pure resolution
+  ctx = TagContext { variables = env, inputUri = baseLocation, customTemplateDefs = templateDefs }
+  resolved = resolveAst(ctx, ast)
+
+  -- Post-pass
+  if yaml11Compat:
+    resolved = convertYaml11Compat(resolved)
+
+  return PreprocessResult { value = resolved, importRecords = manifest }
+
+loadImportsAndDefs(ast, baseLocation, env, templateDefs, manifest, stack):
+  if ast is not a Mapping: return (env, templateDefs, manifest, stack)
+
+  defsAst   = findSection("$defs", ast)
+  importsAst = findSection("$imports", ast)
+
+  -- Process $defs first (let* semantics)
+  for each (key, valueAst) in defsAst:
+    ctx = TagContext { variables = env }
+    resolved = resolveAst(ctx, valueAst)
+    env = env + { key: resolved }
+
+  -- Process $imports sequentially
+  for each (key, locationAst) in importsAst:
+    locationText = extractText(locationAst)
+    resolvedLoc  = interpolateHandlebars(env, locationText)  -- only if "{{" present
+    stack        = pushImport(resolvedLoc, stack)             -- cycle detection
+    importData   = loader(resolvedLoc, baseLocation)
+    if importData has $params: register as customTemplate(key, importData)
+    manifest     = addRecord(key, baseLocation, importData.location, sha256(importData.rawData))
+    importedValue = recursivelyPreprocess(importData, env, manifest, stack)
+    env          = env + { key: importedValue }
+    stack        = popImport(stack)
+
+  return (env, templateDefs, manifest, stack)
+```
+
 Phase 1 (I/O-bound): Load `$imports` and resolve `$defs` into an environment map.
 
 1. Parse `$defs` key-value pairs; resolve each value in sequence using the
@@ -50,21 +93,82 @@ resolve all nodes in the document AST.
    strings (`yes`, `no`, `on`, `off`, `true`, `false`, all case variants) to
    actual booleans.
 
-### Variable Scope
+### Internal Value Type
+
+The internal value type preserves key insertion order using an association list
+rather than an unordered map:
+
+```pseudocode
+type OValue =
+  | ONull
+  | OBool   Bool
+  | ONumber Scientific
+  | OString Text
+  | OArray  [OValue]
+  | OObject [(Text, OValue)]   -- insertion-ordered key-value pairs
+```
+
+All tag resolution, merge operations, and output emission use this ordered
+representation. Standard unordered map types are insufficient: the
+implementation must use an ordered association list or equivalent structure so
+that key order is maintained throughout the pipeline, producing deterministic
+YAML output and preserving CloudFormation resource ordering.
+
+### Variable Scope and Resolution Context
+
+```pseudocode
+type TagContext =
+  { variables         :: Map Text OValue     -- all variables in scope
+  , inputUri          :: Maybe Text          -- source document URI
+  , customTemplateDefs :: Map Text TemplateInfo  -- registered custom resource templates
+  , activeExpansions  :: Set Text            -- guards against recursive custom resource expansion
+  }
+
+withBindings(newBindings, ctx):
+  -- new bindings shadow existing ones (Map.union newBindings ctx.variables)
+  return ctx { variables = newBindings `union` ctx.variables }
+
+withVariable(name, value, ctx):
+  return ctx { variables = insert(name, value, ctx.variables) }
+```
 
 The variable scope carries a map of all variables in scope. Binding is purely
 substitutive: inserting a new key does not affect other bindings. There are no
 closures and no mutable state. Shadowing is first-wins within the same scope
 level: outer variables are visible inside `!$let` unless the same name appears
-in the `!$let` bindings.
+in the `!$let` bindings, in which case the inner binding shadows the outer one.
 
-### Key Order Preservation
+### Truthiness Rules
 
-The internal value type must preserve key insertion order. Standard unordered
-map types are insufficient: the implementation must use an ordered association
-list or equivalent structure so that key order is maintained throughout the
-pipeline, producing deterministic YAML output and preserving CloudFormation
-resource ordering.
+Three distinct truthiness contexts exist, each with slightly different rules:
+
+**Preprocessing truthiness** (used by `!$if`, `!$not`, `!$map` filter):
+
+```pseudocode
+oIsTruthy(value) = case value of
+  ONull       -> false
+  OBool b     -> b
+  OString s   -> s != ""
+  ONumber n   -> n != 0         -- zero IS falsy
+  OArray a    -> a is not empty
+  OObject o   -> o is not empty
+```
+
+**Handlebars truthiness** (used by `{{#if}}`, `{{#unless}}`, `{{#with}}`):
+
+| Value            | Truthy? |
+|------------------|---------|
+| `null`           | false   |
+| `false`          | false   |
+| `""` (empty)     | false   |
+| `[]` (empty)     | false   |
+| `{}` (empty)     | false   |
+| any number       | **true** (including zero) |
+| non-empty string | true    |
+| `true`           | true    |
+
+**JMESPath truthiness** (used by `[?filter]` expressions): same as Handlebars
+truthiness -- all numbers including zero are truthy.
 
 ### Custom Resource Expansion
 
@@ -95,6 +199,17 @@ CloudFormation deployments from a single parameterized file without duplication.
   is expanded using the current environment before the file is loaded.
 - The preprocessing result carries both the resolved value and an import
   manifest recording what was imported.
+
+**Import manifest record structure:**
+
+```pseudocode
+type ImportRecord =
+  { key        :: Maybe Text    -- import key name (Nothing for root document)
+  , from       :: Text          -- importing document location
+  , imported   :: Text          -- resolved import location
+  , sha256Digest :: Text        -- SHA256 hex digest of raw imported content
+  }
+```
 
 **Logic Flow:**
 
@@ -140,6 +255,8 @@ and to allow each import to be available to subsequent import location strings.
 `!$` with dot notation, bracket notation, and query selectors, **so that** I
 can access deeply nested data without manual extraction.
 
+**Accepted tag forms:** `!$` and `!$include` (alias).
+
 **Acceptance Criteria:**
 
 - `!$ varname` resolves the variable `varname` from the current scope.
@@ -153,6 +270,20 @@ can access deeply nested data without manual extraction.
 - Object form with `path` + `jmespath` applies a JMESPath expression to the
   resolved base value.
 - `query` and `jmespath` fields are mutually exclusive.
+
+**Tag argument types:**
+
+```pseudocode
+type VarLookupTag =
+  { path     :: Text          -- dot/bracket path (required)
+  , query    :: Maybe Text    -- comma-separated key selection
+  , jmesPath :: Maybe Text    -- JMESPath expression
+  }
+-- Constructed from:
+--   Scalar string: "path?query" parsed into path + query
+--   Mapping: { path: "...", query: "...", jmespath: "..." }
+-- Returns: OValue (the resolved value)
+```
 
 **Logic Flow:**
 
@@ -211,12 +342,33 @@ deployment targets without duplication.
   are structurally equal, false otherwise.
 - `!$not` takes a one-element sequence and returns the logical negation of the
   resolved value's truthiness.
-- Truthiness: the following values are **falsy**: null, boolean false, empty
-  string `""`, empty array `[]`, empty object `{}`. All other values are
-  **truthy** (non-empty strings, numbers including zero, non-empty arrays,
-  non-empty objects, boolean true). Note: zero is truthy (not falsy).
+- Truthiness uses **preprocessing truthiness** rules (see Technical Context):
+  null, boolean false, empty string `""`, empty array `[]`, empty object `{}`,
+  and **zero** are all **falsy**. All other values are truthy (non-empty
+  strings, non-zero numbers, non-empty arrays, non-empty objects, boolean true).
 - `!$if` can be nested arbitrarily inside `then` and `else` branches.
 - There are no `!$and` or `!$or` tags. Compound conditions use nested `!$if`.
+
+**Tag argument types and return types:**
+
+```pseudocode
+-- !$if
+type IfTag = { test :: YamlAst, then :: YamlAst, else :: Maybe YamlAst }
+resolve_if(ctx, tag) -> OValue:
+  testVal = resolve(ctx, tag.test)
+  if oIsTruthy(testVal): return resolve(ctx, tag.then)
+  else: return resolve(ctx, tag.else) or ONull
+
+-- !$eq
+type EqTag = { left :: YamlAst, right :: YamlAst }
+resolve_eq(ctx, tag) -> OBool:
+  return OBool(resolve(ctx, tag.left) == resolve(ctx, tag.right))
+
+-- !$not
+type NotTag = { expression :: YamlAst }
+resolve_not(ctx, tag) -> OBool:
+  return OBool(not(oIsTruthy(resolve(ctx, tag.expression))))
+```
 
 **Logic Flow:**
 
@@ -236,6 +388,8 @@ deployment targets without duplication.
   error.
 - An empty string is falsy; a string containing `"false"` is truthy (it is a
   non-empty string).
+- The number `0` is falsy (unlike Handlebars `{{#if}}` where all numbers are
+  truthy).
 
 **Error Scenarios:**
 
@@ -266,6 +420,21 @@ zero-based index (`itemIdx` or `varIdx`) are bound in each iteration. An
 optional `filter` expression, evaluated per item, excludes items for which it
 is falsy. Returns a sequence.
 
+```pseudocode
+type MapTag = { items :: YamlAst, template :: YamlAst, var :: Maybe Text, filter :: Maybe YamlAst }
+resolve_map(ctx, tag) -> OArray:
+  items = resolve(ctx, tag.items)       -- must be OArray
+  varName = tag.var or "item"
+  results = []
+  for i, item in enumerate(items):
+    innerCtx = withVariable(varName, item, withVariable(varName + "Idx", i, ctx))
+    if tag.filter:
+      filterVal = resolve(innerCtx, tag.filter)
+      if not oIsTruthy(filterVal): continue
+    results.append(resolve(innerCtx, tag.template))
+  return OArray(results)
+```
+
 **!$concatMap:** Like `!$map` but each `template` must produce a sequence; all
 results are concatenated into one flat list. Non-sequence template results are
 wrapped as single-element lists.
@@ -274,9 +443,23 @@ wrapped as single-element lists.
 list. Non-sequence items are flattened to single-element contribution.
 
 **!$merge:** Takes a sequence of mappings and deep-merges them left to right.
-Later values override earlier values for conflicting keys. Preserves key order:
-base keys appear first, with their values potentially overridden, followed by
-new keys from overlay mappings.
+
+```pseudocode
+resolve_merge(ctx, sources) -> OObject:
+  result = OObject([])
+  for source in sources:
+    val = resolve(ctx, source)   -- must be OObject
+    result = mergeOObjects(result, val)
+  return result
+
+mergeOObjects(base, overlay) -> OObject:
+  -- Keys from base appear first in insertion order
+  -- If a key exists in both: value from overlay replaces base value
+  -- New keys from overlay are appended after base keys
+  result = [(k, overlay[k] if k in overlay else v) for (k, v) in base]
+  result += [(k, v) for (k, v) in overlay if k not in base]
+  return OObject(result)
+```
 
 **!$mergeMap:** Like `!$map` (supports `items`, `template`, `var`) but each
 `template` must produce a mapping; all results are merged left to right.
@@ -287,17 +470,35 @@ new keys from overlay mappings.
 and `value` fields. All results are merged into one mapping.
 
 **!$fromPairs:** Takes a pre-built sequence of two-element sequences `[key,
-value]` and converts it directly to a mapping. Does not iterate — expects the
+value]` and converts it directly to a mapping. Does not iterate -- expects the
 sequence already built.
 
 **!$mapValues:** Takes a mapping as `items`; applies `template` to each value.
 The loop variable (default `item`) is bound to a mapping `{key: K, value: V}`
 for each entry. Returns a mapping with the same keys and transformed values.
 
+```pseudocode
+type MapValuesTag = { items :: YamlAst, template :: YamlAst, var :: Maybe Text }
+resolve_mapValues(ctx, tag) -> OObject:
+  obj = resolve(ctx, tag.items)   -- must be OObject
+  varName = tag.var or "item"
+  results = []
+  for (key, value) in obj:
+    binding = OObject([("key", OString(key)), ("value", value)])
+    innerCtx = withVariable(varName, binding, ctx)
+    results.append((key, resolve(innerCtx, tag.template)))
+  return OObject(results)
+```
+
 **!$groupBy:** Takes a sequence as `items`; evaluates a `key` expression per
 item (with the loop variable in scope) and groups items into a mapping of
 `key -> [item, ...]`. Group insertion order within the result mapping is
 non-deterministic (HashMap internally).
+
+```pseudocode
+type GroupByTag = { items :: YamlAst, key :: YamlAst, var :: Maybe Text, template :: Maybe YamlAst }
+-- Returns: OObject where values are OArray of grouped items
+```
 
 **Logic Flow (shared for iteration tags):**
 
@@ -346,6 +547,29 @@ are appended. This makes merge order significant and predictable.
 structured data within my template, **so that** I can construct strings from
 parts, pass JSON blobs as CloudFormation parameter values, and round-trip
 structured data through string representations.
+
+**Tag argument types and return types:**
+
+```pseudocode
+-- !$join [delimiter, list] -> OString
+type JoinTag = { delimiter :: YamlAst, array :: YamlAst }
+-- List items must be string-convertible scalars (strings, numbers, booleans, nulls)
+
+-- !$split [delimiter, string] -> OArray of OString
+type SplitTag = { delimiter :: YamlAst, string :: YamlAst }
+
+-- !$toYamlString content -> OString        (alias: !$string)
+type ToYamlStringTag = { data :: YamlAst }
+
+-- !$parseYaml content -> OValue
+type ParseYamlTag = { string :: YamlAst }
+
+-- !$toJsonString content -> OString
+type ToJsonStringTag = { data :: YamlAst }
+
+-- !$parseJson content -> OValue
+type ParseJsonTag = { string :: YamlAst }
+```
 
 **Acceptance Criteria:**
 
@@ -415,6 +639,24 @@ string are treated as literal data rather than being expanded.
 expression and selectively suppress preprocessing on parts of the output, **so
 that** I can compute intermediate values without polluting the global `$defs`
 scope, and emit literal data structures that should not be transformed.
+
+**Tag argument types and return types:**
+
+```pseudocode
+-- !$let
+type LetTag = { bindings :: [(Text, YamlAst)], expression :: YamlAst }
+resolve_let(ctx, tag) -> OValue:
+  innerCtx = ctx
+  for (name, valueAst) in tag.bindings:    -- let* semantics
+    resolved = resolve(innerCtx, valueAst)
+    innerCtx = withVariable(name, resolved, innerCtx)
+  return resolve(innerCtx, tag.expression)
+
+-- !$escape
+type EscapeTag = { content :: YamlAst }
+resolve_escape(tag) -> OValue:
+  return astToValueRaw(tag.content)   -- no tag resolution, no Handlebars interpolation
+```
 
 **Acceptance Criteria:**
 
@@ -487,8 +729,6 @@ to interpolate variables and call helper functions for string formatting,
 encoding, and serialization, **so that** I can construct dynamic strings without
 using `!$join` for every concatenation.
 
-**Acceptance Criteria:**
-
 **Template syntax:**
 
 - Any string value containing `{{` is processed as a Handlebars template.
@@ -504,72 +744,93 @@ using `!$join` for every concatenation.
   `{{@key}}` is the key.
 - `{{#with expr}}...{{/with}}` changes the context to the resolved value.
 - `{{! comment text }}` is a comment; produces no output.
-- `\{{` escapes a literal `{{`; the backslash is consumed and the `{{` is
-  emitted verbatim.
 - Unknown helpers produce ERR_6002.
 - Unclosed `{{` or block tags produce ERR_6001.
 
-**All 28 helpers:**
+**All 25 helpers:**
 
 String case (8):
-| Helper       | Behavior                                                         |
-|--------------|------------------------------------------------------------------|
-| `toLowerCase`  | All characters to lower case                                   |
-| `toUpperCase`  | All characters to upper case                                   |
-| `capitalize`   | First character to upper case; rest unchanged                  |
-| `titleize`     | First character of each whitespace-separated word to upper case|
-| `camelCase`    | Split on separators (-, _, space, .) then lowerFirst + TitleCase words |
-| `pascalCase`   | Split on separators then TitleCase each word                   |
-| `snakeCase`    | Split on separators then join with `_` in lower case           |
-| `kebabCase`    | Split on separators then join with `-` in lower case           |
+
+| Helper         | Signature                      | Return type | Behavior                                                          |
+|----------------|--------------------------------|-------------|-------------------------------------------------------------------|
+| `toLowerCase`  | `toLowerCase str`              | String      | All characters to lower case                                      |
+| `toUpperCase`  | `toUpperCase str`              | String      | All characters to upper case                                      |
+| `capitalize`   | `capitalize str`               | String      | First character to upper case; rest unchanged                     |
+| `titleize`     | `titleize str`                 | String      | First character of each whitespace-separated word to upper case   |
+| `camelCase`    | `camelCase str`                | String      | Split on separators (-, _, space, .) then lowerFirst + TitleCase  |
+| `pascalCase`   | `pascalCase str`               | String      | Split on separators then TitleCase each word                      |
+| `snakeCase`    | `snakeCase str`                | String      | Split on separators then join with `_` in lower case              |
+| `kebabCase`    | `kebabCase str`                | String      | Split on separators then join with `-` in lower case              |
 
 String manipulation (6):
-| Helper      | Signature                                   | Behavior                                     |
-|-------------|---------------------------------------------|----------------------------------------------|
-| `trim`      | `trim str`                                  | Strip leading/trailing whitespace            |
-| `replace`   | `replace str search replacement`            | Replace all occurrences (not regex)          |
-| `substring` | `substring str start length`                | Extract substring by char offset and length  |
-| `length`    | `length str\|array\|object`                 | Character count, element count, or key count |
-| `pad`       | `pad str targetLength [padChar]`            | Right-pad to target length; default `" "`    |
-| `concat`    | `concat str1 str2 ...`                      | Concatenate all arguments as strings         |
 
-Encoding (5):
-| Helper           | Behavior                                                                |
-|------------------|-------------------------------------------------------------------------|
-| `base64`         | Base64-encode UTF-8 bytes of input string                               |
-| `urlEncode`      | Percent-encode non-unreserved characters (RFC 3986)                     |
-| `sha256`         | SHA-256 of UTF-8 bytes; output as lowercase hex                         |
+| Helper      | Signature                                   | Return type | Behavior                                     |
+|-------------|---------------------------------------------|-------------|----------------------------------------------|
+| `trim`      | `trim str`                                  | String      | Strip leading/trailing whitespace             |
+| `replace`   | `replace str search replacement`            | String      | Replace all occurrences (not regex)           |
+| `substring` | `substring str start length`                | String      | Extract substring by char offset and length   |
+| `length`    | `length str\|array\|object`                 | String      | Character count, element count, or key count  |
+| `pad`       | `pad str targetLength [padChar]`            | String      | Right-pad to target length; default `" "`     |
+| `concat`    | `concat str1 str2 ...`                      | String      | Concatenate all arguments as strings          |
+
+Encoding (3):
+
+| Helper           | Signature                | Return type | Behavior                                            |
+|------------------|--------------------------|-------------|-----------------------------------------------------|
+| `base64`         | `base64 str`             | String      | Base64-encode UTF-8 bytes of input string           |
+| `urlEncode`      | `urlEncode str`          | String      | Percent-encode non-unreserved characters (RFC 3986) |
+| `sha256`         | `sha256 str`             | String      | SHA-256 of UTF-8 bytes; output as lowercase hex     |
 
 Serialization (6, including deprecated aliases):
-| Helper         | Behavior                                     |
-|----------------|----------------------------------------------|
-| `toJson`       | Compact JSON string (no whitespace)          |
-| `tojson`       | Deprecated alias for `toJson`                |
-| `toJsonPretty` | Pretty-printed JSON string                   |
-| `tojsonPretty` | Deprecated alias for `toJsonPretty`          |
-| `toYaml`       | YAML string using the custom emitter + `\n`  |
-| `toyaml`       | Deprecated alias for `toYaml`                |
+
+| Helper         | Signature              | Return type | Behavior                                     |
+|----------------|------------------------|-------------|----------------------------------------------|
+| `toJson`       | `toJson value`         | String      | Compact JSON string (no whitespace)           |
+| `tojson`       | `tojson value`         | String      | Deprecated alias for `toJson`                 |
+| `toJsonPretty` | `toJsonPretty value`   | String      | Pretty-printed JSON string                    |
+| `tojsonPretty` | `tojsonPretty value`   | String      | Deprecated alias for `toJsonPretty`           |
+| `toYaml`       | `toYaml value`         | String      | YAML string using the custom emitter + `\n`   |
+| `toyaml`       | `toyaml value`         | String      | Deprecated alias for `toYaml`                 |
 
 Object access (1):
-| Helper   | Signature             | Behavior                                        |
-|----------|-----------------------|-------------------------------------------------|
-| `lookup` | `lookup obj key`      | Get property from object or element from array by index string; returns empty string if not found |
+
+| Helper   | Signature             | Return type | Behavior                                                             |
+|----------|-----------------------|-------------|----------------------------------------------------------------------|
+| `lookup` | `lookup obj key`      | Value       | Get property from object or element from array by index; empty string if not found |
 
 Equality (1):
-| Helper | Signature   | Behavior                                |
-|--------|-------------|-----------------------------------------|
-| `eq`   | `eq a b`    | Returns boolean; primarily for `{{#if (eq a b)}}` |
+
+| Helper | Signature   | Return type | Behavior                                        |
+|--------|-------------|-------------|-------------------------------------------------|
+| `eq`   | `eq a b`    | Bool        | Returns boolean; primarily for `{{#if (eq a b)}}` |
 
 **Logic Flow:**
 
-1. If the string does not contain `{{`, return it unchanged (fast path).
-2. Parse the template into a sequence of parts: literals, variable outputs,
-   block constructs, and comments.
-3. Before interpolation, check all simple `{{var}}` references (non-helper,
-   non-block) against the variable map. If any root variable is missing, fail
-   early with ERR_2001.
-4. Render each part against the variable context.
-5. Return the concatenated text.
+```pseudocode
+interpolate(helpers, context, template):
+  if "{{" not in template: return template    -- fast path
+  parts = parseTemplate(template)             -- recursive-descent parser
+  return renderParts(helpers, context, parts)
+
+renderPart(helpers, ctx, part):
+  case part of
+    Literal text  -> text
+    Comment       -> ""
+    Output expr   -> valueToString(evalExpr(helpers, ctx, expr))
+    Block "if" condExpr body elseBody ->
+      if handlebars_isTruthy(evalExpr(helpers, ctx, condExpr)):
+        renderParts(helpers, ctx, body)
+      else: renderParts(helpers, ctx, elseBody) or ""
+    Block "each" expr body elseBody ->
+      case evalExpr(helpers, ctx, expr) of
+        Array arr  -> concat [renderParts(helpers, mergeCtx(ctx, {this: item, @index: i, @first: i==0, @last: i==len-1}), body) | (i, item) <- enumerate(arr)]
+        Object obj -> concat [renderParts(helpers, mergeCtx(ctx, {this: v, @key: k}), body) | (k, v) <- entries(obj)]
+        _          -> renderParts(helpers, ctx, elseBody) or ""
+    Block "with" expr body elseBody ->
+      val = evalExpr(helpers, ctx, expr)
+      if handlebars_isTruthy(val): renderParts(helpers, mergeCtx(ctx, val), body)
+      else: renderParts(helpers, ctx, elseBody) or ""
+```
 
 **Edge Cases:**
 
@@ -584,6 +845,8 @@ Equality (1):
 - `lookup` on an array with a non-integer string key returns empty string.
 - camelCase word splitter recognizes runs of uppercase letters as an acronym
   boundary: `"XMLParser"` splits to `["XML", "Parser"]`.
+- Handlebars `{{#if}}` uses Handlebars truthiness (all numbers including zero
+  are truthy), NOT preprocessing truthiness. This differs from `!$if`.
 
 **Error Scenarios:**
 
@@ -635,6 +898,25 @@ work correctly, while new documents use strict YAML 1.2 semantics.
     API version string in first 20 lines: compat off.
   - Otherwise: compat off.
 
+**Conversion logic:**
+
+```pseudocode
+convertYaml11Compat(value):
+  case value of
+    OObject kvs -> OObject [(k, convertYaml11Compat(v)) | (k, v) <- kvs]
+    OArray items -> OArray [convertYaml11Compat(v) | v <- items]
+    OString s | isBooleanLike(s) -> OBool(isTrueIsh(s))
+    other -> other
+
+isBooleanLike(s):
+  s in {"true","false","yes","no","on","off",
+        "True","False","Yes","No","On","Off",
+        "TRUE","FALSE","YES","NO","ON","OFF"}
+
+isTrueIsh(s):
+  toLower(s) in {"true","yes","on"}
+```
+
 **Logic Flow:**
 
 1. Detect YAML spec from raw input text before parsing when `--yaml-spec auto`
@@ -664,7 +946,7 @@ work correctly, while new documents use strict YAML 1.2 semantics.
 
 YAML 1.1 boolean conversion is a recursive structural fold over the output
 value. The conversion happens after full resolution, so it interacts with all
-other features uniformly — including strings produced by `!$join` or Handlebars
+other features uniformly -- including strings produced by `!$join` or Handlebars
 interpolation.
 
 ---
@@ -675,6 +957,28 @@ interpolation.
 the exact file, line, and column of the problem, along with the surrounding
 YAML context and a corrective example, **so that** I can immediately locate and
 fix the issue without guessing.
+
+**Error type hierarchy:**
+
+```pseudocode
+type PreprocessError =
+  | PeResolveError   ResolveError
+  | PeImportError    ImportError
+  | PeHandlebarsError InterpolateError
+  | PeCycleError     Text
+
+type ResolveError = { position :: Position, kind :: ResolveErrorKind, message :: Text }
+
+type ResolveErrorKind =
+  | REVariableNotFound   { path :: Text, availableVars :: [Text] }
+  | REJmesPath           { expr :: Text, detail :: Text, varPath :: Text }
+  | REPropertyNotFound   { missingKey :: Text, varPath :: Text, availableKeys :: [Text] }
+  | RETypeMismatch       { expected :: Text, found :: Text, contextTag :: Maybe Text }
+  | REMissingField       { fieldName :: Text, tagName :: Text }
+  | REInvalidField       { detail :: Text }
+  | REHandlebars         { detail :: Text }
+  | REGeneric            { detail :: Text }
+```
 
 **Acceptance Criteria:**
 
@@ -689,32 +993,32 @@ fix the issue without guessing.
   examples.
 - All error categories carry their numeric code:
 
-| Range    | Category                        |
-|----------|---------------------------------|
-| 1001–1005 | YAML syntax and parsing        |
-| 2001–2006 | Variable and scope errors       |
-| 3001–3010 | Import and loading errors       |
-| 4001–4005 | Tag syntax and structure errors |
-| 5001–5006 | Type and validation errors      |
-| 6001–6005 | Handlebars template errors      |
-| 7001–7004 | CloudFormation intrinsic errors |
-| 8001–8005 | Configuration and CLI errors    |
-| 9001–9005 | Internal and system errors      |
+| Range     | Category                         |
+|-----------|----------------------------------|
+| 1001-1005 | YAML syntax and parsing          |
+| 2001-2006 | Variable and scope errors        |
+| 3001-3010 | Import and loading errors        |
+| 4001-4005 | Tag syntax and structure errors  |
+| 5001-5006 | Type and validation errors       |
+| 6001-6005 | Handlebars template errors       |
+| 7001-7004 | CloudFormation intrinsic errors  |
+| 8001-8005 | Configuration and CLI errors     |
+| 9001-9005 | Internal and system errors       |
 
 **Key error codes for preprocessing:**
 
-| Code    | Name                       | Triggered by                                                   |
-|---------|----------------------------|----------------------------------------------------------------|
-| ERR_1001 | InvalidYamlSyntax         | Malformed YAML input                                           |
-| ERR_2001 | VariableNotFound          | `!$` path root not in scope; `{{var}}` root not in scope      |
-| ERR_2006 | LookupQueryFailed         | Comma-separated key missing from mapping; JMESPath failure     |
-| ERR_4001 | UnknownPreprocessingTag   | Tag spelled incorrectly (e.g. `!$mapp`)                       |
-| ERR_4002 | MissingRequiredTagField   | Required tag field absent (e.g. `template` missing from `!$map`) |
-| ERR_4003 | InvalidTagFieldValue      | Field value is the wrong type or an illegal combination        |
-| ERR_5001 | TypeMismatchInOperation   | Tag received wrong value type (e.g. sequence where mapping expected) |
-| ERR_6001 | HandlebarsSyntaxError     | Unclosed `{{`, unclosed block tag, unexpected close tag        |
-| ERR_6002 | UnknownHandlebarsHelper   | Helper name not in the registry                                |
-| ERR_6003 | HandlebarsHelperArgumentError | Wrong argument count or type for a helper                  |
+| Code     | Name                           | Triggered by                                                    |
+|----------|--------------------------------|-----------------------------------------------------------------|
+| ERR_1001 | InvalidYamlSyntax              | Malformed YAML input                                            |
+| ERR_2001 | VariableNotFound               | `!$` path root not in scope; `{{var}}` root not in scope       |
+| ERR_2006 | LookupQueryFailed              | Comma-separated key missing from mapping; JMESPath failure      |
+| ERR_4001 | UnknownPreprocessingTag        | Tag spelled incorrectly (e.g. `!$mapp`)                        |
+| ERR_4002 | MissingRequiredTagField        | Required tag field absent (e.g. `template` missing from `!$map`) |
+| ERR_4003 | InvalidTagFieldValue           | Field value is the wrong type or an illegal combination         |
+| ERR_5001 | TypeMismatchInOperation        | Tag received wrong value type (e.g. sequence where mapping expected) |
+| ERR_6001 | HandlebarsSyntaxError          | Unclosed `{{`, unclosed block tag, unexpected close tag         |
+| ERR_6002 | UnknownHandlebarsHelper        | Helper name not in the registry                                 |
+| ERR_6003 | HandlebarsHelperArgumentError  | Wrong argument count or type for a helper                       |
 
 **Error message format:**
 
@@ -729,6 +1033,16 @@ fix the issue without guessing.
 
    <example of correct usage, if applicable>
    For more info, run: iidy explain ERR_NNNN
+```
+
+**Source metadata on every AST node:**
+
+```pseudocode
+type SrcMeta = { inputUri :: Text, start :: Position, end :: Position }
+type Position = { line :: Int, column :: Int, offset :: Int }
+
+-- Every AST constructor carries SrcMeta:
+-- AstNull SrcMeta | AstBool Bool SrcMeta | AstNumber Scientific SrcMeta | ...
 ```
 
 **Logic Flow:**
@@ -760,9 +1074,45 @@ window, so the source must be retained through the pipeline.
 
 ---
 
+## Supported CloudFormation Pass-Through Tags
+
+The following 20 CloudFormation intrinsic function tags are recognized and
+passed through after resolving their inner content:
+
+| Tag             | CloudFormation Intrinsic  |
+|-----------------|--------------------------|
+| `!Ref`          | Ref                      |
+| `!Sub`          | Fn::Sub                  |
+| `!GetAtt`       | Fn::GetAtt               |
+| `!Join`         | Fn::Join                 |
+| `!Select`       | Fn::Select               |
+| `!Split`        | Fn::Split                |
+| `!Base64`       | Fn::Base64               |
+| `!GetAZs`       | Fn::GetAZs               |
+| `!ImportValue`  | Fn::ImportValue          |
+| `!FindInMap`    | Fn::FindInMap            |
+| `!Cidr`         | Fn::Cidr                 |
+| `!Length`        | Fn::Length               |
+| `!ToJsonString` | Fn::ToJsonString         |
+| `!Transform`    | Fn::Transform            |
+| `!ForEach`      | Fn::ForEach              |
+| `!If`           | Fn::If (Condition)       |
+| `!Equals`       | Fn::Equals               |
+| `!And`          | Fn::And                  |
+| `!Or`           | Fn::Or                   |
+| `!Not`          | Fn::Not                  |
+
+These tags are distinct from the `!$` preprocessing tags. Their inner content is
+resolved through the preprocessing pipeline, but the tag itself is preserved in
+the output YAML. Any unrecognized tag (not a `!$` preprocessing tag and not a
+known CloudFormation tag) is preserved as-is with its inner content resolved.
+
+---
+
 ## Testing Requirements
 
-- All 21+ custom tags must have fixture tests with corresponding expected
+- All 22 custom tags (including `!$include` alias for `!$` and `!$string` alias
+  for `!$toYamlString`) must have fixture tests with corresponding expected
   outputs.
 - All error conditions must have fixture tests with corresponding expected error
   output snapshots.
@@ -771,7 +1121,7 @@ window, so the source must be retained through the pipeline.
   exact help string.
 - YAML 1.1 compat behavior must be tested with `%YAML 1.1` directive, CFN
   auto-detected, and explicit `--yaml-spec 1.1` flag inputs.
-- Handlebars helper tests must cover all 28 helpers including deprecated aliases.
+- Handlebars helper tests must cover all 25 helpers including deprecated aliases.
 - Property-based tests cover: word-splitting round-trip for case conversion
   helpers, base64 output character set, URL encoding never encoding unreserved
   characters.
@@ -783,14 +1133,14 @@ window, so the source must be retained through the pipeline.
 
 ## Cross-References
 
-- `docs/import-types.md` — all supported import source types (`./file`,
+- `docs/import-types.md` -- all supported import source types (`./file`,
   `ssm:`, `s3://`, `env:`, `git:`, `cfn:`, `http://`, `random:`)
-- `docs/SECURITY.md` — import security restrictions and path sandboxing
-- `docs/requirements/01-cli-interface.md` — `--yaml-spec`, `--format`, and
+- `docs/SECURITY.md` -- import security restrictions and path sandboxing
+- `docs/requirements/01-cli-interface.md` -- `--yaml-spec`, `--format`, and
   `render` command spec
-- `docs/requirements/03-import-system.md` — import resolution, security model,
+- `docs/requirements/03-import-system.md` -- import resolution, security model,
   cycle detection
-- `docs/requirements/04-custom-resources.md` — custom resource expansion
+- `docs/requirements/04-custom-resources.md` -- custom resource expansion
   pipeline (automatic expansion via `$params` registration)
 - Rust oracle: `~/src/iidy/target/debug/iidy` (read-only reference binary)
-- `DIVERGENCES.md` — documented behavioral differences from Rust iidy
+- `DIVERGENCES.md` -- documented behavioral differences from Rust iidy
