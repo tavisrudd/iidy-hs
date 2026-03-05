@@ -37,11 +37,13 @@ module Iidy.Params.Client (
 ) where
 
 import Control.Exception (try)
+import Control.Monad.Trans.Except (ExceptT (..), runExceptT, throwE)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Aeson (ToJSON (..), Value (..), object, (.=))
 import Data.Aeson.Encode.Pretty (Indent (..), confIndent, defConfig, encodePretty')
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
+import Data.Bifunctor (first)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Conduit (runConduit, (.|))
 import Data.Conduit.List qualified as CL
@@ -435,20 +437,14 @@ paramGet :: Amazonka.Env -> ParamGetArgs -> IO (Either Text Text)
 paramGet awsEnv args = case args.pgaFormat of
     ParamFormatSimple -> do
         result <- fetchParam awsEnv args.pgaPath args.pgaDecrypt
-        case result of
-            Left ex -> pure $ Left $ "SSM GetParameter error for " <> args.pgaPath <> ": " <> ex
-            Right val -> pure (Right val)
-    fmt -> do
-        result <- fetchParameter awsEnv args.pgaPath args.pgaDecrypt
-        case result of
-            Left ex -> pure $ Left $ "SSM GetParameter error for " <> args.pgaPath <> ": " <> ex
-            Right param -> do
-                tagsResult <- listParamTags awsEnv args.pgaPath
-                case tagsResult of
-                    Left err -> pure (Left err)
-                    Right tags -> do
-                        let output = withParamTags tags (paramOutputFromParameter param)
-                        pure $ Right $ formatWith fmt output
+        pure $ first (errPrefix <>) result
+    fmt -> runExceptT $ do
+        param <- ExceptT $ first (errPrefix <>) <$> fetchParameter awsEnv args.pgaPath args.pgaDecrypt
+        tags <- ExceptT $ listParamTags awsEnv args.pgaPath
+        pure $ formatWith fmt $ withParamTags tags (paramOutputFromParameter param)
+  where
+    errPrefix :: Text
+    errPrefix = "SSM GetParameter error for " <> args.pgaPath <> ": "
 
 ------------------------------------------------------------------------
 -- paramSet
@@ -498,29 +494,25 @@ Returns Right (Just text) for output, Right Nothing for "no params" (exit 1),
 or Left on error.
 -}
 paramGetByPath :: Amazonka.Env -> ParamGetByPathArgs -> IO (Either Text GetByPathResult)
-paramGetByPath awsEnv args = do
-    result <- try @Amazonka.Error (fetchByPathRaw awsEnv args)
-    case result of
-        Left ex -> pure $ Left $ "SSM GetParametersByPath error for " <> args.gpbPath <> ": " <> T.pack (show ex)
-        Right params
-            | null params -> pure (Right ByPathEmpty)
-            | otherwise -> do
-                let sorted = List.sortBy (comparing (^. SSMP.parameter_name)) params
-                case args.gpbFormat of
-                    ParamFormatSimple -> do
-                        -- Default: sort by name, build Map name->value, print as YAML
-                        let m =
-                                Map.fromList
-                                    [ (p ^. SSMP.parameter_name, p ^. SSMP.parameter_value)
-                                    | p <- sorted
-                                    ]
-                        pure $ Right $ ByPathOutput $ formatAsYaml m
-                    fmt -> do
-                        -- json/yaml: for each param fetch tags, build Map name->ParamOutput
-                        taggedMap <- buildTaggedMap awsEnv sorted
-                        case taggedMap of
-                            Left err -> pure (Left err)
-                            Right m -> pure $ Right $ ByPathOutput $ formatWith fmt m
+paramGetByPath awsEnv args = runExceptT $ do
+    params <- ExceptT $ do
+        result <- try @Amazonka.Error (fetchByPathRaw awsEnv args)
+        pure $ first (\ex -> "SSM GetParametersByPath error for " <> args.gpbPath <> ": " <> T.pack (show ex)) result
+    if null params
+        then pure ByPathEmpty
+        else do
+            let sorted = List.sortBy (comparing (^. SSMP.parameter_name)) params
+            case args.gpbFormat of
+                ParamFormatSimple -> do
+                    let m =
+                            Map.fromList
+                                [ (p ^. SSMP.parameter_name, p ^. SSMP.parameter_value)
+                                | p <- sorted
+                                ]
+                    pure $ ByPathOutput $ formatAsYaml m
+                fmt -> do
+                    m <- ExceptT $ buildTaggedMap awsEnv sorted
+                    pure $ ByPathOutput $ formatWith fmt m
 
 -- | Fetch raw parameters (not formatted).
 fetchByPathRaw :: Amazonka.Env -> ParamGetByPathArgs -> IO [SSM.Parameter]
@@ -554,26 +546,18 @@ For simple: sort by date, split current/previous, fetch tags for message, YAML.
 For json/yaml: FullHistory with current getting tags.
 -}
 paramGetHistory :: Amazonka.Env -> ParamGetArgs -> IO (Either Text Text)
-paramGetHistory awsEnv args = do
-    result <- try @Amazonka.Error (fetchHistoryRaw awsEnv args.pgaPath args.pgaDecrypt)
-    case result of
-        Left ex ->
-            pure $
-                Left $
-                    "SSM GetParameterHistory error for " <> args.pgaPath <> ": " <> T.pack (show ex)
-        Right entries -> case NE.nonEmpty entries of
-            Nothing ->
-                pure $
-                    Left $
-                        "No history found for parameter '" <> args.pgaPath <> "'"
-            Just ne -> do
-                let sorted = NE.sortBy (comparing historyDate) ne
-                    current = NE.last sorted
-                    previous = NE.init sorted
-                tags <- listParamTags awsEnv args.pgaPath
-                case tags of
-                    Left err -> pure (Left err)
-                    Right tagMap -> pure $ Right $ formatHistory args.pgaFormat tagMap current previous
+paramGetHistory awsEnv args = runExceptT $ do
+    entries <- ExceptT $ do
+        result <- try @Amazonka.Error (fetchHistoryRaw awsEnv args.pgaPath args.pgaDecrypt)
+        pure $ first (\ex -> "SSM GetParameterHistory error for " <> args.pgaPath <> ": " <> T.pack (show ex)) result
+    ne <- case NE.nonEmpty entries of
+        Nothing -> throwE $ "No history found for parameter '" <> args.pgaPath <> "'"
+        Just x -> pure x
+    let sorted = NE.sortBy (comparing historyDate) ne
+        current = NE.last sorted
+        previous = NE.init sorted
+    tagMap <- ExceptT $ listParamTags awsEnv args.pgaPath
+    pure $ formatHistory args.pgaFormat tagMap current previous
   where
     historyDate :: SSM.ParameterHistory -> Maybe UTCTime
     historyDate ph = ph ^. SSMPH.parameterHistory_lastModifiedDate
