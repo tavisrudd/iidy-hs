@@ -9,6 +9,15 @@
             "command": "bash scripts/enforce-worktree-isolation.sh"
           }
         ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/block-worktree-isolation.sh"
+          }
+        ]
       }
     ],
     "WorktreeCreate": [
