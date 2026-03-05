@@ -91,15 +91,40 @@ Before wrapping up, verify ALL of these:
 
 ## Sub-Agent Git Rules
 - **Main agent owns the commit sequence.** Only the main agent does cherry-picks, merges, rebases, pushes.
-- Sub-agents in worktrees: may only `git add` + `git commit` within their worktree. Must commit before finishing.
-- Sub-agents on main (research or direct coding): NO git write operations at all.
-- Use worktree isolation when >2 parallel code-changing sub-agents might have file collisions.
+- Sub-agents doing direct coding on main: may `git add` + `git commit` for their specific files only.
+- Sub-agents doing research on main: NO git write operations at all.
 
-## Worktree Isolation (enforced by hooks)
-- A **PreToolUse hook** (`scripts/enforce-worktree-isolation.sh`) blocks Edit/Write/NotebookEdit operations that target files outside the worktree when cwd is in `.claude/worktrees/`. This is enforced automatically — worktree sub-agents cannot write to the main repo.
-- A **WorktreeCreate hook** (`scripts/worktree-setup.sh`) ensures `core.hooksPath=.githooks` and `commit.gpgsign=false` in every new worktree.
-- **Pre-commit hooks run in worktrees**: `core.hooksPath=.githooks` is in shared git config, and `.githooks/` is tracked, so the pre-commit hook (fourmolu, hlint, build+test) runs on every commit in every worktree.
-- When spawning worktree sub-agents, you do NOT need to manually configure git — the hooks handle it.
+## Parallel Sub-Agents and Worktrees
+
+### DO NOT use `isolation: worktree` on the Agent tool
+The `isolation: worktree` parameter auto-cherry-picks sub-agent commits to main and deletes the worktree on exit. This bypasses main-agent review and pre-commit hooks. **Never use it.**
+
+### Option A: Regular parallel agents (preferred for non-overlapping files)
+When parallel sub-agents edit **different files**, just launch them without worktree isolation. Each agent edits its own files directly on main. The main agent reviews and commits (or the sub-agents commit their own files).
+```
+Agent(subagent_type=general-purpose, prompt="Edit src/Foo.hs ... then git add src/Foo.hs && git commit ...")
+Agent(subagent_type=general-purpose, prompt="Edit src/Bar.hs ... then git add src/Bar.hs && git commit ...")
+```
+
+### Option B: Manual worktrees (for overlapping files)
+When parallel sub-agents might edit the **same files**, create manual worktrees:
+```bash
+git worktree add .worktrees/task-a -b task-a
+git worktree add .worktrees/task-b -b task-b
+```
+Then launch agents with cwd in the worktree. Main agent cherry-picks after review:
+```bash
+git cherry-pick --no-commit task-a
+git commit -C CHERRY_PICK_HEAD
+git worktree remove .worktrees/task-a
+git branch -d task-a
+```
+Add `.worktrees/` to `.gitignore` if not already there.
+
+### Hooks (still active for manual worktrees)
+- **PreToolUse hook** (`scripts/enforce-worktree-isolation.sh`) blocks writes outside worktree when cwd is in `.claude/worktrees/` or `.worktrees/`.
+- **WorktreeCreate hook** (`scripts/worktree-setup.sh`) sets `core.hooksPath=.githooks` and `commit.gpgsign=false`.
+- Pre-commit hooks run in worktrees via shared `core.hooksPath=.githooks`.
 
 ## Ralph?
 If you are running in headless -p mode read @RALPH.md and check ./.msgs/ frequently.

@@ -11,7 +11,7 @@ cwd=$(echo "$input" | jq -r '.cwd')
 tool_name=$(echo "$input" | jq -r '.tool_name')
 
 # Only enforce in worktree contexts
-if [[ "$cwd" != */.claude/worktrees/* ]]; then
+if [[ "$cwd" != */.claude/worktrees/* && "$cwd" != */.worktrees/* ]]; then
     exit 0
 fi
 
