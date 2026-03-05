@@ -71,6 +71,42 @@ createOrUpdate ctx args useChangeset yesFlag argsfilePath = do
         (False, True) -> createWithChangeset ctx args yesFlag argsfilePath
 
 ------------------------------------------------------------------------
+-- Changeset path: shared confirm-and-execute helper
+------------------------------------------------------------------------
+
+{- | Emit changeset result, check for failure, confirm, and execute.
+
+Shared by both 'updateWithChangeset' and 'createWithChangeset' to
+avoid duplicating the 3-level staircase of result check → confirm →
+execute.
+-}
+confirmAndExecuteChangeset ::
+    CfnContext ->
+    -- | stack name
+    Text ->
+    -- | changeset name
+    Text ->
+    ChangeSetInfo ->
+    -- | skip confirmation (--yes flag)
+    Bool ->
+    -- | argsfile text for result display
+    Text ->
+    -- | stack existed? (True = UPDATE, False = CREATE)
+    Bool ->
+    IO (Either Text Int)
+confirmAndExecuteChangeset ctx stackName csName info yesFlag argsfileText stackExisted = do
+    let emit = cfnEmit ctx
+        csResult = buildChangeSetCreationResult info stackExisted argsfileText
+    emit (OdChangeSetResult csResult)
+    if csiStatus info == "FAILED"
+        then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
+        else do
+            result <- confirmChangesetExecution yesFlag
+            if result == Declined
+                then pure (Right 130)
+                else executeChangeset ctx stackName csName
+
+------------------------------------------------------------------------
 -- Changeset path: update existing stack
 ------------------------------------------------------------------------
 
@@ -100,20 +136,9 @@ updateWithChangeset ctx args yesFlag argsfilePath = do
     csResult' <- createChangeset ctx args csName True argsfilePath
     case csResult' of
         Left err -> pure (Left err)
-        Right info -> do
+        Right info ->
             let argsfileText = maybe "" T.pack argsfilePath
-                csResult = buildChangeSetCreationResult info True argsfileText
-            emit (OdChangeSetResult csResult)
-
-            -- Check if changeset failed (e.g. invalid parameters)
-            if csiStatus info == "FAILED"
-                then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
-                else do
-                    -- Confirm execution
-                    result <- confirmChangesetExecution yesFlag
-                    if result == Declined
-                        then pure (Right 130)
-                        else executeChangeset ctx stackName csName
+             in confirmAndExecuteChangeset ctx stackName csName info yesFlag argsfileText True
 
 ------------------------------------------------------------------------
 -- Changeset path: create new stack
@@ -145,18 +170,5 @@ createWithChangeset ctx args yesFlag argsfilePath = do
         Right info -> do
             -- Stack now exists in REVIEW_IN_PROGRESS — fetch and show definition
             emitStackDefinition ctx stackName emit
-
-            -- Show changeset result
             let argsfileText = maybe "" T.pack argsfilePath
-                csResult = buildChangeSetCreationResult info False argsfileText
-            emit (OdChangeSetResult csResult)
-
-            -- Check if changeset failed (e.g. invalid parameters)
-            if csiStatus info == "FAILED"
-                then pure (Left (fromMaybe "Changeset creation failed" (csiStatusReason info)))
-                else do
-                    -- Confirm execution
-                    result <- confirmChangesetExecution yesFlag
-                    if result == Declined
-                        then pure (Right 130)
-                        else executeChangeset ctx stackName csName
+            confirmAndExecuteChangeset ctx stackName csName info yesFlag argsfileText False
