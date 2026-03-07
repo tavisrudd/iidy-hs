@@ -138,13 +138,125 @@ closures and no mutable state. Shadowing is first-wins within the same scope
 level: outer variables are visible inside `!$let` unless the same name appears
 in the `!$let` bindings, in which case the inner binding shadows the outer one.
 
-### Truthiness Rules
-
-Three distinct truthiness contexts exist, each with slightly different rules:
-
-**Preprocessing truthiness** (used by `!$if`, `!$not`, `!$map` filter):
+**Scoping rules by context:**
 
 ```pseudocode
+-- $defs: sequential (let*), each def sees all prior defs
+processDefs(env, defs):
+  for each (key, valueAst) in defs:
+    ctx = TagContext { variables = env }
+    resolved = resolveAst(ctx, valueAst)
+    env = insert(key, resolved, env)
+  return env
+
+-- $imports: sequential, each import sees all defs + prior imports
+processImports(env, imports):
+  for each (key, locationAst) in imports:
+    resolvedLoc = interpolateHandlebars(env, extractText(locationAst))
+    importedValue = loadAndPreprocess(resolvedLoc, env)
+    env = insert(key, importedValue, env)
+  return env
+
+-- !$let: sequential (let*), inner scope shadows outer
+resolveLet(ctx, bindings, inExpr):
+  innerCtx = ctx
+  for each (name, valueAst) in bindings:
+    resolved = resolveAst(innerCtx, valueAst)
+    innerCtx = withVariable(name, resolved, innerCtx)
+  return resolveAst(innerCtx, inExpr)
+
+-- !$map: loop variable + index injected per iteration
+resolveMapIteration(ctx, varName, items, template):
+  for i, item in enumerate(items):
+    bindings = { varName: item, varName+"Idx": i }
+    itemCtx = withBindings(bindings, ctx)  -- shadows outer vars with same names
+    yield resolveAst(itemCtx, template)
+```
+
+### Path Traversal Semantics
+
+Variable references in `!$` tags support dot paths, bracket expansion, query
+selection, and JMESPath expressions. The resolution follows this pipeline:
+
+```pseudocode
+resolveVarLookup(ctx, rawPath, query, jmesPathExpr):
+  -- Step 1: Bracket expansion (up to 10 levels to prevent infinite loops)
+  path = expandBrackets(rawPath, ctx, maxDepth=10)
+
+  -- Step 2: Dot-path traversal
+  segments = split(path, ".")
+  root = segments[0]
+  baseVal = lookupVariable(root, ctx)
+  if baseVal is Nothing: error(VariableNotFound, root, availableVars(ctx))
+  val = traversePath(segments[1:], baseVal)
+
+  -- Step 3: Query selection (if present)
+  if query contains ",":
+    -- Multi-key selection: extract named keys from mapping
+    keys = map(strip, split(query, ","))
+    for each key in keys:
+      if key not in val: error(PropertyNotFound, key, availableKeys(val))
+    val = OObject([(k, val[k]) | k <- keys])
+  else if query is not empty:
+    -- Single dot-path traversal into the result
+    val = traversePath(split(query, "."), val)
+
+  -- Step 4: JMESPath (if present, mutually exclusive with query)
+  if jmesPathExpr is not Nothing:
+    val = applyJmesPath(jmesPathExpr, val)
+
+  return val
+
+expandBrackets(path, ctx, depth):
+  if depth <= 0 or "[" not in path: return path
+  (before, rest) = breakOn("[", path)
+  (varName, after) = breakOn("]", drop(1, rest))
+  resolved = case lookupVariable(varName, ctx) of
+    OString s -> s
+    ONumber n -> show(n)
+    _         -> varName   -- unresolved: keep literal
+  return expandBrackets(before + "." + resolved + drop(1, after), ctx, depth-1)
+
+traversePath(segments, val):
+  for each seg in segments:
+    case val of
+      OObject kvs -> val = lookup(seg, kvs) or error(PropertyNotFound)
+      OArray arr  -> val = arr[parseInt(seg)]  or error(IndexOutOfBounds)
+      _           -> error(CannotTraverse)
+  return val
+```
+
+### Truthiness Rules
+
+Three distinct truthiness contexts exist, each with slightly different rules.
+**These are not interchangeable.** Using the wrong truthiness in a given context
+is a bug.
+
+**Decision table:**
+
+| Value              | Preprocessing (`!$if`, `!$not`, `!$map` filter) | Handlebars (`{{#if}}`, `{{#unless}}`, `{{#with}}`) | JMESPath (`[?filter]`) |
+|--------------------|--------------------------------------------------|-----------------------------------------------------|------------------------|
+| `null`             | falsy                                            | falsy                                               | falsy                  |
+| `false`            | falsy                                            | falsy                                               | falsy                  |
+| `true`             | truthy                                           | truthy                                              | truthy                 |
+| `""` (empty str)   | falsy                                            | falsy                                               | falsy                  |
+| `"hello"` (non-empty) | truthy                                       | truthy                                              | truthy                 |
+| `0` (zero)         | **falsy**                                        | **truthy**                                          | **truthy**             |
+| `42` (non-zero)    | truthy                                           | truthy                                              | truthy                 |
+| `[]` (empty array) | falsy                                            | falsy                                               | falsy                  |
+| `[1]` (non-empty)  | truthy                                           | truthy                                              | truthy                 |
+| `{}` (empty obj)   | falsy                                            | falsy                                               | falsy                  |
+| `{a: 1}` (non-empty) | truthy                                        | truthy                                              | truthy                 |
+
+**Key difference:** Zero is **falsy** in preprocessing but **truthy** in both
+Handlebars and JMESPath. This matches the respective upstream specs (Rust iidy
+`is_truthy` for preprocessing; Handlebars spec for `{{#if}}`; JMESPath spec for
+filters).
+
+**Pseudocode:**
+
+```pseudocode
+-- Preprocessing truthiness (OValue.oIsTruthy)
 oIsTruthy(value) = case value of
   ONull       -> false
   OBool b     -> b
@@ -152,23 +264,18 @@ oIsTruthy(value) = case value of
   ONumber n   -> n != 0         -- zero IS falsy
   OArray a    -> a is not empty
   OObject o   -> o is not empty
+
+-- Handlebars truthiness (Handlebars.Engine.isTruthy)
+hbIsTruthy(value) = case value of
+  Null        -> false
+  Bool b      -> b
+  String s    -> s != ""
+  Number _    -> true           -- ALL numbers truthy, including zero
+  Array a     -> a is not empty
+  Object o    -> o is not empty
+
+-- JMESPath truthiness (JMESPath.isTruthy): same as Handlebars
 ```
-
-**Handlebars truthiness** (used by `{{#if}}`, `{{#unless}}`, `{{#with}}`):
-
-| Value            | Truthy? |
-|------------------|---------|
-| `null`           | false   |
-| `false`          | false   |
-| `""` (empty)     | false   |
-| `[]` (empty)     | false   |
-| `{}` (empty)     | false   |
-| any number       | **true** (including zero) |
-| non-empty string | true    |
-| `true`           | true    |
-
-**JMESPath truthiness** (used by `[?filter]` expressions): same as Handlebars
-truthiness -- all numbers including zero are truthy.
 
 ### Custom Resource Expansion
 
@@ -177,6 +284,57 @@ template. During Phase 2, if the document contains a `Resources` section and
 custom templates are registered, any resource whose `Type` matches a registered
 template name is expanded. Expanded resources replace the original entry; global
 sections emitted by the expansion are merged into the top-level mapping.
+
+### Complete Tag Resolution Reference
+
+The following table summarizes all 24 preprocessing tag names (22 unique tags
+plus 2 aliases: `!$include` for `!$` and `!$string` for `!$toYamlString`),
+their argument types, and return types:
+
+| Tag                | Alias for        | Argument Shape                                      | Return Type        |
+|--------------------|------------------|-----------------------------------------------------|--------------------|
+| `!$`               |                  | scalar path or `{path, query?, jmespath?}`          | OValue (any)       |
+| `!$include`        | `!$`             | (same as `!$`)                                      | OValue (any)       |
+| `!$if`             |                  | `{test, then, else?}`                               | OValue (any)       |
+| `!$eq`             |                  | `[left, right]`                                     | OBool              |
+| `!$not`            |                  | `[expression]`                                      | OBool              |
+| `!$map`            |                  | `{items, template, var?, filter?}`                  | OArray             |
+| `!$concatMap`      |                  | `{items, template, var?, filter?}`                  | OArray (flattened)  |
+| `!$concat`         |                  | `[source1, source2, ...]`                           | OArray (flattened)  |
+| `!$merge`          |                  | `[mapping1, mapping2, ...]`                         | OObject            |
+| `!$mergeMap`       |                  | `{items, template, var?}`                           | OObject (merged)    |
+| `!$mapListToHash`  |                  | `{items, template, var?, filter?}`                  | OObject            |
+| `!$mapValues`      |                  | `{items, template, var?}`                           | OObject            |
+| `!$groupBy`        |                  | `{items, key, var?, template?}`                     | OObject of OArrays |
+| `!$fromPairs`      |                  | `[[k1,v1], [k2,v2], ...]`                          | OObject            |
+| `!$let`            |                  | `{binding1: val1, ..., in: expr}`                   | OValue (any)       |
+| `!$escape`         |                  | any YAML value                                      | OValue (raw, no resolution) |
+| `!$expand`         |                  | `{template: name, params: {...}}` or `[name, {...}]`| OValue (any)       |
+| `!$join`           |                  | `[delimiter, list]`                                 | OString            |
+| `!$split`          |                  | `[delimiter, string]`                               | OArray of OString  |
+| `!$toYamlString`   |                  | any YAML value                                      | OString (YAML)     |
+| `!$string`         | `!$toYamlString` | (same as `!$toYamlString`)                          | OString (YAML)     |
+| `!$parseYaml`      |                  | string                                              | OValue (parsed)    |
+| `!$toJsonString`   |                  | any YAML value                                      | OString (JSON)     |
+| `!$parseJson`      |                  | string                                              | OValue (parsed)    |
+
+The main dispatch function resolves each tag:
+
+```pseudocode
+resolveAst(ctx, node):
+  case node of
+    AstNull              -> ONull
+    AstBool b            -> OBool(b)
+    AstNumber n          -> ONumber(n)
+    AstPlainString s     -> OString(s)
+    AstTemplatedString s -> interpolateHandlebars(ctx, s) -> OString
+    AstSequence items    -> OArray([resolveAst(ctx, i) | i <- items])
+    AstMapping pairs     -> resolveMapping(ctx, pairs) -> OObject (filters special keys)
+    AstPreprocessingTag tag -> dispatch to per-tag resolver (see table above)
+    AstCloudFormationTag tag -> resolveCfnTag(ctx, tag) -> OObject [("!TagName", resolvedInner)]
+    AstUnknownTag name inner -> OObject [(name, resolveAst(ctx, inner))]
+    AstImportedDocument node -> resolveAst(ctx, node.content)
+```
 
 ---
 
@@ -255,7 +413,8 @@ and to allow each import to be available to subsequent import location strings.
 `!$` with dot notation, bracket notation, and query selectors, **so that** I
 can access deeply nested data without manual extraction.
 
-**Accepted tag forms:** `!$` and `!$include` (alias).
+**Accepted tag forms:** `!$` and `!$include` (alias -- identical behavior, the
+parser treats `!$include` as a synonym for `!$`).
 
 **Acceptance Criteria:**
 
@@ -439,8 +598,26 @@ resolve_map(ctx, tag) -> OArray:
 results are concatenated into one flat list. Non-sequence template results are
 wrapped as single-element lists.
 
+```pseudocode
+type ConcatMapTag = { items :: YamlAst, template :: YamlAst, var :: Maybe Text, filter :: Maybe YamlAst }
+resolve_concatMap(ctx, tag) -> OArray:
+  mapped = resolve_map(ctx, tag)   -- reuses !$map logic
+  return OArray(concatMap(flatten, mapped))
+  where flatten(OArray inner) = inner
+        flatten(other)        = [other]
+```
+
 **!$concat:** Takes a sequence of sequences and concatenates them into one flat
 list. Non-sequence items are flattened to single-element contribution.
+
+```pseudocode
+type ConcatTag = { sources :: [YamlAst] }
+resolve_concat(ctx, tag) -> OArray:
+  vals = [resolve(ctx, src) | src <- tag.sources]
+  return OArray(concatMap(flatten, vals))
+  where flatten(OArray inner) = inner
+        flatten(other)        = [other]
+```
 
 **!$merge:** Takes a sequence of mappings and deep-merges them left to right.
 
@@ -464,14 +641,50 @@ mergeOObjects(base, overlay) -> OObject:
 **!$mergeMap:** Like `!$map` (supports `items`, `template`, `var`) but each
 `template` must produce a mapping; all results are merged left to right.
 
+```pseudocode
+type MergeMapTag = { items :: YamlAst, template :: YamlAst, var :: Maybe Text }
+resolve_mergeMap(ctx, tag) -> OObject:
+  mapped = resolve_map(ctx, tag)   -- reuses !$map logic (no filter support)
+  result = OObject([])
+  for val in mapped:
+    assert val is OObject   -- type error otherwise
+    result = mergeOObjects(result, val)
+  return result
+```
+
 **!$mapListToHash:** Like `!$map` (supports `items`, `template`, `var`,
 `filter`) but each `template` must produce either a two-element sequence
 `[key, value]`, a single-key mapping `{key: value}`, or a mapping with `key`
 and `value` fields. All results are merged into one mapping.
 
+```pseudocode
+type MapListToHashTag = { items :: YamlAst, template :: YamlAst, var :: Maybe Text, filter :: Maybe YamlAst }
+resolve_mapListToHash(ctx, tag) -> OObject:
+  mapped = resolve_map(ctx, tag)   -- reuses !$map logic
+  pairs = []
+  for val in mapped:
+    case val of
+      OArray [k, v]                                     -> pairs.append((toText(k), v))
+      OObject [(k, v)]                                  -> pairs.append((k, v))
+      OObject kvs | has("key",kvs) && has("value",kvs)  -> pairs.append((toText(kvs["key"]), kvs["value"]))
+      _                                                 -> error(TypeMismatch)
+  return OObject(pairs)
+```
+
 **!$fromPairs:** Takes a pre-built sequence of two-element sequences `[key,
 value]` and converts it directly to a mapping. Does not iterate -- expects the
 sequence already built.
+
+```pseudocode
+type FromPairsTag = { source :: YamlAst }
+resolve_fromPairs(ctx, tag) -> OObject:
+  sourceVal = resolve(ctx, tag.source)   -- must be OArray
+  pairs = []
+  for val in sourceVal:
+    assert val is OArray of length 2
+    pairs.append((toText(val[0]), val[1]))
+  return OObject(pairs)
+```
 
 **!$mapValues:** Takes a mapping as `items`; applies `template` to each value.
 The loop variable (default `item`) is bound to a mapping `{key: K, value: V}`
@@ -497,7 +710,18 @@ non-deterministic (HashMap internally).
 
 ```pseudocode
 type GroupByTag = { items :: YamlAst, key :: YamlAst, var :: Maybe Text, template :: Maybe YamlAst }
--- Returns: OObject where values are OArray of grouped items
+
+resolve_groupBy(ctx, tag):
+  itemsVal = resolve(ctx, tag.items)
+  assert itemsVal is OArray, else typeMismatchError("sequence", itemsVal)
+  groups = []  -- association list preserving insertion order
+  for item in itemsVal:
+    itemCtx = withVariable(tag.var ?? "item", item, ctx)
+    keyVal = resolve(itemCtx, tag.key)
+    k = oValueToText(keyVal)
+    existing = lookupO(k, groups) ?? OArray([])
+    groups = insertO(k, OArray(existing ++ [item]), groups)
+  return OObject(groups)
 ```
 
 **Logic Flow (shared for iteration tags):**
@@ -596,6 +820,26 @@ Returns the parsed structure.
 
 **Logic Flow:**
 
+```pseudocode
+resolve_toYamlString(ctx, tag):    -- also handles !$string alias
+  val = resolve(ctx, tag.data)
+  return OString(emitYaml(val))
+
+resolve_toJsonString(ctx, tag):
+  val = resolve(ctx, tag.data)
+  return OString(encodeJson(val))
+
+resolve_parseYaml(ctx, tag):
+  str = resolve(ctx, tag.string)
+  assert str is OString, else typeMismatchError("string", str)
+  return parseYaml(str)
+
+resolve_parseJson(ctx, tag):
+  str = resolve(ctx, tag.string)
+  assert str is OString, else typeMismatchError("string", str)
+  return parseJson(str)
+```
+
 - All six tags resolve their input first, then perform their string/parse
   operation.
 - `!$join` validates each item type before joining.
@@ -633,12 +877,14 @@ string are treated as literal data rather than being expanded.
 
 ---
 
-### US-02-006: Use local bindings (!$let) and preprocessing escape (!$escape)
+### US-02-006: Use local bindings (!$let), preprocessing escape (!$escape), and template expansion (!$expand)
 
 **As a** Developer, **I want to** introduce scoped local variables within an
-expression and selectively suppress preprocessing on parts of the output, **so
-that** I can compute intermediate values without polluting the global `$defs`
-scope, and emit literal data structures that should not be transformed.
+expression, selectively suppress preprocessing on parts of the output, and
+explicitly expand registered custom resource templates, **so that** I can
+compute intermediate values without polluting the global `$defs` scope, emit
+literal data structures that should not be transformed, and reuse template
+definitions outside of the automatic `Resources` expansion.
 
 **Tag argument types and return types:**
 
@@ -656,6 +902,21 @@ resolve_let(ctx, tag) -> OValue:
 type EscapeTag = { content :: YamlAst }
 resolve_escape(tag) -> OValue:
   return astToValueRaw(tag.content)   -- no tag resolution, no Handlebars interpolation
+
+-- !$expand
+type ExpandTag = { templateRef :: YamlAst, params :: YamlAst }
+resolve_expand(ctx, tag) -> OValue:
+  templateName = toText(resolve(ctx, tag.templateRef))
+  if templateName in ctx.activeExpansions: error(CircularExpansion)
+  tmplInfo = lookupTemplate(templateName, ctx.customTemplateDefs)
+  if tmplInfo is Nothing: error(ExpandNotFound, templateName)
+  provided = resolve(ctx, tag.params)   -- must be OObject
+  merged = mergeWithDefaults(tmplInfo.params, provided)
+  templateAst = parseYaml(tmplInfo.rawBody, tmplInfo.location)
+  subCtx = ctx { variables = merged `union` ctx.variables,
+                 inputUri = tmplInfo.location,
+                 activeExpansions = insert(templateName, ctx.activeExpansions) }
+  return resolveAst(subCtx, templateAst)
 ```
 
 **Acceptance Criteria:**
@@ -706,12 +967,26 @@ resolve_escape(tag) -> OValue:
 - `!$escape` on a mapping containing a CloudFormation tag (e.g. `!Ref`):
   produces `{"!Ref": "LogicalId"}` as an object, not a YAML tag.
 
+**!$expand:**
+
+- The `!$expand` tag explicitly invokes a registered custom resource template.
+- The first child (scalar or mapping key `template`) identifies the template
+  name, which must match a key from `$imports` that had a `$params` section.
+- The second child (or `params` mapping key) provides parameter values.
+- Parameters are merged with the template's `$params` defaults: provided values
+  override defaults; missing parameters without defaults are omitted.
+- Circular expansion is detected via `activeExpansions` and produces an error.
+- See `04-custom-resources.md` for the full custom resource expansion pipeline
+  including automatic expansion in `Resources` sections.
+
 **Error Scenarios:**
 
 - ERR_4002: `!$let` value is not a mapping.
 - ERR_4002: `in` key missing from `!$let` mapping.
 - ERR_2001: Variable referenced in a `!$let` binding references a name not yet
   defined in that `!$let` block and not in the outer scope.
+- ERR_4002: `!$expand` template name not found in registered custom templates.
+- ERR_9001: Circular `!$expand` detected (template expanding itself).
 
 **Complexity Notes:**
 
@@ -974,10 +1249,13 @@ type ResolveErrorKind =
   | REJmesPath           { expr :: Text, detail :: Text, varPath :: Text }
   | REPropertyNotFound   { missingKey :: Text, varPath :: Text, availableKeys :: [Text] }
   | RETypeMismatch       { expected :: Text, found :: Text, contextTag :: Maybe Text }
-  | REMissingField       { fieldName :: Text, tagName :: Text }
-  | REInvalidField       { detail :: Text }
-  | REHandlebars         { detail :: Text }
-  | REGeneric            { detail :: Text }
+  | RECfnValidation      { cfnTagName :: Text }
+  | REHandlebars
+  | RETagSyntax          { tagName :: Maybe Text }
+  | REExpandNotFound     { templateName :: Text }
+  | RECircularExpansion  { templateName :: Text }
+  | REParseSyntax
+  | REGeneric
 ```
 
 **Acceptance Criteria:**
@@ -1111,9 +1389,9 @@ known CloudFormation tag) is preserved as-is with its inner content resolved.
 
 ## Testing Requirements
 
-- All 22 custom tags (including `!$include` alias for `!$` and `!$string` alias
-  for `!$toYamlString`) must have fixture tests with corresponding expected
-  outputs.
+- All 24 custom tags (including `!$include` alias for `!$`, `!$string` alias
+  for `!$toYamlString`, and `!$expand` for explicit template expansion) must
+  have fixture tests with corresponding expected outputs.
 - All error conditions must have fixture tests with corresponding expected error
   output snapshots.
 - Error snapshot tests verify: error code (ERR_NNNN), file/line/column, caret

@@ -171,10 +171,12 @@ See: `05-cfn-operations.md`, `10-template-approval.md`
 ### 5. Deterministic Operations
 - Idempotency tokens on all CloudFormation mutations (auto-generated UUIDs or
   user-provided via `--client-request-token`)
-- Multi-step operations derive sub-tokens deterministically via SHA256
+- Multi-step operations derive sub-tokens deterministically:
+  `SHA256(primary_token + step_name)` formatted as
+  `<primary_first_8_chars>-<hash_first_8_hex_chars>`
 - Client request token displayed in Command Metadata for traceability
 
-See: `05-cfn-operations.md`
+See: `05-cfn-operations.md`, `12-cross-cutting.md` US-12-004
 
 ### 6. Environment-Based Configuration
 A single `stack-args.yaml` targets multiple environments via maps:
@@ -234,12 +236,27 @@ feature subset required by the Rust oracle.
 
 **Key insertion order**: Object key insertion order must be preserved throughout
 the entire preprocessing pipeline. Standard JSON/YAML object types that use
-unordered maps are insufficient; the internal value representation must maintain
-declaration order to produce deterministic output.
+unordered maps are insufficient; the internal value representation (`OValue`,
+an ordered-map variant) must maintain declaration order to produce deterministic
+output. The `OValue` type wraps `[(Text, OValue)]` for mappings, preserving
+insertion order through all transformation phases.
 
-**Known Divergences**: See `DIVERGENCES.md`. Key differences: CLI help formatting
+**Known Divergences**: See `DIVERGENCES.md` (required reading for understanding
+behavioral gaps from the Rust oracle). Key differences: CLI help formatting
 layout, error color checks stderr TTY (improvement over Rust), `explain` command
-accepts more input formats, PowerShell completion not supported.
+accepts more input formats, PowerShell completion not supported, SSM `--message`
+sets description instead of `iidy:message` tag, KMS alias lookup not implemented,
+template approval diff uses LCS algorithm (order-sensitive) rather than
+set-theoretic diff.
+
+## Formal Specification
+
+A PLT Redex formal semantics under `spec/` validates the preprocessing pipeline's
+core evaluation rules. The Redex model covers import resolution, `$defs` sequential
+binding, custom tag evaluation, and Handlebars interpolation. It serves as a
+machine-checkable complement to this PRD: the Redex rules define the normative
+semantics, while the PRD describes the full system behavior including I/O,
+AWS integration, and CLI interface.
 
 ## Testing Requirements
 

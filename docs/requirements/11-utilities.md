@@ -76,19 +76,47 @@ disk for archiving.
 **Logic Flow:**
 
 ```
-read input (file | stdin)
-  → parse YAML → error: format error → stderr, exit 1
-  → select spec (yaml-spec flag | auto-detect)
-  → preprocess
-  → error: format error → stderr, exit 1
-  → success:
-  → apply JMESPath query (if --query)
-  → error: "Invalid JMESPath query: ..." → stderr, exit 1
-  → validate format string
-  → invalid: "Unsupported format: ..." → stderr, exit 1
-  → render (json | yaml)
-  → write to stdout or file (with overwrite check)
-  → exit 0
+runRender emit args gopts:
+  -- Step 1: Read input
+  (content, baseLocation) = if args.template == "-"
+                            then (stdin, "-")
+                            else (readFile args.template, args.template)
+  source = decodeUtf8 content
+
+  -- Step 2: Parse YAML
+  ast <- parseYaml content baseLocation
+    | Left (ParseError pos msg) -> formatParseErrorEnhanced -> stderr, exit 1
+
+  -- Step 3: Select YAML spec and preprocess
+  useYaml11 = case args.yamlSpec of
+    YamlV11 -> True
+    YamlV12 -> False
+    YamlAuto -> shouldUseYaml11Compatibility (detectYamlSpec source)
+  preprocess = if useYaml11 then preprocessYaml11 else preprocessYaml
+  val <- preprocess dispatcher ast args.template
+    | Left err -> formatPreprocessErrorEnhanced -> stderr, exit 1
+    | Right (PreprocessResult val _manifest) -> val
+
+  -- Step 4: Apply JMESPath query (optional)
+  outputVal = case args.query of
+    Nothing -> val
+    Just q  -> applyJmesPath q (toValue val)
+      | Left err -> formatJMESPathQueryError -> stderr, exit 1
+      | Right filtered -> fromValue filtered
+
+  -- Step 5: Format output
+  rendered = case args.format of
+    RenderJson    -> encodePretty (toValue outputVal)    -- pretty JSON
+    RenderYaml    -> emitYaml outputVal                  -- custom YAML emitter
+    RenderCfnYaml -> emitYaml outputVal                  -- same as yaml for render
+
+  -- Step 6: Write output
+  if isStdoutTarget args.outfile   -- "-" or "stdout"
+    then emit (OdRawOutput (rendered <> "\n"))
+    else
+      if fileExists args.outfile && not args.overwrite
+        then stderr "Output file '<path>' exists. Use --overwrite to overwrite it.", exit 1
+        else writeFile args.outfile rendered, exit 0
 ```
 
 **Edge Cases:**
@@ -231,17 +259,63 @@ screencasts or walk through iidy features interactively without manual typing.
 **Logic Flow:**
 
 ```
-read script file
-  → parse YAML → error: format error → stderr, exit 1
-  → preprocess (YAML 1.1 mode)
-  → error: format error → stderr, exit 1
-  → parse demo script structure
-  → error: "Failed to parse demo script: ..." → stderr, exit 1
-  → success (files, commands):
-      create tmpDir, unpack files
-      run all commands
-      remove tmpDir (always, even on error)
-      exit 0
+runDemo scriptPath timescaling maskSecrets remoteImports:
+  content <- readFile scriptPath
+
+  -- Parse and preprocess in YAML 1.1 mode
+  ast <- parseYaml content scriptPath
+    | Left (ParseError pos msg) -> formatParseErrorEnhanced -> stderr, exit 1
+  oval <- preprocessYaml11 dispatcher ast scriptPath
+    | Left err -> formatPreprocessErrorEnhanced -> stderr, exit 1
+  processed = toValue oval
+
+  -- Parse demo script structure
+  (files, commands) <- parseDemoScript processed
+    | Left err -> "Failed to parse demo script: " <> err -> stderr, exit 1
+
+  -- Execute with temporary directory
+  bracket (createDir tmpDir/iidy-demo) (removeDir) $ \demoDir ->
+    unpackFiles files demoDir   -- validate: no absolute paths, no ".." components
+    iidyExe <- getIidyExe       -- compare current exe with PATH iidy
+    envMap  <- getEnvironment + { PKG_SKIP_EXECPATH_PATCH = "yes" }
+    if iidyExe then envMap += { IIDY_EXE = exePath }
+    for each command in commands:
+      case command of
+        DemoShell cmd ->
+          substituted = substituteIidyCommand cmd iidyExe
+            -- regex: (^|[|;&({])( *)(iidy)\b -> replace "iidy" with exe path
+          printCommand substituted timescaling
+            -- char-by-char with 50ms * timescaling delay
+            -- prefix: "\ESC[31mShell Prompt >\ESC[0m "
+          execShell substituted demoDir envMap maskSecrets
+        DemoSilent cmd ->
+          substituted = substituteIidyCommand cmd iidyExe
+          execShell substituted demoDir envMap maskSecrets
+        DemoSleep secs ->
+          threadDelay (secs * timescaling * 1_000_000)
+        DemoSetEnv vars ->
+          envMap = Map.union vars envMap
+        DemoBanner text ->
+          displayBanner text
+            -- 80-col banner, bold yellow on dark grey (ANSI 256-color 236)
+            -- multi-line: split on "\n"
+    exit 0
+
+-- Account number masking (when maskSecrets = true):
+maskAwsAccountNumbers text:
+  regex match "\b[0-9]{12}\b" -> replace with "************"
+  recursively process suffix for multiple matches
+```
+
+**Command types** (parsed from the `demo` sequence):
+
+```haskell
+data DemoCommand
+    = DemoShell  Text           -- string value: shell command with typing simulation
+    | DemoSilent Text           -- {silent: "<cmd>"}: execute without display
+    | DemoSleep  Int            -- {sleep: N}: delay N * timescaling seconds
+    | DemoSetEnv (Map Text Text) -- {setenv: {K: V}}: merge into environment
+    | DemoBanner Text           -- {banner: "<text>"}: display formatted banner
 ```
 
 **Edge Cases:**
@@ -357,7 +431,8 @@ variables, and other import sources resolve correctly before embedding them in t
 - Output format is controlled by `--format` (case-insensitive):
   - `"json"`: compact JSON, newline-terminated, to stdout.
   - `"yaml"`: YAML serialization to stdout.
-  - Anything else (including `"raw"`): raw unprocessed source text to stdout.
+  - `"yaml-cloudformation"`: same as `yaml` for get-import.
+  - The `RenderFormat` enum has no `Raw` variant; these three are the only options.
 - Optional `--query` JMESPath expression: currently not applied (the flag is parsed but
   not applied). This is a known gap; behavior matches Rust.
 - Exit code 0 on success, 1 on any error.
@@ -365,23 +440,36 @@ variables, and other import sources resolve correctly before embedding them in t
 **Logic Flow:**
 
 ```
-parse import type from location string
-  error → "Import error: ..." → stderr, exit 1
-load import by type
-  error → "Import error: ..." → stderr, exit 1
-  success →
-    "json" → emit compact JSON to stdout
-    "yaml" → emit YAML to stdout
-    other  → emit raw source text to stdout
-    exit 0
+runGetImport emit args gopts:
+  location     = args.import
+  baseLocation = "."          -- always CWD, not relative to a template file
+  dispatcher   = mkFullDispatcher importCfg
+
+  result <- dispatcher location baseLocation
+  case result of
+    Left (ImportError err) ->
+      stderr "Import error: " <> err
+      exit 1
+    Right importData ->
+      doc = importData.doc    -- Aeson Value
+      case args.format of
+        RenderJson    -> emit (OdRawOutput (Aeson.encode doc <> "\n"))
+        RenderYaml    -> emit (OdRawOutput (emitYaml (fromValue doc)))
+        RenderCfnYaml -> emit (OdRawOutput (emitYaml (fromValue doc)))
+      exit 0
 ```
+
+**NOTE:** The `RenderFormat` enum has three variants (`RenderJson | RenderYaml |
+RenderCfnYaml`). There is no `Raw` variant. The `--format` flag defaults to one
+of these three values; the "raw" format described in some documentation is not
+a separate code path in the current implementation. `RenderCfnYaml` behaves
+identically to `RenderYaml` for get-import.
 
 **Edge Cases:**
 
 - `ImportEnv` with an unset variable: `loadEnvImport` returns a `Left ImportError`;
   message printed to stderr, exit 1.
 - `ImportFile` with a missing file: `loadFileImport` returns a `Left ImportError`; same.
-- `--format raw` on a YAML file: returns the raw bytes of the file, not parsed YAML.
 - Import location that is a bare filename with no scheme: `parseImportType` treats it as
   a relative file path (`ImportFile`).
 

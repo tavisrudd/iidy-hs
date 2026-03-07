@@ -113,6 +113,147 @@ current line.
 | Dark grey (`ecDarkGrey`) | `\ESC[90m`    | Previous/next line numbers        |
 | Reset (`ecReset`)     | `\ESC[0m`        | Terminates every colored span     |
 
+### Enhanced Error Type
+
+Raw errors from the YAML parser and preprocessor are converted to one of six enhanced
+error variants before display. Each variant carries fields specific to that error
+category:
+
+```
+type EnhancedPreprocessingError
+    = VariableNotFoundError  VariableNotFoundInfo
+    | TypeMismatchError      TypeMismatchInfo
+    | CfnValidationError     CfnValidationInfo
+    | YamlSyntaxError        YamlSyntaxInfo
+    | TagParsingError        TagParsingInfo
+    | LookupQueryError       LookupQueryInfo
+
+VariableNotFoundInfo:
+    errorId        -- ErrorId (e.g., VariableNotFound = 2001)
+    variable       -- the variable name that was not found
+    location       -- SourceLocation (file, line, column)
+    availableVars  -- list of variable names in current scope
+    suggestions    -- possible corrections
+
+TypeMismatchInfo:
+    errorId, expected, found, location, context, help
+
+CfnValidationInfo:
+    errorId, tagName, message, location, helpText
+
+YamlSyntaxInfo:
+    errorId, shortMessage, guidance, location, fixHint, example
+
+TagParsingInfo:
+    errorId, tagName, message, guidance, location, suggestion, spanLen
+
+LookupQueryInfo:
+    errorId, variablePath, message, location, availableKeys
+```
+
+### Error Conversion Pipeline
+
+The multi-stage pipeline transforms raw errors into displayable text:
+
+```
+Stage 1: Raw Error Input
+    PreprocessError (from preprocessor) or ParseError (from YAML parser)
+
+Stage 2: Parse Error Translation (HsYAML compatibility)
+    translateParseError(source, position, message):
+        "Lexical error" + chained tags on line -> "invalid YAML structure"
+        "Unexpected '<newline>'"               -> "unexpected end of file" (adjusted position)
+        otherwise                              -> pass through unchanged
+
+Stage 3: Classification
+    For structured errors (ResolveError with typed kind):
+        REVariableNotFound -> VariableNotFoundError
+        RETypeMismatch     -> TypeMismatchError
+        RECfnValidation    -> CfnValidationError
+        RETagSyntax        -> TagParsingError
+        REHandlebars       -> YamlSyntaxError (ERR_6001)
+        REGeneric          -> fall through to string-based classification
+
+    For string-based classification (classifyMessage):
+        Pattern-match on message text to determine error variant:
+        "'!$xxx' is not a valid iidy tag"  -> TagParsingError (ERR_4001)
+        "unexpected field 'xxx'"           -> TagParsingError (ERR_4005)
+        "Variable not found: xxx"          -> VariableNotFoundError (ERR_2001)
+        "expected X, found Y"              -> TypeMismatchError (ERR_5001)
+        "property 'x' not found in mapping"-> LookupQueryError (ERR_2006)
+        CFN intrinsic prefix ("!Ref ", etc)-> CfnValidationError (ERR_7001)
+        "must be a mapping/sequence"       -> TagParsingError (ERR_4003)
+        "Handlebars error: ..."            -> YamlSyntaxError (ERR_6001)
+        "invalid YAML..."                  -> YamlSyntaxError (ERR_1001)
+        fallback                           -> TagParsingError (ERR_4005)
+
+    For import errors:
+        ImportError -> YamlSyntaxError (ERR_3001)
+
+    For handlebars errors:
+        InterpolateError -> YamlSyntaxError (ERR_6001)
+
+Stage 4: Display Formatting (pure function)
+    formatError(colors, source, enhancedError) -> Text
+    See US-07-001 for the display format specification.
+```
+
+### Per-Variant Caret Span Lengths
+
+Each enhanced error variant uses a different caret span:
+
+| Variant              | Span Length                            | Inline Description          |
+|----------------------|----------------------------------------|-----------------------------|
+| VariableNotFound     | `length(variable_name) + 3`            | "variable not defined"      |
+| TypeMismatch         | 8 (fixed)                              | "expected <type>"           |
+| CfnValidation        | 4 (fixed)                              | "invalid CloudFormation tag"|
+| YamlSyntax           | 1 (fixed)                              | "" (empty)                  |
+| TagParsing (known)   | `tpiSpanLen` (varies; 0 = no carets)   | "" (empty)                  |
+| LookupQuery          | 1 (fixed)                              | the error message itself    |
+
+### Guidance Text Generation
+
+Each error variant receives context-sensitive guidance:
+
+- **Type mismatch help**: When expected="object" and found="string", suggests using
+  `!$parseJson` or `!$parseYaml`. When expected="string" and found="object", suggests
+  `!$toJsonString` or `!$toYamlString`. Other combinations get no extra help.
+- **CFN help text**: Per-tag help with examples (e.g., "!Ref expects a string (resource
+  or parameter name)" with inline examples for Ref, Sub, Join, Select, FindInMap, etc.).
+- **"Must be" guidance**: Pattern-matched from message text to produce specific
+  guidance like "use format: {test: condition, then: value, else: alternative}" for
+  `!$if` errors, with auto-generated examples for each tag.
+
+### Tag Position Search
+
+For tag-related errors, the position is adjusted to point at the tag name rather than
+the value. The search algorithm:
+
+1. Look at the source line at the parser-reported position.
+2. Search for `!$` patterns on that line.
+3. If found, update the column to point at the tag start.
+4. For chained-tag errors (two `!$` on one line), find the second tag position.
+5. For "unexpected field" errors, find the tag on the source line and generate an
+   appropriate example from the tag name.
+
+### Explain Command Code Normalisation
+
+The explain command normalises all three accepted input formats to canonical form:
+
+```
+normaliseCode(input):
+    upper  = toUpper(input)
+    digits = stripPrefix("ERR_", upper) or upper if no prefix
+    padded = rightJustify(digits, width=4, fill='0')
+    return "ERR_" + padded
+
+Examples:
+    "ERR_2001" -> "ERR_2001"
+    "err_2001" -> "ERR_2001"
+    "2001"     -> "ERR_2001"
+    "42"       -> "ERR_0042"  (unknown, but normalised)
+```
+
 ---
 
 ## User Stories
@@ -147,11 +288,84 @@ fix preprocessing mistakes without opening the source file manually.
 
 **Logic Flow:**
 
-The error formatter dispatches on the error variant. Each variant emits: header, guidance,
-source context (with or without carets depending on variant), variant-specific help
-sections, then footer. Source lines are retrieved by 1-based index. Gutter numbers are
-right-aligned in 4 characters. Caret span is computed as
+The error formatter dispatches on the enhanced error variant. Each variant emits: header,
+guidance, source context (with or without carets depending on variant), variant-specific
+help sections, then footer. Source lines are retrieved by 1-based index. Gutter numbers
+are right-aligned in 4 characters. Caret span is computed as
 `max 1 (min spanLen (lineLen - col + 1))`.
+
+```
+formatError(colors, source, error):
+    case error of
+        VariableNotFoundError info ->
+            header("Variable error", "'<var>' not found", location, errorId)
+            + guidance("variable not defined in current scope")
+            + sourceContext(source, location, spanLen=length(var)+3, "variable not defined")
+            + availableVars(info.availableVars)       -- omitted if empty
+            + footer(errorId)
+
+        TypeMismatchError info ->
+            header("Type error", "expected <X>, found <Y>", location, errorId)
+            + guidance("data type mismatch")
+            + sourceContext(source, location, spanLen=8, "expected <X>")
+            + typeMismatchHelp(expected, found, extraHelp)
+            + footer(errorId)
+
+        CfnValidationError info ->
+            header("CloudFormation error", message, location, errorId)
+            + guidance("invalid CloudFormation intrinsic function")
+            + sourceContext(source, location, spanLen=4, "invalid CloudFormation tag")
+            + cfnHelp(tagName, helpText)
+            + footer(errorId)
+
+        YamlSyntaxError info ->
+            header("Syntax error", shortMessage, location, errorId)
+            + guidance(info.guidance)
+            + sourceContext(source, location, spanLen=1, "")
+            + fixHint(info.fixHint)              -- optional
+            + exampleInline(info.example)         -- optional
+            + "\n"
+            + footer(errorId)
+
+        TagParsingError info ->
+            if info.spanLen > 0:
+                header + guidance + sourceContextWithCarets(spanLen) + example + footer
+            else:
+                header + guidance + sourceContextNoCarets + example + footer
+
+        LookupQueryError info ->
+            header("Lookup error", message, location, errorId)
+            + guidance("query failed on variable '<path>'")
+            + sourceContext(source, location, spanLen=1, message)
+            + availableKeys(info.availableKeys)   -- omitted if empty
+            + footer(errorId)
+```
+
+Source context rendering:
+
+```
+formatSourceContext(colors, source, location, spanLen, inlineDesc):
+    lines   = splitLines(source)
+    lineNum = location.line    -- 1-based
+    col     = location.column  -- 1-based
+
+    prevLine = getLine(lines, lineNum - 1)     -- Maybe, omitted if line 1
+    currLine = getLine(lines, lineNum)         -- Maybe
+    nextLine = getLine(lines, lineNum + 1)     -- Maybe, omitted if last line
+
+    showCarets = spanLen > 0 AND currLine exists AND col > 0 AND col <= length(currLine)
+
+    output:
+        if prevLine exists:
+            darkGrey(padGutter4(lineNum-1)) + " | " + grey(prevLine)
+        if currLine exists:
+            red(padGutter4(lineNum)) + " | " + currLine
+        if showCarets:
+            "     | " + spaces(col-1) + red("^" * effectiveSpan) + " " + grey(inlineDesc)
+            where effectiveSpan = max(1, min(spanLen, lineLength - col + 1))
+        if nextLine exists:
+            darkGrey(padGutter4(lineNum+1)) + " | " + grey(nextLine)
+```
 
 **Edge Cases:**
 
@@ -575,11 +789,21 @@ plain-text error messages without escape sequences.
 
 **Logic Flow:**
 
-Error color detection is called after argument parsing.
-- `ColorAlways` returns full colors.
-- `ColorNever` returns no colors.
-- `ColorAuto` checks `NO_COLOR`, then `FORCE_COLOR`, then falls through to
-  `hIsTerminalDevice stderr`.
+Error color detection is called after argument parsing:
+
+```
+detectErrorColors(colorChoice):
+    ColorAlways -> return defaultColors (all 6 ANSI codes + reset populated)
+    ColorNever  -> return noColors (all fields = empty string)
+    ColorAuto   ->
+        if lookupEnv("NO_COLOR") is set    -> return noColors
+        if lookupEnv("FORCE_COLOR") is set -> return defaultColors
+        if hIsTerminalDevice(stderr)       -> return defaultColors
+        else                               -> return noColors
+```
+
+Note: This uses `stderr` (not `stdout`) for TTY detection because all error output goes
+to stderr. This diverges from the Rust implementation which checks stdout.
 
 **Edge Cases:**
 

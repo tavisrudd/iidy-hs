@@ -66,13 +66,110 @@ slashes normalized, and `ext` is the file extension of the `Template` field (e.g
 `.yaml`). The `latest` key lives at the parent directory level of the hash-named
 objects.
 
-**Diff algorithm**: `generateDiff old new` computes a simple set-difference diff:
-lines present in `old` but not `new` are prefixed with `"- "`, lines present in
-`new` but not `old` are prefixed with `"+ "`. This is not a unified context diff;
-it is order-insensitive. The `--context` flag controls `TemplateDiff.tdContextLines`
-(recorded in the output type) but does not currently trim the diff output.
+**Diff algorithm**: `generateDiff contextLines old new` computes an LCS-based
+(Longest Common Subsequence) unified diff:
+
+```
+generateDiff contextLines old new:
+  if old == new then return ""
+  oldLns = T.lines old
+  newLns = T.lines new
+  ops    = lcsOps oldLns newLns    -- DP-based LCS, produces [DiffOp]
+  hunks  = buildHunks contextLines ops
+  return (formatHunks hunks)
+
+data DiffOp = Equal Text | Delete Text | Insert Text
+
+lcsOps oldLns newLns:
+  -- Build DP table dp[i][j] = LCS length for old[i..] vs new[j..]
+  -- Backtrack to produce sequence of Equal/Delete/Insert ops
+  -- Equal: line in both    -> "  " prefix
+  -- Delete: line in old only -> "- " prefix
+  -- Insert: line in new only -> "+ " prefix
+
+buildHunks contextLines ops:
+  -- Find indices of non-Equal ops (changes)
+  -- Expand each change index to range [max(0, i-ctx), min(len-1, i+ctx)]
+  -- Merge overlapping/adjacent ranges
+  -- Extract ops for each merged range as a hunk
+
+formatHunks hunks:
+  -- Join hunks with "\n---\n" separator
+  -- Within each hunk: join ops with "\n"
+```
+
+This is ORDER-SENSITIVE (not set-theoretic). The `--context` flag controls
+how many lines of unchanged context surround each change group. Non-adjacent
+hunks are separated by `"---"`. The default context of 500 lines means most
+templates show the full diff without truncation.
 
 ---
+
+## Approval Workflow State Machine
+
+```
+                    template-approval request
+                              |
+                              v
+                    +---------+---------+
+                    | Compute SHA256    |
+                    | of template body  |
+                    +---------+---------+
+                              |
+                    +---------+---------+
+                    | HeadObject on     |
+                    | approved key      |
+                    +---------+---------+
+                       /             \
+                  exists           absent
+                    /                 \
+          +--------+------+    +------+--------+
+          | Already       |    | Upload to     |
+          | Approved      |    | .pending key  |
+          | (exit 0)      |    +------+--------+
+          +---------------+           |
+                              template-approval review
+                                      |
+                              +-------+-------+
+                              | HeadObject    |
+                              | pending key   |
+                              +-------+-------+
+                                 /         \
+                             absent      exists
+                               /           \
+                    +---------+--+   +------+---------+
+                    | Error:     |   | HeadObject     |
+                    | not found  |   | approved key   |
+                    | (exit 1)   |   +------+---------+
+                    +------------+      /         \
+                                   exists      absent
+                                     /           \
+                          +---------+--+   +-----+----------+
+                          | Already    |   | Download       |
+                          | approved   |   | pending+latest |
+                          | (exit 0)   |   +-----+----------+
+                          +------------+         |
+                                          +------+------+
+                                          | generateDiff |
+                                          +------+------+
+                                            /         \
+                                       empty        non-empty
+                                         /             \
+                              +---------+--+    +------+---------+
+                              | Auto-      |    | Prompt user    |
+                              | approve    |    +------+---------+
+                              | (exit 0)   |      /         \
+                              +------------+  approve     reject
+                                              /             \
+                                    +--------+--+    +------+------+
+                                    | Upload to |    | Exit 1      |
+                                    | approved  |    | (not 130)   |
+                                    | + latest  |    +-------------+
+                                    | Delete    |
+                                    | pending   |
+                                    | (exit 0)  |
+                                    +-----------+
+```
 
 ## User Stories
 
@@ -270,13 +367,12 @@ requestConfirmation "Would you like to approve these changes?"
 - If upload of the approved key succeeds but upload of the latest key fails (partial
   failure), the pending key is not deleted. The approved object exists but `latest`
   is stale. Partial upload failures are not surfaced to the user.
-- `generateDiff` is set-theoretic: it reports lines removed and lines added
-  regardless of position. A line that moved from one location to another in the file
-  will appear as both removed and added. For CloudFormation YAML templates this is
-  generally acceptable since resource ordering rarely matters.
-- The `--context` flag value is stored in `tdContextLines` but does not trim the
-  diff; the full diff is always emitted. This is a known gap versus the intended
-  behavior of showing a configurable number of context lines around changes.
+- `generateDiff` uses LCS-based diff: it is order-sensitive and position-aware.
+  A line that moved from one location to another appears as a delete at the old
+  position and an insert at the new position.
+- The `--context` flag value controls how many lines of unchanged content surround
+  each change hunk. With the default of 500, most templates show the full diff.
+  Non-adjacent hunks are separated by `"---"` lines.
 
 **Error Scenarios:**
 
@@ -579,8 +675,10 @@ branching beyond the trailing-slash normalization.
   - Identical strings — verify empty output.
   - Single line added — verify `"+ line"` in output.
   - Single line removed — verify `"- line"` in output.
-  - No changes in content but different ordering — verify non-empty diff
-    (the diff algorithm is set-theoretic, not positional).
+  - Unchanged lines — verify `"  line"` prefix (two-space indent).
+  - Reordered lines — verify non-empty diff (LCS-based, position-sensitive).
+  - Context line trimming — verify hunks respect `contextLines` parameter.
+  - Multiple non-adjacent changes — verify `"---"` separator between hunks.
 
 ### Integration Tests (via mock AWS)
 
@@ -622,8 +720,9 @@ branching beyond the trailing-slash normalization.
 - Partial-failure handling during promotion (approved upload succeeds, latest
   upload fails): not tested; the current implementation discards upload errors
   during promotion.
-- Context-line trimming in diff output: the `contextLines` value is stored but
-  not used to trim output. Tests for context-line behavior are deferred.
+- Context-line trimming in diff output: implemented via `buildHunks` which uses
+  `contextLines` to control context window around changes. Tests should verify
+  hunk boundaries and `"---"` separators.
 
 ---
 

@@ -5,7 +5,7 @@
 iidy-hs routes all command output through a unified pipeline that supports three distinct
 rendering modes: interactive (color, spinners, formatted sections), plain (no ANSI, no
 spinners, log-friendly), and json (JSON Lines / NDJSON, one object per line). Every
-structured value emitted by a command is represented as one of 26 `OutputData` variants.
+structured value emitted by a command is represented as one of 27 `OutputData` variants.
 The pipeline selects the appropriate renderer at startup based on CLI flags, terminal
 detection, and environment variables, then passes each `OutputData` value to the renderer
 in order.
@@ -24,6 +24,109 @@ re-initializing the renderer. JSON serialization uses an envelope format (type,
 timestamp, data) defined in this PRD. The interactive and plain modes share the same
 rendering code path; plain mode is controlled by a boolean flag that turns all
 color/bold calls into no-ops.
+
+### OutputData Type Declaration
+
+The `OutputData` type has exactly 27 constructors covering all output events:
+
+```
+type OutputData
+    = OdCommandMetadata      CommandMetadata
+    | OdStackDefinition      StackDefinition Bool       -- Bool = show_times flag
+    | OdStackEvents          StackEventsDisplay
+    | OdStackContents        StackContents
+    | OdStatusUpdate         StatusUpdate
+    | OdCommandResult        CommandResult
+    | OdFinalCommandSummary  FinalCommandSummary
+    | OdStackList            StackListDisplay
+    | OdChangeSetResult      ChangeSetCreationResult
+    | OdStackDrift           StackDrift
+    | OdError                ErrorInfo
+    | OdTokenInfo            TokenInfo
+    | OdNewStackEvents       [StackEventWithTiming]
+    | OdOperationComplete    OperationCompleteInfo
+    | OdInactivityTimeout    InactivityTimeoutInfo
+    | OdConfirmationPrompt   ConfirmationRequest
+    | OdStackChangeDetails   StackChangeDetails
+    | OdStackAbsentInfo      StackAbsentInfo
+    | OdCostEstimate         CostEstimate
+    | OdStackTemplate        StackTemplate
+    | OdApprovalRequestResult ApprovalRequestResult
+    | OdTemplateValidation   TemplateValidation
+    | OdApprovalStatus       ApprovalStatus
+    | OdTemplateDiff         TemplateDiff
+    | OdApprovalResult       ApprovalResult
+    | OdPollingStarted       Text                       -- spinner message
+    | OdRawOutput            Text                       -- raw text for non-CFN commands
+```
+
+### TTY Detection and Mode Resolution
+
+Terminal capabilities are detected at startup:
+
+```
+detectCapabilities:
+    isTty    = hIsTerminalDevice stdout
+    noColor  = lookupEnv "NO_COLOR"
+    forceColor = lookupEnv "FORCE_COLOR"
+    columns  = lookupEnv "COLUMNS"
+
+    hasColor = case (noColor, forceColor) of
+        (Just _, _)      -> False    -- NO_COLOR takes precedence
+        (_, Just _)      -> True     -- FORCE_COLOR forces on
+        (Nothing,Nothing)-> isTty    -- auto-detect
+
+    width = parse COLUMNS or default 80 if TTY, Nothing if not
+
+    return TerminalCapabilities { tcHasColor, tcWidth, tcIsTty }
+```
+
+The output mode is then resolved:
+
+```
+resolveMode:
+    --output-mode json        -> OutputJson
+    --output-mode plain       -> OutputPlain
+    --output-mode interactive -> OutputInteractive
+    no flag + TTY             -> OutputInteractive
+    no flag + not TTY         -> OutputPlain
+
+resolveColors(colorFlag, mode, capabilities):
+    ColorAlways -> True
+    ColorNever  -> False
+    ColorAuto   -> case mode of
+        OutputJson        -> False   -- JSON always disables color
+        OutputPlain       -> False   -- Plain always disables color
+        OutputInteractive -> tcHasColor capabilities
+
+resolveTheme(colorsEnabled, themeChoice):
+    if not colorsEnabled -> noColorTheme   -- all fields = AnsiDefault
+    ThemeAuto            -> darkTheme
+    ThemeDark            -> darkTheme
+    ThemeLight           -> lightTheme
+    ThemeHighContrast    -> highContrastTheme
+```
+
+### Theme Color Definitions
+
+Four themes are defined. Each theme is a record of 14 color fields:
+
+| Field              | Dark Theme            | Light Theme            | High-Contrast       | No-Color    |
+|--------------------|-----------------------|------------------------|----------------------|-------------|
+| thColorsEnabled    | True                  | True                   | True                 | False       |
+| thTimestamp        | Rgb 212 212 212       | Rgb 105 105 105        | BrightWhite          | AnsiDefault |
+| thResourceId       | Rgb 198 198 198       | Rgb 70 70 70           | BrightCyan           | AnsiDefault |
+| thSectionHeading   | Rgb 238 238 238       | AnsiBlack              | BrightWhite          | AnsiDefault |
+| thMuted            | Rgb 128 128 128       | Rgb 105 105 105        | AnsiWhite            | AnsiDefault |
+| thPrimary          | AnsiMagenta           | Rgb 163 21 21          | BrightMagenta        | AnsiDefault |
+| thSuccess          | AnsiGreen             | Rgb 34 139 34          | BrightGreen          | AnsiDefault |
+| thError            | AnsiRed               | Rgb 220 20 60          | BrightRed            | AnsiDefault |
+| thWarning          | AnsiYellow            | Rgb 255 140 0          | BrightYellow         | AnsiDefault |
+| thInfo             | AnsiWhite             | Rgb 70 130 180         | BrightWhite          | AnsiDefault |
+| thSkipped          | Rgb 88 88 88          | Rgb 169 169 169        | BrightBlack          | AnsiDefault |
+| thEnvProduction    | AnsiRed               | Rgb 220 20 60          | BrightRed            | AnsiDefault |
+| thEnvIntegration   | Rgb 95 175 255        | Rgb 70 130 180         | BrightBlue           | AnsiDefault |
+| thEnvDevelopment   | Rgb 215 255 215       | Rgb 218 165 32         | BrightYellow         | AnsiDefault |
 
 ---
 
@@ -46,8 +149,12 @@ names, statuses, and section headers without reading plain text.
 - Each entry is formatted as ` <label_padded_to_25_chars> <value>`, where label text is in
   `thMuted` color and value text receives semantic coloring (status, environment, resource
   ID, timestamp, etc.).
-- Column alignment: `Column2Start = 25`; labels exceeding 25 characters are truncated or
-  the value is placed after a single space. `minStatusPadding = 17`, `maxPadding = 60`.
+- Column alignment: `column2Start = 25`; labels exceeding 25 characters are truncated or
+  the value is placed after a single space.
+- Dynamic padding for tabular sections (stack events, stack resources, etc.) is computed
+  by scanning the full list and taking the maximum text width of each column, clamped
+  between `minStatusPadding = 17` and `maxPadding = 60`. Resource type columns use a
+  separate `resourceTypePadding = 40` constant. Default screen width is 80 columns.
 - Timestamps use the format `%a %b %d %Y %H:%M:%S` (e.g., `Tue Feb 22 2026 14:30:00`).
 - CloudFormation resource status values are colored semantically:
   - Substring `IN_PROGRESS` -> `thWarning` (yellow in dark theme)
@@ -59,12 +166,20 @@ names, statuses, and section headers without reading plain text.
   `colorByEnvironment`: production -> `thEnvProduction` (red), integration ->
   `thEnvIntegration` (blue), development -> `thEnvDevelopment` (green). Unrecognized
   environment names are rendered without color.
-- The stack list uses lifecycle icons: termination-protected stacks show 🔒; stacks with
-  deletion policy `Retain` show ∞; stacks with `Delete` policy show ♺.
-- Final command summary in interactive mode: green `Success` with checkmark emoji, or red
-  `Failure` with cross emoji, followed by elapsed time.
+- The stack list uses lifecycle icons derived from the `lifetime` tag:
+  - Termination-protected stacks (`sleTerminationProtection = True`) or
+    `lifetime=protected` tag: show lock icon.
+  - `lifetime=long` tag: show infinity symbol.
+  - `lifetime=short` tag: show recycle symbol.
+- Final command summary in interactive mode:
+  - `SummarySuccess`: green background + black text "Success" with thumbs-up emoji,
+    rendered as a section entry under "Command Summary:".
+  - `SummaryFailure`: red background + white text "Failure" with table-flip emoticon,
+    followed by "Fix and try again." on its own line.
 - `OdTokenInfo` and `OdPollingStarted` produce no visible output in interactive mode
   (internal lifecycle signals only).
+- `OdRawOutput` passes raw text directly to stdout without any formatting, padding,
+  or section structure. Used for non-CloudFormation command output.
 
 **Logic Flow:**
 
@@ -111,23 +226,26 @@ programmatically without screen-scraping ANSI text.
   No trailing comma, no surrounding array.
 - Every emitted JSON object has the envelope structure:
   `{"type": "<type_name>", "timestamp": "<ISO8601>", "data": {<payload>}}`.
-- Type names use `snake_case` and map from `OutputData` constructors. Of the 26
-  constructors, 23 emit a JSON envelope with the following type names:
+- Type names use `snake_case` and map from `OutputData` constructors. Of the 27
+  constructors, 25 emit a JSON envelope with the following type names:
   `command_metadata`, `stack_definition`, `stack_events`, `stack_contents`,
   `status_update`, `command_result`, `final_command_summary`, `stack_list`,
   `changeset_result`, `stack_drift`, `error`, `token_info`, `new_stack_events`,
-  `operation_complete`, `inactivity_timeout`, `confirmation_required`,
+  `operation_complete`, `inactivity_timeout`, `confirmation_prompt`,
   `stack_change_details`, `stack_absent_info`, `cost_estimate`,
   `approval_request_result`, `template_validation`, `approval_status`,
-  `template_diff`, `approval_result`.
-  Three constructors have special JSON behavior:
-  - `OdTokenInfo`: has type name `token_info` but is suppressed (no output emitted).
+  `template_diff`, `approval_result`, `raw_output`.
+  Two constructors have special JSON behavior:
   - `OdPollingStarted`: suppressed (no output emitted in JSON mode).
   - `OdStackTemplate`: outputs raw template body to stdout (not JSON-wrapped).
+  Note: `OdTokenInfo` emits a JSON envelope with type `token_info` (it is suppressed
+  in interactive mode but not in JSON mode).
+  Note: `OdRawOutput` emits a JSON envelope with type `raw_output` and a `data` field
+  containing the raw text.
 - All field names within `data` are `snake_case`.
 - `OdStackList` with `sldQueryMode = True`: emits a raw JSON array of stack objects
   without the envelope wrapper (for pipeline composition with `jq`).
-- `OdPollingStarted` and `OdTokenInfo`: no output in JSON mode (suppressed).
+- `OdPollingStarted`: no output in JSON mode (suppressed).
 - `OdStackTemplate`: stderr lines are written to stderr, template body is written to
   stdout as plain text (not JSON-wrapped), matching the get-stack-template command's
   contract.
@@ -141,8 +259,8 @@ programmatically without screen-scraping ANSI text.
 1. The output dispatcher detects the JSON mode flag and routes to the JSON renderer.
 2. The JSON renderer pattern-matches on the `OutputData` variant.
 3. For standard variants: builds the type/timestamp/data envelope and serializes to JSONL.
-4. For special cases (`OdStackList` query mode, `OdStackTemplate`, `OdPollingStarted`,
-   `OdTokenInfo`): applies the exception logic described above.
+4. For special cases (`OdStackList` query mode, `OdStackTemplate`, `OdPollingStarted`):
+   applies the exception logic described above.
 
 **Edge Cases:**
 
@@ -182,13 +300,18 @@ contain control characters.
   disabled.
 - All section headings, labels, and values are emitted as plain ASCII text without any
   `\ESC[...m` sequences.
-- All 26 `OutputData` variants that produce output in interactive mode produce equivalent
+- All 27 `OutputData` variants that produce output in interactive mode produce equivalent
   content in plain mode (same fields, same label text, same structure) with no ANSI codes.
 - Spinner animation is fully suppressed: no braille characters, no `\r`, no
   `\ESC[K` line erasure.
 - Timestamps are formatted identically to interactive mode (`%a %b %d %Y %H:%M:%S`).
-- `OdConfirmationPrompt` in plain mode: the prompt text is printed but stdin is not read
-  (non-interactive; the calling code must use `--yes` to suppress prompts in CI).
+- `OdConfirmationPrompt` in plain mode (or when not TTY/ANSI disabled): prints
+  "CONFIRMATION REQUIRED: <message>" followed by "Use --yes flag to proceed automatically
+  in non-interactive mode". Stdin is not read; the calling code must use `--yes` to
+  suppress prompts in CI.
+- `OdConfirmationPrompt` in interactive mode: prints "? <message> (y/N) " with the
+  message in bold error color. Stdin reading is handled by the calling code, not the
+  renderer.
 
 **Logic Flow:**
 
@@ -230,34 +353,32 @@ and satisfy `NO_COLOR` compliance requirements.
   - `never`: ANSI colors disabled regardless of TTY or env vars.
   - `auto`: enables colors when `tcHasColor = True` (TTY + no `NO_COLOR`).
 - `--theme <THEME>` accepts `auto`, `dark`, `light`, `high-contrast`. Default: `auto`.
-  - `auto`: resolves to `darkTheme` (same as `dark`) unless `IIDY_THEME` overrides.
+  - `auto`: resolves to `darkTheme` (same as `dark`).
   - `dark`: `darkTheme` — magenta primary, standard red/green/yellow, RGB grays.
   - `light`: `lightTheme` — dark red primary (RGB 163,21,21), crimson error
     (RGB 220,20,60), goldenrod `envDevelopment` (RGB 218,165,32).
   - `high-contrast`: `highContrastTheme` — all bright ANSI colors for accessibility
     (BrightWhite, BrightCyan, BrightGreen, BrightRed, BrightYellow, BrightBlue,
     BrightMagenta, BrightBlack).
-- `IIDY_THEME` environment variable is read by `themeFromEnv` and accepts values:
-  `light`, `high-contrast`, `highcontrast`, `dark` (case-insensitive). Any other value
-  defaults to `ThemeAuto`.
 - Priority for color: `--color always/never` > `NO_COLOR` / `FORCE_COLOR` env vars >
   TTY detection.
   - `NO_COLOR` (set to any value): forces `hasColor = False`, overrides `--color auto`.
   - `FORCE_COLOR` (set, no `NO_COLOR`): forces `hasColor = True`.
-- Priority for theme: `--theme` flag > `IIDY_THEME` env var > `ThemeAuto` (dark).
-- `COLORTERM=truecolor` or `COLORTERM=24bit` sets `tcHasTrueColor = True`; the dark and
-  light themes use RGB truecolor values which require this capability. High-contrast and
-  no-color themes use only standard ANSI codes.
+- The dark and light themes unconditionally emit RGB truecolor escape sequences
+  (e.g., `\ESC[38;2;R;G;Bm`). High-contrast and no-color themes use only standard ANSI
+  codes. No truecolor capability detection is performed — following the Rust `IidyTheme`
+  system, which also emits RGB unconditionally. Terminals that do not support truecolor
+  will approximate these colors.
 - When colors are disabled, all theme color fields are set to the default (no-color);
   all color and bold formatting functions return their input text unchanged.
 
 **Logic Flow:**
 
-1. Terminal capabilities are detected by reading `NO_COLOR`, `FORCE_COLOR`, `COLORTERM`,
-   `COLUMNS` from the environment and checking whether stdout is a TTY.
+1. Terminal capabilities are detected by reading `NO_COLOR`, `FORCE_COLOR`, `COLUMNS`
+   from the environment and checking whether stdout is a TTY.
 2. The output dispatcher resolves whether colors are enabled from the `--color` flag and
    output mode.
-3. The active theme is selected based on the colors-enabled flag and the theme choice.
+3. The active theme is selected based on the colors-enabled flag and the `--theme` flag.
 4. The resolved theme is passed into the renderer at construction time.
 
 **Edge Cases:**
@@ -331,10 +452,51 @@ it has been since the last event.
 
 **Complexity Notes:**
 
-- An active flag coordinates between the tick thread and the main thread. The spinner
+The spinner subsystem uses two concurrent background threads coordinated via shared
+mutable state:
+
+```
+Spinner Object (IORef-based):
+    spFrameRef   -- current frame index (0..11)
+    spMessage    -- current message text
+    spActive     -- whether spinner is running
+    spHandle     -- output handle (stdout)
+
+Thread 1: Tick Thread (100ms interval)
+    loop:
+        frame = spinnerTick(spinner)      -- advance frame, set active=True
+        render: "\r" + cyanBold + frame + reset + " " + message
+        sleep 100ms
+
+Thread 2: Timing Thread (1s interval)
+    loop:
+        sleep 1s
+        read (startTime, lastEventTime) from shared TVar
+        elapsed = now - startTime
+        sinceLast = now - lastEventTime
+        spinnerSetMessage(spinner, "<elapsed>s elapsed total. <sinceLast>s since last event.")
+
+Stop Sequence:
+    if spinner.active:
+        emit "\r\ESC[K"   -- clear spinner line
+        set active=False, reset frameRef=0
+    kill tick thread
+    kill timing thread
+
+Event Arrival (OdNewStackEvents):
+    preserve timing state (startTime, lastEventTime) from TVar
+    stopSpinner
+    render events
+    startSpinner with fresh tick/timing threads
+    restore preserved timing state into TVar
+    update lastEventTime to latest event timestamp
+```
+
+- The active flag coordinates between the tick thread and the main thread. The spinner
   clear operation checks the active flag before emitting `\r\ESC[K` to avoid double-clear.
-- Elapsed time and last-event time are tracked in the renderer state, not in the spinner
-  object itself.
+- Elapsed time and last-event time are tracked in renderer state via STM TVar, not in the
+  spinner object itself. This separation allows timing to be preserved across
+  stop/restart cycles when new events arrive.
 
 ---
 
@@ -418,9 +580,12 @@ a consistent audit trail of who ran what, in which account, and whether it succe
   - `Derived Tokens` -> listed if `cmDerivedTokens` is non-empty (for assumed-role
     sessions)
 - `OdFinalCommandSummary` is emitted at the end of every write operation.
-- In interactive mode, `FinalCommandSummary` renders as:
-  - `SummarySuccess`: bold green `Success ✓` followed by `in <N>s`
-  - `SummaryFailure`: bold red `Failure ✗` followed by `in <N>s`
+- In interactive mode, `FinalCommandSummary` renders as a section entry under
+  "Command Summary:" label:
+  - `SummarySuccess`: green-background + black-foreground "Success" text with thumbs-up
+    emoji.
+  - `SummaryFailure`: red-background + white-foreground "Failure" text with table-flip
+    emoticon, followed by "Fix and try again." on its own line.
 - In JSON mode, `final_command_summary` has fields: `result` (`"success"` or
   `"failure"`), `elapsed_seconds` (integer).
 - `OdCommandResult` renders a single-line result: success/failure indication +
@@ -527,6 +692,9 @@ a region's stack inventory quickly.
   of `StackListEntry`), `sldShowTags`, `sldFiltersApplied`, `sldColumns`, `sldQueryMode`.
 - Default columns: Name, Status, CreationTime (or as configured by `sldColumns`).
   Additional columns: Tags, StatusReason, TerminationProtection, Environment.
+  Note: the interactive renderer uses a fixed column layout (timestamp, status, name,
+  optional tags) regardless of `sldColumns`. Only the JSON renderer respects `sldColumns`
+  for machine consumers.
 - Stack name column: termination-protected stacks (`sleTerminationProtection = True`)
   are prefixed with 🔒. (Additional lifecycle icons ∞ and ♺ apply for specific deletion
   policies.)
@@ -630,7 +798,7 @@ my environment to unconditionally suppress all ANSI escape codes from iidy outpu
 
 ## Testing Requirements
 
-- All 26 `OutputData` event types are covered by renderer tests in both interactive and
+- All 27 `OutputData` event types are covered by renderer tests in both interactive and
   JSON modes.
 - `OdTokenInfo` and `OdPollingStarted` produce no stdout output in interactive and plain
   modes. Verified by capturing stdout in tests and asserting empty output.
@@ -642,7 +810,7 @@ my environment to unconditionally suppress all ANSI escape codes from iidy outpu
 - All four themes produce distinct color sequences for error, success, and warning in
   interactive mode.
 - The no-color theme produces zero `\ESC[` sequences for any `OutputData` value. Verified
-  by asserting no ANSI escape codes appear in the output over all 26 event types.
+  by asserting no ANSI escape codes appear in the output over all 27 event types.
 - `NO_COLOR` env var: test that terminal capability detection with `NO_COLOR` set returns
   `hasColor = False`.
 - `FORCE_COLOR` env var: test that detection returns `hasColor = True` when `FORCE_COLOR`

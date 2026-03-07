@@ -9,7 +9,7 @@ visible output flows through `renderOutput`.
 
 ## Layer 1: OutputData Enum
 
-`src/Iidy/Output/Types.hs` defines the 26-variant sum type that represents
+`src/Iidy/Output/Types.hs` defines the sum type that represents
 every piece of output the system can produce.  Each variant wraps a strict,
 self-contained record -- renderers never need to reach back into command state.
 
@@ -104,7 +104,7 @@ data InteractiveRenderer = InteractiveRenderer
   }
 ```
 
-The main dispatch function pattern-matches all 26 variants:
+The main dispatch function pattern-matches all variants:
 
 ```haskell
 renderOutputData :: InteractiveRenderer -> OutputData -> IO ()
@@ -320,7 +320,7 @@ immutable after that -- no mid-session re-detection.
 
 | File | Purpose |
 |---|---|
-| `src/Iidy/Output/Types.hs` | All 26 `OutputData` variants and their payload types |
+| `src/Iidy/Output/Types.hs` | All `OutputData` variants and their payload types |
 | `src/Iidy/Output/Manager.hs` | `OutputDispatch`, `mkOutputDispatch`, `renderOutput` |
 | `src/Iidy/Output/Renderer.hs` | `OutputMode` enum and `OutputRenderer` typeclass |
 | `src/Iidy/Output/Renderers/Interactive.hs` | ANSI terminal renderer with spinners |

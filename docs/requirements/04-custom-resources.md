@@ -41,7 +41,10 @@ intrinsic function evaluation, and live AWS resource resolution.
    resource type name.
 2. **Instance detection**: In the consumer's `Resources` section, entries whose
    `Type` matches an import key are routed to the expansion pipeline. All others
-   pass through unchanged.
+   pass through unchanged. Circular template expansion (a template referencing
+   itself directly or indirectly) is detected via an `activeExpansions` set and
+   rejected with: `"Circular template expansion detected: '<typeName>' is already
+   being expanded"`.
 3. **Parameter extraction and merging**: `Properties` from the resource instance
    are extracted as the provided parameter map. Defaults from `ParamDef` fill in
    any missing keys via `mergeParams`.
@@ -53,6 +56,53 @@ intrinsic function evaluation, and live AWS resource resolution.
    the merged parameters as Handlebars bindings. The resolved value tree then has
    `Overrides` deep-merged in, references rewritten with the name prefix, and
    non-Resources sections promoted to the parent document via `extractGlobalSections`.
+
+**Pipeline type declarations** (pseudocode):
+
+```
+-- Core types
+data ParamDef = ParamDef
+    { pdName          :: Text
+    , pdDefault       :: Maybe OValue
+    , pdType          :: Maybe Text          -- "String" | "Number" | "Object" | "AWS:..." | "List<...>" | "CommaDelimitedList"
+    , pdAllowedValues :: Maybe [OValue]
+    , pdAllowedPattern:: Maybe Text          -- POSIX regex
+    , pdSchema        :: Maybe JSON.Value    -- JSON Schema Draft 7
+    , pdIsGlobal      :: Bool
+    }
+
+data TemplateInfo = TemplateInfo
+    { tiParams   :: [ParamDef]
+    , tiRawBody  :: Text                     -- raw YAML source for re-parse
+    , tiLocation :: Text                     -- file path for error messages
+    }
+
+data ExpansionResult = ExpansionResult
+    { erResources      :: [(Text, OValue)]   -- prefixed resource name -> rewritten value
+    , erGlobalSections :: Map Text OValue     -- section name -> promoted section object
+    }
+
+-- Pipeline entry point
+expandCustomResource
+    :: Text                                   -- instance name (e.g., "OrderEvents")
+    -> OValue                                 -- resource definition (Properties, Overrides, NamePrefix)
+    -> TemplateInfo                           -- template with params and raw body
+    -> (Map Text OValue -> Text -> Either Text OValue)  -- re-parser (params -> body -> resolved)
+    -> Set Text                               -- additional globals (parent resource names)
+    -> Either Text ExpansionResult
+
+-- Pipeline steps (in sequence):
+--   1. prefix     = extractPrefix name resourceDef        -- NamePrefix or instance name
+--   2. properties = extractProperties resourceDef         -- Properties as Map Text OValue
+--   3. overrides  = extractOverrides resourceDef          -- Maybe OValue
+--   4. merged     = mergeParams templateInfo.params properties
+--   5. _          <- validateParams templateInfo.params merged
+--   6. resolved   <- reparse merged templateInfo.rawBody
+--   7. withOvr    = deepMerge resolved overrides          -- if present
+--   8. globals    = collectGlobalRefs withOvr ∪ awsPseudoRefs ∪ additionalGlobals
+--   9. resources  = map (prefixKey, rewriteRefs prefix globals) (extractResources withOvr)
+--  10. sections   = extractGlobalSections prefix globals withOvr
+```
 
 ### Key-Order Preservation
 
@@ -68,12 +118,57 @@ expanded template body. The complete set of rewrite sites:
 
 | Site                     | Behavior                                                   |
 |--------------------------|------------------------------------------------------------|
-| `!Ref` / `Fn::Ref`       | Value string prefixed if not in globals set                |
-| `!GetAtt` / `Fn::GetAtt` | Resource portion (before `.`) prefixed                     |
-| `!Sub` / `Fn::Sub`       | `${...}` interpolations prefixed; `${!Literal}` left alone |
-| `Fn::Sub` with var map   | Template rewritten; variable map keys added to globals set  |
+| `!Ref` / `Ref`          | Value string prefixed if not in globals set                |
+| `!GetAtt` / `Fn::GetAtt`| Resource portion (before `.`) prefixed                     |
+| `!Sub` / `Fn::Sub`      | `${...}` interpolations prefixed; `${!Literal}` left alone |
+| `Fn::Sub` with var map  | Template rewritten; variable map keys added to globals set |
 | `Condition` field        | String value prefixed if not in globals set                |
 | `DependsOn` field        | String or array of strings prefixed                        |
+
+**Rewrite dispatch** (pseudocode):
+
+```
+rewriteRefs :: Text -> Set Text -> OValue -> OValue
+rewriteRefs prefix globals val = case val of
+    OObject kvs
+      | single-key "Ref"        -> rewriteRefValue prefix globals refVal
+      | single-key "Fn::GetAtt" -> rewriteGetAtt prefix globals attVal
+      | single-key "Fn::Sub"    -> rewriteSub prefix globals subVal
+      | single-key "!Ref"       -> rewriteRefValue prefix globals refVal
+      | single-key "!GetAtt"    -> rewriteGetAtt prefix globals attVal
+      | single-key "!Sub"       -> rewriteSub prefix globals subVal
+      | otherwise               -> rewriteField for each (key, value):
+                                     "Condition" -> prefix string if shouldRewrite
+                                     "DependsOn" -> prefix string or each array element
+                                     _           -> recurse into value
+    OArray items -> map (rewriteRefs prefix globals) items
+    scalar       -> scalar
+
+-- GetAtt handles both forms:
+rewriteGetAtt prefix globals = \case
+    OString "Resource.Attr"  -> prefix Resource portion before "."
+    OArray [OString r, rest] -> prefix first element if shouldRewrite
+    other                    -> unchanged
+
+-- Sub template string parser:
+rewriteSubTemplate prefix globals template =
+    scan for "${...}" interpolations:
+      "${!literal}" -> leave unchanged (literal escape)
+      "${name}"     -> prefix name if shouldRewrite globals name
+      malformed "${ without }" -> return entire string unchanged
+
+-- Two-argument Sub:
+rewriteSub prefix globals (OArray [OString template, OObject varMap]) =
+    extendedGlobals = globals ∪ {keys of varMap}
+    rewrite template with extendedGlobals
+    rewrite varMap values with original globals
+
+shouldRewrite :: Set Text -> Text -> Bool
+shouldRewrite globals name
+    | "AWS::" `isPrefixOf` name = False
+    | name ∈ globals            = False
+    | otherwise                 = True
+```
 
 Names that are never rewritten:
 
@@ -82,6 +177,10 @@ Names that are never rewritten:
 - The consuming resource's own logical name (passed as additional globals)
 - Variable map keys in two-argument `Fn::Sub`
 - `${!LiteralText}` inside Sub templates
+
+**Global ref collection**: `collectGlobalRefs` scans both `Resources` and
+`Parameters` sections for entries with `$global: true`, collecting their keys
+into the globals set.
 
 ### Global Section Promotion
 
@@ -122,6 +221,38 @@ parameter validation. Supported keywords:
 
 Boolean schemas (`true` accepts all, `false` rejects all) are supported at the
 top level.
+
+**Constraint composition**: When a schema object contains multiple keywords, all
+constraints are AND-ed together. Validation proceeds sequentially through keywords;
+the first failure short-circuits and returns `Left` immediately.
+
+**Validation pseudocode**:
+
+```
+validateSchema :: JSON.Value -> JSON.Value -> Either Text ()
+validateSchema schema value = case schema of
+    Object obj -> do
+        check "type"                 -> matchesType expectedType value
+        check "enum"                 -> value ∈ allowedList
+        check "required"  (objects)  -> all required keys present
+        check "properties" (objects) -> each present property validates against its sub-schema
+        check "additionalProperties: false" -> no keys outside "properties"
+        check "items"     (arrays)   -> each element validates against item schema
+        check "pattern"   (strings)  -> POSIX regex match (max 1024 chars)
+        check "minimum"   (numbers)  -> value >= min
+        check "maximum"   (numbers)  -> value <= max
+        check "minItems"  (arrays)   -> length >= n
+        check "maxItems"  (arrays)   -> length <= n
+        check "minLength" (strings)  -> Text.length >= n
+        check "maxLength" (strings)  -> Text.length <= n
+    Bool True  -> Right ()
+    Bool False -> Left "Schema rejects all values"
+    _          -> Left "Invalid schema: expected object or boolean"
+```
+
+**Security control**: Both `AllowedPattern` (in parameter validation) and
+`pattern` (in JSON Schema validation) enforce a maximum regex pattern length
+of 1024 characters to prevent ReDoS attacks.
 
 ---
 
@@ -256,6 +387,12 @@ CloudFormation resources without manually duplicating the template's internals.
 | Required param absent from Properties   | `Required parameter missing: <name>`             |
 | Template body fails to parse             | Re-parser error propagated as-is                 |
 | No `Resources` section in template       | Expansion produces zero resources (not an error) |
+| Circular template expansion              | `Circular template expansion detected: '<type>' is already being expanded` |
+
+**Circular expansion detection**: The caller maintains an `activeExpansions` set
+tracking which template types are currently being expanded in the call stack. If
+the same type is encountered again (direct or indirect recursion), expansion is
+rejected before any parameter processing occurs.
 
 **Complexity**: Medium. The expansion entrypoint coordinates five sub-operations
 and must correctly thread the `Either Text` error channel through each.
@@ -375,7 +512,28 @@ instances of the template.
    d. Reference rewriting is applied to the value.
 3. The resulting section map is returned as part of the expansion result.
 4. The caller merges each section into the parent document, with parent
-   definitions taking precedence.
+   definitions taking precedence. In multi-instance scenarios, the parent
+   document's original definitions take precedence over ALL instances'
+   promotions, and the first instance's promotions take precedence over
+   subsequent instances'.
+
+**Section promotion pseudocode**:
+
+```
+extractGlobalSections :: Text -> Set Text -> OValue -> Map Text OValue
+extractGlobalSections prefix globals (OObject kvs) =
+    for each sectionName in [Parameters, Outputs, Metadata, Mappings, Conditions, Transform]:
+      if sectionName ∈ kvs:
+        prefixAndRewriteSection prefix globals (lookup sectionName kvs)
+
+prefixAndRewriteSection prefix globals (OObject kvs) =
+    OObject [ (key', stripGlobal (rewriteRefs prefix globals v))
+            | (k, v) <- kvs
+            , k /= "$global"                          -- strip top-level $global entries
+            , let key' = if isMarkedGlobal v then k    -- $global: true -> keep original key
+                         else prefix <> k              -- otherwise prefix
+            ]
+```
 
 **Edge Cases**:
 
@@ -437,6 +595,21 @@ without forking the template.
    Non-object overlays replace the base value entirely.
 4. The merged value is then passed to global ref collection, reference rewriting,
    and section promotion.
+
+**Deep merge pseudocode** (preserves key insertion order):
+
+```
+deepMerge :: OValue -> OValue -> OValue
+deepMerge (OObject base) (OObject overlay) =
+    OObject (mergeKvs base overlay)
+  where
+    mergeKvs bs []              = bs
+    mergeKvs bs ((k, v) : rest) =
+      if k ∈ keys(bs)
+        then mergeKvs (update k (deepMerge existing v) bs) rest   -- recurse into existing key
+        else mergeKvs (bs ++ [(k, v)]) rest                       -- append new key at end
+deepMerge _ overlay = overlay   -- scalar/array: overlay replaces entirely
+```
 
 **Example**:
 
@@ -524,6 +697,60 @@ misconfigured stacks are caught before any AWS API call is made.
    d. Schema: JSON Schema validation; bypassed for CFN intrinsic values.
 6. A value is considered a CFN intrinsic if it is an object whose key is from the
    CFN intrinsic set (both `Fn::` prefix and `!` short-tag forms).
+
+**CFN intrinsic key set** (exhaustive):
+
+```
+Ref, Fn::Sub, Fn::Join, Fn::Select, Fn::If, Fn::GetAtt, Fn::ImportValue, Fn::FindInMap
+!Ref, !Sub,   !Join,    !Select,    !If,    !GetAtt,    !ImportValue,    !FindInMap
+```
+
+Note: `Fn::GetAZs` and `Fn::Split` are NOT in this set. Values using those
+intrinsics will not bypass validation, which matches the Rust implementation.
+
+**Parameter merge and validation pseudocode**:
+
+```
+mergeParams :: [ParamDef] -> Map Text OValue -> Map Text OValue
+mergeParams defs provided =
+    foldl' addDefault provided defs
+  where
+    addDefault acc pd
+      | pdName pd ∈ keys(acc) = acc              -- provided value takes precedence
+      | Just def <- pdDefault pd = insert (pdName pd) def acc  -- fill default
+      | otherwise = acc                           -- no default, will fail validation if required
+
+validateParams :: [ParamDef] -> Map Text OValue -> Either Text ()
+validateParams defs merged = traverse_ validateOne defs
+  where
+    validateOne pd = case lookup (pdName pd) merged of
+        Nothing
+          | Just _ <- pdDefault pd -> Right ()    -- has default, ok
+          | otherwise -> Left ("Required parameter missing: " <> pdName pd)
+        Just val -> do
+            validateAllowedValues pd val          -- explicit isCfnRef bypass
+            validateAllowedPattern pd val         -- bypassed for non-OString (implicit for CFN intrinsics)
+            validateType pd val                   -- explicit isCfnRef bypass
+            validateParamSchema pd val            -- explicit isCfnRef bypass
+
+-- Type validation dispatch:
+validateType :: ParamDef -> OValue -> Either Text ()
+validateType pd val = case pdType pd of
+    Nothing                          -> Right ()
+    Just "String" | Just "string"    -> expectType isOString "String" (with isCfnRef bypass)
+    Just "Number" | Just "number"    -> expectType isONumber "Number" (with isCfnRef bypass)
+    Just "Object" | Just "object"    -> expectType isOObject "Object" (with isCfnRef bypass)
+    Just t | "AWS:" `isPrefixOf` t   -> Right ()  -- AWS parameter types pass through
+           | "List<" `isPrefixOf` t  -> Right ()  -- List<AWS::...> types pass through
+           | t == "CommaDelimitedList" -> Right ()
+           | otherwise               -> Left ("Unknown parameter type: " <> t)
+```
+
+**Note on `AllowedPattern` bypass**: Unlike `AllowedValues`, `Type`, and `Schema`,
+`AllowedPattern` does not have an explicit `isCfnRef` guard. Instead, it only
+matches `OString` values. CFN intrinsic values are `OObject` and fall through to
+the `_nonString -> Right ()` catch-all. The behavioral result is identical (CFN
+intrinsics bypass pattern validation), but the mechanism is implicit.
 
 **JSON Schema Keywords Validated**:
 
@@ -689,6 +916,8 @@ accumulating results. The complexity is in the caller's merge logic.
   original key, `$global` stripped from value.
 - Expansion with non-global Parameters entry: verifies entry promoted with prefix.
 - Expansion with empty `Resources` section in template: produces zero resources.
+- Expansion with circular template reference: returns `Left` with circular
+  expansion error message.
 
 ### Reference Rewriting Tests
 

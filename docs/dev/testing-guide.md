@@ -40,10 +40,10 @@ matching), Changeset (change conversion, dashed name generation), WatchStack
 DescribeStack (event duration calculation).
 
 **Output Rendering** -- Renderer (interactive formatter: headings, labels, padding,
-tags, timestamps, timing text), JsonRenderer (value conversion for all 26
+tags, timestamps, timing text), JsonRenderer (value conversion for all
 `OutputData` types), ThemeVariants (dark/light/high-contrast/no-color themes),
 RendererOutput (end-to-end through actual renderer instances), Integration
-(both renderers processing all 26 variants, command-specific output sequences
+(both renderers processing all variants, command-specific output sequences
 for create/describe/delete/changeset/drift/lint+approval).
 
 **CLI** -- CliParser (`optparse-applicative`: render, delete, describe,
@@ -65,23 +65,23 @@ Haskell implementation agrees with the PLT Redex formal specification on key
 drift-point behaviors. Reads test vectors from `spec/snapshot.json` (generated
 by `spec/snapshot.rkt`). Covers:
 
-| Section               | Tests | What's verified                               |
-|-----------------------|-------|-----------------------------------------------|
-| Truthiness (iidy)     | 13    | `oIsTruthy` -- 0 is falsy                     |
-| Truthiness (HBS)      | 13    | `HBS.isTruthy` -- 0 is truthy                 |
-| Truthiness (JMESPath) | 13    | `JMESPath.isTruthy` -- 0 is truthy             |
-| Merge                 | 4     | `mergeOObjects` -- values + key-order          |
-| Path resolution       | 5     | `traversePathO` -- nested, array, missing      |
-| Escape                | 4     | `astToValueRaw` -- passthrough, sentinel       |
-| MapValues binding     | 2     | `{key, value}` binding structure               |
+| Section               | What's verified                               |
+|-----------------------|-----------------------------------------------|
+| Truthiness (iidy)     | `oIsTruthy` — 0 is falsy                     |
+| Truthiness (HBS)      | `HBS.isTruthy` — 0 is truthy                 |
+| Truthiness (JMESPath) | `JMESPath.isTruthy` — 0 is truthy             |
+| Merge                 | `mergeOObjects` — values + key-order          |
+| Path resolution       | `traversePathO` — nested, array, missing      |
+| Escape                | `astToValueRaw` — passthrough, sentinel       |
+| MapValues binding     | `{key, value}` binding structure               |
 
 The snapshot is committed to git. Regenerate with `make snapshot` after spec
 changes. No Racket dependency is needed to run the Haskell tests -- only to
 regenerate the snapshot.
 
 **Snapshot Comparison** (external scripts, not part of `cabal test`):
-- `scripts/snapshot-compare.sh` -- 37 render snapshots vs Rust insta `.snap` files
-- `scripts/error-snapshot-compare.sh` -- 49 error snapshots vs Rust error output
+- `scripts/snapshot-compare.sh` — render snapshots vs Rust insta `.snap` files
+- `scripts/error-snapshot-compare.sh` — error snapshots vs Rust error output
 
 Snapshots use Rust insta format (YAML header, `---`, raw output). The scripts
 extract content after the second `---` line and diff against `iidy-hs render`.
@@ -128,15 +128,15 @@ test controls exactly what events are returned and in what order.
 
 ## Test Data Builders
 
-Builder functions for all 26 `OutputData` variants live in
+Builder functions for all `OutputData` variants live in
 `test/Test/Shared.hs`. Each follows the naming convention
 `test<TypeName>` -- for example, `testCommandMetadata :: CommandMetadata`,
 `testStackDef :: StackDefinition`, `testStackDrift :: StackDrift`. Helper
 constructors like `mkStackEvt` and `mkResourceEvt` build amazonka event types
 with minimal boilerplate.
 
-`allTestOutputData :: [OutputData]` collects all 27 entries (26 constructors;
-`OdStackDefinition` appears twice with `True` and `False`). Integration tests
+`allTestOutputData :: [OutputData]` collects all constructors
+(`OdStackDefinition` appears twice with `True` and `False`). Integration tests
 iterate this list to verify both renderers handle every variant without crashing.
 When adding a new `OutputData` constructor, add a corresponding builder and
 include it in `allTestOutputData`.

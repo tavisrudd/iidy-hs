@@ -51,9 +51,54 @@ to retrieve all results.
 - KMS alias lookup is not yet implemented; parameters always use `alias/aws/ssm`.
 - `--message` sets the description field, not the `iidy:message` tag.
 - Tag copying in `param review` is not yet implemented.
-- Pagination in `get-by-path` and `get-history` is not yet implemented (single API call only).
-- Structured JSON/YAML output for `param get` non-simple formats is not yet implemented.
-- `param get-by-path` does not produce "No parameters found" error for empty results.
+
+**Previously divergent, now implemented:**
+
+- Pagination in `get-by-path` and `get-history` uses `Amazonka.paginate` with conduit.
+- Structured JSON/YAML output for `param get` non-simple formats is implemented via
+  `ParamOutput` and `ParamHistoryOutput` types with `ToJSON` instances.
+- `param get-by-path` returns `ByPathEmpty` for empty results (exit code 1 path).
+
+**Output data types** (used for `--format json` and `--format yaml`):
+
+```haskell
+data ParamOutput = ParamOutput
+    { poName             :: Maybe Text
+    , poType             :: Maybe Text
+    , poValue            :: Maybe Text
+    , poVersion          :: Maybe Integer
+    , poLastModifiedDate :: Maybe Text
+    , poArn              :: Maybe Text
+    , poDataType         :: Maybe Text
+    , poTags             :: Maybe (Map Text Text)  -- included for non-simple formats
+    }
+
+data ParamHistoryOutput = ParamHistoryOutput
+    { phoName             :: Maybe Text
+    , phoType             :: Maybe Text
+    , phoKeyId            :: Maybe Text
+    , phoLastModifiedDate :: Maybe Text
+    , phoLastModifiedUser :: Maybe Text
+    , phoDescription      :: Maybe Text
+    , phoValue            :: Maybe Text
+    , phoVersion          :: Maybe Integer
+    , phoDataType         :: Maybe Text
+    , phoTags             :: Maybe (Map Text Text)
+    }
+
+data SimpleHistory = SimpleHistory
+    { shCurrent  :: SimpleHistoryCurrent   -- current entry with message from iidy:message tag
+    , shPrevious :: [SimpleHistoryPrevious] -- all older entries
+    }
+
+data FullHistory = FullHistory
+    { fhCurrent  :: ParamHistoryOutput     -- current entry with tags
+    , fhPrevious :: [ParamHistoryOutput]   -- previous entries without tags
+    }
+```
+
+JSON field names use PascalCase (`Name`, `Type`, `Value`, `Version`,
+`LastModifiedDate`, `ARN`, `DataType`, `Tags`) matching AWS SDK conventions.
 
 **CLI arguments:**
 
@@ -91,16 +136,33 @@ namespace that CloudFormation stacks and application code can consume at runtime
 - Unknown type strings fall through to `String`.
 
 **Logic Flow:**
-1. Parse positional args and flags.
-2. If `--with-approval`, the effective write path is `<path>.pending`.
-3. Normalize the type string (case-insensitive) to the appropriate parameter type enum value.
-4. Build a `PutParameter` request with `overwrite` and `type` fields set; set `description`
-   from `--message` if present.
-5. Call the SSM API.
-6. On error, return an error string; on success, return unit.
-7. If `--with-approval`, print the approval reminder to stdout.
-8. If `--message` is provided, set the `iidy:message` tag via `AddTagsToResource` after
-   `PutParameter`.
+
+```
+paramSet awsEnv args:
+  effectivePath = if args.withApproval
+                  then args.path <> ".pending"
+                  else args.path
+  paramType = paramTypeToSsm args.type
+    -- ParamString     -> ParameterType_String
+    -- ParamSecureString -> ParameterType_SecureString
+    -- ParamStringList -> ParameterType_StringList
+  req = PutParameter
+    { name        = effectivePath
+    , value       = args.value
+    , overwrite   = args.overwrite
+    , type'       = paramType
+    , description = args.message   -- NOTE: sets description, not iidy:message tag
+    }
+  result <- try (send awsEnv req)
+  case result of
+    Left ex  -> Left ("SSM PutParameter error for " <> path <> ": " <> show ex)
+    Right _  -> Right ()
+  -- If --with-approval, caller prints approval reminder to stdout
+```
+
+**NOTE:** The Rust oracle sets an `iidy:message` tag via `AddTagsToResource` after
+`PutParameter`. The current implementation sets the SSM `description` field instead.
+This is a known divergence.
 
 **Edge Cases:**
 - `--with-approval` combined with `--overwrite`: the `.pending` path is overwritten if it
@@ -149,12 +211,30 @@ parameter values into shell scripts during development.
 - Exit code is `0` on success, `1` on AWS error (parameter not found, no permission).
 
 **Logic Flow:**
-1. Build a `GetParameter` request with `withDecryption` set to the appropriate boolean.
-2. Call the SSM API and extract the parameter value from the response.
-3. If format is `"simple"`, print the raw value to stdout.
-4. If format is `"json"` or `"yaml"`, construct a `ParamOutput` record with fields `Name`,
-   `Type`, `Value`, `Version`, `LastModifiedDate`, `ARN`, `DataType`, `Tags` and serialize.
-5. Any exception is caught and produces an error string.
+
+```
+paramGet awsEnv args:
+  case args.format of
+    Simple ->
+      result <- fetchParam awsEnv args.path args.decrypt
+        -- GetParameter { name, withDecryption } -> extract parameter_value
+      case result of
+        Left ex  -> Left (errPrefix <> show ex)
+        Right val -> Right val     -- bare value string, caller prints with newline
+
+    Json | Yaml ->
+      param  <- fetchParameter awsEnv args.path args.decrypt
+        -- GetParameter -> extract full Parameter object
+      tags   <- listParamTags awsEnv args.path
+        -- ListTagsForResource Parameter args.path -> Map Text Text
+      output  = withParamTags tags (paramOutputFromParameter param)
+      case format of
+        Json -> formatAsJson output   -- pretty-printed JSON, 2-space indent
+        Yaml -> formatAsYaml output   -- "---\n" prefixed YAML
+```
+
+Tag fetching via `ListTagsForResource` adds one extra API call per parameter for
+non-simple formats.
 
 **Edge Cases:**
 - Parameter does not exist: AWS returns `ParameterNotFoundException`; caught as
@@ -172,8 +252,8 @@ parameter values into shell scripts during development.
 - Network error: caught by `try @SomeException`; displayed and exits with code `1`.
 
 **Complexity Notes:** Low. Single API call, no pagination, no tag fetch in current
-implementation. The main complexity gap is the structured JSON/YAML output for
-non-simple formats, which matches Rust but is not yet implemented.
+implementation. Structured JSON/YAML output for non-simple formats is implemented
+via `ParamOutput` with `ToJSON` instances (see Technical Context).
 
 ---
 
@@ -196,12 +276,30 @@ values in one operation rather than fetching each individually.
 - Pagination: follow `next_token` to retrieve all results across API pages.
 
 **Logic Flow:**
-1. Build a `GetParametersByPath` request with `recursive` and `withDecryption` set.
-2. Paginate the SSM API response (follow `next_token`) and collect all parameters.
-3. Sort parameters alphabetically by name.
-4. For simple format: construct a sorted map of `{path: value}` and serialize as YAML.
-5. For JSON/YAML format: construct a sorted map of `{path: ParamOutput}` and serialize.
-6. Wrap the entire fetch in an exception handler.
+
+```
+paramGetByPath awsEnv args:
+  params <- fetchByPathRaw awsEnv args
+    -- GetParametersByPath { path, recursive, withDecryption }
+    -- Paginated via Amazonka.paginate + conduit:
+    --   pages <- runConduit $ paginate awsEnv req .| CL.consume
+    --   concat all page.parameters
+  if null params then
+    return ByPathEmpty       -- caller prints "No parameters found", exit 1
+
+  sorted = sortBy (comparing parameter_name) params
+
+  case args.format of
+    Simple ->
+      m = Map.fromList [(p.name, p.value) | p <- sorted]
+      return ByPathOutput (formatAsYaml m)
+
+    Json | Yaml ->
+      -- Sequential tag fetch: O(n) ListTagsForResource calls
+      m <- buildTaggedMap awsEnv sorted
+        -- for each param: listParamTags -> Map.insert name (withParamTags tags po) acc
+      return ByPathOutput (formatWith format m)
+```
 
 **Edge Cases:**
 - Path prefix with no trailing slash: SSM `GetParametersByPath` requires the path to
@@ -248,15 +346,43 @@ were during an incident investigation or compliance review.
 - Pagination: follow `next_token` to retrieve all history pages.
 
 **Logic Flow:**
-1. Build a `GetParameterHistory` request with `withDecryption` set.
-2. Call the SSM API and extract the history entries from the response.
-3. Sort entries by `LastModifiedDate` ascending; split into current (last) and previous
-   (all others).
-4. For the current entry: fetch tags via `ListTagsForResource` to populate the `Message`
-   field from the `iidy:message` tag.
-5. For simple format: serialize the `SimpleHistory` struct as YAML.
-6. For JSON/YAML format: serialize the full `ParamHistoryOutput` structure.
-7. Wrap the entire fetch in an exception handler.
+
+```
+paramGetHistory awsEnv args:
+  entries <- fetchHistoryRaw awsEnv args.path args.decrypt
+    -- GetParameterHistory { name, withDecryption }
+    -- Paginated via Amazonka.paginate + conduit:
+    --   pages <- runConduit $ paginate awsEnv req .| CL.consume
+    --   concat all page.parameters
+  case NonEmpty.nonEmpty entries of
+    Nothing -> Left "No history found for parameter '<path>'"
+    Just ne ->
+      sorted  = NE.sortBy (comparing lastModifiedDate) ne
+      current  = NE.last sorted
+      previous = NE.init sorted
+      tagMap  <- listParamTags awsEnv args.path
+
+      case args.format of
+        Simple ->
+          msg = Map.lookup "iidy:message" tagMap |> fromMaybe ""
+          SimpleHistory
+            { current  = { value, lastModifiedDate, lastModifiedUser, message = msg }
+            , previous = [{ value, lastModifiedDate, lastModifiedUser } | p <- previous]
+            }
+          formatAsYaml result
+
+        Json | Yaml ->
+          FullHistory
+            { current  = withHistoryTags tagMap (paramHistoryOutputFromHistory current)
+            , previous = map paramHistoryOutputFromHistory previous
+            }
+          formatWith format result
+```
+
+The `formatHistoryEntry` helper formats individual entries as `"v<N>: <value>"`:
+- Both version and value present: `"v3: some-value"`
+- Value only (no version): `"some-value"`
+- Neither present: entry is skipped (`Nothing`)
 
 **Edge Cases:**
 - Single-version parameter: `Current` is the only entry; `Previous` is an empty list.
@@ -305,18 +431,57 @@ database passwords and API keys are never updated unilaterally in production.
   parameter.
 
 **Logic Flow:**
-1. Fetch `<path>.pending` first.
-2. If the pending parameter is absent, error and exit `1`.
-3. Fetch `<path>` for the current value.
-4. If absent, use `"(not set)"` as the display string.
-5. Print header lines showing parameter path, current value, and pending value.
-6. Prompt: `"Would you like to approve these changes?"` via the shared confirmation module.
-7. On approval:
-   - Write the pending value to `<path>` with `overwrite = True` and type `SecureString`.
-   - Delete `<path>.pending`.
-   - On success: print `"Parameter <path> updated successfully."`.
-   - On partial failure (write succeeded, delete failed): return an error.
-8. On rejection: print `"Change not approved."` and exit `130`.
+
+```
+paramReview awsEnv path:
+  pendingPath = path <> ".pending"
+
+  -- 1. Fetch pending parameter (full object to preserve type)
+  pendingResult <- fetchParamFull awsEnv pendingPath withDecryption=True
+  case pendingResult of
+    Left _  -> Left ("No pending parameter found at " <> pendingPath)
+    Right pendingParam ->
+      pendingValue = pendingParam.value
+      paramType    = pendingParam.type   -- preserves original type (not hardcoded SecureString)
+
+      -- 2. Fetch current value
+      currentResult <- fetchParam awsEnv path withDecryption=True
+      currentValue   = fromRight "(not set)" currentResult
+
+      -- 3. Display
+      print ""
+      print "Parameter: " <> path
+      print "Current value: " <> currentValue
+      print "Pending value: " <> pendingValue
+      print ""
+
+      -- 4. Prompt
+      result <- requestConfirmation "Would you like to approve these changes?"
+      case result of
+        Confirmed ->
+          -- 5. Write pending value preserving original type
+          putReq = PutParameter { name=path, value=pendingValue, overwrite=True, type'=paramType }
+          putResult <- try (send awsEnv putReq)
+          case putResult of
+            Left ex  -> Left ("Failed to update parameter: " <> show ex)
+            Right _  ->
+              -- Delete pending
+              delReq = DeleteParameter pendingPath
+              delResult <- try (send awsEnv delReq)
+              case delResult of
+                Left ex  -> Left ("Parameter updated but failed to delete pending: " <> show ex)
+                Right _  ->
+                  print "Parameter " <> path <> " updated successfully."
+                  Right 0
+
+        Declined ->
+          print "Change not approved."
+          Right 130
+```
+
+**NOTE:** The write preserves the pending parameter's original type (could be
+`String`, `SecureString`, or `StringList`) rather than hardcoding `SecureString`.
+Tag copying from `.pending` to the main parameter is not yet implemented.
 
 **Edge Cases:**
 - `param set` with `--with-approval` and `--overwrite`: the `.pending` parameter is

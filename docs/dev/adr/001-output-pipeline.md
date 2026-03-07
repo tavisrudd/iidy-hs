@@ -25,7 +25,7 @@ Haskell idioms.
 
 We adopt a data-driven output pipeline with three components:
 
-1. **OutputData**: A 26-variant sum type representing every semantic piece of
+1. **OutputData**: A sum type representing every semantic piece of
    output the system can produce (e.g., `OdSectionHeading`, `OdStackEvent`,
    `OdCommandMetadata`, `OdError`). Commands construct and emit these values
    without knowledge of how they will be rendered.
@@ -39,7 +39,7 @@ We adopt a data-driven output pipeline with three components:
 3. **Renderers**: `InteractiveRenderer` produces styled terminal output with
    ANSI codes, section structure, and spinner integration.  `JsonRenderer`
    converts each `OutputData` into a JSON object and writes one object per
-   line. Both implement exhaustive pattern matching over all 26 variants.
+   line. Both implement exhaustive pattern matching over all variants.
 
 All command output flows through `renderOutput`. Direct `putStrLn` calls are
 prohibited in command implementations.
@@ -51,7 +51,7 @@ prohibited in command implementations.
 - **Offline testability**: Output can be tested by capturing emitted
   `OutputData` values and comparing against expected sequences, with no
   terminal or AWS connection required. Integration tests use test data
-  builders for all 26 variants.
+  builders for all variants.
 - **Compiler-enforced completeness**: Adding a new `OutputData` variant
   triggers exhaustiveness warnings in both renderers, ensuring nothing is
   silently dropped.
@@ -66,10 +66,10 @@ prohibited in command implementations.
 - **Indirection cost**: Every piece of output passes through an additional
   layer of allocation and dispatch rather than going directly to the terminal.
   In practice this is negligible compared to AWS API latency.
-- **Variant synchronization**: All 26 variants must be handled in every
+- **Variant synchronization**: All variants must be handled in every
   renderer. Adding a variant requires updating multiple modules. The compiler
   catches omissions, but the manual work scales linearly.
 - **Semantic granularity**: Choosing the right level of abstraction for
   variants requires judgment. Too fine-grained creates noise; too coarse
-  loses formatting flexibility. The current 26-variant set mirrors the Rust
+  loses formatting flexibility. The current variant set mirrors the Rust
   version and has proven sufficient.

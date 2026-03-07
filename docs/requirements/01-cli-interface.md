@@ -59,6 +59,9 @@ metavars, and descriptions are identical between implementations.
 - `--theme <THEME>` selects the color palette. Values: `auto`, `light`, `dark`, `high-contrast`.
   Default: `auto`. `IIDY_THEME` env var sets the default. `auto` selects based on terminal
   background detection.
+- `--no-remote-imports` disables HTTP and S3 `$imports` (flag; default: remote imports
+  enabled). AWS API imports (`cfn:`, `ssm:`, `ssm-path:`) are not affected. Stored
+  internally as a boolean where True = imports allowed, False = disallowed.
 - `--debug` enables debug logging to stderr (flag, default: false).
 - `--log-full-error` prints full error detail to stderr including stack traces (flag, default:
   false).
@@ -84,6 +87,20 @@ metavars, and descriptions are identical between implementations.
 - `--output-mode` is `Maybe OutputMode`; the absence of the flag is distinct from `plain`.
 - Terminal width for help wrapping is clamped to [60, 120]; falls back to 100 if undetectable.
   The `COLUMNS` env var is not read directly; terminal width is queried from the terminal device.
+
+**Terminal Width and Description Wrapping:**
+
+```pseudocode
+detectHelpWidth():
+  win = queryTerminalSize()
+  if win is Nothing: return 100
+  return clamp(win.width, 60, 120)
+
+formatRows(wrapWidth, rows):
+  nameWidth = max(0, max(length(name) for each (name, _) in rows))
+  availableWidth = max(20, wrapWidth - nameWidth - 4)
+  -- descriptions are word-wrapped to availableWidth
+```
 
 **Error Scenarios:**
 
@@ -504,7 +521,8 @@ toolchain I use for CloudFormation.
 - `<PATH>` (positional, required).
 - `--no-decrypt` (flag): disable decryption of SecureString. Default: decrypt enabled.
 - `--format <FMT>` (default: `simple`): Values: `simple` (value only), `json` (full parameter
-  object), `yaml`.
+  object), `yaml`. The alias `raw` is accepted as equivalent to `simple`. Help text displays
+  `raw|json|yaml` but the canonical internal name is `ParamFormatSimple`.
 - Output goes directly to stdout (not through the output pipeline).
 - Exit 0 on success. Exit 1 if parameter not found.
 
@@ -617,12 +635,14 @@ shell completion, and error lookup, **so that** I have a self-contained toolchai
 #### completion
 
 - Command: `iidy completion [SHELL]`
-- `[SHELL]` (positional, optional): `bash`, `zsh`, `fish`, or `powershell`. If omitted:
-  auto-detects from `$SHELL` env var.
+- `[SHELL]` (positional, optional): `bash`, `zsh`, or `fish`. If omitted:
+  auto-detects from `$SHELL` env var (falls back to `bash` for unknown shells).
 - Prints the completion script to stdout.
-- PowerShell is accepted as a shell name but prints a not-supported message (divergence from
-  Rust; see DIVERGENCES.md).
-- Bash, zsh, and fish are fully supported.
+- Only `bash`, `zsh`, and `fish` are accepted as shell names. Any other value (including
+  `powershell`) produces a parse error: `"Unknown shell: <value>. Expected: bash|zsh|fish"`.
+- The `ShellType` ADT has exactly three variants: `ShellBash | ShellZsh | ShellFish`.
+- Auto-detection from `$SHELL` uses `detectShellType` which matches `"zsh"` and `"fish"`
+  literally, falling back to `ShellBash` for all other values.
 
 #### explain
 
@@ -726,12 +746,143 @@ need to pass multiple flags for each environment.
 - Priority for role: CLI `--assume-role-arn` (or `no-role` sentinel) > stack-args.yaml
   `AssumeRoleARN`.
 
+**Stack-Args Loading Pipeline (pseudocode):**
+
+The loading pipeline is a multi-step process that requires a bootstrap AWS environment
+for imports before the full stack-args can be loaded:
+
+```pseudocode
+loadStackArgsFullPipeline(argsfilePath, environment, operation, cliAws, remoteImports):
+  -- PASS 1: Bootstrap AWS for imports
+  rawAws = extractRawAwsFromFile(argsfilePath, environment)
+    -- Parses YAML without preprocessing
+    -- Resolves env maps for Profile/Region/AssumeRoleARN from raw AST
+    -- On missing env key: returns Nothing (silent fallthrough)
+    -- On parse failure: returns empty settings
+  bootstrapAws = mergeAwsSettings(cliAws, rawAws)
+  bootstrapEnv = createAwsEnv(bootstrapAws)  -- may be Nothing if no AWS needed
+
+  -- PASS 2: Full loading with preprocessing
+  return loadStackArgs(argsfilePath, environment, operation, cliAws, remoteImports, bootstrapEnv)
+
+loadStackArgs(argsfilePath, environment, operation, cliAws, remoteImports, mAwsEnv):
+  1. content = readFile(argsfilePath)
+  2. ast = parseYaml(content)                     -- raw YAML AST
+  3. preprocessed = preprocessYaml11(ast, mAwsEnv) -- resolves $imports, custom tags
+  4. jsonVal = toValue(preprocessed)
+  5. resolved = resolveEnvMaps(jsonVal, environment)
+     -- For Profile, Region, AssumeRoleARN:
+     --   If field is Object (env map): lookup environment key (case-sensitive)
+     --     Found + String: replace field with string value
+     --     Found + non-String: ERROR
+     --     Not found: ERROR "environment '<env>' not found in <key> map"
+     --   If field is String: pass through unchanged
+     --   If field is Null/absent: pass through
+  6. withEnvTag = ensureEnvironmentTag(resolved, environment)
+     -- If Tags.environment is not set, inject it with environment name
+  7. withEnvValues = injectEnvValues(withEnvTag, environment, operation, cliAws)
+     -- Injects $envValues = {region, environment, iidy: {command, environment, region, profile?}}
+  8. argsfileAws = extractAwsSettings(withEnvValues)  -- Profile, Region, AssumeRoleARN
+  9. mergedAws = mergeAwsSettings(cliAws, argsfileAws)
+  10. detectionCtx = CredentialDetectionContext {
+       cdcCliProfile       = cliAws.profile,
+       cdcStackArgsProfile = argsfileAws.profile,
+       cdcCliAssumeRoleArn = cliAws.assumeRoleArn,
+       cdcStackArgsAssumeRoleArn = argsfileAws.assumeRoleArn
+     }
+  11. stackArgs = valueToStackArgs(withEnvValues)  -- validates unknown keys, parses fields
+  12. return (stackArgs, mergedAws, detectionCtx)
+```
+
+**Settings Merge and Sentinel Handling (pseudocode):**
+
+```pseudocode
+mergeAwsSettings(cli, argsfile):
+  profile      = mergeSentinel("no-profile", cli.profile, argsfile.profile)
+  region       = cli.region  ?? argsfile.region
+  assumeRoleArn = mergeSentinel("no-role", cli.assumeRoleArn, argsfile.assumeRoleArn)
+
+mergeSentinel(sentinel, cliVal, argsfileVal):
+  if cliVal == Just sentinel: return Nothing   -- sentinel CLEARS inherited value
+  return cliVal ?? argsfileVal                 -- normal precedence
+```
+
+**$envValues Injection (pseudocode):**
+
+```pseudocode
+buildEnvValues(env, operation, aws):
+  return {
+    region: aws.region ?? "",
+    environment: env,
+    iidy: {
+      command: operationName(operation),
+      environment: env,
+      region: aws.region ?? "",
+      profile: aws.profile        -- only present if profile is set
+    }
+  }
+```
+
+**Client Request Token Derivation (pseudocode):**
+
+```pseudocode
+generateTokenFromMaybe(maybeToken):
+  if Just token: return TokenInfo { value=token, source=UserProvided }
+  else: return TokenInfo { value=UUID.v4(), source=AutoGenerated }
+
+deriveTokenForStep(primary, step):
+  hash = SHA256(primary.value + step)
+  value = primary.value[0..8] + "-" + hexEncode(hash)[0..8]
+  return TokenInfo { value, source=Derived(from=primary.value, step) }
+```
+
+**Global SSM Configuration (pseudocode):**
+
+After stack-args are loaded but before the main operation runs, global configuration
+is applied from SSM Parameter Store:
+
+```pseudocode
+applyGlobalConfiguration(awsEnv, stackArgs):
+  params = try fetchParametersByPath(awsEnv, "/iidy/")
+  if error:
+    warn("failed to load global config from SSM: " + error)
+    return stackArgs
+  for (name, value) in params:
+    if name == "/iidy/default-notification-arn":
+      stackArgs.notificationArns.append(value)
+    if name == "/iidy/disable-template-approval" and value == "true":
+      if stackArgs.approvedTemplateLocation is set:
+        warn("Disabling template approval based on global ... parameter store configuration")
+        stackArgs.approvedTemplateLocation = Nothing
+  return stackArgs
+```
+
+**Unknown Key Validation (pseudocode):**
+
+```pseudocode
+validateNoUnknownKeys(keyMap):
+  validKeys = {StackName, Template, ApprovedTemplateLocation, Region, Profile,
+               AssumeRoleARN, ServiceRoleARN, RoleARN, Capabilities, Tags,
+               Parameters, NotificationARNs, TimeoutInMinutes, OnFailure,
+               DisableRollback, EnableTerminationProtection, StackPolicy,
+               ResourceTypes, UsePreviousTemplate, UsePreviousParameterValues,
+               CommandsBefore, $envValues}
+  for key in keyMap:
+    if key not in validKeys:
+      suggestion = closestByLevenshtein(key, validKeys - {$envValues})
+      -- suggest if distance <= min(3, len/2 + 1) and distance > 0
+      error("Unknown keys: " + key + " (did you mean " + suggestion + "?)")
+```
+
 **Edge Cases:**
 
 - Setting `--profile=no-profile` AND having `AWS_PROFILE` set: `AWS_PROFILE` is used (the
   sentinel suppresses the stack-args.yaml profile, not the env var).
 - `--assume-role-arn` performs an STS AssumeRole call at session startup and auto-refreshes
   credentials before expiry for long-running watch operations.
+- Environment map resolution has different error behavior in the two passes:
+  - Bootstrap pass (`extractRawAwsFromAst`): missing env key returns `Nothing` (silent)
+  - Full pass (`resolveEnvMaps`): missing env key returns an error
 
 ---
 
@@ -754,8 +905,11 @@ need to pass multiple flags for each environment.
 - `--no-diff`, `--no-decrypt`, `--no-sortkeys`, `--no-lint-template` flags are tested to
   confirm the default behavior is enabled and the flag disables it.
 - Shell completion for bash, zsh, fish: output is non-empty and syntactically plausible.
-- PowerShell completion: parseable but produces not-supported output.
+- Shell completion for unknown shells (including `powershell`): parse error with expected
+  values listed.
 - `explain` command: accepts `ERR_NNNN`, `err_NNNN`, and bare `NNNN` formats.
+- `--no-remote-imports` flag is tested to confirm it disables HTTP/S3 imports while leaving
+  AWS API imports (`cfn:`, `ssm:`, `ssm-path:`) unaffected.
 - AWS mock fixtures used for all tests involving AWS API calls. No real AWS calls in the test
   suite.
 
@@ -767,7 +921,7 @@ need to pass multiple flags for each environment.
 - `DIVERGENCES.md` — documented behavioral differences from Rust iidy:
   - Help formatting layout
   - YAML snapshot serialization (test artifact only, not CLI output)
-  - PowerShell completion not supported
+  - PowerShell completion: Rust prints a not-supported message; iidy-hs rejects at parse time
   - Error color checks stderr TTY (iidy-hs) vs stdout TTY (Rust)
   - `explain` accepts more input formats than Rust
 - `docs/requirements/02-yaml-preprocessing.md` — preprocessing pipeline spec

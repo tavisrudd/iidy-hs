@@ -136,15 +136,15 @@ environments where TTY detection fails.
 2. Color is forced on for all output when `FORCE_COLOR` is set to any value and `NO_COLOR` is
    not set.
 3. If neither `NO_COLOR` nor `FORCE_COLOR` is set, color is enabled only when stdout is a TTY.
-4. True-color (24-bit) support is enabled when `COLORTERM` is set to `truecolor` or `24bit`.
-5. The `--color` CLI flag (`always`, `auto`, `never`) overrides environment variable detection:
+4. The `--color` CLI flag (`always`, `auto`, `never`) overrides environment variable detection:
    `always` → force color; `never` → disable color; `auto` → use environment/TTY detection.
-6. Error-path color is determined by checking whether stderr is a TTY, independently of stdout.
+5. Error-path color is determined by checking whether stderr is a TTY, independently of stdout.
    This diverges from the Rust implementation, which checks stdout for error colors.
-7. The `IIDY_THEME` environment variable overrides the default theme when set to a recognized
-   theme name.
-8. Color state is determined once at startup and passed through the output dispatch layer; it is
+6. Color state is determined once at startup and passed through the output dispatch layer; it is
    not re-evaluated per output event.
+7. No truecolor capability detection is performed. The dark and light themes unconditionally emit
+   RGB truecolor escape sequences when colors are enabled. This follows the Rust `IidyTheme`
+   system. `COLORTERM` is not read.
 
 #### Logic Flow
 
@@ -156,10 +156,6 @@ color resolution (stdout path):
     NO_COLOR set    → hasColor = False  (highest precedence after explicit flag)
     FORCE_COLOR set → hasColor = True
     otherwise       → hasColor = hIsTerminalDevice stdout
-
-true-color resolution:
-  COLORTERM = "truecolor" | "24bit" → hasTrueColor = True
-  otherwise                          → hasTrueColor = False
 
 error color resolution:
   same precedence chain as above, but terminal check uses stderr handle
@@ -372,7 +368,6 @@ on Ctrl-C:
 
 1. Terminal capabilities are computed once at startup and contain:
    - `hasColor`: whether ANSI color codes should be emitted.
-   - `hasTrueColor`: whether 24-bit RGB codes are supported.
    - `width`: terminal width in columns, or absent for non-TTY contexts.
    - `isTty`: whether stdout is a terminal device.
 2. `isTty` is set by checking whether stdout is connected to a terminal.
@@ -381,10 +376,11 @@ on Ctrl-C:
    defaults to 80. If output is not a TTY, width is absent.
 4. `hasColor` follows the precedence chain: `NO_COLOR` set → False; `FORCE_COLOR` set →
    True; otherwise `isTty`.
-5. `hasTrueColor` is True only when `COLORTERM` is exactly `"truecolor"` or `"24bit"`.
-6. Capability detection is deterministic with respect to the process environment: the same
+5. Capability detection is deterministic with respect to the process environment: the same
    environment variables produce the same result every time.
-7. Width is used to wrap long lines in interactive output. Non-TTY output is not wrapped.
+6. Width is used to wrap long lines in interactive output. Non-TTY output is not wrapped.
+7. No truecolor capability detection is performed; `COLORTERM` is not read. RGB colors are
+   emitted unconditionally when themes use them (see US-06-004).
 
 #### Logic Flow
 
@@ -393,14 +389,11 @@ detect terminal capabilities:
   isTty     = stdout connected to a terminal?
   noColor   = NO_COLOR env var set?
   force     = FORCE_COLOR env var set?
-  colorTerm = COLORTERM env var value
   columns   = COLUMNS env var value
 
   hasColor    = if noColor set → False
                 else if force set → True
                 else isTty
-
-  hasTrueColor = colorTerm ∈ ["truecolor", "24bit"]
 
   width = if COLUMNS parseable as positive int → that value
           else if isTty → 80
@@ -461,23 +454,43 @@ and behavior,
 
 #### Logic Flow
 
-```
-confirmAction message → Bool:
-  emit blank line
-  emit "? " (default color)
-  emit message (bold bright red, if TTY)
-  emit " (y/N) " (default color)
-  flush stdout
-  read line from stdin
-  normalize = toLower(strip(line))
-  return (normalize == "y" OR normalize == "yes")
+```haskell
+data ConfirmResult = Confirmed | Declined
 
-command handler:
-  confirmed ← confirmAction "Are you sure you want to delete stack X?"
-  if confirmed
-    then proceed with destructive operation
-    else emit "Cancelled." and return exit code 130
+requestConfirmation :: Text -> IO ConfirmResult
+requestConfirmation prompt:
+  hSetBuffering stdin LineBuffering   -- ensure line-at-a-time input
+  hSetBuffering stdout NoBuffering    -- ensure prompt appears immediately
+  isTty <- hIsTerminalDevice stdout
+  putStrLn ""                          -- blank line before prompt
+  if isTty
+    then putStr "? \ESC[1;91m" <> prompt <> "\ESC[0m (y/N) "
+                -- SGR 1 = bold, SGR 91 = bright red
+    else putStr "? " <> prompt <> " (y/N) "
+  hFlush stdout
+  answer <- getLine
+  return (if isConfirmation answer then Confirmed else Declined)
+
+isConfirmation :: String -> Bool
+isConfirmation answer = map toLower answer `elem` ["y", "yes"]
 ```
+
+All commands using confirmation prompts follow this pattern:
+
+```
+command handler:
+  result <- requestConfirmation "Are you sure you want to delete stack X?"
+  case result of
+    Confirmed -> proceed with destructive operation
+    Declined  -> emit "Cancelled." and return exit code 130
+```
+
+**Exception:** `template-approval review` rejection returns exit code 1 (a
+deliberate review decision), not 130 (cancellation). See `10-template-approval.md`.
+
+**Module:** `Iidy.Confirm` is the single shared implementation used by all
+confirmation-gated commands: `delete-stack`, `update-stack` diff preview,
+changeset execution, `param review`, and `template-approval review`.
 
 #### Edge Cases
 
