@@ -30,8 +30,7 @@ Autonomous claude driven, Haskell port of iidy (a CloudFormation preprocessor/de
 - **Never use bare `git cherry-pick`.** It bypasses pre-commit hooks. Always use `git cherry-pick --no-commit`, then `git commit -C CHERRY_PICK_HEAD` to reuse the original commit message while running hooks.
 
 ## Build
-- `cabal build` for compilation, in nix direnv / dev shell
-- `cabal jobs: 4`, `-O0` for dev builds
+- `make build` for compilation, in nix direnv / dev shell
 - Use `~/.claude/bin/run-quiet` wrapper for builds to avoid flooding context
 - **When adding a new Haskell dependency**: add it to BOTH `iidy-hs.cabal` (build-depends) AND `flake.nix` (haskellDeps list). Missing either causes build failures in different environments.
 
@@ -56,21 +55,6 @@ Autonomous claude driven, Haskell port of iidy (a CloudFormation preprocessor/de
 - No writing credentials, secrets, or API keys to disk
 - No network calls except Hackage/nixpkgs downloads and ntfy notifications
 
-## Feature Completeness
-- This is a COMPLETE port. Every Rust feature gets ported. No shortcuts, no dropping features.
-- NTP time sync, full schema validation, demo command — everything.
-- No "minimal subset", no "deferred indefinitely", no "marginal value" judgments.
-- If Rust has it, Haskell gets it.
-
-## End-of-Session Gate (every session, non-negotiable)
-Before wrapping up, verify ALL of these:
-- WORKPLAN.md phase index is current (status, links)
-- Current phase doc checkboxes reflect actual state
-- Session handoff doc created in notes/sessions/ with: what done, deviations, next steps
-- progress.log has entries for all completed chunks
-- MEMORY.md reflects any new learnings or status changes
-- All doc updates committed alongside code
-- No orphaned TODOs — anything deferred is tracked in a phase doc
 
 ## Research Before Implementation
 - Each phase MUST begin with a research cycle before any code is written.
@@ -79,15 +63,6 @@ Before wrapping up, verify ALL of these:
 - Do NOT rely on context window or external memory files for code research — put it in committed files under `notes/`.
 - If memory files contain detailed code research, move that content into `notes/` files and commit them.
 - Do NOT begin implementing until the phase doc has the research section filled in.
-
-## Session Size & Delegation
-- Keep sessions SHORT. Each session = 1-2 good green commits, then exit.
-- If a subphase is too large for 1-2 commits, split it across sessions.
-- Exit cleanly so the ralph loop continues with fresh context.
-- Don't try to do everything in one session. Small, focused, done.
-- Use sub-agents (Task tool) for research, exploration, and parallel work to keep main context clean.
-- Delegate to Sonnet sub-agents for straightforward implementation after Opus designs the interface.
-- Use Explore agents for codebase searches rather than flooding main context with grep results.
 
 ## Sub-Agent Git Rules
 - **Main agent owns the commit sequence.** Only the main agent does cherry-picks, merges, rebases, pushes.
@@ -119,7 +94,6 @@ git commit -C CHERRY_PICK_HEAD
 git worktree remove .worktrees/task-a
 git branch -d task-a
 ```
-Add `.worktrees/` to `.gitignore` if not already there.
 
 ### Hooks (still active for manual worktrees)
 - **PreToolUse hook** (`scripts/enforce-worktree-isolation.sh`) blocks writes outside worktree when cwd is in `.claude/worktrees/` or `.worktrees/`.
@@ -127,4 +101,4 @@ Add `.worktrees/` to `.gitignore` if not already there.
 - Pre-commit hooks run in worktrees via shared `core.hooksPath=.githooks`.
 
 ## Ralph?
-If you are running in headless -p mode read @RALPH.md and check ./.msgs/ frequently.
+If you are running in headless -p mode read RALPH.md.
