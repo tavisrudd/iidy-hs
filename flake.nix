@@ -60,7 +60,17 @@
     in {
       packages = forAllSystems (system:
         let pkgs = pkgsFor system;
-        in { default = pkgs.haskellPackages.callCabal2nix "iidy-hs" self {}; }
+        in {
+          default = (pkgs.haskellPackages.callCabal2nix "iidy-hs" self {}).overrideAttrs (old: {
+            nativeCheckInputs = (old.nativeCheckInputs or []) ++ [ pkgs.git ];
+            # The Git import test needs a local commit; flake sources omit .git.
+            preCheck = (old.preCheck or "") + ''
+              git -c init.defaultBranch=main init
+              git -c user.name=iidy-test -c user.email=iidy-test@example.invalid \
+                -c commit.gpgsign=false commit --allow-empty -m "Test fixture"
+            '';
+          });
+        }
       );
 
       devShells = forAllSystems (system:
