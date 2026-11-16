@@ -1,0 +1,128 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C23
+:LANE:     main
+:TODO_STATE: STARTED
+:MODE:     CONTRACT
+:ORIGIN:   User request 2026-11-16: set up a supervision config like peregrine's
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e694-f59b-7266-9388-9eea874fe68a
+:ADDED: [2026-11-16 Mon 15:58]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 15:58]
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:END:
+#+title: C23 — Set up supervised worker workflow (port from peregrine)
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e697-f8f6-7366-aefb-52141225c7cd
+:ADDED: [2026-11-16 Mon 16:01]
+:END:
+
+Peregrine (=~/src/peregrine=) runs its cards through supervised workers:
+Codex sessions in tmux panes or Claude sub-agents work each card on a branch
+in their own worktree, a review worker checks each branch, and a Claude Code
+supervisor assigns, reviews, lands and cleans up. The contract lives in
+=scripts/supervisor/= (=PROTOCOL.md= for workers, =REVIEW.md= for the
+reviewer, =RUNBOOK.md= for the supervisor, plus =send.sh= and =status.sh=),
+started with the =/supervise= skill, with builds serialized by
+=scripts/guarded-cargo=. iidy-hs adopted =c= cards in
+[[file:../C1/index.org][C1]] and now wants the same supervision. Memory on
+this host is tight (Tavis, 2026-11-16: be careful with RAM), so builds by
+parallel workers must be serialized.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e697-f8f6-7366-aefb-5213c4e2f910
+:ADDED: [2026-11-16 Mon 16:01]
+:END:
+
+Allowed paths: =scripts/supervisor/=, =scripts/guarded-build=,
+=.githooks/pre-commit=, =.claude/skills/supervise/=, =AGENTS.md=,
+=CLAUDE.md=, =notes/C23/=, and the untracked runtime directory
+=~/.cache/iidy-hs/=.
+
+Gate: the worker protocol, reviewer brief, supervisor runbook, helper
+scripts and skill exist and are adapted to iidy-hs (Haskell toolchain, build
+lock, mock-AWS testing, Rust parity, the C6 hang); all builds, including the
+pre-commit hook's, take one host-wide lock; =AGENTS.md= and =CLAUDE.md=
+route supervised work to the protocol and carve out its exceptions; the
+scripts pass =bash -n=; a commit runs the hook through the lock; committed
+with C23 in the message.
+
+* DONE Port the supervisor files from peregrine
+:PROPERTIES:
+:ID: org:01a1e697-f8f6-7366-aefb-521264f41080
+:ADDED: [2026-11-16 Mon 16:01]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:01] \\
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:END:
+
+Added =scripts/supervisor/PROTOCOL.md=, =REVIEW.md=, =RUNBOOK.md=,
+=send.sh= and =status.sh=, and =.claude/skills/supervise/SKILL.md=.
+Adaptations from peregrine:
+- Worktrees live in =~/.cache/iidy-hs/worktrees/<worker>= (outside the
+  repo), because the repo's worktree-isolation hook guards =.worktrees/= and
+  would stop a Claude worker editing its card on the main checkout.
+- Toolchain through =direnv exec <worktree>= (Nix dev shell, GHC 9.12.3).
+- Card fitness format for iidy-hs: Scope and gate paragraphs =Allowed
+  paths:=, =Out of scope:=, =Done when:= and =Stop and record if:=; cards
+  filed before this one are refined on main before assignment.
+- Code rules from =CLAUDE.md=, Rust parity, mock-AWS only, the C6 hang
+  procedure, and security cards always reviewed by the review worker.
+- Landing replays commits per =CLAUDE.md= (=cherry-pick --no-commit= then
+  =commit -C=) when a fast-forward is impossible.
+- Left out: benchmarks and quiet-host windows, terminal UI checks, deploys,
+  previews and =merge-refinement.py=.
+- Decisions: only the general ones were carried over, each marked as
+  carried over from peregrine; iidy-hs decisions recorded so far are the RAM
+  rule and the C15/C16 discussion-first rule. The WIP cap (two coding
+  workers plus one reviewer) is a supervisor default for Tavis to adjust.
+- =status.sh= also lists Claude sub-agent worktrees (=claude-C<ID>=) and
+  shows the build lock, GHC processes and available memory.
+
+* DONE Serialize builds with a host-wide lock
+:PROPERTIES:
+:ID: org:01a1e697-f8f6-7366-aefb-5211c97856dc
+:ADDED: [2026-11-16 Mon 16:01]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:01] \\
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:END:
+
+=scripts/guarded-build CMD...= takes an exclusive =flock= on
+=~/.cache/iidy-hs/build.lock=, refuses below 6 GiB available memory
+(=IIDY_MIN_AVAIL_GB=), runs under =choom -n 1000=, and lets nested calls
+reuse the held lock. The pre-commit hook now runs its build and tests
+through it, with a 60-second per-test timeout so a C6 hang fails the commit
+with a named test instead of blocking it. Checked: =scripts/guarded-build
+true= succeeds; with =IIDY_MIN_AVAIL_GB=999= it refuses with exit 75.
+
+* DONE Route agent docs to the protocol
+:PROPERTIES:
+:ID: org:01a1e697-f8f5-75a5-a582-ada1a0c6077e
+:ADDED: [2026-11-16 Mon 16:01]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:01] \\
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:END:
+
+=AGENTS.md= gains a Supervised workers section pointing at the protocol,
+reviewer brief and runbook. =CLAUDE.md= gains three exceptions: card
+branches for supervised workers, builds through =guarded-build=, and the
+runtime directory =~/.cache/iidy-hs/=. Runtime directories created:
+=~/.cache/iidy-hs/{supervisor,tmp,worktrees}= with an empty
+=mailbox.log=.

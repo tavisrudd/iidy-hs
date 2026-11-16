@@ -28,3 +28,11 @@ expanding the current card. Run `c check` before committing card or lane files.
   them.
 - Coding standards, testing, build and git rules live in `CLAUDE.md` and
   apply to all card work.
+
+## Supervised workers
+
+A worker (Codex pane or Claude sub-agent) supervised by a Claude Code
+session follows `scripts/supervisor/PROTOCOL.md`, which overrides the work
+loop above for card state, branches and commits; a review worker follows
+`scripts/supervisor/REVIEW.md`. The supervisor follows
+`scripts/supervisor/RUNBOOK.md` (start a session with `/supervise`).

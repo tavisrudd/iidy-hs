@@ -12,12 +12,16 @@ hlint src/ app/ test/
 # Check cabal deps are in flake.nix
 bash scripts/check-nix-deps.sh
 
+# Builds take the host-wide build lock (scripts/guarded-build) so supervised
+# workers committing in parallel never run two GHC builds at once. The
+# per-test timeout turns a hung test (card C6) into a named failure.
 if [ "${SKIP_TESTS:-0}" != "1" ]; then
   echo "pre-commit: build-strict + test..."
-  cabal test all --ghc-options="-Wall -Wcompat -Werror" --test-show-details=direct 2>&1 | tail -5
+  scripts/guarded-build cabal test all --ghc-options="-Wall -Wcompat -Werror" \
+    --test-show-details=direct --test-options=--timeout=60s 2>&1 | tail -5
 else
   echo "pre-commit: build-strict (tests skipped)..."
-  cabal build all --enable-tests --ghc-options="-Wall -Wcompat -Werror" 2>&1 | tail -5
+  scripts/guarded-build cabal build all --enable-tests --ghc-options="-Wall -Wcompat -Werror" 2>&1 | tail -5
 fi
 
 echo "pre-commit: ok"

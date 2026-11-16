@@ -27,7 +27,9 @@ Work is tracked as Org cards with the `c` CLI (single `main` lane). Read
 
 ## Git
 - Green commits only: all tests pass + zero warnings
-- Never create branches — all work on main
+- Never create branches — all work on main. Exception: supervised workers
+  (`scripts/supervisor/`) work on card branches in worktrees under
+  `~/.cache/iidy-hs/worktrees/`, created and landed by the supervisor.
 - Never reset/restore without backup and user confirmation
 - `git config --local commit.gpgsign false` (YubiKey will hang otherwise)
 - Run `git config --local commit.gpgsign false` if not already set before first commit
@@ -35,6 +37,10 @@ Work is tracked as Org cards with the `c` CLI (single `main` lane). Read
 
 ## Build
 - `make build` for compilation, in nix direnv / dev shell
+- Heavy builds and test runs go through `scripts/guarded-build <cmd>`: one
+  build at a time on this host (shared lock with the pre-commit hook and
+  supervised workers), refused below 6 GiB available memory. Nix builds use
+  `--max-jobs 1 --cores 4`.
 - Use `~/.claude/bin/run-quiet` wrapper for builds to avoid flooding context
 - **When adding a new Haskell dependency**: add it to BOTH `iidy-hs.cabal` (build-depends) AND `flake.nix` (haskellDeps list). Missing either causes build failures in different environments.
 
@@ -43,7 +49,8 @@ Work is tracked as Org cards with the `c` CLI (single `main` lane). Read
 - No placeholder/stub implementations left uncommitted
 - No `undefined` or `error "TODO"` in committed code
 - No unnecessary dependencies
-- No modifications to files outside ~/src/iidy-hs/
+- No modifications to files outside ~/src/iidy-hs/ (except the supervisor's
+  runtime state, worktrees and temp dirs under `~/.cache/iidy-hs/`)
 - Read-only access to ~/src/iidy/
 
 ## Progress Logging
