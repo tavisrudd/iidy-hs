@@ -133,10 +133,15 @@ The following behaviors require live AWS and are verified by code review only:
 
 A template may use the local-only import types (`file:`, plain paths, `env:`,
 `git:`, `filehash:`, `filehash-base64:`) only when its own base location is
-positively a local file: a plain path, `./`, `../`, `/` or `file:`. Every
-other base is untrusted: `s3:` in both the short (`s3:bucket/key`) and long
-(`s3://`) forms, `ssm:`, `ssm-path:`, `cfn:`, `http(s):`, and any unknown or
-differently-cased prefix.
+positively a local file: a plain path, `./`, `../`, `/` or `file:`, or a path
+whose text before its first colon is not a valid RFC 3986 URI scheme (for
+example `dir/./c:d.yaml`, which the file loader produces when `dir/x.yaml`
+imports `./c:d.yaml`). Every other base is untrusted: `s3:` in both the short
+(`s3:bucket/key`) and long (`s3://`) forms, `ssm:`, `ssm-path:`, `cfn:`,
+`http(s):`, and any unknown or differently-cased scheme-shaped prefix. That
+includes a local file named like `a:b.yaml` loaded without a `./` prefix: it
+counts as local in Rust but is untrusted here, so it cannot use the local-only
+import types (write `./a:b.yaml` instead).
 
 Rust (`src/yaml/imports/mod.rs:251-259`) treats a base as remote only when its
 lower-cased prefix is `s3`, `http` or `https`, so a document loaded through

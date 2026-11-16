@@ -9,6 +9,7 @@ module Iidy.Yaml.Imports.Types (
 ) where
 
 import Data.Aeson (Value)
+import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Text (Text)
 import Data.Text qualified as T
 
@@ -120,15 +121,28 @@ parseTypePrefix loc
         ]
 
 {- | Whether a parent document's base location is positively a local file:
-a plain path, @./@, @../@, @/@ or @file:@. The trust gate fails closed:
-every other base (@s3:@ in either form, @ssm:@, @ssm-path:@, @cfn:@,
-@http(s):@ and any unknown or malformed prefix) is untrusted and may not
-use the local-only import types.
+a plain path, @./@, @../@, @/@ or @file:@, or a path whose text before its
+first colon is not URI-scheme shaped (such as @dir/./c:d.yaml@), which only
+a local path can produce. The trust gate fails closed: every other base
+(@s3:@ in either form, @ssm:@, @ssm-path:@, @cfn:@, @http(s):@ and any
+unknown scheme-shaped prefix, including @a:b.yaml@) is untrusted and may
+not use the local-only import types.
 -}
 isLocalBase :: Text -> Bool
 isLocalBase loc = case parseTypePrefix loc of
     Right (prefix, _rest) -> prefix == "" || prefix == "file"
-    Left _unknownPrefix -> False
+    Left _unknownPrefix -> not (isUriScheme (T.takeWhile (/= ':') loc))
+
+-- | RFC 3986 scheme syntax: @ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )@.
+isUriScheme :: Text -> Bool
+isUriScheme t = case T.uncons t of
+    Just (c, rest) -> isAsciiAlpha c && T.all isSchemeChar rest
+    Nothing -> False
+  where
+    isAsciiAlpha :: Char -> Bool
+    isAsciiAlpha ch = isAsciiLower ch || isAsciiUpper ch
+    isSchemeChar :: Char -> Bool
+    isSchemeChar ch = isAsciiAlpha ch || isDigit ch || ch `elem` ("+-." :: String)
 
 isLocalOnly :: ImportType -> Bool
 isLocalOnly = \case

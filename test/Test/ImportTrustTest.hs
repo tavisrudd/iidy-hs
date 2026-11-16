@@ -41,7 +41,10 @@ importTrustTests =
 -- Tables
 ------------------------------------------------------------------------
 
--- | Base locations that must be untrusted, by the spelling under test.
+{- | Base locations that must be untrusted, by the spelling under test.
+@a:b.yaml@ is a local file name, but its prefix is scheme shaped, so it
+stays untrusted (supervisor's call on C14).
+-}
 untrustedBases :: [Text]
 untrustedBases =
     [ "s3:bucket/dir/parent.yaml"
@@ -53,6 +56,7 @@ untrustedBases =
     , "https://example.com/parent.yaml"
     , "S3://bucket/parent.yaml"
     , "ftp://example.com/parent.yaml"
+    , "a:b.yaml"
     ]
 
 -- | Local-only imports in every spelling a template can write them.
@@ -96,7 +100,10 @@ allImports =
     ]
         <> nonLocalImports
 
--- | Base locations a local template is loaded from today.
+{- | Base locations a local template is loaded from today.
+@dir/./c:d.yaml@ is what the file loader produces when @dir/x.yaml@
+imports @./c:d.yaml@: its prefix before the colon is not a URI scheme.
+-}
 localBases :: [Text]
 localBases =
     [ "stack-args.yaml"
@@ -105,6 +112,7 @@ localBases =
     , "../stack-args.yaml"
     , "/abs/stack-args.yaml"
     , "file:stack-args.yaml"
+    , "dir/./c:d.yaml"
     , "."
     , "-"
     , ""
