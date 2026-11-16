@@ -15,14 +15,10 @@ module Iidy.GetImport (
 
 import Control.Exception (Handler (..), IOException, catches)
 import Data.Aeson qualified as Aeson
-import Data.Aeson.Encode.Pretty qualified as Pretty
 import Data.Bifunctor (first)
-import Data.ByteString.Lazy qualified as BL
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import Data.Text.Lazy qualified as TL
-import Data.Text.Lazy.Encoding qualified as TLE
 import System.IO (stderr)
 import System.IO.Error (ioeGetErrorString)
 
@@ -33,6 +29,7 @@ import Iidy.Aws.Config (createAwsEnvFromSettings)
 import Iidy.Aws.CredentialSource (AwsSettings)
 import Iidy.Cli (GetImportArgs (..), GlobalOpts (..), RenderFormat (..))
 import Iidy.Errors.JMESPath (formatJMESPathQueryError)
+import Iidy.JsonPretty (prettyJsonText)
 import Iidy.Output.Types (OutputData (..))
 import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
@@ -139,7 +136,7 @@ emitDoc emit gopts args importData =
         Right queried -> do
             -- Exhaustive match, no wildcard
             case giaFormat args of
-                RenderJson -> emit (OdRawOutput (formatJsonPretty queried))
+                RenderJson -> emit (OdRawOutput (prettyJsonText queried <> "\n"))
                 RenderYaml -> emit (OdRawOutput (yamlWithNewline queried))
                 RenderCfnYaml -> emit (OdRawOutput (yamlWithNewline queried))
             pure 0
@@ -149,12 +146,3 @@ emitDoc emit gopts args importData =
 -- | YAML text ending in exactly one newline (serde_yaml::to_string).
 yamlWithNewline :: Aeson.Value -> Text
 yamlWithNewline v = T.dropWhileEnd (== '\n') (emitYaml (fromValue v)) <> "\n"
-
--- | Two-space pretty JSON plus a newline (serde_json::to_string_pretty + println!).
-formatJsonPretty :: Aeson.Value -> Text
-formatJsonPretty v =
-    lazyBsToText (Pretty.encodePretty' Pretty.defConfig{Pretty.confIndent = Pretty.Spaces 2} v) <> "\n"
-
--- | Decode a lazy ByteString (UTF-8 encoded) to strict Text.
-lazyBsToText :: BL.ByteString -> Text
-lazyBsToText = TL.toStrict . TLE.decodeUtf8

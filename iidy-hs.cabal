@@ -78,6 +78,7 @@ library
     Iidy.Explain
     Iidy.Render
     Iidy.GetImport
+    Iidy.JsonPretty
     Iidy.InitStackArgs
     Iidy.Aws.Config
     Iidy.Aws.CredentialSource
@@ -210,6 +211,7 @@ test-suite iidy-hs-test
     Test.ImportLoaderTest
     Test.AwsLoaderTest
     Test.GetImportTest
+    Test.RenderTest
     Test.MockAws
     Test.ErrorIdTest
     Test.ErrorClassificationTest

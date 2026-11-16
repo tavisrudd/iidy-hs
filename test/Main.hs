@@ -35,6 +35,7 @@ import Test.ParserTest (parserTests)
 import Test.Phase14FixTest (phase14FixTests)
 import Test.PreprocessingPropertyTest (preprocessingPropertyTests)
 import Test.PropertyTest (propertyTests)
+import Test.RenderTest (renderTests)
 import Test.RendererOutputTest (rendererOutputTests)
 import Test.RendererTest (rendererTests)
 import Test.RequestBuilderTest (requestBuilderTests)
@@ -87,6 +88,7 @@ main = do
             , testGroup "ImportLoaders" importLoaderTests
             , testGroup "AwsLoaders" awsLoaderTests
             , testGroup "GetImport" getImportTests
+            , testGroup "Render" renderTests
             , testGroup "ErrorIds" errorIdTests
             , testGroup "ErrorClassification" errorClassificationTests
             , testGroup "Resolver" resolverTests

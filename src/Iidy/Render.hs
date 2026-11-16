@@ -3,19 +3,17 @@ module Iidy.Render (
 ) where
 
 import Control.Monad.Trans.Except (ExceptT (..), runExceptT)
-import Data.Aeson.Encode.Pretty qualified as Pretty
 import Data.ByteString.Lazy qualified as BL
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Text.IO qualified as TIO
-import Data.Text.Lazy qualified as TL
-import Data.Text.Lazy.Encoding qualified as TLE
 import System.Directory (doesFileExist)
 import System.IO (stderr)
 
 import Iidy.Cli (GlobalOpts (..), RenderArgs (..), RenderFormat (..))
 import Iidy.Errors.JMESPath (formatJMESPathQueryError)
+import Iidy.JsonPretty (prettyJsonText)
 import Iidy.Output.Types (OutputData (..))
 import Iidy.Types (YamlSpec (..))
 import Iidy.Yaml.Ast (YamlAst)
@@ -97,7 +95,7 @@ runRender emit args gopts = do
     writeStep :: OValue -> IO (Either RenderError Int)
     writeStep outputVal = do
         let rendered = case raFormat args of
-                RenderJson -> formatJson outputVal
+                RenderJson -> prettyJsonText (toValue outputVal)
                 RenderYaml -> emitYaml outputVal
                 RenderCfnYaml -> emitYaml outputVal
             outPath = raOutfile args
@@ -140,7 +138,3 @@ readTemplate args = do
 
 isStdoutTarget :: Text -> Bool
 isStdoutTarget t = t == "-" || t == "stdout"
-
-formatJson :: OValue -> Text
-formatJson val =
-    TL.toStrict (TLE.decodeUtf8 (Pretty.encodePretty (toValue val)))
