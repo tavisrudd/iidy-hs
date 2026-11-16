@@ -22,7 +22,6 @@ import Iidy.Aws.Config (credentialDisplayName)
 import Iidy.Aws.CredentialSource (AwsSettings (..))
 import Iidy.Aws.Sts (getCallerIdentity)
 import Iidy.Cfn.Context (CfnContext (..), ctxGetUsedTokens)
-import Iidy.Cfn.Types (StackArgs (..))
 import Iidy.Output.Types (
     CommandMetadata (..),
     CommandSummaryResult (..),
@@ -40,13 +39,14 @@ Makes a STS GetCallerIdentity call to get the current IAM principal.
 constructCommandMetadata ::
     CfnContext ->
     AwsSettings ->
-    StackArgs ->
+    -- | IAM service role ARN from the stack args, if any
+    Maybe Text ->
     -- | environment name
     Text ->
     -- | CLI stack name override (only included in CLI Arguments if present)
     Maybe Text ->
     IO CommandMetadata
-constructCommandMetadata ctx awsSettings sa env cliStackNameOverride = do
+constructCommandMetadata ctx awsSettings serviceRole env cliStackNameOverride = do
     -- Get current IAM principal via STS
     (_account, arn) <- getCallerIdentity (cfnEnv ctx)
 
@@ -66,9 +66,6 @@ constructCommandMetadata ctx awsSettings sa env cliStackNameOverride = do
 
     -- Get credential display name
     let credSource = credentialDisplayName (cfnCredentialSources ctx)
-
-    -- IAM service role from stack args
-    let serviceRole = saServiceRoleArn sa
 
     pure
         CommandMetadata

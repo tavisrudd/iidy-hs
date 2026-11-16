@@ -34,7 +34,7 @@ import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateAp
 import Iidy.Cfn.Operations.UpdateStack (updateStack, updateStackWithChangeset)
 import Iidy.Cfn.Operations.WatchStack (watchStack)
 import Iidy.Cfn.Runner (createSimpleContext, runCfnWithArgs)
-import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), StackInput (..), emptyStackArgs)
+import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), StackInput (..))
 import Iidy.Cli
 import Iidy.Cli.Completion (bashCompletionScript, fishCompletionScript, zshCompletionScript)
 import Iidy.Cli.Parser (parseCliOpts)
@@ -122,7 +122,7 @@ runCommand cli = case cliCommand cli of
         let emit = renderOutput dispatch
         ctx <- createSimpleContext cli OpExecuteChangeset env remoteImports emit
         -- Emit CommandMetadata before operation
-        meta <- constructCommandMetadata ctx (cliToAwsSettings cli) emptyStackArgs env Nothing
+        meta <- constructCommandMetadata ctx (cliToAwsSettings cli) Nothing env Nothing
         emit (OdCommandMetadata meta)
         result <-
             executeChangeset ctx stackName (ecsChangesetName args)
@@ -166,7 +166,7 @@ runCommand cli = case cliCommand cli of
         let emit = renderOutput dispatch
         ctx <- createSimpleContext cli OpDeleteStack env BlockRemoteImports emit
         -- Emit CommandMetadata before operation
-        meta <- constructCommandMetadata ctx (cliToAwsSettings cli) emptyStackArgs env Nothing
+        meta <- constructCommandMetadata ctx (cliToAwsSettings cli) Nothing env Nothing
         emit (OdCommandMetadata meta)
         result <-
             deleteStack ctx (delStackname args) (delYes args) env emit

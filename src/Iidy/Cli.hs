@@ -3,7 +3,6 @@ module Iidy.Cli (
     Cli (..),
     GlobalOpts (..),
     AwsOpts (..),
-    NormalizedAwsOpts (..),
 
     -- * Commands
     Commands (..),
@@ -50,7 +49,6 @@ module Iidy.Cli (
 ) where
 
 import Data.Text (Text)
-import Iidy.Aws.ClientReqToken (TokenInfo)
 import Iidy.Aws.CredentialSource (AwsSettings (..))
 import Iidy.Types (ColorChoice, OutputMode, Theme, YamlSpec)
 
@@ -81,15 +79,6 @@ data AwsOpts = AwsOpts
     , aoProfile :: !(Maybe Text)
     , aoAssumeRoleArn :: !(Maybe Text)
     , aoClientRequestToken :: !(Maybe Text)
-    }
-    deriving stock (Show, Eq)
-
-data NormalizedAwsOpts = NormalizedAwsOpts
-    { naoRegion :: !(Maybe Text)
-    , naoProfile :: !(Maybe Text)
-    , naoAssumeRoleArn :: !(Maybe Text)
-    , naoClientRequestToken :: !TokenInfo
-    , naoFixtureSet :: !(Maybe Text)
     }
     deriving stock (Show, Eq)
 

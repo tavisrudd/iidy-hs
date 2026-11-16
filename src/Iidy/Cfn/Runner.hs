@@ -88,7 +88,7 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
             -- Emit CommandMetadata for write operations (not lint/estimate-cost)
             when (emitsCommandMetadata operation) $
                 do
-                    meta <- constructCommandMetadata ctx mergedAws sa' env stackNameOverride
+                    meta <- constructCommandMetadata ctx mergedAws (saServiceRoleArn sa') env stackNameOverride
                     emit (OdCommandMetadata meta)
 
             rc <-
