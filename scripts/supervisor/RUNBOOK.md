@@ -52,8 +52,10 @@ is committed.
    `git worktree add ~/.cache/iidy-hs/worktrees/<worker> -b <branch> main`
    (branch `codex/codex-<n>/C<ID>` or `claude/C<ID>`; the review worktree
    is detached: `git worktree add --detach ~/.cache/iidy-hs/worktrees/review main`).
-3. `direnv allow ~/.cache/iidy-hs/worktrees/<worker>` so the worker can run
-   `direnv exec` there. The first build in a fresh worktree compiles the
+3. `direnv allow /cache/tavis/iidy-hs/worktrees/<worker>` so the worker can
+   run `direnv exec` there. `~/.cache` is a symlink to `/cache/tavis`, and
+   direnv only accepts the resolved path: allow it and tell workers to use
+   the `/cache/tavis/...` path with `direnv exec`. The first build in a fresh worktree compiles the
    whole project; the Haskell dependencies come from the Nix store.
 4. Codex workers: in Tavis's tmux, a window `iidy:codex` with one pane per
    worker, cwd the worker's worktree, running Codex (models below). Record
