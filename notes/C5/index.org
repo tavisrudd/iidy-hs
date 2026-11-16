@@ -1,0 +1,87 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C5
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   User request 2026-11-16: upgrade docs/ from md to org-mode files with org style links
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e63d-db69-77c4-b05b-e1e5d95272ea
+:ADDED: [2026-11-16 Mon 14:22]
+:END:
+#+title: C5 — Convert docs/ from Markdown to Org with Org-style links
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e63e-159e-75a8-a875-24908738399f
+:ADDED: [2026-11-16 Mon 14:23]
+:END:
+
+The project documentation under =docs/= is Markdown: the user docs at the
+top level (=README.md=, =getting-started.md=, =command-reference.md=,
+=import-types.md=, =yaml-preprocessing.md=, =custom-resource-templates.md=,
+=SECURITY.md=), the developer docs and ADRs in =docs/dev/= and
+=docs/dev/adr/=, and the requirements set in =docs/requirements/=. Cards
+([[file:../C1/index.org][C1]]) are Org, and =c= expands Org links when it builds a
+card packet, so docs in Org with =file:= and =id:= links can be linked from
+cards and pulled into an agent's context precisely, down to a heading.
+
+No build, test or CI file references =docs/=. Links into =docs/*.md= do
+exist in the top-level =README.md=, =WORKPLAN.md=, cross-links between the
+requirements docs, and many historical notes under =notes/=.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e63e-159e-75a8-a875-248f5c464ae3
+:ADDED: [2026-11-16 Mon 14:23]
+:END:
+
+Allowed paths: =docs/=, the top-level =README.md=, =WORKPLAN.md=,
+=CLAUDE.md=, =AGENTS.md=, and =notes/C5/=. Historical notes under =notes/=
+(handoffs, reviews) are left as they are; their links to old =.md= paths go
+stale by design, since [[file:../C2/index.org][C2]] archives them.
+
+Gate: every =.md= file under =docs/= is replaced by an =.org= file of the
+same name (=git mv= first, so history follows), with =#+title:=, Org
+headings, Org tables, =#+begin_src= blocks with languages, and Org-style
+links (=[[file:...][label]]= for files, =[[*Heading][label]]= or =id:= links
+for headings, =[[https://...][label]]= for URLs); no Markdown syntax is left
+(check with =rg -n '\]\(|^#{1,6} |^```' docs/=); every internal link resolves
+to an existing file or heading; links into =docs/= from the allowed
+top-level files point at the new =.org= paths; GitHub renders the converted
+files. Work committed with C5 in the messages.
+
+* TODO Decide conversion method and conventions
+:PROPERTIES:
+:ID: org:01a1e63e-159e-75a8-a875-248e8a923716
+:ADDED: [2026-11-16 Mon 14:23]
+:END:
+
+Try =pandoc -f gfm -t org= on a sample of each kind of doc (user doc,
+requirements doc with pseudocode, ADR) and compare with a hand conversion.
+Record here the chosen method and the conventions: heading link style
+(=*Heading= versus =id:=; =id:= needs =c stamp= on each file), table
+handling, code block languages, and whether =docs/README.md= stays Markdown
+for GitHub's directory view.
+
+* TODO Convert docs/ and fix internal links
+:PROPERTIES:
+:ID: org:01a1e63e-159e-75a8-a875-248df4f477f9
+:ADDED: [2026-11-16 Mon 14:23]
+:END:
+
+Convert each file with =git mv= then rewrite, a directory at a time. Fix
+cross-links between docs to the new paths and Org link syntax.
+
+* TODO Update inbound links and verify
+:PROPERTIES:
+:ID: org:01a1e63e-159e-75a8-a875-248c436e0c96
+:ADDED: [2026-11-16 Mon 14:23]
+:END:
+
+Update links to =docs/= in =README.md=, =WORKPLAN.md=, =CLAUDE.md= and
+=AGENTS.md=. Run the Markdown-residue grep and a link check over =docs/=,
+and record the results here.

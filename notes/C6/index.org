@@ -1,0 +1,77 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C6
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   Discovered 2026-11-16 during the C1 closeout commit: the pre-commit test run hung for 8+ minutes
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e63f-89b4-75e6-88e0-373c48849e72
+:ADDED: [2026-11-16 Mon 14:24]
+:END:
+#+title: C6 — Find and fix the intermittent hang in the test suite
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e63f-baa2-7184-958c-c38d70090094
+:ADDED: [2026-11-16 Mon 14:24]
+:END:
+
+On 2026-11-16 the pre-commit hook (=.githooks/pre-commit=, which runs
+=cabal test all ... | tail -5=) hung while committing the C1 closeout. The
+=iidy-hs-test= binary sat in =futex_do_wait= with 76 threads, stdin on
+=/dev/null=, for more than 8 minutes; a normal run of the suite takes under
+half a second. After the binary was killed, an immediate rerun passed every
+test in 0.38s, and the retried commit passed too. The commit before it, made
+minutes earlier, also passed. So some test can deadlock or wait forever
+intermittently. Likely candidates are tests using threads, timeouts, polling
+or mock clocks (for example the watch-stack, spinner, polling and timing
+tests).
+
+Because the hook pipes through =tail -5=, the hung run shows no test names,
+and tasty has no default per-test timeout, so a hang blocks a commit with no
+diagnostic.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e63f-baa2-7184-958c-c38c17a82615
+:ADDED: [2026-11-16 Mon 14:24]
+:END:
+
+Allowed paths: =test/=, =src/= where the hang is a real concurrency bug,
+=.githooks/pre-commit=, =Makefile=, =notes/C6/=.
+
+Gate: the hanging test is identified and the cause fixed (not just skipped);
+the suite runs at least 200 consecutive times with no hang (record the loop
+command and result here); the hook or test runner applies a per-test
+timeout so any future hang fails fast and names the test.
+
+* TODO Reproduce and identify the hanging test
+:PROPERTIES:
+:ID: org:01a1e63f-baa2-7184-958c-c38b1d04ead1
+:ADDED: [2026-11-16 Mon 14:24]
+:END:
+
+Loop the test binary with a per-test timeout (for example
+=--timeout=20s=) and full output, under load and with =+RTS -N= variations,
+until a run hangs; record which test and its stack or event log.
+
+* TODO Fix the cause and add a timeout guard
+:PROPERTIES:
+:ID: org:01a1e63f-baa2-7184-958c-c38a2e90eb80
+:ADDED: [2026-11-16 Mon 14:24]
+:END:
+
+Fix the deadlock or unbounded wait, then add a per-test timeout to the
+test suite or the pre-commit hook.
+
+* TODO Verify with a long run loop
+:PROPERTIES:
+:ID: org:01a1e63f-baa2-7184-958c-c3894f39b5d9
+:ADDED: [2026-11-16 Mon 14:24]
+:END:
+
+Run the suite repeatedly and record the result here.
