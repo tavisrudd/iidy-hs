@@ -258,3 +258,6 @@ iidy-hs decisions:
   TypeScript version (`~/src/iidy-js`) and a discussion with Tavis before
   any code. The remote-template redesign (C15) likewise starts with an
   options write-up for Tavis.
+- Claude sub-agents for the 2026-11-16 batch (Tavis): Opus and Sonnet
+  sub-agents work the cards, no Codex panes; brief template in
+  `~/.cache/iidy-hs/supervisor/claude-briefs/card-brief.md`.
