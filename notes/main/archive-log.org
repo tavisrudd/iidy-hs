@@ -7,6 +7,7 @@
 :END:
 
 =c set <ID> done --note ...= appends one short dated completion entry here.
+- [2026-11-16 Mon 14:15] [[file:../C1/index.org][C1]] — Lane, allocator, AGENTS.md and cards C2-C4 committed in 3f24739; c check passes
 * COMMENT meta
 :PROPERTIES:
 :LANE: main

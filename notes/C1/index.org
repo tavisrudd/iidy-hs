@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C1
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   User request 2026-11-16: adopt the c cards workflow (single main lane)
 :CREATED_BY: opus-5.5-medium
@@ -12,6 +12,10 @@
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 14:14]
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+- Card state STARTED → DONE [2026-11-16 Mon 14:15]
+  Note: Lane, allocator, AGENTS.md and cards C2-C4 committed in 3f24739; c check passes
   Agent: opus-5.5-medium
   Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :END:
