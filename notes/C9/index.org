@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C9
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   C2 handoff triage (notes/C2/report--handoff-triage.org), accepted by the user 2026-11-16
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :ID: org:01a1e64b-18c0-7261-acab-1bfcf5b6d02b
 :ADDED: [2026-11-16 Mon 14:37]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 16:34]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C9 — Detect real terminal width in the output renderer
 #+date: 2026-11-16
