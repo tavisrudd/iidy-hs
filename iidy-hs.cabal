@@ -209,6 +209,8 @@ test-suite iidy-hs-test
     Test.FilehashTest
     Test.ImportLoaderTest
     Test.AwsLoaderTest
+    Test.GetImportTest
+    Test.MockAws
     Test.ErrorIdTest
     Test.ErrorClassificationTest
     Test.ResolverTest
@@ -244,6 +246,7 @@ test-suite iidy-hs-test
     , amazonka-ssm
     , microlens
     , bytestring
+    , http-client
     , http-types
     , containers
     , directory

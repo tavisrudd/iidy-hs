@@ -1,0 +1,25 @@
+<DescribeStacksResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">
+  <DescribeStacksResult>
+    <Stacks>
+      <member>
+        <StackName>network-stack</StackName>
+        <StackId>arn:aws:cloudformation:us-east-1:123456789012:stack/network-stack/00000000-0000-0000-0000-000000000000</StackId>
+        <CreationTime>2026-01-01T00:00:00Z</CreationTime>
+        <StackStatus>CREATE_COMPLETE</StackStatus>
+        <Outputs>
+          <member>
+            <OutputKey>VpcId</OutputKey>
+            <OutputValue>vpc-0abc123</OutputValue>
+          </member>
+          <member>
+            <OutputKey>SubnetId</OutputKey>
+            <OutputValue>subnet-0def456</OutputValue>
+          </member>
+        </Outputs>
+      </member>
+    </Stacks>
+  </DescribeStacksResult>
+  <ResponseMetadata>
+    <RequestId>00000000-0000-0000-0000-000000000001</RequestId>
+  </ResponseMetadata>
+</DescribeStacksResponse>

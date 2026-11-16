@@ -20,6 +20,7 @@ import Test.ErrorFixtureTest (buildErrorTests)
 import Test.ErrorIdTest (errorIdTests)
 import Test.FilehashTest (filehashTests)
 import Test.FixtureTest (buildFixtureTests)
+import Test.GetImportTest (getImportTests)
 import Test.GlobalConfigTest (globalConfigTests)
 import Test.HandlebarsTest (handlebarsTests)
 import Test.ImportLoaderTest (importLoaderTests)
@@ -84,6 +85,7 @@ main = do
             , testGroup "Filehash" filehashTests
             , testGroup "ImportLoaders" importLoaderTests
             , testGroup "AwsLoaders" awsLoaderTests
+            , testGroup "GetImport" getImportTests
             , testGroup "ErrorIds" errorIdTests
             , testGroup "ErrorClassification" errorClassificationTests
             , testGroup "Resolver" resolverTests

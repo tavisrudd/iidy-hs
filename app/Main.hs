@@ -257,7 +257,7 @@ runCommand cli = case cliCommand cli of
                 Right rc -> exitCode rc
     CmdGetImport args -> do
         dispatch <- mkOutputDispatch (cliGlobalOpts cli)
-        runGetImport (renderOutput dispatch) args (cliGlobalOpts cli) >>= exitCode
+        runGetImport (renderOutput dispatch) args (cliGlobalOpts cli) (cliToAwsSettings cli) >>= exitCode
     CmdDemo args ->
         let ri = if goRemoteImports (cliGlobalOpts cli) then AllowRemoteImports else BlockRemoteImports
          in runDemo (daDemoscript args) (daTimescaling args) (daMaskSecrets args) ri >>= exitCode

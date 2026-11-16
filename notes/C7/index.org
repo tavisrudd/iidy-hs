@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C7
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :CARD_PRIORITY: A
 :MODE:     CONTRACT
 :ORIGIN:   C2 handoff triage (notes/C2/report--handoff-triage.org), accepted by the user 2026-11-16
@@ -10,6 +10,11 @@
 :SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :ID: org:01a1e64b-1887-7738-b770-e328fd1649db
 :ADDED: [2026-11-16 Mon 14:37]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 15:33]
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675/agent:ae1a258c26a456080
 :END:
 #+title: C7 — Give get-import an AWS environment (Rust parity)
 #+date: 2026-11-16
@@ -48,17 +53,201 @@ a test using mock AWS fixtures shows an =ssm:= and a =cfn:= import resolving
 through =get-import=; behaviour without credentials matches Rust's error;
 build warning-free, all tests pass; committed with C7 in the message.
 
-* TODO Confirm Rust behaviour and design the fix
+* DONE Confirm Rust behaviour and design the fix
 :PROPERTIES:
 :ID: org:01a1e64b-91d4-76b3-ac8b-78f80a5ff8f6
 :ADDED: [2026-11-16 Mon 14:37]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 15:35] \\
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675/agent:ae1a258c26a456080
 :END:
 
 Read =~/src/iidy= =cfn/get_import.rs= and record how and when it builds the
 AWS environment and what it does on missing credentials.
 
-* TODO Build the AWS environment in get-import with a mock-backed test
+** Findings: Rust
+:PROPERTIES:
+:ID: org:01a1e680-4a8c-75fc-8330-371383410cd6
+:ADDED: [2026-11-16 Mon 15:35]
+:END:
+
+=~/src/iidy/src/cfn/get_import.rs= (=get_import=) always calls
+=config_from_normalized_opts= (=src/aws/mod.rs=) before loading anything,
+then hands the =SdkConfig= to =ProductionImportLoader::with_aws_config=.
+=config_from_normalized_opts= → =config_from_merged_settings= applies
+=--region= and =--profile= to =aws_config::defaults(..)=, calls
+=loader.load().await=, and wraps the credentials in an
+=AssumeRoleProvider= when =--assume-role-arn= is set. It never resolves
+credentials: the Rust SDK resolves them lazily at the first API call. It
+returns =Ok= in practice, so the =format_aws_error= branch at config time is
+effectively dead.
+
+So construction is eager in code but lazy in effect: a =file:=, =env:= or
+=random:= import never touches credentials or region.
+
+Probed with the Rust debug binary (=~/src/iidy/target/debug/iidy=), under
+=env -i HOME=<empty dir> AWS_EC2_METADATA_DISABLED=true= so no network call
+could happen (the credential chain fails before any request is sent):
+
+| Invocation                                      | stderr                                                                      | exit |
+|-------------------------------------------------+-----------------------------------------------------------------------------+------|
+| =get-import ssm:/foo= (region set, no creds)    | =Import error: Failed to fetch SSM parameter /foo: dispatch failure=       |    1 |
+| =get-import cfn:output:mystack/Key= (same)      | =Import error: Failed to describe CloudFormation stack mystack: dispatch failure= | 1 |
+| =get-import s3://b/k= (same)                    | =Import error: Failed to fetch S3 object s3://b/k: dispatch failure=       |    1 |
+| =get-import ssm:/foo= (no region, no creds)     | =Import error: Failed to fetch SSM parameter /foo: dispatch failure=       |    1 |
+| =get-import x.yaml= (no region, no creds)       | (none; prints =a: 1= on stdout)                                             |    0 |
+| =--profile nope get-import x.yaml=              | (none; prints =a: 1=)                                                       |    0 |
+
+Missing credentials therefore surface as an ordinary =Import error: ...=
+line on stderr with exit code 1, only for AWS-backed import types. The
+error text names the operation that failed; the SDK cause is the opaque
+"dispatch failure". Note the =e.to_string().contains("AWS")= check in
+=get_import= never fires for these messages, so =format_aws_error= is not
+used either.
+
+** Findings: Haskell
+:PROPERTIES:
+:ID: org:01a1e680-4a8c-75fc-8330-371242bb898d
+:ADDED: [2026-11-16 Mon 15:35]
+:END:
+
+- =runGetImport= (=src/Iidy/GetImport.hs=) builds
+  =ImportConfig { icAwsEnv = Nothing }=, so =withAwsEnv= in
+  =src/Iidy/Yaml/Imports/Loaders/Dispatch.hs= always returns
+  "AWS import type requires credentials and is not available in this
+  context" for =cfn:=, =ssm:=, =ssm-path:=, =s3:=.
+- The shared builder is =createAwsEnvFromSettings :: AwsSettings -> IO
+  (Env, CredentialSourceStack)= in =src/Iidy/Aws/Config.hs=, fed by
+  =cliToAwsSettings :: Cli -> AwsSettings= (=src/Iidy/Cli.hs=). That is how
+  =Iidy.Cfn.Context.createContext= and the stack-args bootstrap in
+  =Iidy.Cfn.Runner= build their env. It honours profile, region and
+  assume-role, matching the Rust settings.
+- Unlike Rust, it is eager in effect: =Amazonka.newEnv discover= resolves
+  credentials up front and throws =AuthError= if none exist, and
+  =resolveRegion= throws an =IOException= if no region is set. Calling it
+  unconditionally would break =get-import file.yaml= on a machine without
+  AWS config, which works in Rust.
+- =runGetImport= only takes =GlobalOpts=; the AWS flags live in
+  =cliAwsOpts=, so the call site in =app/Main.hs= has to pass
+  =cliToAwsSettings cli= as well (one-line change).
+- No mock =Amazonka.Env= existed in =test/=; existing AWS tests cover only
+  pure parsing. =http-client= exposes =managerRawConnection= /
+  =managerTlsConnection= and =makeConnection=
+  (=Network.HTTP.Client.Internal=), which allow an in-process fake
+  connection that never opens a socket.
+
+** Design
+:PROPERTIES:
+:ID: org:01a1e680-4a8b-74d6-8de1-d9785fb28ff6
+:ADDED: [2026-11-16 Mon 15:35]
+:END:
+
+1. Keep =createAwsEnvFromSettings= as the single env builder (no new
+   builder code).
+2. In =GetImport=, classify the location with =parseImportType=. Only when
+   the type is =cfn:=, =ssm:=, =ssm-path:=, or =s3:= with remote imports
+   allowed, run the env builder. This reproduces Rust's observable
+   laziness: non-AWS imports never need credentials or a region.
+3. If the builder throws (=AuthError=, =IOException= from the region
+   check, or an amazonka =Error= from the STS assume-role call), print
+   =Import error: <reason>= to stderr and exit 1, which is the same shape
+   as Rust. The wording names the credential/region problem rather than
+   Rust's "dispatch failure", which is more useful and still one
+   =Import error:= line.
+4. Split =runGetImport= into a thin wrapper and =runGetImportWith=, which
+   takes the env provider as an =IO Env= action, so the test injects a mock
+   env and also observes that the provider is not called for non-AWS
+   imports.
+5. Test helper =Test.MockAws=: an =Env= with static fake keys whose
+   =http-client= =Manager= uses a fake connection. The fake reads the
+   request bytes, routes on the =X-Amz-Target= header (SSM JSON protocol)
+   or the =Action== form field (CloudFormation query protocol), and
+   replies with a canned body from =test-fixtures/mock-aws/=.
+
+* DONE Build the AWS environment in get-import with a mock-backed test
 :PROPERTIES:
 :ID: org:01a1e64b-91d4-76b3-ac8b-78f776e3da83
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 15:39] \\
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675/agent:ae1a258c26a456080
+:END:
+
+** Implementation
+:PROPERTIES:
+:ID: org:01a1e684-179f-73e9-b757-3f4e72baa8ad
+:ADDED: [2026-11-16 Mon 15:39]
+:END:
+
+- =src/Iidy/GetImport.hs=: =runGetImport= now takes the CLI
+  =AwsSettings= and delegates to =runGetImportWith (fst <$>
+  createAwsEnvFromSettings settings)=. =runGetImportWith= classifies the
+  location with =parseImportType= and runs the env provider only when
+  =needsAwsEnv= holds (=cfn:=, =ssm:=, =ssm-path:=, and =s3:= unless
+  remote imports are blocked). =AuthError=, =IOException= (region check)
+  and amazonka =Error= (STS assume-role) from the provider become one
+  =Import error: <reason>= line on stderr and exit 1. No new env-building
+  code: the builder is the same one the stack commands use.
+- =app/Main.hs=: the call site passes =cliToAwsSettings cli= (one line).
+- =test/Test/MockAws.hs=: reusable in-process mock =Amazonka.Env= (fake
+  keys, us-east-1, =Amazonka.once=, http-client manager whose raw and TLS
+  connection factories return a fake =Connection=; no socket is opened).
+  Fixtures are looked up by =<host service>.<operation>.json|xml= under
+  =test-fixtures/mock-aws/=; a missing fixture returns HTTP 400. Required
+  adding =http-client= to the test-suite =build-depends= in
+  =iidy-hs.cabal= (it is already a library dependency and in =flake.nix=).
+- =test/Test/GetImportTest.hs= (group =GetImport=):
+  - =ssm:/app/db-host= resolves to ="db.internal.example"= and the mock
+    served =ssm.GetParameter.json=;
+  - =cfn:output:network-stack/VpcId= resolves to ="vpc-0abc123"= via
+    =cloudformation.DescribeStacks.xml=; =cfn:output:network-stack= returns
+    the full outputs map;
+  - a file import, an =env:= import, and an =s3:= import with remote
+    imports blocked never call the env provider;
+  - a provider throwing =CredentialChainExhausted= (=ssm:=, =cfn:=) or a
+    region =IOException= (=ssm-path:=) gives exit 1 and no output;
+  - =needsAwsEnv= over every =ImportType=, both remote settings.
+
+** Evidence
+:PROPERTIES:
+:ID: org:01a1e684-179f-73e9-b757-3f4d67919556
+:ADDED: [2026-11-16 Mon 15:39]
+:END:
+
+- =direnv exec . cabal build all -j1 --enable-tests --ghc-options='-j2
+  -Werror'= on GHC 9.12.3: clean.
+- =cabal test all ... --test-options=--timeout=30s=: all tests pass
+  (including the new =GetImport= group); no hang.
+- Built binary, run inside =unshare -rn= (no network) with an empty
+  =HOME=, compared with the Rust table above:
+
+| Invocation                                | Haskell stderr                                                          | exit |
+|-------------------------------------------+-------------------------------------------------------------------------+------|
+| =get-import ssm:/foo= (region, no creds)  | =Import error: AWS credentials not available: CredentialChainExhausted= |    1 |
+| =get-import cfn:output:mystack/Key=       | same                                                                    |    1 |
+| =get-import ssm:/foo= (no region)         | same                                                                    |    1 |
+| =--profile nope get-import ssm:/foo=      | =Import error: AWS credentials not available: InvalidFileError "Missing profile: \"nope\""= | 1 |
+| fake keys, no region, =ssm:/foo=          | =Import error: No AWS region configured. ...= (multi-line hint)         |    1 |
+| =get-import x.yaml= (no creds, any)       | (none; prints =a: 1=)                                                   |    0 |
+| =--profile nope get-import x.yaml=        | (none; prints =a: 1=)                                                   |    0 |
+
+Same shape as Rust (one =Import error:= report on stderr, exit 1, nothing
+on stdout; non-AWS imports unaffected by missing AWS config). The reason
+text differs: Rust reports the failed operation plus the SDK's opaque
+"dispatch failure"; Haskell reports the credential or region problem,
+because amazonka resolves credentials when the env is built rather than at
+the first call.
+
+** Side findings (filed as C13, not fixed here)
+:PROPERTIES:
+:ID: org:01a1e684-179f-73e9-b757-3f4c08526e27
+:ADDED: [2026-11-16 Mon 15:39]
+:END:
+
+- Haskell =get-import= ignores =--query=; Rust applies the JMESPath query.
+- Haskell prints YAML without a trailing newline (=a: 1=); Rust prints
+  =a: 1\n=.

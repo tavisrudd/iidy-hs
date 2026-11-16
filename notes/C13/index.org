@@ -1,0 +1,45 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C13
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: B
+:MODE:     CONTRACT
+:ORIGIN:   Found while working C7: Haskell get-import ignores giaQuery (Rust applies the JMESPath query in cfn/get_import.rs) and prints YAML without a trailing newline (Rust: 'a: 1\n')
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675/agent:ae1a258c26a456080
+:ID: org:01a1e683-91b4-768b-9769-54f5aa45374b
+:ADDED: [2026-11-16 Mon 15:39]
+:END:
+#+title: C13 — get-import: apply --query and end YAML output with a newline (Rust parity)
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e683-91b4-768b-9769-54f4be553e21
+:ADDED: [2026-11-16 Mon 15:39]
+:END:
+
+get-import: apply --query and end YAML output with a newline (Rust parity)
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e683-91b4-768b-9769-54f3ca8a84ca
+:ADDED: [2026-11-16 Mon 15:39]
+:END:
+
+Define allowed paths and acceptance evidence before implementation.
+
+* TODO get-import: apply --query and end YAML output with a newline (Rust parity)
+:PROPERTIES:
+:ID: org:01a1e683-91b4-768b-9769-54f23c3e46f6
+:ADDED: [2026-11-16 Mon 15:39]
+:END:
+
+Refine this headline into a short, concrete outcome or unit of work before
+dispatch. Put dependencies in Context and detailed steps and the stopping
+condition in this task body.
+
+Keep task notes under the relevant TODO heading. Add reports and pinned
+=file-rev:= links here as work proceeds.
