@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C24
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :CARD_PRIORITY: C
 :MODE:     CONTRACT
 :ORIGIN:   C13 review 2026-11-16: GetImport.formatJsonPretty and Render.formatJson both wrap encodePretty, differing only in indent
@@ -11,8 +11,28 @@
 :ID: org:01a1e6a8-a9ec-75c5-898a-bfac0bb51067
 :ADDED: [2026-11-16 Mon 16:19]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 16:35]--[2026-11-16 Mon 16:38] => 0:03
+CLOCK: [2026-11-16 Mon 16:39]--[2026-11-16 Mon 16:41] => 0:02
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:34]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 16:35]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aa97056e576f99a9e
+- Clock-out [2026-11-16 Mon 16:38]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aa97056e576f99a9e
+- Clock-in [2026-11-16 Mon 16:39]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aa97056e576f99a9e
+- Clock-out [2026-11-16 Mon 16:41]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aa97056e576f99a9e
+- Card state STARTED → DONE [2026-11-16 Mon 16:41]
+  Note: Landed 25384f1, d602c56, 92c283f: one two-space prettyJsonText helper; render --format json matches Rust (Tavis); Params.Client uses it; Sonnet review: land, fix round 1 tests + one-line Params change
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -73,39 +93,145 @@ Out of scope: changing get-import's output bytes; any render output other
 than =--format json=; the other pretty-JSON callers listed in Context.
 
 Done when:
-- [ ] One two-space pretty-JSON helper is the only caller of aeson-pretty
+- [X] One two-space pretty-JSON helper is the only caller of aeson-pretty
   for these two commands; =formatJsonPretty= and =formatJson= are removed
   or are thin aliases of it.
-- [ ] A render test pinning Rust's exact =render --format json= bytes is
+- [X] A render test pinning Rust's exact =render --format json= bytes is
   recorded failing on the branch base (four-space), then passes; the
   get-import byte tests pass unchanged.
-- [ ] A side-by-side run of the Rust and Haskell =render --format json= on
+- [X] A side-by-side run of the Rust and Haskell =render --format json= on
   the same inputs (a nested mapping and a list) is recorded in this card,
   with matching stdout including the trailing newline.
-- [ ] Any existing render test expecting four-space JSON is updated to the
+- [X] Any existing render test expecting four-space JSON is updated to the
   Rust bytes, each such change listed in the card.
-- [ ] Build warning-free, full suite green, commits name C24.
+- [X] Build warning-free, full suite green, commits name C24.
 
 Stop and record if: matching Rust's render bytes needs more than the indent
 change (for example key order or trailing newline differences): record the
 difference and report =question=.
 
-* TODO Share one pretty-JSON helper between get-import and render
+* DONE Share one pretty-JSON helper between get-import and render
 :PROPERTIES:
 :ID: org:01a1e6a8-a9eb-77c6-8201-a8b7f548cb8a
 :ADDED: [2026-11-16 Mon 16:19]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:38] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aa97056e576f99a9e
 :END:
 
 C13 has landed. Re-read both functions. Add the failing regression first:
 a render test asserting Rust's two-space bytes, failing on the base. Then
 add the shared two-space helper in its own module and use it from both
 commands.
-* TODO Run the gate and record the byte comparison
+
+** Findings (worker claude-C24)
+:PROPERTIES:
+:ID: org:01a1e6b9-aad5-773a-9a0c-2c3ae03b58c7
+:ADDED: [2026-11-16 Mon 16:38]
+:END:
+Callers of aeson-pretty found by search: =GetImport.formatJsonPretty=
+(two-space, trailing newline) and =Render.formatJson= (four-space) are the
+two in scope; others (Output/Renderers/Json.hs, Handlebars/Helpers.hs,
+ConvertStack.hs, Params/Client.hs) are out of scope. Extended no existing
+owner because none was shared: new module =src/Iidy/JsonPretty.hs= exports
+=prettyJsonText= (two-space, no trailing newline); both commands append
+"\n" themselves. =formatJsonPretty=, =formatJson= and =lazyBsToText= are
+removed.
+
+Regression test: new =test/Test/RenderTest.hs= (registered in
+=test/Main.hs= and =iidy-hs.cabal=; there was no render command test
+module), reusing =test-fixtures/get-import/doc.yaml= and =list.yaml=. On
+the base it failed both cases (got four-space output). No existing render
+test expected four-space JSON, so no other test changed. The test and fix
+are in one commit because every commit must be green.
+
+Commit: =C24: share one two-space pretty-JSON helper; render --format json
+matches Rust=.
+* DONE Run the gate and record the byte comparison
 :PROPERTIES:
 :ADDED: [2026-11-16 Mon 16:40]
 :ID: org:01a1e6aa-a903-7666-bb82-16ddef14cfd5
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:38] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aa97056e576f99a9e
 :END:
 
 Run the full suite and, with the built binary, compare =render --format
 json= and =get-import --format json= output before and after on one sample
 file (=cmp=). Record the result in the card.
+
+** Result
+:PROPERTIES:
+:ID: org:01a1e6b9-aad4-7502-b4c0-7a36b20699fb
+:ADDED: [2026-11-16 Mon 16:38]
+:END:
+Full suite green, build warning-free, rebased on main. Binary built from
+the base (with only the new test) vs the fixed binary, on doc.yaml (nested
+mapping) and list.yaml (list), compared with =cmp=:
+- =get-import --format json=: before and after byte-identical on both.
+- =render --format json=: after is byte-identical to the Rust binary
+  (=~/src/iidy/target/debug/iidy=) on both, including the trailing newline;
+  before differed from Rust at byte 5 (indent width) on both.
+No key-order or newline differences beyond indent were found.
+
+** Review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e6ba-fc19-75b4-b1ab-93f7cbccf122
+:ADDED: [2026-11-16 Mon 16:39]
+:END:
+Verdict, commit 6939967: land (2 low defects, test duplication; fix in a
+follow-up or before landing at the supervisor's choice).
+
+Checks run:
+- Revert proof: with =src/Iidy/Render.hs= and =src/Iidy/GetImport.hs=
+  reverted to 4a5661b (new module and tests kept; compiles), both
+  =Render= tests fail with four-space output (=got "{\n    \"a\": 1,...=)
+  and all 17 GetImport tests pass. Files restored.
+- Production change is correct: =prettyJsonText= is two-space with no
+  newline; both callers append "\n". GetImport bytes unchanged.
+- No other =render= output path or test expects four-space JSON
+  (=RenderJson= appears only in Render, GetImport, CliParserTest, and the
+  two test modules; CliParserTest only parses the flag).
+- test/Main.hs registration of =Test.RenderTest= is minimal and fine.
+
+Defects:
+1. Low, test/Test/RenderTest.hs:16-27 and 31-46: =globalOpts= repeats
+   =GetImportTest.globalOpts= (test/Test/GetImportTest.hs:43), and the
+   IORef/=OdRawOutput= capture repeats =runArgs= (GetImportTest.hs:64-75).
+   No existing render command test harness was missed (RendererTest and
+   RendererOutputTest test output renderers, not =runRender=). Smallest
+   fix: move =globalOpts= (with the remote flag) and a
+   =captureRawOutput :: ((OutputData -> IO ()) -> IO Int) -> IO (Int,
+   [Text])= helper into =test/Test/Shared.hs=, use it from both modules.
+2. Low, test/Test/RenderTest.hs:51,55 and GetImportTest.hs:34-38: fixture
+   paths =test-fixtures/get-import/doc.yaml= and =list.yaml= are
+   hard-coded again. Fix: export =docFixture= and =listFixture= from the
+   shared module with defect 1.
+3. Info: the card's allowed paths omit =test/Main.hs=; accepted by the
+   supervisor.
+
+Other aeson-pretty callers (out of scope, not changed):
+- =src/Iidy/Params/Client.hs:264= =formatAsJson= has the identical
+  two-space config and could call =prettyJsonText= (a later card).
+- =src/Iidy/Output/Renderers/Json.hs:161,174=, =src/Iidy/Yaml/Handlebars/Helpers.hs:283=,
+  =src/Iidy/Cfn/Operations/ConvertStack.hs:568= use the four-space
+  default; intentional or a separate parity question.
+
+Pre-existing bugs: none found.
+
+** Fix round 1 (worker claude-C24)
+:PROPERTIES:
+:ID: org:01a1e6bc-a632-7461-bb19-ddf349101465
+:ADDED: [2026-11-16 Mon 16:41]
+:END:
+- Test duplication removed: =globalOpts= (now =testGlobalOpts=), the raw
+  output capture (=collectRawOutput=) and the two fixture paths moved to
+  =test/Test/Shared.hs= and used by =GetImportTest= and =RenderTest=.
+- Scope widening, supervisor's call: =src/Iidy/Params/Client.hs=
+  =formatAsJson= now calls =prettyJsonText=. Same config and no newline
+  handling in either, so output bytes are unchanged; the full suite
+  passes unchanged.
