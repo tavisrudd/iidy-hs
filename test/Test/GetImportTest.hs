@@ -6,6 +6,7 @@ module Test.GetImportTest (getImportTests) where
 import Control.Exception (throwIO)
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Text (Text)
+import Data.Text qualified as T
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 
@@ -16,7 +17,7 @@ import Iidy.Cli (GetImportArgs (..), RenderFormat (..))
 import Iidy.GetImport (needsAwsEnv, runGetImportWith)
 import Iidy.Yaml.Imports.Types (ImportType (..), RemoteImports (..))
 import Test.MockAws (MockAws (..), newMockAws)
-import Test.Shared (collectRawOutput, docFixture, listFixture, testGlobalOpts)
+import Test.Shared (collectRawOutput, docFixture, listFixture, nestedSeqFixture, testGlobalOpts)
 
 getImportTests :: [TestTree]
 getImportTests =
@@ -24,6 +25,7 @@ getImportTests =
     , testGroup "env built only when needed" lazinessTests
     , testGroup "env construction failures" failureTests
     , testGroup "query and output layout" outputTests
+    , testGroup "serde_yaml sequence layout" sequenceLayoutTests
     , testCase "needsAwsEnv classifies every import type" needsAwsEnvTable
     ]
 
@@ -178,4 +180,45 @@ outputTests =
     , testCase "json arrays are pretty-printed one element per line" $
         runFormat RenderJson Nothing listFixture
             >>= (@?= RunResult 0 ["{\n  \"l\": [\n    \"x\",\n    \"y\"\n  ]\n}\n"] 0)
+    ]
+
+------------------------------------------------------------------------
+-- serde_yaml sequence layout (Rust get_import.rs:56 uses serde_yaml)
+------------------------------------------------------------------------
+
+-- | Bytes printed by the Rust binary for 'nestedSeqFixture' (recorded in C25).
+nestedSeqRustYaml :: Text
+nestedSeqRustYaml =
+    T.unlines
+        [ "a:"
+        , "  c:"
+        , "  - x"
+        , "  - y"
+        , "  grid:"
+        , "  - - 1"
+        , "    - 2"
+        , "  - - 3"
+        , "    - - 4"
+        , "      - 5"
+        , "  items:"
+        , "  - deep:"
+        , "      k:"
+        , "      - p"
+        , "      - q"
+        , "    name: n1"
+        , "    tags:"
+        , "    - t1"
+        , "    - t2"
+        , "  - empty: []"
+        , "    name: n2"
+        , "top:"
+        , "- u"
+        , "- v"
+        ]
+
+sequenceLayoutTests :: [TestTree]
+sequenceLayoutTests =
+    [ testCase "yaml: dashes sit at the parent key's indent" $
+        runFormat RenderYaml Nothing nestedSeqFixture
+            >>= (@?= RunResult 0 [nestedSeqRustYaml] 0)
     ]

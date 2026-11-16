@@ -1,0 +1,13 @@
+a:
+  c: [x, y]
+  grid:
+    - [1, 2]
+    - [3, [4, 5]]
+  items:
+    - deep:
+        k: [p, q]
+      name: n1
+      tags: [t1, t2]
+    - empty: []
+      name: n2
+top: [u, v]

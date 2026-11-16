@@ -1,5 +1,7 @@
 module Iidy.Yaml.Emitter (
+    SeqStyle (..),
     emitYaml,
+    emitYamlWith,
 ) where
 
 import Data.Char (isDigit)
@@ -13,16 +15,29 @@ import Iidy.Yaml.OValue
 -- Public API
 ------------------------------------------------------------------------
 
--- | Emit an OValue as iidy-js-compatible YAML.
+{- | Where the dashes of a block sequence under a mapping key go.
+
+'SeqIndented' is iidy-js / Rust @serialize_yaml_iidy_js_compatible@ (the
+@render@ output): dashes two columns right of the key. 'SeqFlush' is Rust
+@serde_yaml@ (@get-import@): dashes at the key's own column.
+-}
+data SeqStyle = SeqIndented | SeqFlush
+    deriving (Show, Eq)
+
+-- | Emit an OValue as iidy-js-compatible YAML ('SeqIndented').
 emitYaml :: OValue -> Text
-emitYaml = emitValue 0 True
+emitYaml = emitYamlWith SeqIndented
+
+-- | Emit an OValue as YAML with the given sequence layout.
+emitYamlWith :: SeqStyle -> OValue -> Text
+emitYamlWith st = emitValue st 0 True
 
 ------------------------------------------------------------------------
 -- Core emission
 ------------------------------------------------------------------------
 
-emitValue :: Int -> Bool -> OValue -> Text
-emitValue indent isRoot = \case
+emitValue :: SeqStyle -> Int -> Bool -> OValue -> Text
+emitValue st indent isRoot = \case
     ONull -> "null"
     OBool True -> "true"
     OBool False -> "false"
@@ -30,11 +45,12 @@ emitValue indent isRoot = \case
     OString s -> emitString s
     OArray items
         | null items -> "[]"
-        | otherwise -> emitArray indent items
+        | isRoot && st == SeqFlush -> T.drop 1 (emitArray st indent items)
+        | otherwise -> emitArray st indent items
     OObject kvs
         | null kvs -> "{}"
-        | isTaggedKvs kvs -> emitTaggedKvs indent kvs
-        | otherwise -> emitMapping indent isRoot kvs
+        | isTaggedKvs kvs -> emitTaggedKvs st indent kvs
+        | otherwise -> emitMapping st indent isRoot kvs
 
 ------------------------------------------------------------------------
 -- Scalars
@@ -144,59 +160,59 @@ escapeDoubleQuotes = T.concatMap $ \case
 -- Arrays
 ------------------------------------------------------------------------
 
-emitArray :: Int -> [OValue] -> Text
-emitArray indent items =
+emitArray :: SeqStyle -> Int -> [OValue] -> Text
+emitArray st indent items =
     let indentStr = T.replicate indent " "
         emitItem val =
-            let valStr = emitArrayValue (indent + 2) val
+            let valStr = emitArrayValue st (indent + 2) val
              in indentStr <> "- " <> valStr
      in "\n" <> T.intercalate "\n" (map emitItem items)
 
-emitArrayInline :: Int -> [OValue] -> Text
-emitArrayInline indent items =
+emitArrayInline :: SeqStyle -> Int -> [OValue] -> Text
+emitArrayInline st indent items =
     let indentStr = T.replicate indent " "
-        emitFirst val = "- " <> emitArrayValue (indent + 2) val
-        emitRest val = indentStr <> "- " <> emitArrayValue (indent + 2) val
+        emitFirst val = "- " <> emitArrayValue st (indent + 2) val
+        emitRest val = indentStr <> "- " <> emitArrayValue st (indent + 2) val
      in case items of
             [] -> "[]"
             (first : rest) -> emitFirst first <> "\n" <> T.intercalate "\n" (map emitRest rest)
 
-emitArrayValue :: Int -> OValue -> Text
-emitArrayValue indent = \case
+emitArrayValue :: SeqStyle -> Int -> OValue -> Text
+emitArrayValue st indent = \case
     OObject kvs
         | null kvs -> "{}"
-        | isTaggedKvs kvs -> emitTaggedKvs indent kvs
-        | otherwise -> emitMappingInline indent kvs
+        | isTaggedKvs kvs -> emitTaggedKvs st indent kvs
+        | otherwise -> emitMappingInline st indent kvs
     OArray items
         | null items -> "[]"
-        | otherwise -> emitArrayInline indent items
+        | otherwise -> emitArrayInline st indent items
     OString s
         | T.any (== '\n') s -> emitMultilineStringIndented indent s
         | needsQuotes s -> quoteString s
         | otherwise -> s
-    other -> emitValue indent False other
+    other -> emitValue st indent False other
 
 ------------------------------------------------------------------------
 -- Mappings
 ------------------------------------------------------------------------
 
-emitMapping :: Int -> Bool -> [(Text, OValue)] -> Text
-emitMapping indent isRoot kvs =
+emitMapping :: SeqStyle -> Int -> Bool -> [(Text, OValue)] -> Text
+emitMapping st indent isRoot kvs =
     let indentStr = T.replicate indent " "
         emitPair (k, v) =
             let keyStr = emitMapKey k
-                valStr = emitMapValue (indent + 2) v
+                valStr = emitMapValue st (indent + 2) v
              in indentStr <> keyStr <> ":" <> valStr
         body = T.intercalate "\n" (map emitPair kvs)
      in if isRoot then body else "\n" <> body
 
-emitMappingInline :: Int -> [(Text, OValue)] -> Text
-emitMappingInline indent kvs =
+emitMappingInline :: SeqStyle -> Int -> [(Text, OValue)] -> Text
+emitMappingInline st indent kvs =
     let indentStr = T.replicate indent " "
         emitFirst (k, v) =
-            emitMapKey k <> ":" <> emitMapValue (indent + 2) v
+            emitMapKey k <> ":" <> emitMapValue st (indent + 2) v
         emitRest (k, v) =
-            indentStr <> emitMapKey k <> ":" <> emitMapValue (indent + 2) v
+            indentStr <> emitMapKey k <> ":" <> emitMapValue st (indent + 2) v
      in case kvs of
             [] -> "{}"
             (first : rest) -> emitFirst first <> "\n" <> T.intercalate "\n" (map emitRest rest)
@@ -206,8 +222,8 @@ emitMapKey k
     | needsQuotes k = quoteString k
     | otherwise = k
 
-emitMapValue :: Int -> OValue -> Text
-emitMapValue indent = \case
+emitMapValue :: SeqStyle -> Int -> OValue -> Text
+emitMapValue st indent = \case
     ONull -> " null"
     OBool True -> " true"
     OBool False -> " false"
@@ -218,11 +234,18 @@ emitMapValue indent = \case
         | otherwise -> " " <> s
     OArray items
         | null items -> " []"
-        | otherwise -> emitArray indent items
+        | otherwise -> emitArray st (seqIndent st indent) items
     OObject kvs
         | null kvs -> " {}"
-        | isTaggedKvs kvs -> " " <> emitTaggedKvs indent kvs
-        | otherwise -> emitMapping indent False kvs
+        | isTaggedKvs kvs -> " " <> emitTaggedKvs st indent kvs
+        | otherwise -> emitMapping st indent False kvs
+
+{- | Column of the dashes of a sequence under a mapping key, given the column
+its value would otherwise be indented to (the key's column plus two).
+-}
+seqIndent :: SeqStyle -> Int -> Int
+seqIndent SeqIndented indent = indent
+seqIndent SeqFlush indent = max 0 (indent - 2)
 
 emitMultilineStringIndented :: Int -> Text -> Text
 emitMultilineStringIndented indent s =
@@ -258,13 +281,13 @@ isTaggedKvs kvs =
             [(k, _)] -> T.isPrefixOf "!" k
             _notSingleton -> False
 
-emitTaggedKvs :: Int -> [(Text, OValue)] -> Text
-emitTaggedKvs indent kvs = case kvs of
-    [(tag, v)] -> tag <> emitTagArgument indent v
+emitTaggedKvs :: SeqStyle -> Int -> [(Text, OValue)] -> Text
+emitTaggedKvs st indent kvs = case kvs of
+    [(tag, v)] -> tag <> emitTagArgument st indent v
     _notSingleton -> "{}"
 
-emitTagArgument :: Int -> OValue -> Text
-emitTagArgument indent = \case
+emitTagArgument :: SeqStyle -> Int -> OValue -> Text
+emitTagArgument st indent = \case
     OString s
         | T.any (== '\n') s -> " " <> emitMultilineStringIndented indent s
         | needsQuotes s -> " " <> quoteString s
@@ -272,8 +295,8 @@ emitTagArgument indent = \case
     ONumber n -> " " <> emitNumber n
     OBool b -> " " <> if b then "true" else "false"
     ONull -> " null"
-    OArray [single] -> emitTagArgument indent single
-    OArray items -> emitArray indent items
+    OArray [single] -> emitTagArgument st indent single
+    OArray items -> emitArray st indent items
     OObject kvs
-        | isTaggedKvs kvs -> " " <> emitTaggedKvs indent kvs
-        | otherwise -> emitMapping indent False kvs
+        | isTaggedKvs kvs -> " " <> emitTaggedKvs st indent kvs
+        | otherwise -> emitMapping st indent False kvs

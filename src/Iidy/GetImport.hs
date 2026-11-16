@@ -31,7 +31,7 @@ import Iidy.Cli (GetImportArgs (..), GlobalOpts (..), RenderFormat (..))
 import Iidy.Errors.JMESPath (formatJMESPathQueryError)
 import Iidy.JsonPretty (prettyJsonText)
 import Iidy.Output.Types (OutputData (..))
-import Iidy.Yaml.Emitter (emitYaml)
+import Iidy.Yaml.Emitter (SeqStyle (..), emitYamlWith)
 import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
 import Iidy.Yaml.Imports.Types (
     ImportData (..),
@@ -145,4 +145,4 @@ emitDoc emit gopts args importData =
 
 -- | YAML text ending in exactly one newline (serde_yaml::to_string).
 yamlWithNewline :: Aeson.Value -> Text
-yamlWithNewline v = T.dropWhileEnd (== '\n') (emitYaml (fromValue v)) <> "\n"
+yamlWithNewline v = T.dropWhileEnd (== '\n') (emitYamlWith SeqFlush (fromValue v)) <> "\n"

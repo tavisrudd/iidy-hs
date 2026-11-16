@@ -12,6 +12,7 @@ module Test.Shared (
     testGlobalOpts,
     collectRawOutput,
     docFixture,
+    nestedSeqFixture,
     listFixture,
 
     -- * Test data builders
@@ -560,3 +561,7 @@ docFixture = "test-fixtures/get-import/doc.yaml"
 -- | get-import / render fixture: a mapping holding a list.
 listFixture :: Text
 listFixture = "test-fixtures/get-import/list.yaml"
+
+-- | get-import / render fixture: sequences nested in mappings, mappings and sequences.
+nestedSeqFixture :: Text
+nestedSeqFixture = "test-fixtures/get-import/nested-seq.yaml"
