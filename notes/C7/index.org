@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C7
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :CARD_PRIORITY: A
 :MODE:     CONTRACT
 :ORIGIN:   C2 handoff triage (notes/C2/report--handoff-triage.org), accepted by the user 2026-11-16
@@ -13,6 +13,10 @@
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 15:33]
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675/agent:ae1a258c26a456080
+- Card state STARTED → DONE [2026-11-16 Mon 15:41]
+  Note: get-import builds the AWS env via createAwsEnvFromSettings only for cfn:/ssm:/ssm-path:/s3: (lazy, matching Rust's observable behaviour); missing creds/region -> one 'Import error:' line, exit 1; mock-AWS tests (Test.MockAws, test-fixtures/mock-aws) show ssm: and cfn: resolving; commit 371025c. Side gaps filed as C13.
   Agent: opus-5.5-medium
   Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675/agent:ae1a258c26a456080
 :END:

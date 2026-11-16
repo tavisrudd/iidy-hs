@@ -10,6 +10,7 @@
 - [2026-11-16 Mon 14:15] [[file:../C1/index.org][C1]] — Lane, allocator, AGENTS.md and cards C2-C4 committed in 3f24739; c check passes
 - [2026-11-16 Mon 14:38] [[file:../C2/index.org][C2]] — Handoffs archived in c8e3a99; triage report and cards C7-C12 committed with this closeout
 - [2026-11-16 Mon 15:19] [[file:../C3/index.org][C3]] — nixpkgs locks bumped to 2026-11-14 (72d2d6d); GHC 9.10.3 -> 9.12.3 via haskell.packages.ghc912, tasty-bench 0.4.1 -> 0.5 (49bebab); no API changes; microlens/http-client-tls/crypton/optparse-applicative/random/QuickCheck held back (non-leaf overrides, recorded under survey); all tests, Redex spec and nix build pass
+- [2026-11-16 Mon 15:41] [[file:../C7/index.org][C7]] — get-import builds the AWS env via createAwsEnvFromSettings only for cfn:/ssm:/ssm-path:/s3: (lazy, matching Rust's observable behaviour); missing creds/region -> one 'Import error:' line, exit 1; mock-AWS tests (Test.MockAws, test-fixtures/mock-aws) show ssm: and cfn: resolving; commit 371025c. Side gaps filed as C13.
 * COMMENT meta
 :PROPERTIES:
 :LANE: main
