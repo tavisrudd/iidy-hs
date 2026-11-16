@@ -171,3 +171,19 @@ tries stdout, stderr and stdin in turn. So with stdout redirected, Rust can
 still find a size from stderr or stdin, while iidy-hs reports no width.
 `COLUMNS` must be a positive integer of at most 10000; anything else is
 ignored. A real size of 0 (reported by some ptys) is ignored too.
+
+## YAML Sequence Indentation Outside get-import
+
+**Cause**: Card C25 fixed `get-import` only; the other `serde_yaml` call sites
+still use the indenting emitter.
+
+Rust writes block sequences under a mapping key with the dashes at the key's
+column (`serde_yaml`): `c:\n- x`. iidy-hs `get-import` now matches. These
+iidy-hs outputs still indent the dashes (`c:\n  - x`), where Rust uses
+`serde_yaml`: the `!$toYamlString` tag (`resolver.rs:1781`), the handlebars
+`toYaml` helper (`helpers/serialization.rs:57`), the rendered template text
+that `create-stack` and friends send to CloudFormation
+(`cfn/template_loader.rs:143`), and the `param` commands' YAML output
+(`params/mod.rs:234`, own emitter in `src/Iidy/Params/Client.hs`). The
+documents parse to the same data; only the bytes differ. `render` itself
+matches Rust (it uses Rust's own indenting emitter).
