@@ -9,11 +9,18 @@
 :SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :ID: org:01a1e64b-18a4-75da-af32-09b2a3f93001
 :ADDED: [2026-11-16 Mon 14:37]
+:CLOCK_SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aba0658a0cb185226
+:END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 16:22]
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:21]
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 16:22]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aba0658a0cb185226
 :END:
 #+title: C8 — Preserve key order in !$parseYaml
 #+date: 2026-11-16
@@ -73,16 +80,16 @@ stop rule); any change to how duplicate keys, preprocessing tags or numbers
 inside the parsed string are treated, beyond keeping order.
 
 Done when:
-- [ ] A test with mapping keys in non-alphabetical order (nested mappings
+- [X] A test with mapping keys in non-alphabetical order (nested mappings
   too) under =!$parseYaml= is recorded failing on the branch base, in
   =parseYamlTests= and as an end-to-end fixture.
-- [ ] The Rust output for the same fixture is recorded in the card (or, if
+- [X] The Rust output for the same fixture is recorded in the card (or, if
   the Rust binary cannot be run, the source-order guarantee of
   =serde_yaml::Value= is cited), and the Haskell output now matches it.
-- [ ] The parsed AST is converted directly to =OValue= with mapping order
+- [X] The parsed AST is converted directly to =OValue= with mapping order
   kept; duplicate keys behave as before (the test says which wins).
-- [ ] All other =parseYamlTests= and the full suite pass unchanged.
-- [ ] Build warning-free, commits name C8.
+- [X] All other =parseYamlTests= and the full suite pass unchanged.
+- [X] Build warning-free, commits name C8.
 
 Stop and record if: Haskell and Rust already agree (record both outputs,
 keep the new test as a guard, finish); the other =astToValueRaw= callers
@@ -90,10 +97,15 @@ should change too, or fixing them would change rendered output of existing
 templates (question for Tavis: list them, do not touch them); the fix
 needs a change outside the allowed paths.
 
-* TODO Reproduce against Rust with a key-order fixture
+* DONE Reproduce against Rust with a key-order fixture
 :PROPERTIES:
 :ID: org:01a1e64b-91dd-7176-8d4f-38a6019ff606
 :ADDED: [2026-11-16 Mon 14:37]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:33] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aba0658a0cb185226
 :END:
 
 Write a template whose =!$parseYaml= string has keys like =zebra=, =apple=,
@@ -102,10 +114,45 @@ Write a template whose =!$parseYaml= string has keys like =zebra=, =apple=,
 both outputs in the card. Add the failing unit test to =parseYamlTests=
 first.
 
-* TODO Add an ordered raw-AST conversion and use it in resolveParseYaml
+
+** Result
+:PROPERTIES:
+:ID: org:01a1e6b5-6e40-74e9-96ec-b070f327723e
+:ADDED: [2026-11-16 Mon 16:33]
+:END:
+Fixture: =test-fixtures/example-templates/yaml-iidy-syntax/parse-yaml-key-order.yaml=
+(branch =claude/C8=). Rust (=~/src/iidy/target/debug/iidy render=) keeps
+source order: =serde_yaml::Value= mappings are ordered
+(=resolver.rs:1827-1830=). Rust output for =Value=:
+#+begin_example
+zebra: 1
+apple: {yak: a, bee: b, cat: [z, y]}   (block style in the real output)
+mango: [{walrus: 1, ant: 2}]
+banana: 4
+#+end_example
+The full output is the committed expected file. Note: wrapping the parsed
+value in =!$toJsonString= makes Rust sort keys (serde_json), so the fixture
+emits the parsed value directly.
+
+Haskell on the base: the new =parseYamlTests= case failed with
+=OObject [apple (bee, yak), mango [ant, walrus], zebra]= (sorted, not source
+order), and the fixture =yaml-iidy-syntax/parse-yaml-key-order= failed too
+(confirmed by temporarily restoring the old call). Duplicate-key test
+(=b: 1, a: 2, b: 3=) also failed on base (got a, b order).
+
+Existing implementation search: the main document path orders via
+=resolveMapping= (list of pairs, =OObject=); the only raw conversion is
+=astToValueRaw=, so I extended it as the single owner (below).
+
+* DONE Add an ordered raw-AST conversion and use it in resolveParseYaml
 :PROPERTIES:
 :ID: org:01a1e64b-91dd-7176-8d4f-38a59f8c8546
 :ADDED: [2026-11-16 Mon 14:37]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:33] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aba0658a0cb185226
 :END:
 
 Add a function next to =astToValueRaw= (for example =astToOValueRaw=) that
@@ -115,12 +162,75 @@ key text via =rawKeyText=), and call it in =resolveParseYaml= in place of
 define =astToValueRaw= from it with =toValue= only if that keeps its
 behaviour for the other callers; otherwise leave =astToValueRaw= alone.
 
-* TODO Fix the misleading fromValue comment and add the fixture
+
+** Result
+:PROPERTIES:
+:ID: org:01a1e6b5-6e40-74e9-96ec-b06f319a59fb
+:ADDED: [2026-11-16 Mon 16:33]
+:END:
+=astToOValueRaw= added in =Resolver.hs=; =astToValueRaw= is now
+=toValue . astToOValueRaw= (same per-node rules, so other callers are
+unchanged: =toValue= used =KM.fromList=, last value wins, as before).
+=resolveParseYaml= calls =astToOValueRaw=. Duplicate keys: first position,
+last value (same as =insertO=); tested.
+
+* DONE Fix the misleading fromValue comment and add the fixture
 :PROPERTIES:
 :ADDED: [2026-11-16 Mon 16:30]
 :ID: org:01a1e6a4-4f0d-77c9-af0f-e2920a42aa7d
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:33] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aba0658a0cb185226
 :END:
 
 Correct the comment on =fromValue= in =OValue.hs= (it keeps whatever order
 the =KeyMap= iterates in). Add the end-to-end fixture pair and record the
 passing run.
+
+
+** Result
+:PROPERTIES:
+:ID: org:01a1e6b5-6e40-74e9-96ec-b06e5de6fb0c
+:ADDED: [2026-11-16 Mon 16:33]
+:END:
+Comment fixed in =OValue.hs=. Fixture pair added (committed with the fix).
+Passing run: focused run of =/parseYaml/ || /key-order/= (10 tests OK), then
+the full suite on the rebased tip: all 1691 tests passed.
+
+Out-of-scope order-losing sites left untouched: =resolveEscape= (now
+order-preserving only if switched to =astToOValueRaw=, a one-line follow-up),
+=parseYamlContent= (=ContentParsing.hs=) and =ConvertStack.hs=; both return
+aeson =Value=, so they need a card to decide.
+
+** Review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e6b6-dd5a-765c-adc7-42b089dead78
+:ADDED: [2026-11-16 Mon 16:35]
+:END:
+Verdict for baa2c9b: land, 0 defects.
+
+Checks:
+- Revert proof: with =Resolver.hs= restored to base 0cf82b4, the key-order
+  =parseYamlTests= case, the duplicate-key case and the fixture
+  =yaml-iidy-syntax/parse-yaml-key-order= all FAIL (output sorted: apple,
+  mango, zebra; duplicate case got a,b). The other 7 matching tests pass.
+  Worktree restored to the branch tip afterwards.
+- Duplication: no other AST-to-=OValue= builder exists under =src/Iidy/Yaml=
+  (=Engine.hs= =convertYaml11CompatO= only maps an existing =OValue=). The
+  per-node rules live once in =astToOValueRaw=; =astToValueRaw= is
+  =toValue . astToOValueRaw=. Reuse of =insertO= is correct.
+- Other callers (=resolveEscape=, =parseYamlContent=, =ConvertStack=): per-node
+  rules are unchanged line for line (same =rawKeyText=, same =cfnTagParts=,
+  same "!$escaped" string). Duplicate keys: old =KM.fromList= kept the last
+  value; =insertO= keeps the last value (first position) and =toValue= then
+  builds the same map, so output is identical. Non-string keys go through
+  the same =rawKeyText=, so unchanged. Number, null, bool nodes identical.
+- Rust parity: =resolve_parse_yaml= (resolver.rs ~1820) parses to
+  =serde_yaml::Value= (serde_yaml_ng), whose mappings keep source order; the
+  fixture expected file matches that order.
+
+Notes (not defects): Rust's serde_yaml_ng rejects duplicate mapping keys,
+while Haskell accepts them with last-wins; the card says duplicate-key
+behaviour stays as before, so this is pre-existing and not for this commit.
