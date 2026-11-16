@@ -12,12 +12,11 @@ import Test.Tasty.HUnit (testCase, (@?=))
 import Amazonka qualified
 import Amazonka.Auth.Exception qualified as AuthEx
 
-import Iidy.Cli (GetImportArgs (..), GlobalOpts (..), RenderFormat (..))
+import Iidy.Cli (GetImportArgs (..), RenderFormat (..))
 import Iidy.GetImport (needsAwsEnv, runGetImportWith)
-import Iidy.Output.Types (OutputData (..))
-import Iidy.Types (ColorChoice (..), Theme (..))
 import Iidy.Yaml.Imports.Types (ImportType (..), RemoteImports (..))
 import Test.MockAws (MockAws (..), newMockAws)
+import Test.Shared (collectRawOutput, docFixture, listFixture, testGlobalOpts)
 
 getImportTests :: [TestTree]
 getImportTests =
@@ -40,38 +39,17 @@ data RunResult = RunResult
     }
     deriving (Show, Eq)
 
-globalOpts :: Bool -> GlobalOpts
-globalOpts remote =
-    GlobalOpts
-        { goEnvironment = "development"
-        , goColor = ColorNever
-        , goTheme = ThemeAuto
-        , goOutputMode = Nothing
-        , goDebug = False
-        , goLogFullError = False
-        , goRemoteImports = remote
-        }
-
 jsonArgs :: Text -> GetImportArgs
 jsonArgs loc = GetImportArgs{giaImport = loc, giaFormat = RenderJson, giaQuery = Nothing}
-
-listFixture :: Text
-listFixture = "test-fixtures/get-import/list.yaml"
-
-docFixture :: Text
-docFixture = "test-fixtures/get-import/doc.yaml"
 
 -- | Run get-import with the given args, counting env builds and collecting raw output.
 runArgs :: Bool -> IO Amazonka.Env -> GetImportArgs -> IO RunResult
 runArgs remote mkEnv args = do
     builds <- newIORef (0 :: Int)
-    out <- newIORef []
+    (emit, readOut) <- collectRawOutput
     let countedEnv = bump builds >> mkEnv
-        emit = \case
-            OdRawOutput t -> atomicModifyIORef' out (\ts -> (ts <> [t], ()))
-            _other -> pure ()
-    rc <- runGetImportWith countedEnv emit args (globalOpts remote)
-    RunResult rc <$> readIORef out <*> readIORef builds
+    rc <- runGetImportWith countedEnv emit args (testGlobalOpts remote)
+    RunResult rc <$> readOut <*> readIORef builds
 
 -- | Run get-import as JSON, counting env builds and collecting raw output.
 runWith :: Bool -> IO Amazonka.Env -> Text -> IO RunResult

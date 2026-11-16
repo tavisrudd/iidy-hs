@@ -9,6 +9,10 @@ module Test.Shared (
     mkEvent,
     jsonLookup,
     isObject,
+    testGlobalOpts,
+    collectRawOutput,
+    docFixture,
+    listFixture,
 
     -- * Test data builders
     testTokenInfo,
@@ -49,7 +53,7 @@ import Control.Concurrent.STM (newTVarIO)
 import Data.Aeson (Value (..))
 import Data.Aeson.Key qualified as AesonKey
 import Data.Aeson.KeyMap qualified as KM
-import Data.IORef (newIORef)
+import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Time.Calendar (fromGregorian)
@@ -60,6 +64,7 @@ import Iidy.Aws.ClientReqToken (TokenInfo (..), TokenSource (..))
 import Iidy.Aws.CredentialSource (AwsSettings (..))
 import Iidy.Cfn.Status (StackStatus (..))
 import Iidy.Cfn.Types (StackChangeType (..))
+import Iidy.Cli (GlobalOpts (..))
 import Iidy.Output.Color (darkTheme, noColorTheme)
 import Iidy.Output.Renderers.Interactive (
     InteractiveRenderer (..),
@@ -67,6 +72,7 @@ import Iidy.Output.Renderers.Interactive (
     plainInteractiveOptions,
  )
 import Iidy.Output.Types
+import Iidy.Types (ColorChoice (..), Theme (..))
 
 ------------------------------------------------------------------------
 -- Shared helpers
@@ -524,3 +530,33 @@ odConstructorName (OdTemplateDiff _) = "TemplateDiff"
 odConstructorName (OdApprovalResult _) = "ApprovalResult"
 odConstructorName (OdPollingStarted _) = "PollingStarted"
 odConstructorName (OdRawOutput _) = "RawOutput"
+
+-- | Global options for command tests (no colour; remote imports as given).
+testGlobalOpts :: Bool -> GlobalOpts
+testGlobalOpts remote =
+    GlobalOpts
+        { goEnvironment = "development"
+        , goColor = ColorNever
+        , goTheme = ThemeAuto
+        , goOutputMode = Nothing
+        , goDebug = False
+        , goLogFullError = False
+        , goRemoteImports = remote
+        }
+
+-- | An emitter that records each 'OdRawOutput' text, and the action reading them.
+collectRawOutput :: IO (OutputData -> IO (), IO [Text])
+collectRawOutput = do
+    out <- newIORef []
+    let emit = \case
+            OdRawOutput t -> atomicModifyIORef' out (\ts -> (ts <> [t], ()))
+            _other -> pure ()
+    pure (emit, readIORef out)
+
+-- | get-import / render fixture: a nested mapping.
+docFixture :: Text
+docFixture = "test-fixtures/get-import/doc.yaml"
+
+-- | get-import / render fixture: a mapping holding a list.
+listFixture :: Text
+listFixture = "test-fixtures/get-import/list.yaml"
