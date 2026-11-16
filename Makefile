@@ -7,7 +7,7 @@ build-strict:
 	cabal build all --enable-tests --ghc-options="-Wall -Wcompat -Werror"
 
 test:
-	cabal test all --test-show-details=direct
+	cabal test all --test-show-details=direct --test-options=--timeout=60s
 
 run:
 	cabal run iidy-hs -- $(ARGS)
