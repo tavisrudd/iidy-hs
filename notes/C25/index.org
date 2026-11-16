@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C25
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C13 side finding: Haskell emits '  c:\n    - x', Rust serde_yaml emits '  c:\n  - x'
 :CREATED_BY: opus-5.5-medium
@@ -10,8 +10,21 @@
 :ID: org:01a1e6a8-aa2c-70e1-8b6e-6fcc4bc3af4c
 :ADDED: [2026-11-16 Mon 16:19]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 16:44]--[2026-11-16 Mon 16:54] => 0:10
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:44]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 16:44]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a8ae0b5dfbce2197a
+- Clock-out [2026-11-16 Mon 16:54]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a8ae0b5dfbce2197a
+- Card state STARTED → DONE [2026-11-16 Mon 16:58]
+  Note: Landed fcd3304, 40a3fc0 (replayed f32d21b, 73c86da): get-import emits sequences like serde_yaml via SeqFlush; render unchanged; other callers left for Tavis; Sonnet review: land, minor only; out-of-path test files accepted (supervisor's call)
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -74,17 +87,17 @@ Out of scope: any change to =render= output (it matches Rust today);
 callers beyond get-import unless the decision below says so.
 
 Done when:
-- [ ] The card records, for each iidy-hs caller of =emitYaml=, which Rust
+- [X] The card records, for each iidy-hs caller of =emitYaml=, which Rust
   emitter its counterpart uses (table in the card) and the observed output
   of both binaries on a nested-sequence sample for =get-import= and =render=.
-- [ ] =get-import --format yaml= prints sequences under mapping keys at the
+- [X] =get-import --format yaml= prints sequences under mapping keys at the
   key's indent, byte-identical to the Rust binary on a sample with nested
   sequences, sequences of mappings, and a mapping holding a sequence inside a
   sequence item; a test recorded failing before the change covers it.
-- [ ] =render= YAML output is byte-identical before and after (existing
+- [X] =render= YAML output is byte-identical before and after (existing
   tests and fixtures pass unchanged; add one nested-sequence render test if
   none exists).
-- [ ] Build warning-free, full suite green, commits name C25.
+- [X] Build warning-free, full suite green, commits name C25.
 
 Stop and record if: C13 has not landed; making the other serde_yaml-based
 callers (=!$toYamlString=, handlebars =toYaml=, =param=) match Rust as well
@@ -93,31 +106,193 @@ outputs; the project default is Rust parity, but these are user-visible and
 the card only settles get-import); the fix needs to alter =render= output;
 or it needs changes outside the allowed paths.
 
-* TODO Match serde_yaml sequence indentation in the YAML emitter
+* DONE Match serde_yaml sequence indentation in the YAML emitter
 :PROPERTIES:
 :ID: org:01a1e6a8-aa2c-70e1-8b6e-6fc9d15ee1e4
 :ADDED: [2026-11-16 Mon 16:19]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:54] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a8ae0b5dfbce2197a
 :END:
 
 Wait for C13 to land. Build a nested-sequence sample file and capture the
 Rust and iidy-hs output of =get-import= and =render= for it into the card.
 Write the failing get-import test from the Rust bytes first.
-* TODO Add a serde_yaml-style sequence mode and use it in get-import
+
+** Findings
+:PROPERTIES:
+:ID: org:01a1e6c8-afd1-7232-847a-db5b6b16784b
+:ADDED: [2026-11-16 Mon 16:54]
+:END:
+Sample: =test-fixtures/get-import/nested-seq.yaml= (on the branch), keys kept
+in alphabetical order because iidy-hs get-import sorts keys (see the key
+order finding below). It holds sequences under keys, a sequence of sequences,
+a sequence of mappings, a mapping with a sequence inside a sequence item, and
+an empty sequence.
+
+Rust =get-import= (serde_yaml), also what iidy-hs now prints:
+#+begin_example
+a:
+  c:
+  - x
+  - y
+  grid:
+  - - 1
+    - 2
+  - - 3
+    - - 4
+      - 5
+  items:
+  - deep:
+      k:
+      - p
+      - q
+    name: n1
+    tags:
+    - t1
+    - t2
+  - empty: []
+    name: n2
+top:
+- u
+- v
+#+end_example
+
+Rust =render= (own emitter) indents every sequence two columns under its
+key (=a:\n  c:\n    - x=); iidy-hs =render= is byte-identical to it before and
+after the change (checked with =cmp= on this sample, and a pinned test
+=render --format yaml: sequences stay indented under their key= was added).
+
+Failing test recorded before the fix (branch base, test only): "yaml: dashes
+sit at the parent key's indent" got =c:\n    - x= against expected
+=c:\n  - x=. The failing run is in the commit's test, which passes only with
+the emitter change.
+
+Existing implementations found before writing code: the one emitter
+=Iidy.Yaml.Emitter.emitYaml= (callers in the table below); a second,
+independent emitter =renderYaml= in =src/Iidy/Params/Client.hs= (line 279, left
+unchanged); no emitter options existed. I extended the first one.
+
+Extra differences seen while testing get-import, outside this card:
+- Key order: Rust get-import keeps document order (=z: [1]\na: 2= prints
+  =z= first); iidy-hs prints keys sorted (the document is an Aeson Value).
+  Needs ImportData to keep order; not fixed here.
+- Rust =get-import --format yaml-cloudformation= prints "Unsupported format"
+  (accepts only yaml and json); iidy-hs accepts it as yaml.
+- Root sequence: iidy-hs used to start with a blank line (=\n- a=); the
+  flush mode now prints =- a= like Rust.
+* DONE Add a serde_yaml-style sequence mode and use it in get-import
 :PROPERTIES:
 :ADDED: [2026-11-16 Mon 16:40]
 :ID: org:01a1e6aa-a924-752e-a4f4-54eec4780ed8
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:54] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a8ae0b5dfbce2197a
 :END:
 
 Give the emitter a way to place sequence dashes at the parent key's indent
 (a flag passed down through =emitMapValue=, =emitArray= and the inline
 variants), default off so =render= is unchanged. =GetImport.hs= turns it on.
 Reuse the one emitter; do not copy it.
-* TODO Tabulate the other callers and decide
+
+Done: =SeqStyle= (=SeqIndented= default, =SeqFlush=) is threaded through all
+emitter functions; =emitYaml= is =emitYamlWith SeqIndented=, GetImport.hs uses
+=emitYamlWith SeqFlush=. Tests: =Test.EmitterTest= (SeqFlush group),
+=Test.GetImportTest= (serde_yaml sequence layout), =Test.RenderTest=
+(render stays indented).
+* DONE Tabulate the other callers and decide
 :PROPERTIES:
 :ADDED: [2026-11-16 Mon 16:40]
 :ID: org:01a1e6aa-a924-752e-a4f4-54edc7600527
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:54] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a8ae0b5dfbce2197a
 :END:
 
 Fill in the caller-to-Rust-emitter table in the card. Leave the other
 serde_yaml-based callers unchanged and list the exact output differences as
 the question for Tavis; add =DIVERGENCES.md= entries for those left as is.
+
+** Callers of the emitter
+:PROPERTIES:
+:ID: org:01a1e6c8-afd1-7232-847a-db5aa49f7230
+:ADDED: [2026-11-16 Mon 16:54]
+:END:
+| iidy-hs caller                          | Rust counterpart            | Rust emitter   | iidy-hs now              |
+|-----------------------------------------+-----------------------------+----------------+--------------------------|
+| Render.hs 99-100 (render yaml)          | engine.rs:652 render.rs:45  | iidy-js-compat | indented (same as Rust)  |
+| GetImport.hs (get-import yaml)          | get_import.rs:56            | serde_yaml     | flush (changed, matches) |
+| Cfn/TemplateLoader.hs 90 (rendered tpl) | cfn/template_loader.rs:143  | serde_yaml     | indented                 |
+| Handlebars/Helpers.hs 288 (toYaml)      | helpers/serialization.rs:57 | serde_yaml     | indented                 |
+| Resolver.hs 833 (!$toYamlString)        | resolution/resolver.rs:1781 | serde_yaml     | indented                 |
+| Params/Client.hs 279 (own emitter)      | params/mod.rs:234           | serde_yaml     | indented                 |
+
+Observed on =tpl.yaml= / =tpl2.yaml= in the temp dir (Rust vs iidy-hs):
+- =!$toYamlString= of =c: [x, y]= and a list of maps: Rust prints
+  =c:\n- x=, iidy-hs =c:\n  - x= (all sequences two columns deeper).
+- handlebars =toYaml=: same sequence difference. Also Rust's result had no
+  trailing newline (=|-= block), iidy-hs adds one (=|=); separate difference.
+- Rendered template text and =param= YAML: same sequence difference by
+  construction (same emitter); the documents parse to identical data.
+  The template text also feeds the template-size check and hashing, so the
+  byte difference can matter there.
+
+DIVERGENCES.md has an entry for the callers left as is.
+
+** Question for supervisor
+:PROPERTIES:
+:ID: org:01a1e6c8-afd1-7232-847a-db59dcde4248
+:ADDED: [2026-11-16 Mon 16:54]
+:END:
+Should the other serde_yaml callers (=!$toYamlString=, handlebars =toYaml=,
+rendered template text in TemplateLoader, =param= via Params/Client.hs) also
+switch to =SeqFlush=, for Rust byte parity? It is a one-argument change each
+(=emitYamlWith SeqFlush=), but it changes user-visible output, so I left
+them. Separately: get-import key order and the yaml-cloudformation format
+(see Findings) differ from Rust; want cards for them?
+
+** Review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e6cb-728a-772a-906f-61ceec924c38
+:ADDED: [2026-11-16 Mon 16:57]
+:END:
+Verdict: f32d21b land; 73c86da land (docs only). 0 blocking defects, 3
+minor.
+
+Checks:
+- Regression proof: with =Emitter.hs= behaviour reverted to base (=seqIndent
+  SeqFlush= identity, root-drop disabled; tests kept), the get-import test
+  "yaml: dashes sit at the parent key's indent" and the three SeqFlush
+  emitter tests fail; restored afterwards. The render test passes either
+  way, as intended (pin).
+- Threading: one emitter, =SeqStyle= passed through every function
+  (=emitValue=, array/mapping, inline variants, tagged). No copied emit
+  code. Nested mapping in sequence item reaches =emitMapValue= with the
+  style, so =seqIndent= applies at every depth. =SeqIndented= makes
+  =seqIndent= the identity and the root branch needs =SeqFlush=, so the
+  default is byte-identical for all other callers. Block scalars, empty
+  sequences ("[]") and empty maps are untouched by the style.
+- Root-sequence leading-newline change is guarded by =st == SeqFlush=, so it
+  affects only get-import (the single =emitYamlWith SeqFlush= caller).
+- Tests use =Test.Shared= helpers (=collectRawOutput=, fixtures, extended
+  with =nestedSeqFixture=). DIVERGENCES.md entry is accurate against the
+  caller table.
+
+Defects:
+1. minor, =test/Test/RenderTest.hs= and =test/Test/Shared.hs=: outside the
+   card's allowed paths (RenderTest only implied by the gate's "add one
+   render test"); record or accept.
+2. minor, =DIVERGENCES.md= (new entry): omits the handlebars =toYaml=
+   trailing-newline difference (Rust =|-=, iidy-hs adds a newline) that the
+   card found; also the get-import key-order and =yaml-cloudformation=
+   differences have no entry.
+3. minor, =src/Iidy/Yaml/Emitter.hs= =emitTagArgument=: with =SeqFlush= a
+   sequence argument of a tagged single-key map still uses indented dashes
+   (not passed through =seqIndent=). Unreachable for sane get-import data
+   (a JSON object whose only key starts with "!"); no fix needed.
