@@ -1,0 +1,396 @@
+#+title: C16 review: ApprovedTemplateLocation in iidy-js, Rust and Haskell
+
+Worker =claude-C16= (Claude Opus 5.5), 2026-11-16. Research only; no code was
+changed. Sources were read at: =~/src/iidy-js= (TypeScript, the original),
+=~/src/iidy= (Rust port), =~/src/iidy-hs= at =250154c= (Haskell port). Line
+numbers refer to those checkouts.
+
+* Summary
+:PROPERTIES:
+:ID: org:01a1e6a6-0b3b-752b-ad7e-fd8aca1e0501
+:ADDED: [2026-11-16 Mon 16:16]
+:END:
+
+The TypeScript original enforces approval on the client side by construction.
+When =ApprovedTemplateLocation= is set, every deploy command renders the local
+template, hashes it, and replaces the template with an HTTPS URL to the
+approved S3 object for that hash. Before calling CloudFormation it fetches
+that URL; if the fetch fails (object missing, or no read access) the command
+stops and tells the user to run =template-approval request=. The template sent
+to CloudFormation is therefore always the approved S3 object, never the local
+body. This was a deliberate feature (PR #45, "Replace template URL when
+ApprovedTemplateLocation is in use", January 2018), with error messages added
+for create (issue #71) and for =update-stack --changeset= (issue 106).
+
+The Rust port implemented only the two =template-approval= commands. Its
+deploy request builders never read =approved_template_location=, so the local
+template body is sent and approval is advisory. Its user docs nevertheless
+describe a deploy-time check (step 5) that does not exist. The Haskell port
+copied the Rust behaviour and docs. Both ports also added a "no diff" shortcut
+in =template-approval review= that TypeScript never had: it reports the
+template approved without writing the approved object, so the deploy-time
+lookup (where it exists) would still fail.
+
+* How the TypeScript version works
+:PROPERTIES:
+:ID: org:01a1e6a6-0b3b-752b-ad7e-fd898e171452
+:ADDED: [2026-11-16 Mon 16:16]
+:END:
+
+** Shared pieces
+:PROPERTIES:
+:ID: org:01a1e6a6-0b3b-752b-ad7e-fd88d9f1d790
+:ADDED: [2026-11-16 Mon 16:16]
+:END:
+
+- Approved key :: =src/cfn/approvedTemplateVersionLocation.ts:6-27=. Renders
+  the template with =loadCFNTemplate(..., {omitMetadata: true},
+  S3_TEMPLATE_MAX_BYTES)= (line 12), takes the MD5 hex of the rendered body
+  (line 17), appends the extension of the =Template= path (line 18) and joins
+  it under the =ApprovedTemplateLocation= prefix (line 21). It throws "Unable
+  to determine versioned template location" when there is no body (line 25),
+  so a =Template= given as an HTTP(S) URL cannot be combined with approval.
+  =omitMetadata= matters: without it the renderer adds =Metadata.iidy= with
+  host name and user name (=src/preprocess/index.ts:651-663=), and the hash
+  would differ per user.
+- Deploy template swap :: =src/cfn/stackArgsToX.ts:29-73=
+  (=stackArgsToCreateStackInput=). When =ApprovedTemplateLocation= is set it
+  builds =https://s3.amazonaws.com/<bucket>/<key>= (lines 33-36) and loads
+  /that/ instead of =stackArgs.Template= (line 41). =loadCFNTemplate= returns
+  an HTTP location as =TemplateURL= with no body
+  (=src/cfn/loadCFNTemplate.ts:32-34=) after presigning it with the caller's
+  credentials (=loadCFNTemplate.ts:18=, =src/cfn/maybeSignS3HttpUrl.ts:39-48=;
+  the =s3.amazonaws.com= host is signed for us-east-1, lines 24-25).
+  =stackArgsToUpdateStackInput= (line 103) and
+  =stackArgsToCreateChangeSetInput= (line 83) both call the create builder, so
+  all three get the swap.
+- Approval check :: =src/cfn/AbstractCloudFormationStackCommand.ts:25-36=
+  (=isHttpTemplateAccessible=: plain HTTP GET of the presigned URL; any error
+  counts as inaccessible) and lines 214-223 (=_requiresTemplateApproval=,
+  =_exitWithTemplateApprovalFailure=). The error reads "Template version has
+  not been approved or the current IAM principal does not have permission to
+  access it. Run: iidy template-approval request <argsfile>". It returns
+  =FAILURE= before any CloudFormation mutation.
+- Global switch :: =src/cfn/loadStackArgs.ts:48-52=. SSM parameter
+  =/iidy/disable-template-approval= = "true" deletes
+  =ApprovedTemplateLocation= from the stack args, which turns off both the
+  swap and the check (documented at =README.md:369=).
+
+** Per command
+:PROPERTIES:
+:ID: org:01a1e6a6-0b3b-752b-ad7e-fd873d90e52a
+:ADDED: [2026-11-16 Mon 16:16]
+:END:
+
+- template-approval request :: =src/cfn/approval/index.ts:24-71=. Loads only
+  =ApprovedTemplateLocation= and =Template= (plus =Parameters= for lint) from
+  stack args (lines 25-29). Fails if the location is missing (lines 66-68).
+  Computes the approved key (line 33); =HeadObject= on it (line 36); if it
+  exists, prints "already been approved" (line 37). On =NotFound= it renders
+  the template again with =omitMetadata=, lints it when =--lint-template= is on
+  (default; lines 42-50), and uploads it to =<key>.pending= with ACL
+  =bucket-owner-full-control= (lines 52-56, ACL added for cross-account use in
+  =00e8d40=). Prints the review command (line 59).
+- template-approval review :: =src/cfn/approval/index.ts:77-159=. Forces
+  region us-east-1 (line 78). =HeadObject= on the key with =.pending= stripped
+  (lines 88-93); if present, "already been approved". Otherwise gets the
+  pending object (lines 97-100) and =<dir>/latest= (lines 102-113, empty when
+  missing), prints the diff (lines 115-119) and always prompts (line 121),
+  even when the diff is empty. On yes it writes the approved key (lines
+  124-128), writes =latest= (lines 132-136) and deletes the pending object
+  (lines 140-143). On no it returns =INTERRUPT= (line 150). There is no
+  separate no-diff path.
+- create-stack :: =AbstractCloudFormationStackCommand.ts:138-173=. Builds the
+  input with the swap (lines 144-149), then the approval check (lines
+  151-153), then lint (lines 155-160), which is skipped on the approval path
+  because there is no =TemplateBody=, then =createStack= (line 162).
+- update-stack :: =AbstractCloudFormationStackCommand.ts:175-212=. Same
+  order: swap (line 177), check (lines 178-180), lint (skipped), =updateStack=
+  (line 198).
+- create-changeset :: =src/cfn/index.ts:59-104=. Swap (lines 64-65), check
+  (lines 72-74), =createChangeSet= (line 76).
+- create-or-update, update-stack --changeset :: =src/cfn/index.ts:156-176=
+  and =197-225= route to the three classes above, so they inherit the swap and
+  the check. The =--diff= preview (line 208, =diffStackTemplates=) compares
+  against the local template, not the approved object.
+- exec-changeset :: =src/cfn/index.ts:131-150=. No template involved; the
+  changeset was already built from the approved URL.
+- estimate-cost :: =src/cfn/estimateStackCost.ts:9-11=. Gets the swap (sends
+  the approved =TemplateURL=) but has no approval check; CloudFormation
+  reports the missing object.
+
+** Git history and intent
+:PROPERTIES:
+:ID: org:01a1e6a6-0b3b-752b-ad7e-fd8663b6d9ad
+:ADDED: [2026-11-16 Mon 16:16]
+:END:
+
+- =16bf034= (2017-12-22) "Template approval commands": request uploads
+  =<md5>.pending=; review approves; "When a template is changed, the filename
+  is changed because of the md5 hashing."
+- =835f14e= (2018-01-11) "Use approved template for create/update stack",
+  merged as PR #45 (=5bb74fd=, 2018-01-17) "Replace template URL when
+  ApprovedTemplateLocation is in use". =93a8cc1= adds =render:= support.
+- =1efefe1= (2018-02-20) "Show helpful error message on create if template
+  needs approval", fixes #71. =86f6b08= (2018-05-15) adds the same message for
+  =update-stack --changeset=, fixes issue 106.
+- =1622091= (PR #151) filters stack-args keys for the approval commands;
+  =8fced1f= (2019-12-04, PR #218) adds the SSM disable switch; =00e8d40=
+  (2020-01-04) adds the cross-account ACL; =8926290= and =db225b8= (2020-2021)
+  move the request to the 1 MB S3 template size limit.
+
+The intent is clear from the history: approval is a gate that every deploy
+command passes through, and the deployed template is the approved S3 object.
+Because CloudFormation receives a =TemplateURL= under the approved prefix, an
+IAM policy with a =cloudformation:TemplateUrl= condition on the deploy role
+can make the gate hold for any tool, not just iidy.
+
+** Edge cases in the TypeScript behaviour
+:PROPERTIES:
+:ID: org:01a1e6a6-0b3b-752b-ad7e-fd85a9fe0d96
+:ADDED: [2026-11-16 Mon 16:16]
+:END:
+
+- The check is an HTTP GET of a presigned URL. A 403 (no read permission), a
+  404, or a network failure all produce the same "not approved or no
+  permission" message.
+- A =Template= that is an HTTP(S) URL makes the approved-key computation
+  throw (=approvedTemplateVersionLocation.ts:25=), so such stacks cannot use
+  approval.
+- With =UsePreviousTemplate: true= the swap still sets =TemplateURL= and
+  =_normalizeUsePreviousTemplateOrParamValues= then sets
+  =UsePreviousTemplate= (=stackArgsToX.ts:15=); CloudFormation rejects both
+  together. Approval and =UsePreviousTemplate= did not work together.
+- The URL is always the global =s3.amazonaws.com= path-style host, presigned
+  for us-east-1; buckets in other regions depend on S3 redirect behaviour.
+- Lint before deploy (=ef75a35=) never runs when approval is on.
+
+* Rust port
+:PROPERTIES:
+:ID: org:01a1e6a6-0b3b-752b-ad7e-fd84efe60e9d
+:ADDED: [2026-11-16 Mon 16:16]
+:END:
+
+- Request :: =src/cfn/template_approval_request.rs:16-110=. Requires the
+  location (lines 27-28), loads the template with the 51 KB
+  =TEMPLATE_MAX_BYTES= limit (line 46, TypeScript uses the 1 MB S3 limit),
+  computes the key (lines 56-60), checks existence (lines 64-77), validates
+  via CloudFormation when linting (lines 80-89), uploads =.pending= with
+  =bucket-owner-full-control= (lines 93, 113-128).
+- Hash :: =src/cfn/template_hash.rs:6-48=. SHA256, not MD5 (commit =633c9e8=,
+  2026-02-18, "MD5 is cryptographically broken and unnecessary here"; the
+  completion note
+  =notes/handoffs/done/2026-02-19-template-approval-completion.md= says the
+  change is intentional). The extension defaults to =yaml= when the
+  path has none (line 38). Keys from iidy-js and from the ports never match,
+  so templates approved with iidy-js count as unapproved.
+- Review :: =src/cfn/template_approval_review.rs:14-157=. Requires the
+  =.pending= suffix (lines 27-31) and the pending object (lines 61-64), checks
+  the approved key (line 67), diffs against =<dir>/latest= (lines 48-56,
+  88-104). No-diff path at lines 106-117: reports =approved: true=,
+  =cleanup_completed: true= and returns 0 without writing anything. With
+  changes it prompts (line 120) and on yes writes approved and latest and
+  deletes pending (lines 209-246). Defaults region to us-east-1 (lines
+  249-253).
+- Deploy :: =src/cfn/request_builder.rs:73-86= (create), =228-241= (update)
+  and =336-342= (changeset) take the template from =stack_args.template= only;
+  =approved_template_location= is read nowhere outside the request command and
+  the SSM switch (=src/cfn/stack_args.rs:436-443=).
+- Docs :: =docs/command-reference.md:409-410= says "At deploy time, iidy
+  re-processes the template, re-hashes it, and checks whether a matching
+  approved object exists. If it does, the deployment proceeds. If not, it
+  fails." The code does not do this. Lines 418-424 then say IAM on the deploy
+  role is the real gate; with such a policy every Rust deploy fails, because a
+  =TemplateBody= is sent rather than a =TemplateURL=.
+- The design spec (=notes/template-approval-design-spec.md:597-604=) says the
+  hash must be computed on the fully processed template "to ensure the
+  approved template hash matches what will actually be deployed", so the
+  author expected a deploy-side match, but none was built.
+
+* Haskell port
+:PROPERTIES:
+:ID: org:01a1e6a6-0b3b-752b-ad7e-fd831576c034
+:ADDED: [2026-11-16 Mon 16:16]
+:END:
+
+- Request :: =src/Iidy/Cfn/Operations/TemplateApproval.hs:51-124=. Requires
+  the location (lines 65-68) and =Template= (lines 69-72), loads with
+  =loadCfnTemplate= (lines 75-82, which applies the 51 KB limit,
+  =src/Iidy/Cfn/TemplateLoader.hs:39,204=), computes the key (lines 85-88),
+  checks existence (line 93), uploads =.pending= (line 110). Differences from
+  Rust and TypeScript: the lint flag is accepted and ignored (=_lintTmpl=,
+  line 59, passed from =app/Main.hs:247=); the upload sets no ACL
+  (=uploadToS3=, lines 339-346), so cross-account requests lose
+  =bucket-owner-full-control=; when already approved, the pending location
+  printed is the approved location (line 101).
+- Hash :: =src/Iidy/Cfn/TemplateHash.hs:23-32= SHA256, key built at lines
+  64-74. Unlike Rust, an extension-less path gets no extension (line 67), so
+  Rust and Haskell keys differ for such templates.
+- Review :: =TemplateApproval.hs:131-188= and =206-261=. Same flow as Rust.
+  No-diff path at lines 226-238 reports =arApproved = True= with the approved
+  location and =arCleanupCompleted = False=, writes nothing, returns 0. The
+  approve step (lines 279-297) writes approved and latest and deletes pending.
+- Deploy :: =src/Iidy/Cfn/RequestBuilder.hs:69,76-77= (create), =110,117-118=
+  (update) and =159,166-167= (changeset) load =saTemplate= and pass its body or
+  URL. =CreateStack.hs:56=, =UpdateStack.hs:84= and =Changeset.hs:122= are the
+  only callers, so create-or-update and =--changeset= paths share the gap.
+  =src/Iidy/Cfn/Operations/EstimateCost.hs:44-52= also uses the local
+  template. =saApprovedTemplateLocation= is read only by the request command
+  and the SSM switch (=src/Iidy/Cfn/GlobalConfig.hs:105-113=).
+- HTTP template URLs are passed through unsigned
+  (=TemplateLoader.hs:71-73=); there is no equivalent of
+  =maybeSignS3HttpUrl= (Rust has one at =src/cfn/template_loader.rs:55=).
+  This matters for any option that sends a =TemplateURL=.
+- Docs :: =docs/command-reference.md:409-410= carries the same incorrect
+  step 5. =DIVERGENCES.md= has no entry for any of this.
+
+* The no-diff "approved without writing the object" case
+:PROPERTIES:
+:ID: org:01a1e6a6-0b3b-752b-ad7e-fd82bbeef6c1
+:ADDED: [2026-11-16 Mon 16:16]
+:END:
+
+TypeScript has no such case: with an empty diff it still prompts and, on yes,
+writes the approved object, =latest=, and deletes the pending object
+(=approval/index.ts:115-144=). Both ports added a shortcut when the pending
+body equals =latest= (Rust =template_approval_review.rs:106-117=, Haskell
+=TemplateApproval.hs:226-238=). The shortcut writes nothing, leaves the
+pending object behind, and reports success. When does it fire? The pending
+key is the hash of the body, and =latest= is the last approved body. If they
+are equal, the approved object for this hash normally already exists and the
+earlier "already approved" check would have returned first. The shortcut
+fires when the approved object is missing but =latest= matches: the approved
+object was deleted or expired, or =latest= was written some other way. In that
+state any deploy-time lookup would refuse, while the review command claims the
+template is approved. Under advisory behaviour the wrong report is harmless;
+under any enforcing option it becomes a dead end, because rerunning review
+loops on the same shortcut. Fixing it is independent of the enforcement
+choice: match TypeScript (drop the shortcut, prompt, write on yes), or keep
+the shortcut but perform the approve writes, since the content equals an
+already approved body.
+
+* Options for enforcement
+:PROPERTIES:
+:ID: org:01a1e6a6-0b3b-752b-ad7e-fd811a1748b5
+:ADDED: [2026-11-16 Mon 16:16]
+:END:
+
+All three apply to create-stack, update-stack and create-changeset, which
+covers create-or-update and =--changeset= paths through the shared builders.
+Each also needs the no-diff fix above and a docs correction.
+
+** Option A: deploy from the approved S3 object's URL (TypeScript parity)
+:PROPERTIES:
+:ID: org:01a1e6a6-0b3b-752b-ad7e-fd80bff34a10
+:ADDED: [2026-11-16 Mon 16:16]
+:END:
+
+When =ApprovedTemplateLocation= is set, render the local template, compute the
+versioned key, =HeadObject= it with the caller's credentials, and send a
+=TemplateURL= for that object instead of the body. On =NotFound= stop with
+the TypeScript message and the =template-approval request= command; on
+=AccessDenied= say so separately (an improvement on TypeScript's single
+message).
+
+- What it gives :: The deployed template is exactly the approved bytes. An
+  IAM =cloudformation:TemplateUrl= condition on the deploy role now works with
+  iidy-hs instead of rejecting every deploy, which is the gate the docs
+  describe.
+- What breaks :: Deploys that currently pass with an unapproved template
+  fail (intended). The deploy principal and CloudFormation need
+  =s3:GetObject= on the approved keys. A =Template= given as an HTTP(S) or S3
+  URL cannot be hashed; TypeScript errors there. =UsePreviousTemplate= must
+  skip the swap (TypeScript is broken there). Lint and validation before
+  deploy would see no body unless the local body is kept for linting. A
+  bucket in another region needs a presigned or regional URL; Haskell has no
+  presign helper, so this needs amazonka's presign or a region-aware
+  virtual-hosted URL. Objects approved by iidy-js (MD5 keys) are not found
+  while the ports use SHA256.
+- Size :: Medium. One shared helper in =src/Iidy/Cfn/= used by the three
+  builders in =RequestBuilder.hs= (and optionally =EstimateCost.hs=), an S3
+  head call and URL construction (likely 100-200 lines with presign), mock
+  tests for approved, missing, access denied, disabled by SSM, and
+  =UsePreviousTemplate=; docs and =DIVERGENCES.md= (Rust has the gap).
+
+** Option B: verify the local template's hash and refuse otherwise
+:PROPERTIES:
+:ID: org:01a1e6a6-0b3b-752b-ad7e-fd7f353aed83
+:ADDED: [2026-11-16 Mon 16:16]
+:END:
+
+Same render, hash and =HeadObject= as option A, but keep sending the local
+=TemplateBody= when the approved object exists.
+
+- What it gives :: Unapproved templates are refused by iidy-hs. The body
+  sent is byte-identical to the approved object (same render, same hash), so
+  the content matches.
+- What breaks :: The same deploys fail as in option A. IAM
+  =cloudformation:TemplateUrl= policies still reject every deploy, so the
+  documented IAM gate stays unusable and the check is client-side only. No
+  cross-region or presign work, no =s3:GetObject= need for CloudFormation.
+  Templates over 51 KB still cannot be deployed inline, whereas option A
+  would allow up to 1 MB.
+- Size :: Small. A helper and one call in each builder (about 50-80 lines),
+  similar tests, docs.
+
+** Option C: keep advisory and document
+:PROPERTIES:
+:ID: org:01a1e6a6-0b3b-752b-ad7e-fd7ecf3ed2ae
+:ADDED: [2026-11-16 Mon 16:16]
+:END:
+
+Leave the deploy path as it is. Correct step 5 in =docs/command-reference.md=,
+state that iidy-hs does not check approval at deploy time and that an IAM
+=TemplateUrl= policy is incompatible with it, add a =DIVERGENCES.md= entry
+against iidy-js, and optionally print a warning at deploy when the approved
+object is missing.
+
+- What breaks :: Nothing. Teams relying on approval as a gate keep a
+  silent gap unless they read the docs, and the IAM gate stays unusable.
+- Size :: Tiny (docs, plus a small warning helper if wanted).
+
+** Recommendation
+:PROPERTIES:
+:ID: org:01a1e6a6-0b3b-752b-ad7e-fd7de524923f
+:ADDED: [2026-11-16 Mon 16:16]
+:END:
+
+Option A. It is what iidy-js was built to do (PR #45 and the two follow-up
+error-message fixes), it is the only option under which the documented IAM
+gate works with iidy-hs, and the deployed template is the approved object
+rather than a re-render that happens to hash the same. Use an S3 API
+=HeadObject= for the check rather than an HTTP GET, keep linting the local
+rendered body before the swap, skip the swap with =UsePreviousTemplate=, fail
+clearly for URL templates, and fix the review no-diff path to match
+TypeScript. Keep SHA256 unless Tavis needs iidy-js approved buckets to keep
+working. Record the change against Rust in =DIVERGENCES.md=. If presigning or
+cross-region URLs turn out to be more than a small addition, option B is a
+reasonable first step that can grow into A, with C's docs fix shipped in
+either case.
+
+* Questions for Tavis
+:PROPERTIES:
+:ID: org:01a1e6a6-0b3b-752b-ad7e-fd7c4ff6cfbd
+:ADDED: [2026-11-16 Mon 16:16]
+:END:
+
+1. Which behaviour: A (deploy from the approved object's URL, iidy-js
+   parity), B (check the hash, still send the local body) or C (advisory,
+   documented)?
+2. Hash: keep SHA256 (Rust's deliberate choice, =633c9e8=), switch back to
+   MD5 for compatibility with buckets approved by iidy-js, or look up both?
+3. For A, how should the =TemplateURL= be formed: presigned like iidy-js, or
+   a plain regional virtual-hosted URL (CloudFormation then reads it with the
+   caller's permissions; cross-region buckets would not work)?
+4. Review with an empty diff: match iidy-js (prompt, write on yes) or write
+   the approved object without prompting since it equals =latest=?
+5. Should lint and validation still run on the local rendered body when
+   approval is on? iidy-js skipped it.
+6. A =Template= given as an HTTP(S) or S3 URL together with
+   =ApprovedTemplateLocation=: refuse (iidy-js throws) or skip approval with a
+   warning?
+7. Include estimate-cost in the enforcement, or leave it on the local
+   template?
+8. The request command's side gaps in Haskell (ignored =--lint-template=,
+   no =bucket-owner-full-control= ACL, 51 KB instead of 1 MB limit, missing
+   presign of HTTPS S3 URLs): fix inside C16 or file separate cards?

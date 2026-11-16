@@ -66,6 +66,8 @@ mock-AWS tests; build warning-free, tests pass; committed with C16.
 Read the TypeScript approval flow and write the comparison report. Do not
 change code.
 
+Report: [[file:report--approval-ts-review.org][ApprovedTemplateLocation in iidy-js, Rust and Haskell]]
+
 * TODO Discuss with the user and record the decision
 :PROPERTIES:
 :ID: org:01a1e692-1406-709f-9058-855e72711768
