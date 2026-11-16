@@ -15,7 +15,9 @@ it.
 ## Files
 
 `~/.cache` is ephemeral on this host (Tavis, 2026-11-16): nothing the
-supervision needs to keep lives there.
+supervision needs to keep lives there. Worker worktrees are the one
+exception (Tavis, 2026-11-16), because they are disposable once their work
+is committed.
 
 - Tracked, in `scripts/supervisor/`: `PROTOCOL.md` (the worker contract),
   `RUNBOOK.md` (this file), `REVIEW.md` (the review worker's brief),
@@ -31,23 +33,26 @@ supervision needs to keep lives there.
   - `panes.txt`: `codex-1=%ID codex-2=%ID review=%ID` on one line.
   - `msg-*.txt`, `assign-*.txt`: messages written before sending.
   - `build.lock`: the lock file `guarded-build` holds.
-  - `worktrees/<worker>`: one worktree per worker (`codex-<n>`, `review`,
-    or `claude-C<ID>` for a sub-agent), each with its own `dist-newstyle/`.
-    Not under `.worktrees/`, because the repo's worktree-isolation hook
-    guards that path and would block workers from editing their card on the
-    main checkout. Commits live in the main repository; only uncommitted
-    work is in the worktree, so workers make WIP commits before pausing.
   - `tmp/`: workers' temporary directories.
+- Worker worktrees, in `~/.cache/iidy-hs/worktrees/<worker>`: one per
+  worker (`codex-<n>`, `review`, or `claude-C<ID>` for a sub-agent), each
+  with its own `dist-newstyle/`. Commits live in the main repository; only
+  uncommitted edits are in the worktree, so workers make WIP commits before
+  pausing. If the cache is wiped, run `git worktree prune`, then recreate
+  the worktree on its branch (`git worktree add WT <branch>`) and
+  `direnv allow` it. They are not
+  under the repo's `.worktrees/`, which the worktree-isolation hook guards:
+  it would block workers from editing their card on the main checkout.
 
 ## Setup (once per worker)
 
-1. `mkdir -p ~/src/iidy-hs/.supervisor/tmp ~/src/iidy-hs/.supervisor/worktrees`
+1. `mkdir -p ~/src/iidy-hs/.supervisor/tmp ~/.cache/iidy-hs/worktrees`
    and create an empty `~/src/iidy-hs/.supervisor/mailbox.log`.
 2. From `~/src/iidy-hs`:
-   `git worktree add ~/src/iidy-hs/.supervisor/worktrees/<worker> -b <branch> main`
+   `git worktree add ~/.cache/iidy-hs/worktrees/<worker> -b <branch> main`
    (branch `codex/codex-<n>/C<ID>` or `claude/C<ID>`; the review worktree
-   is detached: `git worktree add --detach ~/src/iidy-hs/.supervisor/worktrees/review main`).
-3. `direnv allow ~/src/iidy-hs/.supervisor/worktrees/<worker>` so the worker can run
+   is detached: `git worktree add --detach ~/.cache/iidy-hs/worktrees/review main`).
+3. `direnv allow ~/.cache/iidy-hs/worktrees/<worker>` so the worker can run
    `direnv exec` there. The first build in a fresh worktree compiles the
    whole project; the Haskell dependencies come from the Nix store.
 4. Codex workers: in Tavis's tmux, a window `iidy:codex` with one pane per

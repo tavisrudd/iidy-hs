@@ -14,7 +14,7 @@ supervisor.
 
 - Your worker name is given in your first instruction, for example
   `codex-1` or `claude-C14`.
-- You work only in your own worktree: `~/src/iidy-hs/.supervisor/worktrees/<worker>`,
+- You work only in your own worktree: `~/.cache/iidy-hs/worktrees/<worker>`,
   on branch `<worker-prefix>/C<ID>` (for example `codex/codex-1/C14` or
   `claude/C14`) for the current card. The supervisor creates the worktree
   and branches. You never touch `main`, never run `git push`, never merge,
@@ -23,7 +23,7 @@ supervisor.
   never delete worktrees, branches or cache.
 - Toolchain: run every build and test command inside the project's Nix dev
   shell for your worktree: prefix commands with
-  `direnv exec ~/src/iidy-hs/.supervisor/worktrees/<worker>` (the supervisor has run
+  `direnv exec ~/.cache/iidy-hs/worktrees/<worker>` (the supervisor has run
   `direnv allow` there). Confirm once that `ghc --version` prints the version
   the dev shell pins (9.12.3 since card C3); a bare shell may find an older
   GHC.

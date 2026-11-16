@@ -15,10 +15,10 @@ contract; it overrides AGENTS.md for branches, card state and commits), then
 `~/src/iidy-hs/AGENTS.md` and `~/src/iidy-hs/CLAUDE.md`. You report in your
 final reply, not the mailbox.
 
-- Worktree: `~/src/iidy-hs/.supervisor/worktrees/claude-C<ID>` (already created,
+- Worktree: `~/.cache/iidy-hs/worktrees/claude-C<ID>` (already created,
   `direnv allow`ed). Work only there. Branch: `claude/C<ID>`.
 - Toolchain: prefix build and test commands with
-  `direnv exec ~/src/iidy-hs/.supervisor/worktrees/claude-C<ID>`; confirm
+  `direnv exec ~/.cache/iidy-hs/worktrees/claude-C<ID>`; confirm
   `ghc --version` prints 9.12.3 once.
 - Builds and tests only through `scripts/guarded-build` (host-wide lock,
   memory floor). GHC at most -j4; never two builds at once. Always pass a

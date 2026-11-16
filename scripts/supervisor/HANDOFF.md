@@ -11,7 +11,7 @@ final reply, and you steer them with SendMessage. Launch each with
 - Sonnet: bounded fixes, test additions, docs, card refinement, and reviews
   of Sonnet work.
 - Never `isolation: worktree` on the Agent tool (CLAUDE.md). Worktrees are
-  made by you under `~/src/iidy-hs/.supervisor/worktrees/claude-C<ID>`.
+  made by you under `~/.cache/iidy-hs/worktrees/claude-C<ID>`.
 
 ## Limits that bite
 

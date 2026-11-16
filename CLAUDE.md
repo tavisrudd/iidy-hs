@@ -29,7 +29,7 @@ Work is tracked as Org cards with the `c` CLI (single `main` lane). Read
 - Green commits only: all tests pass + zero warnings
 - Never create branches — all work on main. Exception: supervised workers
   (`scripts/supervisor/`) work on card branches in worktrees under
-  `~/src/iidy-hs/.supervisor/worktrees/`, created and landed by the supervisor.
+  `~/.cache/iidy-hs/worktrees/`, created and landed by the supervisor.
 - Never reset/restore without backup and user confirmation
 - `git config --local commit.gpgsign false` (YubiKey will hang otherwise)
 - Run `git config --local commit.gpgsign false` if not already set before first commit
@@ -50,7 +50,8 @@ Work is tracked as Org cards with the `c` CLI (single `main` lane). Read
 - No `undefined` or `error "TODO"` in committed code
 - No unnecessary dependencies
 - No modifications to files outside ~/src/iidy-hs/ (except the supervisor's
-  runtime state, worktrees and temp dirs under `~/src/iidy-hs/.supervisor/`)
+  runtime state and temp dirs under `~/src/iidy-hs/.supervisor/`, and worker
+  worktrees under `~/.cache/iidy-hs/worktrees/`)
 - Read-only access to ~/src/iidy/
 
 ## Progress Logging

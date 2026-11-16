@@ -8,6 +8,7 @@ set -uo pipefail
 cache=$HOME/src/iidy-hs/.supervisor
 run=$cache
 repo=$HOME/src/iidy-hs
+worktrees=$HOME/.cache/iidy-hs/worktrees
 verbose=${1:-}
 mailbox=$run/mailbox.log
 panes=${IIDY_SUPERVISOR_PANES:-$run/panes.txt}
@@ -46,7 +47,7 @@ if [[ -r $panes ]]; then
     if [[ -n $line ]]; then
       mail=" last=$(grep -oE 'card=C[0-9]+' <<<"$line")/$(grep -oE 'state=[a-z-]+' <<<"$line" | cut -d= -f2)@$(cut -c12-16 <<<"$line")"
     fi
-    echo "$worker $state$(branch_info "$cache/worktrees/$worker")$mail"
+    echo "$worker $state$(branch_info "$worktrees/$worker")$mail"
     if [[ $verbose == -v ]]; then
       grep -E '^• ' <<<"$screen" | grep -vE 'Working|Waiting' | tail -1 | cut -c1-110 | sed 's/^/  /'
       grep -E '^(• |  └ )' <<<"$screen" | tail -4 | cut -c1-110 | sed 's/^/    /'
@@ -54,7 +55,7 @@ if [[ -r $panes ]]; then
   done
 fi
 
-for wt in "$cache"/worktrees/claude-C*; do
+for wt in "$worktrees"/claude-C*; do
   [[ -d $wt ]] || continue
   echo "$(basename "$wt") SUB$(branch_info "$wt")"
 done
