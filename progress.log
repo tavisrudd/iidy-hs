@@ -106,3 +106,4 @@
 2026-11-16 15:19 — 2026-11-16--2 (f2c5724c-c18a-470a-95c4-5c03105ef675): C3 done — nixpkgs locks bumped, GHC 9.10.3 -> 9.12.3, tasty-bench 0.5; tests, Redex spec and nix build pass.
 2026-11-16 15:41 — 2026-11-16--2 (f2c5724c-c18a-470a-95c4-5c03105ef675): C7 done — get-import builds AWS env lazily for cfn/ssm/ssm-path/s3 imports (Rust parity); mock-AWS tests added; filed C13.
 2026-11-16 15:55 — 2026-11-16--2 (f2c5724c-c18a-470a-95c4-5c03105ef675): C4 Fable security review done (2 high, 3 medium, 7 low, 3 info); filed C14-C22. C7 get-import AWS env done via sub-agent; C13 filed.
+2026-11-16 16:02 — 2026-11-16--2 (f2c5724c-c18a-470a-95c4-5c03105ef675): C23 supervised worker workflow ported from peregrine (scripts/supervisor, /supervise skill, guarded-build lock).

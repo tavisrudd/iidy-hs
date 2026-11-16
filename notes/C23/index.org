@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C23
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   User request 2026-11-16: set up a supervision config like peregrine's
 :CREATED_BY: opus-5.5-medium
@@ -12,6 +12,10 @@
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 15:58]
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+- Card state STARTED → DONE [2026-11-16 Mon 16:02]
+  Note: Supervision files, guarded-build lock and hook change committed in 0d3dd6c
   Agent: opus-5.5-medium
   Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :END:
