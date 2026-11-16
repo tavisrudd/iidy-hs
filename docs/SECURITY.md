@@ -89,10 +89,18 @@ relative imports across different contexts.
 - `https://example.com/file.yaml` -> `https://example.com/`
 - `https://example.com/configs/app.yaml` -> `https://example.com/configs/`
 
-The `isRemoteBase` function determines whether a base location is remote by
-checking for `s3://`, `http://`, or `https://` prefixes. The `parseTypePrefix`
-function extracts the type prefix from an import location, treating paths
-with `./`, `../`, or `/` prefixes as implicit `file:` imports.
+The `isLocalBase` function decides whether a base location is trusted, and it
+fails closed: a base is local only when it is positively a local file path.
+That means `parseTypePrefix` reads it as a plain path (no colon), a `./`,
+`../` or `/` path, or a `file:` location, or the text before its first colon
+is not a valid RFC 3986 URI scheme (for example `dir/./c:d.yaml`, which only a
+local path can produce). Every other base is untrusted: `s3:` in both the short
+(`s3:bucket/key`) and long (`s3://`) forms, `ssm:`, `ssm-path:`, `cfn:`,
+`http://`, `https://`, and any unknown scheme-shaped prefix (including a local
+file named like `a:b.yaml` or a Windows drive path, which must be written with
+a `./` or `/` prefix to stay local). The `parseTypePrefix` function extracts
+the type prefix from an import location, treating paths with `./`, `../`, or
+`/` prefixes as implicit `file:` imports.
 
 ## Threat Model
 
@@ -160,8 +168,8 @@ Security validation is centralized in `parseImportType` in
 
 1. Extracts the type prefix from the import location (`parseTypePrefix`).
 2. Maps the prefix to an `ImportType` constructor.
-3. Checks whether the base location is remote (`isRemoteBase`).
-4. Rejects the import if both conditions hold: the base is remote AND the
+3. Checks whether the base location is positively local (`isLocalBase`).
+4. Rejects the import if both conditions hold: the base is not local AND the
    import type is local-only (`isLocalOnly`).
 
 Individual import loaders live under `src/Iidy/Yaml/Imports/Loaders/`:

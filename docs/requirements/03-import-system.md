@@ -45,7 +45,7 @@ parseImportType :: Text -> Text -> Either ImportError ImportType
 parseImportType location baseLocation =
   (typeStr, rest) <- parseTypePrefix location
   importType <- classify typeStr    -- "file" -> ImportFile, "env" -> ImportEnv, etc.
-  if isRemoteBase baseLocation && isLocalOnly importType
+  if not (isLocalBase baseLocation) && isLocalOnly importType
     then Left "Import type <typeStr> is not allowed from remote templates"
     else Right importType
 ```
@@ -815,7 +815,11 @@ templates cannot read my credentials, files, or repository metadata.
 
 **Acceptance Criteria:**
 
-- A base location is classified as remote if it begins with `s3://`, `http://`, or `https://`.
+- The trust check fails closed. A base location is local only when it is positively a local
+  file path: a plain path, a `./`, `../` or `/` path, a `file:` location, or a path whose text
+  before its first colon is not a valid RFC 3986 URI scheme. Every other base is untrusted,
+  including `s3:` (short and `s3://` forms), `ssm:`, `ssm-path:`, `cfn:`, `http://`,
+  `https://` and any unknown scheme-shaped prefix.
 - Five import types are classified as local-only: file, env, git, filehash, filehash-base64.
 - When a remote template attempts a local-only import, the error is:
   `Import type <typeStr> is not allowed from remote templates`.
@@ -834,10 +838,13 @@ templates cannot read my credentials, files, or repository metadata.
 **Security classification pseudocode:**
 
 ```
-isRemoteBase :: Text -> Bool
-isRemoteBase loc = isPrefixOf "s3://" loc
-               || isPrefixOf "http://" loc
-               || isPrefixOf "https://" loc
+isLocalBase :: Text -> Bool
+isLocalBase loc = case parseTypePrefix loc of
+  Right (prefix, _) -> prefix == "" || prefix == "file"
+  Left _            -> not (isUriScheme (takeWhile (/= ':') loc))
+
+-- RFC 3986: ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+isUriScheme :: Text -> Bool
 
 isLocalOnly :: ImportType -> Bool
 isLocalOnly = \case
