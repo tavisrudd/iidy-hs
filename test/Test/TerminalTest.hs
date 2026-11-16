@@ -25,6 +25,12 @@ terminalTests =
             resolveWidth Nothing True Nothing @?= Nothing
         , testCase "real size of 0 (some ptys) falls through to Nothing" $
             resolveWidth Nothing True (Just 0) @?= Nothing
+        , testCase "COLUMNS that overflows Int is rejected, not wrapped" $
+            resolveWidth (Just "18446744073709551716") True (Just 200) @?= Just 200
+        , testCase "COLUMNS above the sane bound is rejected" $
+            resolveWidth (Just "10001") True (Just 200) @?= Just 200
+        , testCase "COLUMNS at the sane bound is accepted" $
+            resolveWidth (Just "10000") True (Just 200) @?= Just 10000
         , testCase "non-terminal without COLUMNS is Nothing" $
             resolveWidth Nothing False (Just 200) @?= Nothing
         ]

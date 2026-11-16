@@ -61,6 +61,11 @@ resolveWidth columns isTty realSize =
     positive n = if n > 0 then Just n else Nothing
 
     parseColumns :: String -> Maybe Int
-    parseColumns s = case reads s of
-        [(n, "")] | n > 0 -> Just n
+    parseColumns s = case reads s :: [(Integer, String)] of
+        [(n, "")] | n > 0 && n <= maxColumns -> Just (fromInteger n)
         _invalid -> Nothing
+
+    -- Parsed as Integer so huge values cannot wrap around; no real terminal
+    -- is wider than this.
+    maxColumns :: Integer
+    maxColumns = 10000
