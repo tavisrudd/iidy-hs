@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C4
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   User request 2026-11-16: adopt the c cards workflow (single main lane)
 :CREATED_BY: opus-5.5-medium
@@ -16,6 +16,10 @@
   Agent: opus-5.5-medium
   Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 - Card state TODO → STARTED [2026-11-16 Mon 15:42]
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+- Card state STARTED → DONE [2026-11-16 Mon 15:55]
+  Note: Fable review in report--security-review.org (3142207); findings filed as C14-C22
   Agent: opus-5.5-medium
   Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :END:
@@ -85,11 +89,28 @@ gate fails open) was spot-checked: =isRemoteBase= in
 are treated as local. Not checked: real AWS paths end to end, live advisory
 databases, the Redex spec.
 
-* TODO Triage findings into cards
+* DONE Triage findings into cards
 :PROPERTIES:
 :ID: org:01a1e636-0a70-72f9-8ecd-c1241eaac3b4
 :ADDED: [2026-11-16 Mon 14:14]
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 15:55] \\
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:END:
 
 Review the findings with the user and file a card for each accepted fix,
 linked from the report.
+
+User decisions (2026-11-16): file cards as proposed. C14 fixes the
+fail-open trust check (priority A). C15 redesigns what remote templates may
+inherit and import, starting with an options write-up for the user (priority
+A). C16 enforces the approved template, starting with a review of the
+TypeScript version (=~/src/iidy-js=) and a discussion with the user. C17
+builds stack-args AWS access after its values are computed. C18 filters
+control characters from terminal output. C19 redacts session tokens from
+errors. C20 adds resource limits. C21 groups the five remaining low findings
+(priority C). C22 corrects the security docs and resolves =CommandsBefore=
+and =--debug=, after C15. No card for the shared approval-disable setting
+(by design) or the regex exception.

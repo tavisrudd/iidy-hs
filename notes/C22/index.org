@@ -1,0 +1,62 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C22
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e691-4948-75e7-a270-0b1777bd6d7c
+:ADDED: [2026-11-16 Mon 15:54]
+:DEPENDS_ON: C15
+:END:
+:LOGBOOK:
+- DEPENDS_ON (none) → C15 [2026-11-16 Mon 15:54]
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:END:
+#+title: C22 — Correct security docs and remove or implement CommandsBefore and --debug
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e692-143c-70db-935c-e1c578891a7a
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+The C4 review found documentation and CLI surface that describe behaviour
+the code does not have: =SECURITY.md= says relative imports from remote
+templates resolve remotely, but the code rejects them; the stack-args field
+=CommandsBefore= is parsed but never run; and the =--debug= flag does
+nothing. See [[id:org:01a1e68e-1584-74b8-b152-a94c0e6cc79e][Info: SECURITY.md and CLI surface claim behaviour the code does not have]].
+[[file:../C15/index.org][C15]] may change the remote-template model, so the
+=SECURITY.md= rewrite should follow its decision.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e692-143c-70db-935c-e1c40ff3f39c
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Allowed paths: =SECURITY.md=, =docs/=, =README.md=, =src/Iidy/Cli*=,
+=src/Iidy/StackArgs*=, =app/Main.hs=, =test/=, =notes/C22/=.
+
+Gate: =SECURITY.md= and =docs/SECURITY.md= describe the actual model (after
+C15's decision); =CommandsBefore= and =--debug= are each either implemented
+to match Rust, with tests, or removed (or rejected with a clear message),
+with the choice recorded here; build warning-free, tests pass; committed
+with C22.
+
+* TODO Decide and fix CommandsBefore and --debug
+:PROPERTIES:
+:ID: org:01a1e692-143c-70db-935c-e1c326f89cfd
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+* TODO Correct SECURITY.md after C15
+:PROPERTIES:
+:ID: org:01a1e692-143c-70db-935c-e1c2c8c805c2
+:ADDED: [2026-11-16 Mon 15:54]
+:END:

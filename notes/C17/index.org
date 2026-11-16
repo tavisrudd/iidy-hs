@@ -1,0 +1,57 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C17
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e691-47e6-76d6-96d5-e48c5d51b394
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+#+title: C17 — Build stack-args AWS access after its values are computed
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e692-140f-7737-921c-2be60c1b04fe
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+A stack-args file can compute its =Profile=, =Region= and =AssumeRoleARN=
+from imports. The deploy commands build a first AWS environment from those
+fields before preprocessing the file (=src/Iidy/Cfn/Runner.hs= around lines
+64-70, =src/Iidy/StackArgsLoader.hs= around lines 197-207), so imports in
+the stack-args file run under the ambient credentials and region rather
+than the ones the file finally names, silently. See
+[[id:org:01a1e68e-1585-707c-91d5-94cc843d0bd6][Medium: stack-args imports can run under different credentials]].
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e692-140f-7737-921c-2be51e05621d
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Allowed paths: =src/Iidy/Cfn/Runner.hs=, =src/Iidy/StackArgsLoader.hs=,
+=src/Iidy/Aws/=, =test/=, =test-fixtures/=, =notes/C17/=.
+
+Gate: behaviour compared with Rust and recorded here; imports in a
+stack-args file either run under the credentials the file names or the tool
+refuses with a clear error when those fields are computed (choose the one
+that matches Rust or is safer, and record why); mock-AWS tests cover both a
+literal and a computed =Profile=/=Region=; build warning-free, tests pass;
+committed with C17.
+
+* TODO Compare with Rust and choose the fix
+:PROPERTIES:
+:ID: org:01a1e692-140f-7737-921c-2be43177554e
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+* TODO Implement with tests
+:PROPERTIES:
+:ID: org:01a1e692-140f-7737-921c-2be3a212fe08
+:ADDED: [2026-11-16 Mon 15:54]
+:END:

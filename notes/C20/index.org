@@ -1,0 +1,57 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C20
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e691-48ec-7029-b574-3a72e11429bd
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+#+title: C20 — Add resource limits for alias expansion, import depth and response size
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e692-142a-7666-9ade-4c561b581ebf
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Nothing bounds the work an input can cause. The C4 review showed a 380-byte
+YAML file using nested aliases expanding to 19.7 MB of output at 253 MB of
+memory (=src/Iidy/Yaml/Parser.hs= around lines 73-74), and an import chain
+running past 4,000 hops until killed (=src/Iidy/Yaml/Imports/Manifest.hs=
+around lines 46-58). Handlebars helper output (=Handlebars/Helpers.hs=
+around line 174) is unbounded, and the HTTP loader's limits
+(=Loaders/Http.hs= around line 108) are the only existing cap. See
+[[id:org:01a1e68e-1585-707c-91d5-94c92f017ed0][Low: no resource limits]].
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e692-142a-7666-9ade-4c55ce0fc05b
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Allowed paths: =src/Iidy/Yaml/=, =src/Iidy/Handlebars/=, =test/=,
+=test-fixtures/=, =notes/C20/=.
+
+Gate: limits on alias expansion, import depth (and cycles), and helper
+output size, each failing with a clear error; limits large enough that all
+existing fixtures and examples pass; tests with an alias bomb and a long
+import chain fail fast; what Rust does recorded for comparison; build
+warning-free, tests pass; committed with C20.
+
+* TODO Choose limits and compare with Rust
+:PROPERTIES:
+:ID: org:01a1e692-142a-7666-9ade-4c5468fd30cb
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+* TODO Implement limits with tests
+:PROPERTIES:
+:ID: org:01a1e692-142a-7666-9ade-4c531d19c021
+:ADDED: [2026-11-16 Mon 15:54]
+:END:

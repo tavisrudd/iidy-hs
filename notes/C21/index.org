@@ -1,0 +1,89 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C21
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e691-4919-706c-8f16-a0f9e561ad1c
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+#+title: C21 — Low-severity hardening from the C4 security review
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e692-1434-76c4-8beb-6bbbb44f705d
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+The C4 review found five low-severity issues, each small, grouped here:
+
+- =iidy demo= works in the fixed directory =/tmp/iidy-demo= and deletes it
+  recursively (=src/Iidy/Demo.hs= around lines 100-106); another local user
+  can pre-create it. [[id:org:01a1e68e-1585-707c-91d5-94c826e5c3c5][finding]]
+- Write operations query =pool.ntp.org= over unauthenticated SNTP
+  (=src/Iidy/Aws/Timing.hs= around lines 83-118), even with
+  =--no-remote-imports=, with no sanity bound against the system clock.
+  [[id:org:01a1e68e-1585-707c-91d5-94c76dd1eb22][finding]]
+- =convert-stack-to-iidy= overwrites local files and existing SSM
+  parameters without confirmation
+  (=src/Iidy/Cfn/Operations/ConvertStack.hs= around lines 574-631 and
+  677-703). [[id:org:01a1e68e-1585-707c-91d5-94c6e0b7579f][finding]]
+- The displayed credential source can disagree with the credentials in use
+  when =--profile= and credential environment variables are both set
+  (=src/Iidy/Aws/Config.hs= around lines 128-164 versus 44-71).
+  [[id:org:01a1e68e-1584-74b8-b152-a94e929ee31f][finding]]
+- Plaintext =http:= imports are allowed and redirects are followed
+  silently; import manifest digests are computed but never shown or checked
+  (=Imports/Types.hs= around lines 75-76, =Loaders/Http.hs= around lines 56
+  and 104-114). [[id:org:01a1e68e-1584-74b8-b152-a94d23b74a2f][finding]]
+
+Each item should be checked against Rust before changing behaviour.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e692-1434-76c4-8beb-6bba4dd8a22b
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Allowed paths: the files named above, =test/=, =test-fixtures/=,
+=notes/C21/=.
+
+Gate: each item is fixed with a test, or explicitly declined with a reason
+recorded under its task (for example where Rust parity matters more); build
+warning-free, tests pass; committed with C21.
+
+* TODO Demo uses a private temporary directory
+:PROPERTIES:
+:ID: org:01a1e692-1434-76c4-8beb-6bb9a8e5ee56
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+* TODO Bound or make optional the NTP time check
+:PROPERTIES:
+:ID: org:01a1e692-1434-76c4-8beb-6bb8263ba367
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+* TODO convert-stack-to-iidy asks before overwriting
+:PROPERTIES:
+:ID: org:01a1e692-1434-76c4-8beb-6bb71823cc91
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+* TODO Credential-source display matches the credentials in use
+:PROPERTIES:
+:ID: org:01a1e692-1434-76c4-8beb-6bb68ad230a8
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+* TODO Decide on plaintext http imports, redirects and digests
+:PROPERTIES:
+:ID: org:01a1e692-1434-76c4-8beb-6bb5b5fd4e3b
+:ADDED: [2026-11-16 Mon 15:54]
+:END:

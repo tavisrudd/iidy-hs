@@ -1,0 +1,56 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C14
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: A
+:MODE:     CONTRACT
+:ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e691-4741-74b6-b913-396dceff2480
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+#+title: C14 — Fix fail-open import trust check for short-form s3:, ssm: and cfn: parents
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e692-13f4-75e0-886b-b82d53748459
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Templates loaded from remote locations are not allowed to use the local-only
+import types (=file:=, =env:=, =git:=, =filehash:=, =filehash-base64:=).
+The check is =isRemoteBase= in =src/Iidy/Yaml/Imports/Types.hs= (around
+lines 81 and 122), which treats a parent as remote only when its location
+starts with =s3://=, =http://= or =https://=. A document loaded through the
+short form =s3:bucket/key= (=src/Iidy/Yaml/Imports/Loaders/S3.hs= around
+lines 38, 66 and 127 keep that spelling as the base), or through =ssm:= or
+=cfn:=, therefore counts as local, and a remote template can reach local
+files, environment variables and git data by importing one. Found and
+confirmed by the C4 review: [[id:org:01a1e68e-1585-707c-91d5-94cf1de05539][High: import trust gate fails open]].
+The redesign of what remote templates may do at all is
+[[file:../C15/index.org][C15]]; this card is the narrow fix.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e692-13f4-75e0-886b-b82c3a4d42aa
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Allowed paths: =src/Iidy/Yaml/Imports/=, =test/=, =test-fixtures/=,
+=notes/C14/=.
+
+Gate: the gate fails closed: a parent is local only when it is positively a
+local file location, and every other base (including =s3:=, =ssm:=,
+=ssm-path:=, =cfn:=, =http(s):=) is treated as untrusted; regression tests
+cover each parent spelling importing each local-only type; existing
+import tests still pass; build warning-free; committed with C14.
+
+* TODO Make the trust check fail closed with regression tests
+:PROPERTIES:
+:ID: org:01a1e692-13f4-75e0-886b-b82b9df8dd11
+:ADDED: [2026-11-16 Mon 15:54]
+:END:

@@ -1,0 +1,48 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C19
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e691-48b6-7547-9669-e53b8867a05a
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+#+title: C19 — Redact AWS session tokens from error messages
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e692-1422-7188-ba5f-c08a237a728e
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Several AWS loaders turn transport errors into messages with =show=, which
+includes the request headers, among them =X-Amz-Security-Token= (the
+session token for temporary credentials): =src/Iidy/Yaml/Imports/Loaders/Ssm.hs=
+around lines 60 and 93, and the same pattern in the S3, Cfn, Sts and
+TemplateApproval code. The C4 review reproduced it with fake credentials.
+See [[id:org:01a1e68e-1585-707c-91d5-94cadad6bb43][Low: AWS session token is printed in transport-error messages]].
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e692-1422-7188-ba5f-c089ecd0ea9c
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Allowed paths: =src/Iidy/=, =test/=, =notes/C19/=.
+
+Gate: one shared function formats AWS and HTTP errors without request
+headers or credentials, and every loader and AWS call site uses it (grep
+recorded here shows no remaining =show= of those error types); a test with
+fake credentials shows the token absent from the message; build
+warning-free, tests pass; committed with C19.
+
+* TODO Add a redacting error formatter and use it everywhere
+:PROPERTIES:
+:ID: org:01a1e692-1422-7188-ba5f-c088ca32791b
+:ADDED: [2026-11-16 Mon 15:54]
+:END:

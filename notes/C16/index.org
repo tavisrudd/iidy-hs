@@ -1,0 +1,74 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C16
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e691-47af-74a1-9b62-c9f109d409fa
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+#+title: C16 — Enforce the approved template at deploy time
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e692-1406-709f-9058-85614e97b1f5
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Template approval lets a reviewer approve a pending template, which is then
+stored as an approved object in S3; the stack-args setting
+=ApprovedTemplateLocation= names where approved templates live. The C4
+review found that create, update and changeset
+(=src/Iidy/Cfn/RequestBuilder.hs= around lines 69, 110 and 159) send the
+local template regardless of approval, so approval is advisory only. Also,
+when the review step finds no difference it reports "approved" without
+writing the approved object (=src/Iidy/Cfn/TemplateApproval.hs= around line
+226). The Rust port has the same gap. See
+[[id:org:01a1e68e-1585-707c-91d5-94cde3b60847][Medium: ApprovedTemplateLocation is not enforced]].
+
+The user wants this to start from what the original TypeScript iidy
+(=~/src/iidy-js=, read-only) intended and does, and to discuss the design
+before any change. Starting points there: =src/cfn/approval/index.ts=,
+=src/cfn/AbstractCloudFormationStackCommand.ts=, =src/cfn/loadStackArgs.ts=.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e692-1406-709f-9058-8560a4cb0cc4
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Allowed paths: =notes/C16/= for the review; after the user's decision,
+=src/Iidy/Cfn/=, =test/=, =test-fixtures/=, =docs/=.
+
+Gate: a report =notes/C16/report--approval-ts-review.org= describes how the
+TypeScript version handles =ApprovedTemplateLocation= in each command
+(request, review, create, update, changeset), with file:line references,
+and compares it with Rust and Haskell; the user has discussed it and chosen
+the behaviour, recorded on this card; that behaviour is implemented with
+mock-AWS tests; build warning-free, tests pass; committed with C16.
+
+* TODO Review approval handling in the TypeScript version
+:PROPERTIES:
+:ID: org:01a1e692-1406-709f-9058-855f90a913a9
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Read the TypeScript approval flow and write the comparison report. Do not
+change code.
+
+* TODO Discuss with the user and record the decision
+:PROPERTIES:
+:ID: org:01a1e692-1406-709f-9058-855e72711768
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+* TODO Implement the chosen behaviour with tests
+:PROPERTIES:
+:ID: org:01a1e692-1406-709f-9058-855d4dca0734
+:ADDED: [2026-11-16 Mon 15:54]
+:END:

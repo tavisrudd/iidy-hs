@@ -1,0 +1,56 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C18
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e691-481a-7494-b72f-e21162512b87
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+#+title: C18 — Filter control characters from terminal output
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e692-1419-7071-aafc-dcef49993cb5
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Template text, stack names, CloudFormation events and diffs are written to
+the terminal unfiltered (for example
+=src/Iidy/Output/Renderers/Interactive/Sections.hs= around line 728). A
+pending template could contain ANSI or other control sequences that hide or
+rewrite lines in the approval diff a reviewer reads. The missing filter is
+confirmed from code; the effect was not tested on a real terminal. See
+[[id:org:01a1e68e-1585-707c-91d5-94cb5096de43][Medium: untrusted text is written to the terminal without control-character filtering]].
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e692-1419-7071-aafc-dceed0c96873
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Allowed paths: =src/Iidy/Output/=, =test/=, =notes/C18/=.
+
+Gate: every place untrusted text reaches the interactive renderer passes
+through one escaping function that makes control characters visible (the
+tool's own colour codes are unaffected); the approval diff is covered;
+tests show an embedded escape sequence rendered visibly; snapshot tests
+updated only where escaping changes output; build warning-free, tests
+pass; committed with C18.
+
+* TODO Inventory untrusted-text sinks in the renderer
+:PROPERTIES:
+:ID: org:01a1e692-1419-7071-aafc-dcedf66fbd46
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+* TODO Add escaping and tests
+:PROPERTIES:
+:ID: org:01a1e692-1419-7071-aafc-dceca320ebc1
+:ADDED: [2026-11-16 Mon 15:54]
+:END:

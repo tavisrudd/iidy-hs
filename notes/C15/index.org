@@ -1,0 +1,73 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C15
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: A
+:MODE:     CONTRACT
+:ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e691-4779-7682-a0c5-968ca1130db7
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+#+title: C15 — Redesign what remote templates may inherit and import
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e692-13fd-7254-9ca2-0d90b106a888
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+A remote template (from S3 or HTTP) currently inherits all of its parent's
+variables, may import =ssm:=, =ssm-path:= and =cfn:= values (read with the
+user's AWS credentials), may fetch loopback and cloud instance-metadata
+addresses over HTTP, and may build an import URL from any of those values.
+Together these let a remote template read secrets and send them to a server
+it controls. Relevant code: =src/Iidy/Yaml/Engine.hs= (around lines 170,
+199 and 233) and =src/Iidy/Yaml/Imports/Loaders/Dispatch.hs= (around lines
+70-77). The C4 review reproduced the variable leak against a loopback
+server: [[id:org:01a1e68e-1585-707c-91d5-94ce6b11308a][High: remote templates can read secrets and exfiltrate them]].
+The narrow fail-open fix is [[file:../C14/index.org][C14]].
+
+This changes what templates are allowed to do, so users with existing
+remote templates may be affected. The design needs the user's decision
+before code changes.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e692-13fd-7254-9ca2-0d8f21d3ab56
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Allowed paths: =notes/C15/= for the options write-up; after the user's
+decision, =src/Iidy/Yaml/=, =test/=, =test-fixtures/=, =docs/= (security
+model) and =SECURITY.md=.
+
+Gate: an options write-up compares at least: blocking AWS-backed and
+loopback/link-local imports from remote templates; isolating remote
+templates from parent variables (explicit passing only); both; and what the
+TypeScript (=~/src/iidy-js=) and Rust (=~/src/iidy=) versions do; the user
+has chosen; the chosen model is implemented with tests reproducing the
+review's exfiltration scenario and showing it blocked; docs describe the
+model; build warning-free, tests pass; committed with C15.
+
+* TODO Write up the options and compare with the TypeScript and Rust versions
+:PROPERTIES:
+:ID: org:01a1e692-13fd-7254-9ca2-0d8e55c18e5e
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+* TODO Discuss with the user and record the decision
+:PROPERTIES:
+:ID: org:01a1e692-13fd-7254-9ca2-0d8db4d6be1a
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+* TODO Implement the chosen model with tests and docs
+:PROPERTIES:
+:ID: org:01a1e692-13fd-7254-9ca2-0d8c55835f59
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
