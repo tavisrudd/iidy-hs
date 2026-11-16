@@ -24,6 +24,7 @@ getImportTests =
     [ testGroup "AWS imports via mock env" mockAwsTests
     , testGroup "env built only when needed" lazinessTests
     , testGroup "env construction failures" failureTests
+    , testGroup "query and output layout" outputTests
     , testCase "needsAwsEnv classifies every import type" needsAwsEnvTable
     ]
 
@@ -53,6 +54,25 @@ globalOpts remote =
 
 jsonArgs :: Text -> GetImportArgs
 jsonArgs loc = GetImportArgs{giaImport = loc, giaFormat = RenderJson, giaQuery = Nothing}
+
+{- | Run get-import with explicit format and query on a local file; also
+returns captured stderr-free stdout chunks.
+-}
+runFormat :: RenderFormat -> Maybe Text -> Text -> IO RunResult
+runFormat fmt query loc = do
+    out <- newIORef []
+    let emit = \case
+            OdRawOutput t -> atomicModifyIORef' out (\ts -> (ts <> [t], ()))
+            _other -> pure ()
+        args = GetImportArgs{giaImport = loc, giaFormat = fmt, giaQuery = query}
+    rc <- runGetImportWith (pure (error "env not needed")) emit args (globalOpts False)
+    RunResult rc <$> readIORef out <*> pure 0
+
+listFixture :: Text
+listFixture = "test-fixtures/get-import/list.yaml"
+
+docFixture :: Text
+docFixture = "test-fixtures/get-import/doc.yaml"
 
 -- | Run get-import as JSON, counting env builds and collecting raw output.
 runWith :: Bool -> IO Amazonka.Env -> Text -> IO RunResult
@@ -95,7 +115,7 @@ mockAwsTests =
         mock <- newMockAws
         r <- runWith True (pure (mockEnv mock)) "cfn:output:network-stack"
         rrExitCode r @?= 0
-        rrOutput r @?= ["{\"SubnetId\":\"subnet-0def456\",\"VpcId\":\"vpc-0abc123\"}\n"]
+        rrOutput r @?= ["{\n  \"SubnetId\": \"subnet-0def456\",\n  \"VpcId\": \"vpc-0abc123\"\n}\n"]
     ]
 
 ------------------------------------------------------------------------
@@ -155,3 +175,33 @@ needsAwsEnvTable = do
             ]
     filter (needsAwsEnv AllowRemoteImports) allTypes @?= [ImportCfn, ImportSsm, ImportSsmPath, ImportS3]
     filter (needsAwsEnv BlockRemoteImports) allTypes @?= [ImportCfn, ImportSsm, ImportSsmPath]
+
+------------------------------------------------------------------------
+-- --query and exact output text (Rust get_import.rs:45-64)
+------------------------------------------------------------------------
+
+outputTests :: [TestTree]
+outputTests =
+    [ testCase "field query: a gives 1" $
+        runFormat RenderYaml (Just "a") docFixture >>= (@?= RunResult 0 ["1\n"] 0)
+    , testCase "nested query: b.c gives x" $
+        runFormat RenderYaml (Just "b.c") docFixture >>= (@?= RunResult 0 ["x\n"] 0)
+    , testCase "indexing query: l[1] gives y" $
+        runFormat RenderYaml (Just "l[1]") listFixture >>= (@?= RunResult 0 ["y\n"] 0)
+    , testCase "invalid query exits 1 with no stdout" $
+        runFormat RenderYaml (Just "a[") docFixture >>= (@?= RunResult 1 [] 0)
+    , testCase "yaml output ends with exactly one newline" $
+        runFormat RenderYaml Nothing docFixture
+            >>= (@?= RunResult 0 ["a: 1\nb:\n  c: x\n  d: {}\n"] 0)
+    , testCase "json output is pretty-printed like serde_json" $
+        runFormat RenderJson Nothing docFixture
+            >>= ( @?=
+                    RunResult
+                        0
+                        ["{\n  \"a\": 1,\n  \"b\": {\n    \"c\": \"x\",\n    \"d\": {}\n  }\n}\n"]
+                        0
+                )
+    , testCase "json arrays are pretty-printed one element per line" $
+        runFormat RenderJson Nothing listFixture
+            >>= (@?= RunResult 0 ["{\n  \"l\": [\n    \"x\",\n    \"y\"\n  ]\n}\n"] 0)
+    ]

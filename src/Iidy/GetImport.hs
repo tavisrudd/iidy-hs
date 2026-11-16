@@ -15,6 +15,8 @@ module Iidy.GetImport (
 
 import Control.Exception (Handler (..), IOException, catches)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Encode.Pretty qualified as Pretty
+import Data.Bifunctor (first)
 import Data.ByteString.Lazy qualified as BL
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -30,6 +32,7 @@ import Amazonka.Auth.Exception qualified as AuthEx
 import Iidy.Aws.Config (createAwsEnvFromSettings)
 import Iidy.Aws.CredentialSource (AwsSettings)
 import Iidy.Cli (GetImportArgs (..), GlobalOpts (..), RenderFormat (..))
+import Iidy.Errors.JMESPath (formatJMESPathQueryError)
 import Iidy.Output.Types (OutputData (..))
 import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
@@ -40,6 +43,7 @@ import Iidy.Yaml.Imports.Types (
     RemoteImports (..),
     parseImportType,
  )
+import Iidy.Yaml.JMESPath (applyJmesPath)
 import Iidy.Yaml.OValue (fromValue)
 
 ------------------------------------------------------------------------
@@ -77,7 +81,7 @@ runGetImportWith mkEnv emit args gopts = do
             result <- mkFullDispatcher importCfg location baseLocation
             case result of
                 Left (ImportError err) -> reportImportError err
-                Right importData -> emitDoc emit (giaFormat args) importData
+                Right importData -> emitDoc emit gopts args importData
 
 {- | Whether loading an import of this type needs an AWS environment.
 S3 imports are excluded when remote imports are blocked, so the user sees
@@ -121,16 +125,35 @@ reportImportError err = do
     TIO.hPutStrLn stderr ("Import error: " <> err)
     pure 1
 
--- | Emit the loaded document in the requested format.
-emitDoc :: (OutputData -> IO ()) -> RenderFormat -> ImportData -> IO Int
-emitDoc emit format importData = do
-    let doc = idDoc importData
-    -- Exhaustive match, no wildcard
-    case format of
-        RenderJson -> emit (OdRawOutput (lazyBsToText (Aeson.encode doc) <> "\n"))
-        RenderYaml -> emit (OdRawOutput (emitYaml (fromValue doc)))
-        RenderCfnYaml -> emit (OdRawOutput (emitYaml (fromValue doc)))
-    pure 0
+{- | Apply the optional @--query@ to the loaded document, then emit it in the
+requested format (Rust @get_import.rs:45-64@). An invalid query prints the
+error on stderr, writes nothing to stdout and returns 1.
+-}
+emitDoc :: (OutputData -> IO ()) -> GlobalOpts -> GetImportArgs -> ImportData -> IO Int
+emitDoc emit gopts args importData =
+    case maybe (Right doc) (\q -> first (q,) (applyJmesPath q doc)) (giaQuery args) of
+        Left (query, err) -> do
+            formatted <- formatJMESPathQueryError (goColor gopts) query err
+            TIO.hPutStr stderr formatted
+            pure 1
+        Right queried -> do
+            -- Exhaustive match, no wildcard
+            case giaFormat args of
+                RenderJson -> emit (OdRawOutput (formatJsonPretty queried))
+                RenderYaml -> emit (OdRawOutput (yamlWithNewline queried))
+                RenderCfnYaml -> emit (OdRawOutput (yamlWithNewline queried))
+            pure 0
+  where
+    doc = idDoc importData
+
+-- | YAML text ending in exactly one newline (serde_yaml::to_string).
+yamlWithNewline :: Aeson.Value -> Text
+yamlWithNewline v = T.dropWhileEnd (== '\n') (emitYaml (fromValue v)) <> "\n"
+
+-- | Two-space pretty JSON plus a newline (serde_json::to_string_pretty + println!).
+formatJsonPretty :: Aeson.Value -> Text
+formatJsonPretty v =
+    lazyBsToText (Pretty.encodePretty' Pretty.defConfig{Pretty.confIndent = Pretty.Spaces 2} v) <> "\n"
 
 -- | Decode a lazy ByteString (UTF-8 encoded) to strict Text.
 lazyBsToText :: BL.ByteString -> Text
