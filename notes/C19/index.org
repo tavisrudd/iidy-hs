@@ -33,16 +33,109 @@ See [[id:org:01a1e68e-1585-707c-91d5-94cadad6bb43][Low: AWS session token is pri
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-Allowed paths: =src/Iidy/=, =test/=, =notes/C19/=.
+Allowed paths: a new =src/Iidy/Aws/Errors.hs=, and, only to replace a
+=show= of an AWS or HTTP error with the shared formatter (or to delete a
+duplicate formatter): =src/Iidy/Errors.hs=, =src/Iidy/GetImport.hs=,
+=src/Iidy/Aws/Sts.hs=, =src/Iidy/Cfn/GlobalConfig.hs=,
+=src/Iidy/Cfn/Operations/Changeset.hs=,
+=src/Iidy/Cfn/Operations/ConvertStack.hs=,
+=src/Iidy/Cfn/Operations/LintTemplate.hs=,
+=src/Iidy/Cfn/Operations/TemplateApproval.hs=,
+=src/Iidy/Params/Client.hs=, =src/Iidy/Params/Review.hs=,
+=src/Iidy/Yaml/Imports/Loaders/Ssm.hs=, =S3.hs=, =Cfn.hs= and =Http.hs=
+(same directory); =iidy-hs.cabal= (the new modules); =test/Test/AwsErrorTest.hs=
+(new), =test/Test/MockAws.hs= (a failing-connection mode and a session token
+in the fake credentials), =test/Test/ChangesetTest.hs= (only if
+=formatAmazonkaError= moves), =test/Main.hs= (registering the new module),
+=notes/C19/=.
 
-Gate: one shared function formats AWS and HTTP errors without request
-headers or credentials, and every loader and AWS call site uses it (grep
-recorded here shows no remaining =show= of those error types); a test with
-fake credentials shows the token absent from the message; build
-warning-free, tests pass; committed with C19.
+Out of scope: the content of non-error output; credential handling in
+=Iidy.Aws.Config=; the stack-args bootstrap env that swallows its failure
+([[file:../C17/index.org][C17]]); terminal escaping of error text
+([[file:../C18/index.org][C18]]); the HTTP loader's size limits and any
+other limit ([[file:../C20/index.org][C20]]: it also edits
+=Loaders/Http.hs=, so land one of the two first and rebase the other);
+messages that do not come from an AWS or HTTP exception type.
 
-* TODO Add a redacting error formatter and use it everywhere
+Done when:
+- [ ] =Iidy.Aws.Errors= holds one pure function for each of
+  =Amazonka.Error= and =HttpException= (for example
+  =formatAwsError :: Amazonka.Error -> Text=) that never prints request
+  headers, the query string, the signed request or credentials. The three
+  existing near-duplicates (=Iidy.Errors.handleAwsError=,
+  =Iidy.Cfn.GlobalConfig.formatAwsError=,
+  =Iidy.Cfn.Operations.Changeset.formatAmazonkaError=) are replaced by it,
+  not left beside it.
+- [ ] Settled by this card (proposed 2026-11-16 for Tavis to confirm before
+  the card is assigned; Opus reviews it): a =ServiceError= prints
+  =<code>: <message>= exactly as =formatAmazonkaError= does today (a missing
+  message prints the code alone); a =TransportError= prints the host and the
+  inner exception's own description, never the request; any other
+  =Amazonka.Error= constructor prints a short fixed description with no
+  request or response headers. Call sites that now print =show= of a
+  =ServiceError= therefore get a shorter message, and each such change is
+  listed in the first task note.
+- [ ] Every site in the inventory uses it. The recorded grep
+  (=rg -n 'show (e|ex|err)\b' src app= and a search for =displayException=)
+  is attached with each remaining hit marked as not an AWS or HTTP error
+  and why. Starting list, checked 2026-11-16: =Loaders/Ssm.hs= lines 60 and
+  93, =Loaders/S3.hs= line 71, =Loaders/Cfn.hs= lines 159, 243 and 371,
+  =Loaders/Http.hs= line 91, =Params/Client.hs= lines 393, 414, 428, 459, 498
+  and 550, =Params/Review.hs= lines 93, 109 and 115,
+  =Operations/TemplateApproval.hs= lines 345, 357 and 368, =ConvertStack.hs=
+  lines 510, 521 and 698, =LintTemplate.hs= line 69, =Aws/Sts.hs= line 34,
+  =GetImport.hs= line 116, =Changeset.hs= line 296, =GlobalConfig.hs= line
+  132 and the fall-through in =Errors.hs= lines 57-58 and 39-41. The C4 review
+  names only part of this list.
+- [ ] Test with fake credentials: =Test.MockAws= gains a session token in
+  its fake keys and a mode whose connection fails, so a real =TransportError=
+  is produced by =Amazonka.send=. The test asserts the formatted message
+  (and the =Left= from an SSM import and an S3 import run against that env)
+  contains neither the token string, the access key, nor the signature, and
+  contains the host. A pure test covers the constructors (=ServiceError=,
+  =TransportError= with a connection failure, a response-timeout and a
+  status-code =HttpException=, =SerializeError=). Recorded failing before
+  the change.
+- [ ] A presigned-URL style query (=?X-Amz-Signature=...=) in an HTTP import
+  location does not appear in the message for an =HttpException=.
+- [ ] Existing =formatAmazonkaError= tests in =ChangesetTest= still pass
+  (moved or retargeted, expected values unchanged).
+- [ ] Build warning-free, full suite green, commits name C19.
+
+Stop and record if: a call site needs the full exception text to work
+(a retry decision that matches on the text, or a documented debug flag;
+=goDebug= and =goLogFullError= are not read anywhere today); Tavis has not
+confirmed the message shapes above; the change needs a file outside the
+allowed list; or the transport error cannot be reproduced through the mock
+env (describe what was tried).
+
+* TODO Inventory every AWS and HTTP error site
 :PROPERTIES:
 :ID: org:01a1e692-1422-7188-ba5f-c088ca32791b
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
+
+Run the grep in the gate, reconcile it with the starting list, and record
+each site (file, line, error type, what the message shows today) in the
+card. Note the sites whose message becomes shorter. Check that no Amazonka
+logger is configured (none was found on 2026-11-16, so debug flags cannot
+print headers).
+
+* TODO Reproduce the leak with the mock env, as a failing test
+:PROPERTIES:
+:ID: org:01a1e6c6-5247-7342-bc95-a68b25e02d33
+:ADDED: [2026-11-16 Mon 16:51]
+:END:
+
+Extend =Test.MockAws= (fake session token; a connection that fails) and
+write =test/Test/AwsErrorTest.hs= with the token assertions against the
+current behaviour of the SSM and S3 loaders. Record the failing run.
+
+* TODO Add the formatter and route every site through it
+:PROPERTIES:
+:ID: org:01a1e6c6-5247-7342-bc95-a68ac6e968ec
+:ADDED: [2026-11-16 Mon 16:51]
+:END:
+
+Create =Iidy.Aws.Errors=, delete the three duplicates, replace each
+inventory site, and make the failing tests pass. Attach the final grep.

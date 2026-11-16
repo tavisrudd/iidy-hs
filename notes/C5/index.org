@@ -39,20 +39,62 @@ requirements docs, and many historical notes under =notes/=.
 :ADDED: [2026-11-16 Mon 14:23]
 :END:
 
-Allowed paths: =docs/=, the top-level =README.md=, =WORKPLAN.md=,
-=CLAUDE.md=, =AGENTS.md=, and =notes/C5/=. Historical notes under =notes/=
-(handoffs, reviews) are left as they are; their links to old =.md= paths go
-stale by design, since [[file:../C2/index.org][C2]] archives them.
+Allowed paths: =docs/= (every file, renamed =.md= to =.org=), the links
+into =docs/= in =README.md= and =WORKPLAN.md=, =notes/C5/=. Nothing else:
+no source, test, build or other card file references =docs/= (checked
+2026-11-16 with =grep -rIl 'docs/'= outside =notes/=).
 
-Gate: every =.md= file under =docs/= is replaced by an =.org= file of the
-same name (=git mv= first, so history follows), with =#+title:=, Org
-headings, Org tables, =#+begin_src= blocks with languages, and Org-style
-links (=[[file:...][label]]= for files, =[[*Heading][label]]= or =id:= links
-for headings, =[[https://...][label]]= for URLs); no Markdown syntax is left
-(check with =rg -n '\]\(|^#{1,6} |^```' docs/=); every internal link resolves
-to an existing file or heading; links into =docs/= from the allowed
-top-level files point at the new =.org= paths; GitHub renders the converted
-files. Work committed with C5 in the messages.
+Out of scope: any change to what the docs say (wording, corrections,
+restructuring, the security-model rewrite in [[file:../C22/index.org][C22]],
+the import-trust docs in [[file:../C15/index.org][C15]]); historical notes
+under =notes/= and other cards, whose links to old =.md= paths go stale by
+design ([[file:../C2/index.org][C2]] archives them); the top-level
+=SECURITY.md=, =CONTRIBUTING.md= and =DIVERGENCES.md=, which stay Markdown
+for GitHub's community pages; =CLAUDE.md=, =AGENTS.md= and the card tooling.
+
+Collision warning: these cards list =docs/= as allowed paths:
+[[file:../C15/index.org][C15]],
+[[file:../C16/index.org][C16]] and
+[[file:../C22/index.org][C22]]. Land this
+card in one short pass (one commit per directory is fine) and before any of
+them edits =docs/=; if one has docs commits unmerged, stop and record.
+
+Done when:
+- [ ] Each of the =.md= files under =docs/= (top level, =dev/=, =dev/adr/=,
+  =requirements/=) is now an =.org= file of the same base name, moved with
+  =git mv= in its own commit before the content rewrite, so
+  =git log --follow= works; =git ls-files docs | grep '\.md$'= prints nothing.
+- [ ] Each file has =#+title:=, Org headings, Org tables, =#+begin_src=
+  blocks with a language (or =#+begin_example= when the Markdown block had
+  none), and Org links: =[[file:other.org][label]]= for files,
+  =[[file:other.org::*Heading][label]]= or =[[*Heading][label]]= for
+  headings, =[[https://...][label]]= for URLs.
+- [ ] The Markdown-residue grep prints nothing:
+  =rg -n '\]\(|^#{1,6} |^```|^\|[-: ]+\|$' docs/= (the last alternative
+  catches Markdown table separator rows; an Org rule =|---+---|= may remain).
+- [ ] The link check below reports zero broken links and its output is
+  recorded in the last task: every =file:= target exists, and every
+  =::*Heading= or =[[*Heading]]= target matches a heading in its file.
+- [ ] A text-preservation check is recorded: for each file,
+  =pandoc -f org -t plain= of the new file and =pandoc -f gfm -t plain= of
+  the old (=git show HEAD~N:path=) differ only in link and table
+  rendering; list any file where more differs and say why.
+- [ ] =README.md= and =WORKPLAN.md= links into =docs/= point at the =.org=
+  paths (=rg -n 'docs/[^ )]*\.md' README.md WORKPLAN.md= prints nothing).
+- [ ] =c peek 'file:docs/import-types.org::*<a real heading>' --from
+  README.md --print= resolves, proving a card can link into a heading.
+- [ ] No =.hs=, cabal, nix or test file changed; the suite is not rerun
+  (nothing it reads changed; record the =git diff --stat= file list).
+- [ ] Commits name C5.
+
+Stop and record if: =pandoc -f gfm -t org= loses content (a table, a code
+block, a nested list) in a way a quick manual fix does not repair for
+more than a handful of files; the work needs a change outside the allowed
+paths; a doc has a link or an anchor that cannot be expressed as an Org
+link (record the file and line); =c peek= cannot resolve the
+=file:...::*Heading= form (Tavis decides whether to stamp =id:= links
+instead, which edits every heading); a card or branch that edits =docs/= is
+in flight.
 
 * TODO Decide conversion method and conventions
 :PROPERTIES:
@@ -60,12 +102,31 @@ files. Work committed with C5 in the messages.
 :ADDED: [2026-11-16 Mon 14:23]
 :END:
 
-Try =pandoc -f gfm -t org= on a sample of each kind of doc (user doc,
-requirements doc with pseudocode, ADR) and compare with a hand conversion.
-Record here the chosen method and the conventions: heading link style
-(=*Heading= versus =id:=; =id:= needs =c stamp= on each file), table
-handling, code block languages, and whether =docs/README.md= stays Markdown
-for GitHub's directory view.
+Pandoc 3.7 is on the host (=pandoc -f gfm -t org --wrap=none=). Try it on
+one user doc (=docs/getting-started.md=), one requirements doc with
+pseudocode (=docs/requirements/03-import-system.md=) and one ADR, and read
+the output for lost content. Default conventions, unless the trial shows a
+problem; record the final choice here:
+- heading links use =[[file:x.org::*Heading][label]]= (same file:
+  =[[*Heading][label]]=); this is the form =c peek= resolves and needs no
+  =c stamp= or property drawers in the docs;
+- tables become Org tables; code blocks keep their language;
+- =docs/README.md= becomes =docs/README.org= (GitHub renders it in the
+  directory view); say so if the trial shows otherwise.
+
+* TODO Write the link-check and residue scripts
+:PROPERTIES:
+:ID: org:01a1e6c0-c86b-752e-ba09-8d7133f7500a
+:ADDED: [2026-11-16 Mon 16:45]
+:END:
+
+Before converting, write a small checker in the scratchpad (not committed)
+that, for every =.org= file under =docs/=, extracts =[[file:...]]= and
+=[[*...]]= links, tests that the file exists relative to the linking file,
+and that any =::*Heading= or =*Heading= target equals a heading line in the
+target file (Org matches the heading text, ignoring TODO keyword and tags).
+Run it on a hand-converted copy of one doc to prove it detects a broken
+link, then use it for the gate. Record its command and output here.
 
 * TODO Convert docs/ and fix internal links
 :PROPERTIES:
@@ -73,8 +134,11 @@ for GitHub's directory view.
 :ADDED: [2026-11-16 Mon 14:23]
 :END:
 
-Convert each file with =git mv= then rewrite, a directory at a time. Fix
-cross-links between docs to the new paths and Org link syntax.
+Per directory (top level, =dev/=, =dev/adr/=, =requirements/=): commit the
+=git mv= renames alone, then commit the converted content. Rewrite links
+between docs to the new =.org= paths and Org syntax as you go. Convert
+mechanically; any wording problem you notice goes in a note on this card
+for [[file:../C22/index.org][C22]] or a new card, not into the doc.
 
 * TODO Update inbound links and verify
 :PROPERTIES:
@@ -82,6 +146,7 @@ cross-links between docs to the new paths and Org link syntax.
 :ADDED: [2026-11-16 Mon 14:23]
 :END:
 
-Update links to =docs/= in =README.md=, =WORKPLAN.md=, =CLAUDE.md= and
-=AGENTS.md=. Run the Markdown-residue grep and a link check over =docs/=,
-and record the results here.
+Update the =docs/= links in =README.md= (lines near 242 and 274-282) and
+=WORKPLAN.md= (prose paths near lines 45, 96, 104, 178-184). Run the
+Markdown-residue grep, the link check, the pandoc text-preservation check
+and the =c peek= probe, record each result here, and close.

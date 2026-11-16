@@ -22,10 +22,27 @@
 
 A stack-args file can compute its =Profile=, =Region= and =AssumeRoleARN=
 from imports. The deploy commands build a first AWS environment from those
-fields before preprocessing the file (=src/Iidy/Cfn/Runner.hs= around lines
-64-70, =src/Iidy/StackArgsLoader.hs= around lines 197-207), so imports in
-the stack-args file run under the ambient credentials and region rather
-than the ones the file finally names, silently. See
+fields before preprocessing the file (=runCfnWithArgs= in
+=src/Iidy/Cfn/Runner.hs= lines 64-70: =extractRawAwsFromFile=,
+=mergeAwsSettings=, =createAwsEnvFromSettings=, every exception swallowed;
+the raw field
+reading is =resolveRawField= in =src/Iidy/Cfn/StackArgsLoader.hs= lines
+199-208), so imports in the stack-args file run under the ambient
+credentials and region rather than the ones the file finally names,
+silently. The final environment is built later from the preprocessed values
+(=Runner.hs= line 77, =loadStackArgs= lines 143-151 of the same loader).
+The review quoted the loader as =src/Iidy/StackArgsLoader.hs=; the file is
+=src/Iidy/Cfn/StackArgsLoader.hs=.
+
+Rust does not have this feature: =load_stack_args=
+(=~/src/iidy/src/cfn/stack_args.rs:181-262=) preprocesses with
+=preprocess_yaml= first, whose =ProductionImportLoader::new()=
+(=src/yaml/engine.rs:578=) has no AWS config, so an =ssm:=, =cfn:= or =s3:=
+import in a stack-args file fails there with "AWS configuration required"
+(=src/yaml/imports/loaders/mod.rs:72-93=); it reads
+=Profile=, =Region= and =AssumeRoleARN= from the preprocessed value only.
+Imports under a computed profile are therefore an iidy-hs extension, and
+"matches Rust" cannot be the tie-breaker. See
 [[id:org:01a1e68e-1585-707c-91d5-94cc843d0bd6][Medium: stack-args imports can run under different credentials]].
 
 * Scope and gate
@@ -34,15 +51,70 @@ than the ones the file finally names, silently. See
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-Allowed paths: =src/Iidy/Cfn/Runner.hs=, =src/Iidy/StackArgsLoader.hs=,
-=src/Iidy/Aws/=, =test/=, =test-fixtures/=, =notes/C17/=.
+Allowed paths: =src/Iidy/Cfn/Runner.hs=,
+=src/Iidy/Cfn/StackArgsLoader.hs=, =iidy-hs.cabal= (only if the change adds
+a module), =test/Test/StackArgsLoaderTest.hs= (and a new test module for the
+bootstrap rule if that file would pass about 500 lines), =test/Test/MockAws.hs=
+(only to record the settings a mock env was built for), =test/Main.hs= (only
+to register a new module), =test-fixtures/= (stack-args fixtures and mock AWS
+responses), =DIVERGENCES.md= (one entry), =notes/C17/=.
 
-Gate: behaviour compared with Rust and recorded here; imports in a
-stack-args file either run under the credentials the file names or the tool
-refuses with a clear error when those fields are computed (choose the one
-that matches Rust or is safer, and record why); mock-AWS tests cover both a
-literal and a computed =Profile=/=Region=; build warning-free, tests pass;
-committed with C17.
+Overlap: [[file:../C12/index.org][C12]] splits and rewrites the same loader
+module (it names the path as =src/Iidy/StackArgsLoader.hs=, which does not
+exist; the file is =src/Iidy/Cfn/StackArgsLoader.hs=). Do not run both in
+flight. This card is small and changes behaviour, so it goes first and C12
+rebases onto it; if C12 has unmerged commits, stop and record.
+
+Out of scope: how credentials are created (=Iidy.Aws.Config=), the
+credential-source display, and the merge rules for =Profile=, =Region= and
+=AssumeRoleARN= (=mergeAwsSettings= and its sentinels); supporting two-pass
+loading or a different env per import; the import trust gate
+([[file:../C14/index.org][C14]], [[file:../C15/index.org][C15]]); any other
+command's AWS handling (=get-import= builds its own env from the CLI
+settings, [[file:../C7/index.org][C7]]).
+
+Done when:
+- [ ] The Rust comparison in Context is re-checked and recorded in the first
+  task note with the decision and its reason. Default decision, unless the
+  check contradicts it: keep AWS imports in stack-args (an extension Rust
+  lacks) and fail closed when they could have run under the wrong account.
+- [ ] Rule implemented: when the file performed an AWS import (the import
+  manifest from =preprocessYaml11= shows an =ssm:=, =ssm-path:=, =cfn:= or
+  =s3:= import; reuse =needsAwsEnv= from =Iidy.GetImport= or move it to a
+  shared home, no second classifier) and the merged settings built after
+  preprocessing differ from the ones the import env was built for, the tool
+  stops before any AWS deployment call. The error names the field, shows
+  both values, and says to set the field literally or pass it on the command
+  line.
+- [ ] The raw reading no longer treats an uninterpolated templated string
+  (=Region: "{{r}}"=) or a tag as a literal: such a field counts as not
+  known before preprocessing.
+- [ ] A bootstrap env failure is no longer swallowed when the file has AWS
+  imports: the cause reaches the user. With no AWS import in the file,
+  behaviour is unchanged.
+- [ ] The env factory is a parameter (for example
+  =AwsSettings -> IO Amazonka.Env=) of the code that does the bootstrap, so
+  tests use a mock env and see which settings it was asked for; the
+  production call passes =createAwsEnvFromSettings=.
+- [ ] Mock-AWS tests, each recorded failing before the change where it pins
+  new behaviour: literal =Profile= and =Region= with an =ssm:= import
+  succeed and the factory saw those literals; computed =Profile= (through
+  an import or a =$defs= reference) with an =ssm:= import is refused;
+  computed =Region= with no AWS import loads as before; a CLI =--profile=
+  equal to the final value passes; a templated =Region: "{{r}}"= with an
+  AWS import is refused; a bootstrap failure with an AWS import reports its
+  cause.
+- [ ] =DIVERGENCES.md= has one entry: stack-args AWS imports work here and
+  not in Rust, and are refused when a credential field is computed.
+- [ ] Build warning-free, full suite green, commits name C17.
+
+Stop and record if: the rule cannot be decided from the import manifest and
+the merged settings (a deeper redesign, such as a second preprocessing pass
+with the final env, would be needed: describe it and ask Tavis); the fix
+needs a change outside the allowed paths; it would refuse a stack-args file
+that works today without computed credential fields; or the choice between
+keeping AWS imports in stack-args and dropping them to match Rust comes up
+(that is Tavis's call, with keeping them as the recommendation).
 
 * TODO Compare with Rust and choose the fix
 :PROPERTIES:
@@ -50,8 +122,30 @@ committed with C17.
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
+Re-read =Runner.hs= lines 55-77, =extractRawAwsFromAst= and
+=resolveRawField=, and the Rust references in Context. Reproduce the
+review's scenario first: a stack-args file with a computed =Profile= and an
+=ssm:= import, run through the mock env; record that the import ran under
+the bootstrap settings (the ambient ones) while the final merged settings
+differ. Record the decision (default in the gate) here.
+
+* TODO Make the bootstrap env factory a parameter
+:PROPERTIES:
+:ID: org:01a1e6c4-1bf1-77db-901d-6ab66436d08b
+:ADDED: [2026-11-16 Mon 16:49]
+:END:
+
+Move the bootstrap block of =runCfnWithArgs= into a function in
+=Iidy.Cfn.StackArgsLoader= (or a small new module) taking the env factory.
+No behaviour change in this step; the existing suite stays green. Add the
+mock-side recording of requested settings.
+
 * TODO Implement with tests
 :PROPERTIES:
 :ID: org:01a1e692-140f-7737-921c-2be3a212fe08
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
+
+First commit the failing tests for the computed-field, templated-string and
+swallowed-failure cases (recorded failing), then the rule, the raw-reading
+fix and the error surfacing, then the =DIVERGENCES.md= entry.

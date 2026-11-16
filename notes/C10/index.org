@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C10
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C2 handoff triage (notes/C2/report--handoff-triage.org), accepted by the user 2026-11-16
 :CREATED_BY: opus-5.5-medium
@@ -12,6 +12,10 @@
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:42]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Card state STARTED → DONE [2026-11-16 Mon 16:55]
+  Note: Landed (replayed 2c28cc4, 54c8cf9 as 760fb6c, 5cb1512): constructCommandMetadata takes the service role; NormalizedAwsOpts removed; Sonnet review: land, 0 defects
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -63,29 +67,34 @@ commands emit command metadata; changing the metadata content or its
 rendering; other CLI option types.
 
 Done when:
-- [ ] =constructCommandMetadata= takes only the data it uses (the service
+- [X] =constructCommandMetadata= takes only the data it uses (the service
   role as =Maybe Text=) instead of =StackArgs=; all three callers updated.
-- [ ] =app/Main.hs= no longer passes =emptyStackArgs= and no longer
+- [X] =app/Main.hs= no longer passes =emptyStackArgs= and no longer
   imports names it stops using (no new warnings).
-- [ ] =naoFixtureSet= is removed. If =NormalizedAwsOpts= has no users at
+- [X] =naoFixtureSet= is removed. If =NormalizedAwsOpts= has no users at
   all (as found in Context), the whole record and its export are removed
   and the card says so; otherwise only the field.
-- [ ] Command metadata output is unchanged: the exec-changeset and
+- [X] Command metadata output is unchanged: the exec-changeset and
   delete-stack metadata still shows no IAM service role, and the stack
   operations still show the stack-args one (by reading the diff, since no
   test covers it; add a test only if it fits in the allowed paths without a
   new mock).
-- [ ] Build warning-free, full suite green, commits name C10.
+- [X] Build warning-free, full suite green, commits name C10.
 
 Stop and record if: removing =NormalizedAwsOpts= or the field breaks a
 test or code outside the allowed paths; narrowing the signature would
 change the metadata of any command (question for Tavis); the change grows
 beyond these two call-site and record edits.
 
-* TODO Narrow constructCommandMetadata's input and drop the dummy StackArgs
+* DONE Narrow constructCommandMetadata's input and drop the dummy StackArgs
 :PROPERTIES:
 :ID: org:01a1e64b-91f1-739a-802d-47eeb2bf8fb1
 :ADDED: [2026-11-16 Mon 14:37]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:53] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a9aa25c2442c6afdc
 :END:
 
 Replace the =StackArgs= parameter with the service role =Maybe Text=. Update
@@ -93,21 +102,73 @@ Replace the =StackArgs= parameter with the service role =Maybe Text=. Update
 sites to pass =Nothing=. Remove the =emptyStackArgs= and, if unused, the
 =StackArgs (..)= names from the =Main.hs= import on line 37.
 
-* TODO Remove naoFixtureSet
+Search for existing owners: =constructCommandMetadata= is defined once
+(=CommandMetadata.hs=) and called from =Runner.hs= and =Main.hs= (two
+sites); no other code builds the service-role field. Done in commit
+2c28cc4: the parameter is now =Maybe Text=. Runner passes
+=saServiceRoleArn sa'=; exec-changeset and delete-stack pass =Nothing=
+(what =emptyStackArgs= gave). =StackArgs (..)= stays imported in Main
+(=saStackName= is used); only =emptyStackArgs= was dropped from that import.
+
+* DONE Remove naoFixtureSet
 :PROPERTIES:
 :ID: org:01a1e64b-91f1-739a-802d-47ed4021dfd6
 :ADDED: [2026-11-16 Mon 14:37]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:53] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a9aa25c2442c6afdc
 :END:
 
 Delete the field, or the whole unused =NormalizedAwsOpts= record and its
 export if nothing references it (re-run the search first).
 
-* TODO Run the full gate and review the metadata diff
+Re-searched src, app, test: nothing references =NormalizedAwsOpts= or any
+=nao*= field. Whole record, its export and the then-unused =TokenInfo=
+import removed in commit 54c8cf9.
+
+* DONE Run the full gate and review the metadata diff
 :PROPERTIES:
 :ADDED: [2026-11-16 Mon 16:30]
 :ID: org:01a1e6a4-e5f4-73ec-ac7e-ce0fa5c779a4
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:53] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a9aa25c2442c6afdc
 :END:
 
 Build with =-Werror= warnings via =make build-strict= under
 =scripts/guarded-build=, run the full suite, and record in the card that
 the three call sites pass the same service role as before.
+
+Rebased onto main (ba8560a); =cabal build all --enable-tests
+--ghc-options="-Wall -Wcompat -Werror"= clean and the full suite passed
+(all tests, no hang) under =scripts/guarded-build=. Metadata diff: the Runner
+site passes the same =saServiceRoleArn= of the parsed args as before; both
+Main sites previously passed =emptyStackArgs= whose =saServiceRoleArn= is
+=Nothing=, and now pass =Nothing=. No output change.
+
+** Review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e6c8-8820-729e-9333-2f564397a4f4
+:ADDED: [2026-11-16 Mon 16:54]
+:END:
+Verdicts: 2c28cc4 land; 54c8cf9 land. Zero defects.
+
+- Callers: =constructCommandMetadata= has exactly three callers (Runner.hs,
+  Main.hs exec-changeset, Main.hs delete-stack); none in test/, bench/ or
+  other executables in iidy-hs.cabal. Runner passes =saServiceRoleArn sa'=
+  (the value the old body read); both Main sites pass =Nothing=, equal to
+  =emptyStackArgs= =saServiceRoleArn = Nothing= (Types.hs:127). No output change.
+- =NormalizedAwsOpts=, =nao*= fields and =naoFixtureSet=: no references remain
+  in src, app, test, bench or docs. Only mentions are in notes/archive and
+  notes/C2 history (describing the Rust struct or past state), not stale docs.
+  The =TokenInfo= import was removed and is unused elsewhere in Cli.hs.
+- =emptyStackArgs= is still defined in Types.hs and used widely in
+  test/Test/GlobalConfigTest.hs; not dead. =StackArgs (..)= is still used in
+  Main.hs (=saStackName=).
+- Rules: new parameter is documented and typed =Maybe Text=; signature kept;
+  no partial functions, no new imports, no stale imports left.
+- Not built; relied on the hook's full-suite run per the request.

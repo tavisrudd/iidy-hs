@@ -22,11 +22,28 @@
 
 Nothing bounds the work an input can cause. The C4 review showed a 380-byte
 YAML file using nested aliases expanding to 19.7 MB of output at 253 MB of
-memory (=src/Iidy/Yaml/Parser.hs= around lines 73-74), and an import chain
-running past 4,000 hops until killed (=src/Iidy/Yaml/Imports/Manifest.hs=
-around lines 46-58). Handlebars helper output (=Handlebars/Helpers.hs=
-around line 174) is unbounded, and the HTTP loader's limits
-(=Loaders/Http.hs= around line 108) are the only existing cap. See
+memory (=src/Iidy/Yaml/Parser.hs= lines 73-74: =yAlias= returns the shared
+node and =yAnchor= passes it through, with no count), and an import chain
+running past 4,000 hops until killed (=pushImport= in
+=src/Iidy/Yaml/Imports/Manifest.hs= lines 47-58 checks only for a repeated
+location; it is called from =src/Iidy/Yaml/Engine.hs= lines 70 and 174).
+Handlebars =pad= (=helperPad=, =doPad= in
+=src/Iidy/Yaml/Handlebars/Helpers.hs= lines 169-188; the review quoted
+line 174) builds =T.replicate= of an unchecked width, and it is the only
+amplifying =replicate= in the Handlebars code. The HTTP loader
+(=src/Iidy/Yaml/Imports/Loaders/Http.hs= lines 100-114, constants in
+=src/Iidy/Constants.hs=) already caps the response body at
+=httpMaxResponseBytes= (10 MB) and the wait for a response at
+=httpTimeoutSeconds= (30 s), but nothing bounds total transfer time.
+
+The Rust original has no such limits: =~/src/iidy/src/yaml/= has no depth,
+alias or helper-size constant (only the circular-import check at
+=engine.rs:82=); its YAML crate (=serde_yaml_ng=) may impose its own
+recursion limit, which was not checked. The Haskell constants for existing
+limits live in =Iidy.Constants=; the template size limits are in
+=Iidy.Cfn.TemplateLoader= (=templateMaxBytes=, =s3TemplateMaxBytes=).
+(The earlier Scope named =src/Iidy/Handlebars/=; the directory is
+=src/Iidy/Yaml/Handlebars/=.) See
 [[id:org:01a1e68e-1585-707c-91d5-94c92f017ed0][Low: no resource limits]].
 
 * Scope and gate
@@ -35,23 +52,129 @@ around line 174) is unbounded, and the HTTP loader's limits
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-Allowed paths: =src/Iidy/Yaml/=, =src/Iidy/Handlebars/=, =test/=,
-=test-fixtures/=, =notes/C20/=.
+Allowed paths: =src/Iidy/Constants.hs= (the new limits live beside the
+existing ones), =src/Iidy/Yaml/Parser.hs=, =src/Iidy/Yaml/Engine.hs=,
+=src/Iidy/Yaml/Imports/Manifest.hs=, =src/Iidy/Yaml/Handlebars/Helpers.hs=,
+=src/Iidy/Yaml/Imports/Loaders/Http.hs=, =iidy-hs.cabal= (only for a new
+test module), =test/Test/ResourceLimitsTest.hs= (new),
+=test/Test/ParserTest.hs=, =test/Test/EngineTest.hs=, =test/Test/HandlebarsTest.hs=,
+=test/Test/ImportLoaderTest.hs=, =test/Main.hs= (registering the new module),
+=test-fixtures/limits/=, =DIVERGENCES.md= (one entry), =notes/C20/=.
 
-Gate: limits on alias expansion, import depth (and cycles), and helper
-output size, each failing with a clear error; limits large enough that all
-existing fixtures and examples pass; tests with an alias bomb and a long
-import chain fail fast; what Rust does recorded for comparison; build
-warning-free, tests pass; committed with C20.
+Overlap: [[file:../C19/index.org][C19]] edits =Loaders/Http.hs= (error
+formatting) and [[file:../C26/index.org][C26]] edits
+=src/Iidy/Yaml/Resolution/Resolver.hs= and =Imports/ContentParsing.hs=: if
+the alias cap seems to need the resolver, stop and record rather than edit it
+while C26 is in flight. [[file:../C15/index.org][C15]] (after its decision)
+may touch =Yaml/Imports/= and =Engine.hs=; check =git log= for them before
+starting.
 
-* TODO Choose limits and compare with Rust
+Out of scope: limits on stack-args values, template byte sizes for
+CloudFormation (already in =Iidy.Cfn.TemplateLoader=), local file import size,
+S3/SSM response sizes, the response-size cap and per-response timeout that
+the HTTP loader already has, and any change to behaviour below the limits.
+
+Values (the review gives none; proposed 2026-11-16 for Tavis to confirm or
+change before the card is assigned; each is a user-visible limit). They
+are named constants in =Iidy.Constants=, with the reason recorded beside each:
+- Alias expansion: at most 1,000,000 nodes after expanding aliases
+  (scalars, sequences and mappings each count one). A 1 MB CloudFormation
+  template (=s3TemplateMaxBytes= is 999,999) holds well under 500,000 nodes,
+  so real documents have a wide margin. The review's bomb (five levels of
+  fan-out 10, about 111,000 nodes) still loads under this limit, at the
+  253 MB and 1.5 s the review measured; a sixth level (about 1.1 million
+  nodes) is rejected. Tavis may prefer a lower figure such as 250,000.
+- Import depth: at most 32 nested imports on one chain; at most 1,000
+  imports resolved in one run. The review's chain ran past 4,000 hops;
+  real projects nest a handful of levels.
+- Helper output: no single Handlebars helper result longer than 1,048,576
+  characters (1 MiB, the size of the largest deployable template); only
+  =pad= can amplify today.
+- HTTP import total time: 60 seconds from request to the end of the body,
+  twice the existing 30 second wait for a response, enforced with
+  =System.Timeout.timeout= around the whole fetch.
+Rust has none of these, so each is a divergence to record.
+
+Done when:
+- [ ] The Rust comparison above is re-checked (grep of =~/src/iidy/src/yaml/=
+  and =cfn/= for limits) and recorded in the first task note, together with
+  Tavis's confirmed values.
+- [ ] Each limit is enforced with a clear error naming the limit, the value
+  and what hit it (for example "YAML alias expansion exceeds 1000000 nodes
+  in <location>"; "import depth 33 exceeds 32: a.yaml -> b.yaml -> ..."),
+  surfacing through the existing error types and display, not a crash or
+  a hang.
+- [ ] Tests, each with a 10 second timeout and each recorded failing
+  (killed by the timeout or out of memory is acceptable evidence) before
+  the fix: a generated alias bomb with enough levels to pass the node limit
+  is rejected quickly; a bomb just under the limit still loads; a linear
+  import chain deeper than the depth limit and a fan-out over the total
+  count limit are rejected, while a chain at the limit loads; =pad= to a
+  huge width errors and =pad= to a small width is unchanged; an HTTP import
+  whose body drips past the total time errors, using a local test server or
+  an injected clock, not a real network.
+- [ ] Every existing fixture, example template and test passes unchanged
+  (the full suite, which renders the example templates, is green); no
+  expected output changed.
+- [ ] =DIVERGENCES.md= has one entry listing the four limits and their
+  values.
+- [ ] Build warning-free, full suite green, commits name C20.
+
+Stop and record if: Tavis has not confirmed or changed the values above (do
+not pick other values, and do not start the implementation task); the alias
+count cannot be done in the parser without the resolver (record the options
+and ask); enforcing a limit rejects an existing fixture; the HTTP total
+time cannot be tested without a real network; or the work needs a change
+outside the allowed paths. Budget: if a limit takes more than two
+implement-and-test rounds, stop and record the state.
+
+* TODO Re-check Rust and get the limit values confirmed
 :PROPERTIES:
 :ID: org:01a1e692-142a-7666-9ade-4c5468fd30cb
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
+
+Grep the Rust tree for limits, record the finding, and write the values
+above (or Tavis's replacements) into this card. Add the constants to
+=Iidy.Constants= with a one-line reason each. Do nothing else until the
+values are recorded as confirmed.
+
+* TODO Cap import depth and total imports
+:PROPERTIES:
+:ID: org:01a1e6c8-2279-70ac-bb06-81c820689747
+:ADDED: [2026-11-16 Mon 16:53]
+:END:
+
+Enforce in =pushImport= (the chain length is already tracked in
+=isChain=) and the manifest count, with the failing chain and fan-out tests
+first.
+
+* TODO Cap alias expansion
+:PROPERTIES:
+:ID: org:01a1e6c8-2279-70ac-bb06-81c783a075f2
+:ADDED: [2026-11-16 Mon 16:53]
+:END:
+
+Find the cheapest place that bounds expanded work before resolution
+(a node counter threaded through the loader in =Parser.hs=, or a size
+walk with sharing taken into account); do not resolve the full expansion
+to measure it. Failing bomb tests first.
+
+* TODO Cap helper output and HTTP total time
+:PROPERTIES:
+:ID: org:01a1e6c8-2279-70ac-bb06-81c63dae377c
+:ADDED: [2026-11-16 Mon 16:53]
+:END:
+
+=helperPad= first, then any other helper that can amplify (record the
+check); then the overall timeout around =fetchHttpStreaming=.
 
 * TODO Implement limits with tests
 :PROPERTIES:
 :ID: org:01a1e692-142a-7666-9ade-4c531d19c021
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
+
+Add the =DIVERGENCES.md= entry, run the full suite through
+=scripts/guarded-build=, and record the results and measured time and memory
+of the bomb test before and after.

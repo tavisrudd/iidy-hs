@@ -34,14 +34,83 @@ confirmed from code; the effect was not tested on a real terminal. See
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-Allowed paths: =src/Iidy/Output/=, =test/=, =notes/C18/=.
+Allowed paths: a new =src/Iidy/Output/Sanitize.hs=,
+=src/Iidy/Output/Renderers/Interactive.hs= and
+=src/Iidy/Output/Renderers/Interactive/= (call sites only),
+=iidy-hs.cabal= (the new module and a new test module in their lists),
+=test/Test/SanitizeTest.hs= (new), =test/Test/RendererOutputTest.hs=,
+=test/Test/Shared.hs= (only to add a helper that renders to captured text),
+=test/Main.hs= (registering the new module), =DIVERGENCES.md= (one entry),
+=notes/C18/=.
 
-Gate: every place untrusted text reaches the interactive renderer passes
-through one escaping function that makes control characters visible (the
-tool's own colour codes are unaffected); the approval diff is covered;
-tests show an embedded escape sequence rendered visibly; snapshot tests
-updated only where escaping changes output; build warning-free, tests
-pass; committed with C18.
+Out of scope: =src/Iidy/Output/Terminal.hs= and the width logic that
+[[file:../C9/index.org][C9]] has just changed (do not touch it; this card
+adds a separate module); the JSON renderer (JSON escapes control characters
+already); error text printed outside the renderer (=dieTxt= and other
+direct stderr writes in =app/Main.hs= and =src/Iidy/=: record the list in
+the first task note and file a card with =c new=); changing
+=src/Iidy/Cfn/Operations/TemplateApproval.hs= (the diff is escaped where it
+is printed, not where it is built); hashing or verifying the pending
+template (the review's second recommendation: file a card); the Rust port
+(it has no such filter either, so this is a deliberate divergence).
+
+Overlap: [[file:../C19/index.org][C19]] also edits files under =src/Iidy/=
+but not the renderer; no other open card edits
+=src/Iidy/Output/Renderers/Interactive/Sections.hs=. Check
+=git log -3 -- src/Iidy/Output= before starting, since C9 landed there
+today.
+
+Settled by this card (proposed 2026-11-16 for Tavis to confirm before the
+card is assigned; the worker follows these and asks about anything else
+that changes what the user sees):
+- Visible form: every escaped character becomes =\uNNNN= in four lower-case
+  hex digits (=ESC= is =\u001b=), the same spelling Rust's YAML emitter
+  uses for control characters (=~/src/iidy/src/yaml/emitter.rs:475=).
+- Escaped: C0 controls except =\n= and =\t=, DEL, C1 controls
+  (U+0080-U+009F), U+2028 and U+2029, and the bidirectional controls
+  U+202A-U+202E and U+2066-U+2069 (a reordered line can disguise an added
+  diff line). A =\r= is escaped unless it is directly followed by =\n=.
+- Applies to text from outside the tool (template text and diffs, AWS
+  strings such as event reasons, tags, parameters, output values, stack
+  names and descriptions, exception text) before the tool adds its own
+  colour codes, so the tool's own colour sequences are untouched, and
+  before any width or padding calculation, so columns align on the visible
+  text.
+- Not applied to the two deliberate document outputs, =OdRawOutput= and
+  the body of =OdStackTemplate= (what =render=, =get-import= and
+  =get-stack-template= print for redirecting into files): their bytes stay
+  exact.
+
+Done when:
+- [ ] One pure function (for example =escapeControl :: Text -> Text= in
+  =Iidy.Output.Sanitize=) implements the rules above; unit tests cover each
+  class (ESC, CR with and without LF, NUL, DEL, a C1 character, U+202E, tab
+  and newline kept, ordinary and non-ASCII text such as accented letters and
+  emoji unchanged) and a property that the output has no escaped-class
+  character and equals the input when it has none.
+- [ ] The first task's inventory lists every place text from outside the
+  tool reaches =Interactive/Sections.hs= and =Interactive.hs=, and each one
+  is routed through the function; the template-approval diff
+  (=renderTemplateDiff=, =Sections.hs= line 728) is covered.
+- [ ] A renderer test per sink family (the diff, an event status reason, a
+  stack tag or parameter value, a stack output value, an error message)
+  renders a value containing =ESC[2K= or a bare =\r= and asserts the visible
+  =\u001b= form and no raw ESC from the data, with the renderer's own colour
+  codes still present when colour is on.
+- [ ] A test pins that =OdRawOutput= and the =OdStackTemplate= body pass
+  through unchanged.
+- [ ] No existing expected output changed (the suite passes without edits
+  to expected values); if one must change, stop.
+- [ ] =DIVERGENCES.md= has one entry for the escaping and the raw-output
+  exemption.
+- [ ] Build warning-free, full suite green, commits name C18.
+
+Stop and record if: any user-visible output change not listed above is
+needed (for example column widths, a different form for tabs, or filtering
+raw output); an existing expected output would change; the fix needs a
+change outside the allowed paths (for example the diff can only be escaped
+where it is built); or Tavis has not confirmed the settled choices above.
+A reviewer (Opus) checks the escaped character classes against the list.
 
 * TODO Inventory untrusted-text sinks in the renderer
 :PROPERTIES:
@@ -49,8 +118,32 @@ pass; committed with C18.
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-* TODO Add escaping and tests
+Walk =Interactive/Sections.hs= and =Interactive.hs= for every value that
+originates outside the tool and record a table (call site, source, covered
+or not) in a =report--sinks.org= beside this card. Starting points: the
+diff at line 728, stack description, status reason, tags and parameters
+(lines 100-134), event reasons (around 212), output values (around 257),
+status updates (323-326) and command messages (337), stack lists (379-400),
+drift values (around 554), error messages (around 579), the template body
+(668, exempt) and =OdRawOutput= (=Interactive.hs= line 97, exempt). List
+direct writes outside the renderer for the follow-up card.
+
+* TODO Add the escaping function and its unit tests
 :PROPERTIES:
 :ID: org:01a1e692-1419-7071-aafc-dceca320ebc1
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
+
+Create =Iidy.Output.Sanitize= with the pure function and
+=test/Test/SanitizeTest.hs= (separate from the renderer tests), register
+both, and run them. No renderer call sites yet.
+
+* TODO Route the sinks through it, with renderer tests
+:PROPERTIES:
+:ID: org:01a1e6c5-455b-71dc-a53d-890145cec89e
+:ADDED: [2026-11-16 Mon 16:50]
+:END:
+
+Apply the function at the call sites from the inventory, add the renderer
+tests and the raw-output pins from the gate, and add the =DIVERGENCES.md=
+entry. Record the full-suite result.
