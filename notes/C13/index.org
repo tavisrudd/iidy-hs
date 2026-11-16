@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C13
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :CARD_PRIORITY: B
 :MODE:     CONTRACT
 :ORIGIN:   Found while working C7: Haskell get-import ignores giaQuery (Rust applies the JMESPath query in cfn/get_import.rs) and prints YAML without a trailing newline (Rust: 'a: 1\n')
@@ -10,6 +10,11 @@
 :SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675/agent:ae1a258c26a456080
 :ID: org:01a1e683-91b4-768b-9769-54f5aa45374b
 :ADDED: [2026-11-16 Mon 15:39]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 16:11]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C13 — get-import: apply --query and end YAML output with a newline (Rust parity)
 #+date: 2026-11-16
