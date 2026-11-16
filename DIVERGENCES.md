@@ -155,3 +155,13 @@ import the parent's remote type (`mod.rs:263-281`, test
 `test_relative_imports_inherit_remote_type`); Haskell classifies it as a local
 file import and rejects it from an untrusted parent. This difference predates
 C14 and is unchanged by it.
+
+## Terminal Width: COLUMNS Override
+
+**Cause**: Kept from the earlier Haskell implementation (card C9).
+
+iidy-hs honours a valid `COLUMNS` (positive integer) as the highest-priority
+output width. Otherwise it uses the real terminal size (the `terminal-size`
+package), as Rust does; with neither, the interactive renderer falls back to
+130. Rust never reads `COLUMNS`: its order is the real terminal size, then 130
+(`src/output/terminal.rs:54`, `src/output/theme.rs:177`).
