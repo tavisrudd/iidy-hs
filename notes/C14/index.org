@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C14
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :CARD_PRIORITY: A
 :MODE:     CONTRACT
 :ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
@@ -11,8 +11,35 @@
 :ID: org:01a1e691-4741-74b6-b913-396dceff2480
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 16:12]--[2026-11-16 Mon 16:18] => 0:06
+CLOCK: [2026-11-16 Mon 16:19]--[2026-11-16 Mon 16:20] => 0:01
+CLOCK: [2026-11-16 Mon 16:24]--[2026-11-16 Mon 16:27] => 0:03
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:11]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 16:12]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:abc52b4a786fb79c9
+- Clock-out [2026-11-16 Mon 16:18]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:abc52b4a786fb79c9
+- Clock-in [2026-11-16 Mon 16:19]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:abc52b4a786fb79c9
+- Clock-out [2026-11-16 Mon 16:20]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:abc52b4a786fb79c9
+- Clock-in [2026-11-16 Mon 16:24]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:abc52b4a786fb79c9
+- Clock-out [2026-11-16 Mon 16:27]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:abc52b4a786fb79c9
+- Card state STARTED → DONE [2026-11-16 Mon 16:27]
+  Note: Landed 7fefd88..1c62101: import trust gate fails closed (isLocalBase), table-driven regression matrix, docs and DIVERGENCES updated; Opus review: land, fix round 1 test/docs only
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -46,7 +73,9 @@ The redesign of what remote templates may do at all is
 :END:
 
 Allowed paths: =src/Iidy/Yaml/Imports/=, =test/=, =test-fixtures/=,
-=DIVERGENCES.md= (one entry if the fix departs from Rust), =notes/C14/=.
+=DIVERGENCES.md= (one entry if the fix departs from Rust), =notes/C14/=;
+for review fix round 1 only (supervisor's call, 2026-11-16):
+=docs/SECURITY.md= and =docs/requirements/03-import-system.md=.
 
 Out of scope: what remote templates may inherit or import beyond the
 local-only types (variable isolation, blocking =ssm:=/=cfn:=/loopback
@@ -54,25 +83,237 @@ imports): that is [[file:../C15/index.org][C15]]. No change to user-visible
 behaviour for templates loaded from local files.
 
 Done when:
-- [ ] The check fails closed: a parent is local only when its base is
+- [X] The check fails closed: a parent is local only when its base is
   positively a local file location (plain path, =./=, =../=, =/=,
   =file:=); every other base (=s3:= short and =s3://= long forms, =ssm:=,
   =ssm-path:=, =cfn:=, =http(s)://=, and any unknown form) is untrusted.
-- [ ] A regression test, recorded failing on the branch base before the
+- [X] A regression test, recorded failing on the branch base before the
   fix, covers each untrusted parent spelling importing each local-only
   type (=file:=, plain path, =env:=, =git:=, =filehash:=,
   =filehash-base64:=), table-driven rather than copied per case.
-- [ ] Existing import tests pass unchanged; local parents still import
+- [X] Existing import tests pass unchanged; local parents still import
   every type.
-- [ ] Rust behaviour (=~/src/iidy/src/yaml/imports/mod.rs=) is compared
+- [X] Rust behaviour (=~/src/iidy/src/yaml/imports/mod.rs=) is compared
   and any divergence is recorded in =DIVERGENCES.md=.
-- [ ] Build warning-free, full suite green, commits name C14.
+- [X] Build warning-free, full suite green, commits name C14.
 
 Stop and record if: the fix needs a change outside the allowed paths, or
 would block an import that a local template uses today.
 
-* TODO Make the trust check fail closed with regression tests
+* DONE Make the trust check fail closed with regression tests
 :PROPERTIES:
 :ID: org:01a1e692-13f4-75e0-886b-b82b9df8dd11
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:20] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:abc52b4a786fb79c9
+:END:
+
+Branch =claude/C14= (worker claude-C14), rebased onto main 7bc8617:
+- 7fefd88 C14: make the import trust gate fail closed
+- 95fa787 C14: record the fail-closed trust gate divergence from Rust
+- b54ca7f C14: treat bases with a non-scheme prefix as local paths
+- d979c16 C14: one typed table owns the import trust-gate tests
+- cee2ce9 C14: describe the fail-closed isLocalBase rule in the security docs
+- 1c62101 C14: name Windows drive paths in the trust gate divergence
+
+** Existing implementation found (duplication check)
+:PROPERTIES:
+:ID: org:01a1e6a7-e218-72e4-9024-b415b2204a6b
+:ADDED: [2026-11-16 Mon 16:18]
+:END:
+- =parseTypePrefix= in =src/Iidy/Yaml/Imports/Types.hs= already owns
+  location-prefix parsing (plain path, =./=, =../=, =/=, known prefixes,
+  unknown prefix as =Left=). The fix reuses it: =isRemoteBase= became
+  =isLocalBase=, which is true only when =parseTypePrefix= yields the
+  empty prefix (plain path) or =file=. No second location parser.
+- Loaders keep their import location as =idLocation= (S3.hs:66 keeps the
+  short =s3:= spelling, Ssm.hs:69/101, Cfn.hs:384, Http.hs:81), and
+  =Engine.processImportedDoc= passes =idLocation= as the nested base, so the
+  gate in =parseImportType= is the single place to fix.
+- Existing gate tests stay in =test/Test/SecurityControlsTest.hs=
+  (unchanged). New table-driven module =test/Test/ImportTrustTest.hs=;
+  =MockAws= was not needed because the gate runs before any AWS call.
+
+** Regression test, failing on the base
+:PROPERTIES:
+:ID: org:01a1e6a7-e218-72e4-9024-b414f062ba30
+:ADDED: [2026-11-16 Mon 16:18]
+:END:
+=test/Test/ImportTrustTest.hs= crosses untrusted bases (=s3:= short,
+=s3://=, =ssm:=, =ssm-path:=, =cfn:=, =http://=, =https://=, =S3://=,
+=ftp://=) with local-only imports (=file:=, plain, =./=, =../=, =/=,
+=env:=, =git:=, =filehash:=, =filehash-base64:=); also checks
+=mkFullDispatcher= refuses =env:HOME= from each untrusted base, and an
+engine run where a stub remote document at =s3:bucket/evil.yaml=,
+=ssm:/evil=, =ssm-path:/evil= or =cfn:export/Evil= imports =env:HOME=.
+Run on base 250154c (test module added, Types.hs unchanged):
+=64 out of 303 tests failed= (pattern =ImportTrust=); for example
+: file:data.yaml from s3:bucket/dir/parent.yaml: FAIL
+:   expected rejection, got ImportFile
+: env:HOME from ssm:/app/parent: FAIL
+:   expected rejection, got ImportEnv
+The 64 are the 9 local-only imports for each of the 6 previously
+fail-open bases (=s3:= short, =ssm:=, =ssm-path:=, =cfn:=, =S3://=,
+=ftp://=), 6 dispatcher cases and 4 nested cases. With the fix: all
+1559 tests pass (full suite, rebased tip). Local bases (plain, =dir/=,
+=./=, =../=, =/=, =file:=, =.=, =-=, empty) still classify every import
+type as before.
+
+** Rust comparison
+:PROPERTIES:
+:ID: org:01a1e6a7-e218-72e4-9024-b413c2bfaebb
+:ADDED: [2026-11-16 Mon 16:18]
+:END:
+Rust =parse_import_type= (=src/yaml/imports/mod.rs:251-259=) treats a base
+as remote only for the =s3=, =http=, =https= prefixes, so =ssm:=/=cfn:=
+parents fail open there too, and an unknown-prefix base is local. Rust
+also gives unprefixed imports from a remote parent the parent's type
+(=mod.rs:263-281=); Haskell rejects them (pre-existing, unchanged). Both
+recorded in one =DIVERGENCES.md= entry, "Import Trust Gate: Fails Closed".
+
+** Question for supervisor
+:PROPERTIES:
+:ID: org:01a1e6a7-e218-72e4-9024-b412503da46e
+:ADDED: [2026-11-16 Mon 16:18]
+:END:
+The stop rule "would block an import that a local template uses today"
+is hit by one narrow case the Done-when list settles the other way. A
+local file base whose text has a colon before any =./= or =/= prefix
+now parses as an unknown prefix and is untrusted, so that file loses its
+local-only imports. Examples: running =iidy render a:b.yaml=, or a nested
+file =dir/x.yaml= importing =./c:d.yaml= whose resolved base is
+=dir/./c:d.yaml= and which itself has =$imports=. Before the fix (and in
+Rust) these counted as local. Imports written as =c:d.yaml= were already
+rejected as an unknown type. Options: (a) keep the strict rule the card
+states (current branch); (b) also treat a base as local when the text
+before its first colon is not URI-scheme shaped (contains =/=, for
+example), which fixes the nested case but not =a:b.yaml=. No loader
+produces a remote location with such a prefix, so (b) stays fail-closed
+for every real remote spelling. Which one?
+
+** Decision: option (b), by URI scheme syntax (supervisor's call)
+:PROPERTIES:
+:ID: org:01a1e6a9-c655-7156-8262-e91ad61dc5e7
+:ADDED: [2026-11-16 Mon 16:20]
+:END:
+Supervisor's call: a base is local when =parseTypePrefix= gives a plain
+path or =file:=, or when the text before its first colon is not an RFC 3986
+scheme (=ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )=); such a prefix can
+only come from a local path. Implemented in =isLocalBase= with a helper
+=isUriScheme= in =Types.hs=, no second parser (7b1c349). The nested base
+=dir/./c:d.yaml= is now local; scheme-shaped unknowns such as =ftp://= and
+=a:b.yaml= stay untrusted. Accepted consequence: a local template loaded
+as =a:b.yaml= (no =./=) cannot use the local-only import types; Rust treats
+it as local. Recorded in the =DIVERGENCES.md= entry. Tables extended:
+=a:b.yaml= in the untrusted bases, =dir/./c:d.yaml= in the local bases.
+Full suite on the rebased tip: all 1592 tests pass.
+
+** Review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e6ad-3156-758a-9418-a050a111e125
+:ADDED: [2026-11-16 Mon 16:24]
+:END:
+Reviewer: review worker, branch =claude/C14= at 7b1c349, base e50e32b.
+
+Verdicts: cadc82c land; 77e9230 land; 7b1c349 land. Overall: land; both
+defects below can follow up without blocking the fix.
+
+Checks:
+- Regression proof: with =src/Iidy/Yaml/Imports/Types.hs= reverted to
+  e50e32b, =-p ImportTrust= gives =74 out of 336 tests failed=: 9
+  local-only imports for each of the 7 fail-open bases (=s3:= short,
+  =ssm:=, =ssm-path:=, =cfn:=, =S3://=, =ftp://=, =a:b.yaml=), 7
+  dispatcher cases, 4 nested cases. Local-base and allowed-import groups
+  pass on the base. Tip: =ImportTrust=, =SecurityControls=, =ImportLoader=
+  all 387 pass.
+- Gate probe, no bypass found. Every remote loader (=Http.hs:81=,
+  =S3.hs:66=, =Ssm.hs:69=/=:101=, =Cfn.hs:384=) sets =idLocation= to the
+  exact location string the dispatcher classified, and
+  =Engine.processImportedDoc= uses it as the child base, so =isLocalBase=
+  runs =parseTypePrefix= on the same text that was classified =s3=,
+  =http(s)=, =ssm=, =ssm-path= or =cfn=: always untrusted. Mixed-case
+  (=S3:=, =HTTPS:=), leading-whitespace and URL-encoded (=s3%3A=) spellings
+  never reach a remote loader (unknown type, or a plain file path that is
+  local-only and so refused from an untrusted parent). =file:<url>= is a
+  local-only import and its file-loader base is =dir </> path= (=./...=,
+  =/...= or =dir/...=), a real local path. =env:=, =git:=, =filehash:=,
+  =random:= bases are now untrusted, but those loaders return scalars and
+  never recurse. Relative imports from a remote parent classify as file
+  and are refused. Root bases (render, stack-args, =render:=, demo,
+  get-import =.=) are local file paths. A local nested file always gets a
+  =./= or =dir/= prefix from =File.hs:36= (=takeDirectory= gives =.=),
+  so the non-scheme branch only widens trust for local paths.
+- Rust parity: =mod.rs:251-259= read; the =DIVERGENCES.md= entry matches.
+- Rules: warning-free, signatures present, no partial functions, modules
+  well under 500 lines, commits name C14 with no attribution lines, paths
+  inside scope (=iidy-hs.cabal= and =test/Main.hs= only register the
+  module).
+
+Defects:
+1. Medium, outside the card's allowed paths: the security docs still
+   describe the old fail-open rule. =docs/SECURITY.md:92-95= and =:163=
+   and =docs/requirements/03-import-system.md:48= and =:837-840= name
+   =isRemoteBase= and say a base is remote only with an =s3://=,
+   =http://= or =https://= prefix. A reader auditing the trust model from
+   the docs gets the vulnerable rule. Fix: replace those passages with the
+   =isLocalBase= rule (plain path, =./=, =../=, =/=, =file:=, or a
+   non-scheme prefix before the first colon; everything else untrusted).
+   This needs the supervisor to widen the scope to =docs/= or file a card.
+2. Low, test duplication: =test/Test/ImportTrustTest.hs= repeats the gate
+   cases already hand-written in =test/Test/SecurityControlsTest.hs:46-78=
+   (file/env/git/filehash from =s3://=, =https://=, =http://=; s3/http/ssm
+   from remote bases), each with a copied "not allowed from remote"
+   assertion that =assertRejected= now duplicates. Inside the new module,
+   =allImports= restates the nine =localOnlyImports= entries. Fix: define
+   one =localOnlyTyped :: [(Text, ImportType)]= with
+   =localOnlyImports = map fst localOnlyTyped=, and fold the
+   SecurityControls gate cases into the matrix (or put the matrix in that
+   module's =parseImportType= group) so one table owns the gate.
+
+Notes (no change needed): =isLocalBase= re-splits on the first colon with
+=T.takeWhile= after =parseTypePrefix= already did; it is one line, not a
+second parser. Windows drive paths such as =C:\x\stack-args.yaml= are
+scheme shaped and so untrusted, unlike Rust; no Windows build exists, and
+it follows the accepted =a:b.yaml= call, but the =DIVERGENCES.md= entry
+could name drive letters.
+
+** Fix round 1 (from Review 2026-11-16)
+:PROPERTIES:
+:ID: org:01a1e6af-ccb0-7064-8ff0-edcd715f204e
+:ADDED: [2026-11-16 Mon 16:27]
+:END:
+- Duplication (d979c16): =localOnlyTyped :: [(Text, ImportType)]= is the
+  one typed table; =localOnlyImports = map fst localOnlyTyped= and
+  =allImports = localOnlyTyped <> nonLocalImports=. The dispatcher matrix
+  now crosses every untrusted base with every local-only import. The
+  hand-written gate cases in =SecurityControlsTest= (old lines 40-78 and
+  its =mkFullDispatcher enforcement= group) are removed; its
+  classification cases (unknown prefixes, plain path, =./has:colon=) stay.
+  Old case to matrix row (=ImportTrust= group / test name):
+  | Old SecurityControlsTest case     | ImportTrustTest row                                                        |
+  |-----------------------------------+----------------------------------------------------------------------------|
+  | local file from local base is OK  | local parent / file:data.yaml from .                                       |
+  | env import from local base is OK  | local parent / env:HOME from .                                             |
+  | local file from s3 base REJECTED  | untrusted parent / file:data.yaml from s3://bucket/dir/parent.yaml         |
+  | env import from https base        | untrusted parent / env:HOME from https://example.com/parent.yaml           |
+  | git import from http base         | untrusted parent / git:branch from http://example.com/parent.yaml          |
+  | filehash import from s3 base      | untrusted parent / filehash:data.txt from s3://bucket/dir/parent.yaml      |
+  | remote s3 from s3 base is OK      | keeps non-local / s3://bucket/data.yaml from s3://bucket/dir/parent.yaml   |
+  | remote http from s3 base is OK    | keeps non-local / http://example.com/data.yaml from s3://... (row added)   |
+  | ssm import from https base is OK  | keeps non-local / ssm:/param from https://example.com/parent.yaml          |
+  | dispatcher rejects file: from s3  | dispatcher / file:data.yaml from s3://bucket/dir/parent.yaml               |
+  | dispatcher rejects env: from https| dispatcher / env:HOME from https://example.com/parent.yaml                 |
+  All rows assert the same "not allowed from remote" text the old cases did.
+- Docs (cee2ce9, supervisor's call to widen scope this round):
+  =docs/SECURITY.md= base-resolution paragraph and implementation step 3-4,
+  =docs/requirements/03-import-system.md= pseudocode, the acceptance
+  criterion that defined a remote base, and the classification pseudocode
+  now describe =isLocalBase= and the fail-closed rule. Not changed (not
+  asked): =03-import-system.md= still has an acceptance criterion saying
+  relative imports from remote templates inherit the parent's scheme;
+  Haskell rejects them (recorded in =DIVERGENCES.md=).
+- DIVERGENCES.md (1c62101): Windows drive paths are named as untrusted.
+- Rebased onto main 7bc8617; full suite: all 1688 tests pass.
