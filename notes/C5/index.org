@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C5
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   User request 2026-11-16: upgrade docs/ from md to org-mode files with org style links
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :ID: org:01a1e63d-db69-77c4-b05b-e1e5d95272ea
 :ADDED: [2026-11-16 Mon 14:22]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 16:56]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C5 — Convert docs/ from Markdown to Org with Org-style links
 #+date: 2026-11-16
