@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C3
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   User request 2026-11-16: adopt the c cards workflow (single main lane)
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :ID: org:01a1e634-e1a1-7789-9032-12c12a1e549a
 :ADDED: [2026-11-16 Mon 14:13]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 14:39]
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675/agent:a1ab98d8d02b79e5e
 :END:
 #+title: C3 — Upgrade dependencies
 #+date: 2026-11-16
