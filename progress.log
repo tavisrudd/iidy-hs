@@ -109,3 +109,4 @@
 2026-11-16 16:02 — 2026-11-16--2 (f2c5724c-c18a-470a-95c4-5c03105ef675): C23 supervised worker workflow ported from peregrine (scripts/supervisor, /supervise skill, guarded-build lock).
 2026-11-16 16:20 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C13 landed (get-import --query, newline, pretty JSON; Rust parity)
 2026-11-16 16:27 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C14 landed (import trust gate fails closed)
+2026-11-16 16:33 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C6 parked waiting (33 runs, no hang; make test timeout landed); filed C27 NTP mock

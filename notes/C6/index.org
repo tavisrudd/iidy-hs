@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C6
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: WAITING
 :MODE:     CONTRACT
 :ORIGIN:   Discovered 2026-11-16 during the C1 closeout commit: the pre-commit test run hung for 8+ minutes
 :CREATED_BY: opus-5.5-medium
@@ -10,8 +10,21 @@
 :ID: org:01a1e63f-89b4-75e6-88e0-373c48849e72
 :ADDED: [2026-11-16 Mon 14:24]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 16:18]--[2026-11-16 Mon 16:32] => 0:14
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:17]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 16:18]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:abf56fd6d8807c533
+- Clock-out [2026-11-16 Mon 16:32]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:abf56fd6d8807c533
+- Card state STARTED → WAITING [2026-11-16 Mon 16:33]
+  Note: 33 suite runs on GHC 9.12.3, no hang; Makefile timeout landed (2a707fe); next-time capture notes and repro-loop.sh in card; NTP suspect filed as C27
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -67,7 +80,7 @@ fixing its cause; changing renderer behaviour that users see; changing
 =scripts/guarded-build= or the supervisor scripts.
 
 Done when:
-- [ ] The reproduction loop is recorded in the card (exact command, GHC
+- [X] The reproduction loop is recorded in the card (exact command, GHC
   version, number of runs, per-test timeout, whether runs were under load).
 - [ ] If a hang reproduced: the test and cause are named in the card with
   the stack or event-log evidence; a regression test or stress test that
@@ -77,9 +90,9 @@ Done when:
   the supervisor) with the next-time notes below recorded: what was tried,
   what to capture on the next hang (see the first task), and which
   suspects are still open.
-- [ ] The =Makefile= =test= target passes the same per-test timeout as the
+- [X] The =Makefile= =test= target passes the same per-test timeout as the
   hook, so a hang anywhere fails fast and names the test.
-- [ ] Build warning-free, full suite green, commits name C6.
+- [X] Build warning-free, full suite green, commits name C6.
 
 Stop and record if: about 30 full-suite runs on GHC 9.12.3 with
 =--timeout=20s= (see the first task) show no hang; the cause is outside the
@@ -110,16 +123,152 @@ stuck in an uninterruptible wait (=mask=-ed =bracket= cleanup, an =MVar= or
 both the hang and the ignored SIGTERM. The process was then killed with
 SIGKILL. Check whether the hang still occurs on GHC 9.12.3.
 
-* TODO Record what to capture on a future hang
+** Existing owners found before writing code
+:PROPERTIES:
+:ID: org:01a1e6b4-7d58-7513-8f84-0ba1996e1abf
+:ADDED: [2026-11-16 Mon 16:32]
+:END:
+- =.githooks/pre-commit= already passes =--test-options=--timeout=60s=
+  (added by C23); the =Makefile= =test= target is the only test entry
+  without it.
+- =scripts/= has no test-loop or hang-capture helper (only the ralph loops,
+  which drive agents, and =guarded-build=). The loop below was kept as a
+  throwaway script in the worker temp dir; no code was added for it.
+- Concurrency in the suite's code paths: the spinner and timing threads in
+  =src/Iidy/Output/Renderers/Interactive/Types.hs= (=forkIO= in
+  =startSpinner= / =startTimingTask=, =killThread= inside =mask_= in
+  =stopSpinner= / =stopTimingTask=), and =src/Iidy/Aws/Timing.hs=
+  (=reliableNow= wraps an SNTP query to =pool.ntp.org= in
+  =System.Timeout.timeout=, with =getAddrInfo= and =bracket= inside).
+
+** Reproduction attempt 2026-11-16 (worker claude-C6): no hang
+:PROPERTIES:
+:ID: org:01a1e6b4-7d58-7513-8f84-0ba08f398c97
+:ADDED: [2026-11-16 Mon 16:32]
+:END:
+Build: =scripts/guarded-build cabal build all --enable-tests -j4= on
+branch =claude/C6= at =88dafc0=, GHC 9.12.3 (dev shell), 24-core host.
+The loop then ran the built binary outside the lock, one run at a time,
+from the worktree root (the suite needs =test-fixtures/= relative to the
+cwd), stdin on =/dev/null=, output to a per-run log, with a 120 s wall-clock
+watchdog that would capture =/proc/PID/task/*/{comm,wchan,status}= and the
+log tail before =kill -9=:
+
+#+begin_src sh
+BIN=dist-newstyle/build/x86_64-linux/ghc-9.12.3/iidy-hs-0.1.0.0/t/iidy-hs-test/build/iidy-hs-test/iidy-hs-test
+"$BIN" --timeout=20s [+RTS -N1|-N2 -RTS] [+RTS -l -olRUN.eventlog -RTS] \
+  > RUN.log 2>&1 < /dev/null
+#+end_src
+
+| Batch               | RTS             | Runs | Load                     | Result                 |
+|---------------------+-----------------+------+--------------------------+------------------------|
+| default             | =-N= (24 caps)  |    3 | idle                     | all passed, 0.44-0.46s |
+| default + event log | =-N -l=         |    4 | idle                     | all passed, 0.33-0.36s |
+| one capability      | =-N1=           |    8 | idle                     | all passed, 0.30-0.34s |
+| two capabilities    | =-N2=           |    8 | idle                     | all passed, 0.35-0.39s |
+| loaded + event log  | =-N -l=         |    7 | 24 busy-loop burners     | all passed, 3.45-3.90s |
+| via =make test=     | =-N=, cabal     |    1 | idle                     | passed                 |
+| via pre-commit hook | =-N=, cabal     |    1 | idle                     | passed                 |
+
+Total 32 full-suite runs (30 direct, 2 through =cabal test=), 1256 tests
+each, no hang and no timeout. Load was 24 =nice -n 10= shell busy loops,
+load average about 18; the suite slowed tenfold (parallel GC
+oversubscribed) but did not hang. Four further direct runs failed at once
+because they were started from the wrong cwd (fixtures not found); they
+are not counted. The card's stop rule (about 30 runs with no hang) is met,
+so the fix task is not started.
+
+** Findings and open suspects
+:PROPERTIES:
+:ID: org:01a1e6b4-7d58-7513-8f84-0b9f9a39fe3b
+:ADDED: [2026-11-16 Mon 16:32]
+:END:
+- Baseline thread picture of a healthy run under =-N= on this host: 24
+  threads in =do_epoll_wait= (one IO manager per capability), 23-27 in
+  =futex_do_wait= (idle RTS workers), 2-3 in =poll_schedule_timeout= (the
+  timer manager's poll backend plus the RTS ticker). The first hang had 1
+  in =poll=, so the ticker had probably stopped: the RTS was fully idle,
+  every Haskell thread blocked, rather than one thread spinning or sitting
+  in an in-flight DNS query (which would add a thread in =poll= or
+  =recvfrom=).
+- SIGTERM being ignored is consistent with tasty: tasty installs a SIGTERM
+  handler that throws to the main thread, and the main thread then waits
+  for running tests to be cancelled. A test that cannot receive the async
+  exception keeps that wait, and the process, alive. The same applies to
+  tasty's =--timeout=, which is implemented with an async exception, so the
+  60 s hook timeout turns an interruptible hang into a named failure but
+  cannot stop a test blocked inside a safe foreign call or
+  =uninterruptibleMask=.
+- Open suspect 1: =test/Test/TimingTest.hs= "reliableTimeProvider ..."
+  tests make real network calls (DNS lookup of =pool.ntp.org= and an SNTP
+  round trip, about 0.15 s here). =getAddrInfo= is a safe FFI call that
+  =System.Timeout.timeout= cannot interrupt, so a stuck resolver (this host
+  uses =nsncd=) would hang that test past both its own 2 s timeout and
+  tasty's. This also breaks the project rule against network calls in
+  tests. It does not match the idle-RTS picture above well, so it stays a
+  suspect, not a cause.
+- Open suspect 2: the interactive renderer's spinner and timing threads
+  (=startSpinner= / =stopSpinner= in
+  =src/Iidy/Output/Renderers/Interactive/Types.hs=). A test that starts a
+  spinner on a TTY-flagged renderer and blocks on a handle or =TVar= while
+  =stopSpinner= is masked is the other candidate; no test was seen
+  blocking there.
+- The first hang ran under GHC 9.10.3 inside =cabal test ... | tail -5= in
+  the hook, possibly while other builds loaded the host; the attempt here
+  is GHC 9.12.3, so a 9.10-only RTS issue cannot be ruled out either.
+
+* DONE Record what to capture on a future hang
 :PROPERTIES:
 :ADDED: [2026-11-16 Mon 16:30]
 :ID: org:01a1e6a3-ecef-7736-8e3b-bd1554ab7fae
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:32] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:abf56fd6d8807c533
 :END:
 
 Whether or not the hang reproduces, write down in the card how to catch the
 next one: run the suite without =tail=, with =+RTS -l= (event log) or
 =-DS= if available, and on a hang capture =ls /proc/PID/task= state,
 =/proc/PID/stack= per thread and the last test name from the tasty output.
+
+** How to catch the next hang (recorded 2026-11-16)
+:PROPERTIES:
+:ID: org:01a1e6b4-7d58-7513-8f84-0b9e15485fa4
+:ADDED: [2026-11-16 Mon 16:32]
+:END:
+1. Do not pipe the suite through =tail=. Run the built binary directly with
+   a log per run, from the repository root:
+   =iidy-hs-test --timeout=20s +RTS -l -olRUN.eventlog --eventlog-flush-interval=1 -RTS > RUN.log 2>&1 < /dev/null=.
+   The flush interval keeps the event log on disk current, so a process
+   that must be killed with =kill -9= still leaves its last seconds.
+   GHC 9.12's default RTS includes the event log, so =-l= needs no
+   rebuild; =-DS= (scheduler debug) needs a =-debug= build and was not
+   used.
+2. If tasty prints "Timeout" for a test, the hang was interruptible: the
+   test name in the log is the answer, and the event log shows what its
+   thread was blocked on.
+3. If the process outlives its timeout (the C6 shape), capture before any
+   signal:
+   - =for t in /proc/PID/task/*; do echo $t $(cat $t/comm) $(cat $t/wchan); grep State $t/status; done=
+     (counts by =wchan= are enough; compare with the healthy baseline in
+     the first task: 24 =do_epoll_wait=, about 25 =futex_do_wait=, 2-3
+     =poll=);
+   - =ls -l /proc/PID/fd= (an open UDP socket or nsncd unix socket points
+     at the NTP test);
+   - the last lines of RUN.log, and which tests have not printed a result
+     (run with =--test-show-details=direct= style output, so each test
+     prints its own line).
+   =/proc/PID/stack= needs root on this host and =ptrace_scope= is 1, so
+   neither the kernel stacks nor =gdb -p= work without sudo; ask Tavis for
+   =sudo cat /proc/PID/task/*/stack= or a =gdb -p PID -batch -ex "thread apply all bt"=
+   if the wchan picture is not enough.
+4. Then send SIGINT (=kill -INT=) once and wait a few seconds, in case
+   the hang is interruptible after all; then =kill -9=. Convert the event
+   log with =ghc-events show RUN.eventlog= and look at the last "stopping thread N (blocked on ...)" entries.
+5. Record the GHC version, =+RTS= flags, host load and whether the run was
+   under =cabal test= or the hook.
 
 * TODO Fix the cause with a failing test first
 :PROPERTIES:
@@ -131,14 +280,30 @@ Only if a hang reproduced. Write the regression or stress test first and
 record it failing (timing out) on the branch base, then fix the deadlock or
 unbounded wait. Do not skip the test.
 
-* TODO Align the Makefile test target with the hook timeout
+* DONE Align the Makefile test target with the hook timeout
 :PROPERTIES:
 :ADDED: [2026-11-16 Mon 16:30]
 :ID: org:01a1e6a3-ecef-7736-8e3b-bd1469774d96
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:32] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:abf56fd6d8807c533
+:END:
 
 Add =--test-options=--timeout=60s= to the =cabal test= line of the =test=
 target in the =Makefile= so it matches =.githooks/pre-commit=.
+
+** Result 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e6b4-7d58-7513-8f84-0b9dce02e1ab
+:ADDED: [2026-11-16 Mon 16:32]
+:END:
+Commit =2a707fe= (rebased from =e8acda2=) ("C6: pass the hook's 60s per-test timeout in make test")
+changes the =test= target to
+=cabal test all --test-show-details=direct --test-options=--timeout=60s=.
+=scripts/guarded-build make test= passed with it, and the commit passed
+the pre-commit hook (fourmolu, hlint, =-Werror= build, full suite).
 
 * TODO Verify with a long run loop
 :PROPERTIES:
@@ -149,3 +314,12 @@ target in the =Makefile= so it matches =.githooks/pre-commit=.
 After a fix, run the suite 30 consecutive times and record the command and
 result here. If no fix was possible, record the reproduction attempt per the
 Done-when list and stop.
+
+** Result 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e6b4-7d58-7513-8f84-0b9c5c8c4b52
+:ADDED: [2026-11-16 Mon 16:32]
+:END:
+No hang reproduced, so there is no fix to verify. The 32 runs and the
+reproduction details are under the first task; the card stops at its
+budget.

@@ -1,0 +1,66 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C27
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C6 2026-11-16: test/Test/TimingTest.hs reliableTimeProvider tests resolve and query pool.ntp.org, a real network call in the suite and an open suspect for the C6 hang
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e6b5-4fe2-73a7-9f37-be6fed53c279
+:ADDED: [2026-11-16 Mon 16:33]
+:END:
+#+title: C27 — Mock the NTP lookup in the timing tests
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e6b5-4fe2-73a7-9f37-be6ec55d1da3
+:ADDED: [2026-11-16 Mon 16:33]
+:END:
+
+The two =reliableTimeProvider= tests in =test/Test/TimingTest.hs= (around
+line 168) call the real =reliableNow= in =src/Iidy/Aws/Timing.hs= (around
+line 83), which resolves =pool.ntp.org= with =getAddrInfo= and sends an SNTP
+query (=queryNtp=, around line 107). That is a real network call in the test
+suite, against the project rule, and the =getAddrInfo= foreign call cannot
+be interrupted by the 2-second =timeout= or by tasty's per-test timeout, so a
+stuck resolver hangs the run. Found by [[file:../C6/index.org][C6]], which
+keeps it as an open suspect for the intermittent hang.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e6b5-4fe2-73a7-9f37-be6d26f712c8
+:ADDED: [2026-11-16 Mon 16:33]
+:END:
+
+Allowed paths: =src/Iidy/Aws/Timing.hs=, =test/Test/TimingTest.hs=,
+=notes/C27/=.
+
+Out of scope: changing what =reliableTimeProvider= does at run time (NTP
+server, retry count, timeouts, fallback); the renderer's spinner threads.
+
+Done when:
+- [ ] The NTP query is a parameter of the fallback logic (for example
+  =reliableNowWith :: IO (Maybe UTCTime) -> IO UTCTime=), with the
+  production provider passing the real =tryNtp=, so behaviour is unchanged.
+- [ ] Tests cover the fallback logic with stub queries: first try succeeds;
+  first fails and second succeeds; both fail and system time is used; and
+  =tpStartTime < tpNow=. No test resolves a host name or opens a socket.
+- [ ] =grep -n reliableTimeProvider test/= shows no test calling the real
+  provider's IO.
+- [ ] Build warning-free, full suite green, commits name C27.
+
+Stop and record if: the parameterisation needs changes outside the allowed
+paths.
+
+* TODO Parameterise the NTP query and test the fallback with stubs
+:PROPERTIES:
+:ID: org:01a1e6b5-4fe2-73a7-9f37-be6c5ff868d3
+:ADDED: [2026-11-16 Mon 16:33]
+:END:
+
+Extract the retry and fallback logic of =reliableNow= into a function that
+takes the query action; keep =reliableTimeProvider= using the real query.
+Replace the two network tests with stub-driven tests per the gate.
