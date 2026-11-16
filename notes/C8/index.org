@@ -21,14 +21,31 @@
 :END:
 
 The =!$parseYaml= tag parses a YAML string inside a template. In
-=src/Iidy/Yaml/Resolver.hs= (around lines 836-843) the parsed AST goes
-through =astToValueRaw :: YamlAst -> Value=, an aeson =Value= whose object
-keys are held in aeson's =KeyMap=, which may not keep document order. The
-Rust original parses with the order-preserving =serde_yaml_ng=, so mapping
-keys come out in source order there. If the Haskell result reorders keys,
-rendered templates differ from Rust. Flagged in the March Gemini review of
-the resolver error paths and confirmed as still present by the C2 triage
+=src/Iidy/Yaml/Resolution/Resolver.hs= (=resolveParseYaml=, lines 836-844) the
+parsed AST goes through =astToValueRaw :: YamlAst -> Value= (line 908) and
+then =fromValue=. The intermediate is an aeson =Value= whose object keys are
+held in aeson's =KeyMap=, which does not keep document order (the comment on
+=fromValue= in =src/Iidy/Yaml/OValue.hs= line 46 claims it preserves order,
+which only holds for an already-ordered source). The ordered type is
+=OValue= (=OObject ![(Text, OValue)]=, same file, line 27). The Rust
+original resolves the tag in =~/src/iidy/src/yaml/resolution/resolver.rs=
+(=resolve_parse_yaml=, around line 1820) with =serde_yaml::from_str= into
+=serde_yaml::Value=, whose mappings keep source order, so mapping keys come
+out in source order there. If the Haskell result reorders keys, rendered
+templates differ from Rust. Flagged in the March Gemini review of the
+resolver error paths and confirmed as still present by the C2 triage
 ([[file:../C2/report--handoff-triage.org][report]]).
+
+Other callers of =astToValueRaw= have the same loss: =resolveEscape=
+(Resolver.hs line 861), =parseYamlContent= in
+=src/Iidy/Yaml/Imports/ContentParsing.hs= (line 48) and
+=src/Iidy/Cfn/Operations/ConvertStack.hs= (line 193). They are not part of
+this card.
+
+Existing tests: the =parseYamlTests= group in =test/Test/ResolverTest.hs=
+(line 951) uses =assertResolves= and already compares =OObject= lists, so an
+ordering test fits there; end-to-end fixtures live under
+=test-fixtures/example-templates/= with matching =expected-outputs/=.
 
 * Scope and gate
 :PROPERTIES:
@@ -36,13 +53,37 @@ the resolver error paths and confirmed as still present by the C2 triage
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
 
-Allowed paths: =src/Iidy/Yaml/=, =test/=, =test-fixtures/=, =spec/= only if
-the formal semantics state key order for this tag, =notes/C8/=.
+Allowed paths: =src/Iidy/Yaml/Resolution/Resolver.hs=,
+=src/Iidy/Yaml/OValue.hs= (a new ordered raw-AST conversion and the
+comment fix), =test/Test/ResolverTest.hs=, a fixture pair under
+=test-fixtures/example-templates/= and =test-fixtures/expected-outputs/=
+(and =test/Test/FixtureTest.hs= only if the fixture needs registering),
+=spec/= only if the formal semantics state key order for this tag,
+=DIVERGENCES.md= (one entry if Haskell and Rust cannot be made to agree),
+=notes/C8/=.
 
-Gate: a fixture with out-of-alphabetical-order keys under =!$parseYaml= shows
-whether Haskell and Rust agree (record both outputs here); if they differ,
-the parsed AST converts directly to the ordered =OValue= type and the fixture
-matches Rust; build warning-free, all tests pass; committed with C8.
+Out of scope: changing =resolveEscape=, import content parsing or
+=ConvertStack= (they share =astToValueRaw= and the same loss: see the
+stop rule); any change to how duplicate keys, preprocessing tags or numbers
+inside the parsed string are treated, beyond keeping order.
+
+Done when:
+- [ ] A test with mapping keys in non-alphabetical order (nested mappings
+  too) under =!$parseYaml= is recorded failing on the branch base, in
+  =parseYamlTests= and as an end-to-end fixture.
+- [ ] The Rust output for the same fixture is recorded in the card (or, if
+  the Rust binary cannot be run, the source-order guarantee of
+  =serde_yaml::Value= is cited), and the Haskell output now matches it.
+- [ ] The parsed AST is converted directly to =OValue= with mapping order
+  kept; duplicate keys behave as before (the test says which wins).
+- [ ] All other =parseYamlTests= and the full suite pass unchanged.
+- [ ] Build warning-free, commits name C8.
+
+Stop and record if: Haskell and Rust already agree (record both outputs,
+keep the new test as a guard, finish); the other =astToValueRaw= callers
+should change too, or fixing them would change rendered output of existing
+templates (question for Tavis: list them, do not touch them); the fix
+needs a change outside the allowed paths.
 
 * TODO Reproduce against Rust with a key-order fixture
 :PROPERTIES:
@@ -50,8 +91,31 @@ matches Rust; build warning-free, all tests pass; committed with C8.
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
 
-* TODO Convert the parsed AST directly to OValue if order differs
+Write a template whose =!$parseYaml= string has keys like =zebra=, =apple=,
+=mango= (and a nested mapping). Render it with the Rust binary
+(=nix develop ~/src/iidy= shell, read-only use) and with iidy-hs, and record
+both outputs in the card. Add the failing unit test to =parseYamlTests=
+first.
+
+* TODO Add an ordered raw-AST conversion and use it in resolveParseYaml
 :PROPERTIES:
 :ID: org:01a1e64b-91dd-7176-8d4f-38a59f8c8546
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
+
+Add a function next to =astToValueRaw= (for example =astToOValueRaw=) that
+produces =OValue= with the same per-node rules (tags, imported documents,
+key text via =rawKeyText=), and call it in =resolveParseYaml= in place of
+=fromValue (astToValueRaw ast)=. Do not duplicate the per-node rules:
+define =astToValueRaw= from it with =toValue= only if that keeps its
+behaviour for the other callers; otherwise leave =astToValueRaw= alone.
+
+* TODO Fix the misleading fromValue comment and add the fixture
+:PROPERTIES:
+:ADDED: [2026-11-16 Mon 16:30]
+:ID: org:01a1e6a4-4f0d-77c9-af0f-e2920a42aa7d
+:END:
+
+Correct the comment on =fromValue= in =OValue.hs= (it keeps whatever order
+the =KeyMap= iterates in). Add the end-to-end fixture pair and record the
+passing run.

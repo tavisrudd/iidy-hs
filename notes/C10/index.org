@@ -20,14 +20,27 @@
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
 
-=constructCommandMetadata= requires a full =StackArgs= value, but only reads
-a few fields from it. Commands that have no stack-args file pass a dummy
-=emptyStackArgs= from =app/Main.hs= (around lines 125 and 169) to satisfy
-it. Separately, the =naoFixtureSet= field (=src/Iidy/Cli.hs= around line 92)
-is declared but never read. Both were left open by the March
-=constructCommandMetadata= refactor handoff and the CLI utilities review;
-the C2 triage ([[file:../C2/report--handoff-triage.org][report]]) confirmed
-they are still present.
+=constructCommandMetadata= (=src/Iidy/Cfn/CommandMetadata.hs=, line 40)
+requires a full =StackArgs= value but reads exactly one field from it,
+=saServiceRoleArn= (line 59, for =cmIamServiceRole=). Commands that have no
+stack-args file pass a dummy =emptyStackArgs= (defined in
+=src/Iidy/Cfn/Types.hs= line 114, with =saServiceRoleArn = Nothing=) from
+=app/Main.hs= lines 125 (exec-changeset) and 169 (delete-stack). The other
+caller is =src/Iidy/Cfn/Runner.hs= line 91, which passes the real parsed
+=sa'=. =emptyStackArgs= is also used by =test/Test/GlobalConfigTest.hs=
+and defined in =Types.hs=, so it stays.
+
+Separately, the =naoFixtureSet= field (=src/Iidy/Cli.hs= line 92) is never
+read or set. Looking further, the whole =NormalizedAwsOpts= record
+(=Cli.hs= lines 87-93, exported at line 6) is never constructed or used
+anywhere in =src/=, =app/= or =test/=, so the field is not the only dead
+part. No test calls =constructCommandMetadata= (it makes an STS call);
+=test/Test/Shared.hs= only builds =CommandMetadata= values directly.
+
+Both items were left open by the March =constructCommandMetadata= refactor
+handoff and the CLI utilities review; the C2 triage
+([[file:../C2/report--handoff-triage.org][report]]) confirmed they are
+still present.
 
 * Scope and gate
 :PROPERTIES:
@@ -35,14 +48,34 @@ they are still present.
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
 
-Allowed paths: =app/Main.hs=, =src/Iidy/Cli.hs=, the module defining
-=constructCommandMetadata= and its callers, =test/=, =notes/C10/=.
+Allowed paths: =app/Main.hs= (explicitly allowed: it holds the two dummy
+call sites), =src/Iidy/Cfn/CommandMetadata.hs=, =src/Iidy/Cfn/Runner.hs=
+(the third caller), =src/Iidy/Cli.hs=, =test/= (only if a test references
+what is removed), =notes/C10/=.
 
-Gate: =constructCommandMetadata= takes only the data it uses; =emptyStackArgs=
-is no longer passed from =Main.hs= (and deleted if nothing else uses it);
-=naoFixtureSet= is removed, or kept with a recorded reason if a parser test
-needs it; command metadata output is unchanged (existing snapshot tests
-pass); build warning-free; committed with C10.
+Out of scope: =emptyStackArgs= itself (tests use it); changing which
+commands emit command metadata; changing the metadata content or its
+rendering; other CLI option types.
+
+Done when:
+- [ ] =constructCommandMetadata= takes only the data it uses (the service
+  role as =Maybe Text=) instead of =StackArgs=; all three callers updated.
+- [ ] =app/Main.hs= no longer passes =emptyStackArgs= and no longer
+  imports names it stops using (no new warnings).
+- [ ] =naoFixtureSet= is removed. If =NormalizedAwsOpts= has no users at
+  all (as found in Context), the whole record and its export are removed
+  and the card says so; otherwise only the field.
+- [ ] Command metadata output is unchanged: the exec-changeset and
+  delete-stack metadata still shows no IAM service role, and the stack
+  operations still show the stack-args one (by reading the diff, since no
+  test covers it; add a test only if it fits in the allowed paths without a
+  new mock).
+- [ ] Build warning-free, full suite green, commits name C10.
+
+Stop and record if: removing =NormalizedAwsOpts= or the field breaks a
+test or code outside the allowed paths; narrowing the signature would
+change the metadata of any command (question for Tavis); the change grows
+beyond these two call-site and record edits.
 
 * TODO Narrow constructCommandMetadata's input and drop the dummy StackArgs
 :PROPERTIES:
@@ -50,8 +83,26 @@ pass); build warning-free; committed with C10.
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
 
+Replace the =StackArgs= parameter with the service role =Maybe Text=. Update
+=Runner.hs= line 91 to pass =saServiceRoleArn sa'= and the two =Main.hs=
+sites to pass =Nothing=. Remove the =emptyStackArgs= and, if unused, the
+=StackArgs (..)= names from the =Main.hs= import on line 37.
+
 * TODO Remove naoFixtureSet
 :PROPERTIES:
 :ID: org:01a1e64b-91f1-739a-802d-47ed4021dfd6
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
+
+Delete the field, or the whole unused =NormalizedAwsOpts= record and its
+export if nothing references it (re-run the search first).
+
+* TODO Run the full gate and review the metadata diff
+:PROPERTIES:
+:ADDED: [2026-11-16 Mon 16:30]
+:ID: org:01a1e6a4-e5f4-73ec-ac7e-ce0fa5c779a4
+:END:
+
+Build with =-Werror= warnings via =make build-strict= under
+=scripts/guarded-build=, run the full suite, and record in the card that
+the three call sites pass the same service role as before.

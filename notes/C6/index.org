@@ -33,7 +33,19 @@ tests).
 
 Because the hook pipes through =tail -5=, the hung run shows no test names,
 and tasty has no default per-test timeout, so a hang blocks a commit with no
-diagnostic.
+diagnostic. Since then C23 added =--test-options=--timeout=60s= to the
+=cabal test= line in =.githooks/pre-commit=, so the guard half of this card
+is partly in place (the =Makefile= =test= target still has no timeout).
+
+Leads for where a hang can come from: the suite is built =-threaded -N=
+(=iidy-hs.cabal= around line 235) and no test module forks threads itself,
+but the interactive renderer does.
+=src/Iidy/Output/Renderers/Interactive/Types.hs= forks the spinner and timing threads (=forkIO= around lines 235 and 288) and
+stops them with =killThread= inside =mask_= (=stopSpinner= around line 249,
+=stopTimingTask= around line 310); =src/Iidy/Aws/Timing.hs= uses =bracket=
+(around line 114). Tests that drive the renderer (for example
+=test/Test/RendererOutputTest.hs=, =test/Test/ThemeVariantTest.hs=,
+=test/Test/WatchStackTest.hs=) are the first suspects.
 
 * Scope and gate
 :PROPERTIES:
@@ -41,13 +53,33 @@ diagnostic.
 :ADDED: [2026-11-16 Mon 14:24]
 :END:
 
-Allowed paths: =test/=, =src/= where the hang is a real concurrency bug,
-=.githooks/pre-commit=, =Makefile=, =notes/C6/=.
+Allowed paths: =test/=, =test-fixtures/=, =src/Iidy/Output/Renderers/=
+and =src/Iidy/Aws/Timing.hs= only where the hang is a real concurrency bug
+there, =Makefile=, =.githooks/pre-commit=, =notes/C6/=.
 
-Gate: the hanging test is identified and the cause fixed (not just skipped);
-the suite runs at least 200 consecutive times with no hang (record the loop
-command and result here); the hook or test runner applies a per-test
-timeout so any future hang fails fast and names the test.
+Out of scope: skipping, deleting or loosening the hanging test instead of
+fixing its cause; changing renderer behaviour that users see; changing
+=scripts/guarded-build= or the supervisor scripts.
+
+Done when:
+- [ ] The reproduction loop is recorded in the card (exact command, GHC
+  version, number of runs, per-test timeout, whether runs were under load).
+- [ ] If a hang reproduced: the test and cause are named in the card with
+  the stack or event-log evidence; a regression test or stress test that
+  failed (timed out) before the fix passes after it; the suite then runs
+  30 consecutive times without a timeout.
+- [ ] If nothing reproduced in the budget: the card is parked WAITING (by
+  the supervisor) with the next-time notes below recorded: what was tried,
+  what to capture on the next hang (see the first task), and which
+  suspects are still open.
+- [ ] The =Makefile= =test= target passes the same per-test timeout as the
+  hook, so a hang anywhere fails fast and names the test.
+- [ ] Build warning-free, full suite green, commits name C6.
+
+Stop and record if: about 30 full-suite runs on GHC 9.12.3 with
+=--timeout=20s= (see the first task) show no hang; the cause is outside the
+allowed paths (for example in a dependency or in the RTS); or fixing it
+would change user-visible renderer behaviour (question for Tavis).
 
 * TODO Reproduce and identify the hanging test
 :PROPERTIES:
@@ -55,9 +87,13 @@ timeout so any future hang fails fast and names the test.
 :ADDED: [2026-11-16 Mon 14:24]
 :END:
 
-Loop the test binary with a per-test timeout (for example
-=--timeout=20s=) and full output, under load and with =+RTS -N= variations,
-until a run hangs; record which test and its stack or event log.
+Build once with =scripts/guarded-build cabal build all --enable-tests=, then
+loop the test binary about 30 times with =--timeout=20s=,
+=--test-show-details=direct= style output (no =tail=), saving each run's
+output to a log in the scratchpad. Vary =+RTS -N1=, =-N2= and the default
+=-N=, and run some iterations while the host is loaded. Do not run the loop
+under =guarded-build= for its whole duration (it holds the shared build
+lock); take the lock only for the build.
 
 Observation from the first hang (2026-11-16, GHC 9.10.3 build, before the
 C3 move to 9.12.3): SIGTERM did not stop the hung binary; it was still alive
@@ -69,14 +105,35 @@ stuck in an uninterruptible wait (=mask=-ed =bracket= cleanup, an =MVar= or
 both the hang and the ignored SIGTERM. The process was then killed with
 SIGKILL. Check whether the hang still occurs on GHC 9.12.3.
 
-* TODO Fix the cause and add a timeout guard
+* TODO Record what to capture on a future hang
+:PROPERTIES:
+:ADDED: [2026-11-16 Mon 16:30]
+:ID: org:01a1e6a3-ecef-7736-8e3b-bd1554ab7fae
+:END:
+
+Whether or not the hang reproduces, write down in the card how to catch the
+next one: run the suite without =tail=, with =+RTS -l= (event log) or
+=-DS= if available, and on a hang capture =ls /proc/PID/task= state,
+=/proc/PID/stack= per thread and the last test name from the tasty output.
+
+* TODO Fix the cause with a failing test first
 :PROPERTIES:
 :ID: org:01a1e63f-baa2-7184-958c-c38a2e90eb80
 :ADDED: [2026-11-16 Mon 14:24]
 :END:
 
-Fix the deadlock or unbounded wait, then add a per-test timeout to the
-test suite or the pre-commit hook.
+Only if a hang reproduced. Write the regression or stress test first and
+record it failing (timing out) on the branch base, then fix the deadlock or
+unbounded wait. Do not skip the test.
+
+* TODO Align the Makefile test target with the hook timeout
+:PROPERTIES:
+:ADDED: [2026-11-16 Mon 16:30]
+:ID: org:01a1e6a3-ecef-7736-8e3b-bd1469774d96
+:END:
+
+Add =--test-options=--timeout=60s= to the =cabal test= line of the =test=
+target in the =Makefile= so it matches =.githooks/pre-commit=.
 
 * TODO Verify with a long run loop
 :PROPERTIES:
@@ -84,4 +141,6 @@ test suite or the pre-commit hook.
 :ADDED: [2026-11-16 Mon 14:24]
 :END:
 
-Run the suite repeatedly and record the result here.
+After a fix, run the suite 30 consecutive times and record the command and
+result here. If no fix was possible, record the reproduction attempt per the
+Done-when list and stop.

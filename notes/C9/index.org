@@ -20,15 +20,30 @@
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
 
-The output renderer's width comes from =src/Iidy/Output/Terminal.hs=
-(around lines 23-34), which reads only the =COLUMNS= environment variable and
-falls back to 80 columns. =COLUMNS= is usually not exported to child
-processes, so in practice output wraps at 80 on wide terminals. The Rust
-original queries the real terminal size (=output/terminal.rs= around line
-55). The =terminal-size= package is already a dependency and is used in
-=src/Iidy/Cli/Help.hs=. Flagged in the March Gemini review of the
-interactive renderer; still present per the C2 triage
+The output renderer's width comes from =detectCapabilities= in
+=src/Iidy/Output/Terminal.hs= (lines 18-41), which reads only the =COLUMNS=
+environment variable. When =COLUMNS= is unset or invalid it gives
+=Just 80= on a terminal and =Nothing= otherwise. =COLUMNS= is usually not
+exported to child processes, so in practice output wraps at 80 on wide
+terminals. The consumer is =newInteractiveRendererWithHandles= in
+=src/Iidy/Output/Renderers/Interactive/Types.hs= (line 176), which uses
+=tcWidth= and falls back to =defaultScreenWidth= (130, line 112) when it is
+=Nothing=; =src/Iidy/Output/Manager.hs= line 90 also passes =tcWidth= on.
+
+The Rust original does not read =COLUMNS= at all. It has two places:
+=TerminalCapabilities::detect_terminal_width= in
+=~/src/iidy/src/output/terminal.rs= (line 54, the real size via the
+=terminal_size= crate, else =None=) and =get_terminal_width= in
+=~/src/iidy/src/output/theme.rs= (line 177, the real size, else 130, used by
+the interactive renderer at =renderers/interactive.rs= line 101). So Rust's
+order is: real terminal size, then 130. The =terminal-size= package is
+already a dependency (=iidy-hs.cabal= line 122) and is used in
+=src/Iidy/Cli/Help.hs= (=size=, around line 195). Flagged in the March
+Gemini review of the interactive renderer; still present per the C2 triage
 ([[file:../C2/report--handoff-triage.org][report]]).
+
+C18 also works in =src/Iidy/Output/=; this card stays inside
+=Terminal.hs= (the renderer files above are read, not edited).
 
 * Scope and gate
 :PROPERTIES:
@@ -36,12 +51,38 @@ interactive renderer; still present per the C2 triage
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
 
-Allowed paths: =src/Iidy/Output/Terminal.hs=, =test/=, =notes/C9/=.
+Allowed paths: =src/Iidy/Output/Terminal.hs=, a new
+=test/Test/TerminalTest.hs= registered in =test/Main.hs= and in the test
+suite =other-modules= of =iidy-hs.cabal=, =DIVERGENCES.md= (one entry),
+=notes/C9/=.
 
-Gate: width resolution matches Rust's order of precedence (record it here;
-expected: =COLUMNS= override, then the real terminal size, then 80 when not a
-terminal); a unit test covers the precedence with the size lookup injected;
-build warning-free, all tests pass; committed with C9.
+Out of scope: any other file in =src/Iidy/Output/= (C18 owns renderer
+changes), the fallback width constant (130 stays in
+=Interactive/Types.hs=), colour detection, help-text width in
+=Cli/Help.hs=.
+
+Settled here: keep honouring a valid =COLUMNS= as the highest-precedence
+override (it is existing behaviour; Rust has no equivalent, so record that
+in =DIVERGENCES.md=). The rest follows Rust.
+
+Done when:
+- [ ] The card records Rust's precedence as found: real terminal size, then
+  130 (via =Nothing= and the renderer's =defaultScreenWidth=); and ours:
+  valid =COLUMNS=, then real size, then =Nothing=.
+- [ ] =tcWidth= no longer returns =Just 80= for a terminal without
+  =COLUMNS=; non-terminal output still yields =Nothing=.
+- [ ] A unit test covers the precedence with the size lookup injected
+  (valid =COLUMNS= wins; invalid or zero =COLUMNS= falls through; real size
+  used when no override; =Nothing= when neither), recorded failing before
+  the fix for the =Just 80= case.
+- [ ] Existing output and renderer tests pass unchanged.
+- [ ] Build warning-free, full suite green, commits name C9.
+
+Stop and record if: matching Rust needs a change outside the allowed paths
+(for example to the renderer's width fallback); the terminal-size lookup
+cannot be injected without changing exported types used elsewhere; or the
+=COLUMNS= decision above turns out to conflict with how existing tests or
+users rely on it (question for Tavis).
 
 * TODO Record Rust's width precedence
 :PROPERTIES:
@@ -49,8 +90,25 @@ build warning-free, all tests pass; committed with C9.
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
 
+Re-read the two Rust functions named in Context, confirm the line numbers
+and the 130 fallback, and write the precedence into the card.
+
 * TODO Use terminal-size in Output.Terminal with a precedence test
 :PROPERTIES:
 :ID: org:01a1e64b-91e7-70e2-a35d-fbac15d409ba
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
+
+Split the width decision into a pure function over (=COLUMNS= text,
+is-terminal, size lookup result) and have =detectCapabilities= call it with
+the real inputs (=System.Console.Terminal.Size.size=). Write the failing
+test first in =test/Test/TerminalTest.hs=, then make it pass.
+
+* TODO Record the COLUMNS divergence
+:PROPERTIES:
+:ADDED: [2026-11-16 Mon 16:30]
+:ID: org:01a1e6a4-9de1-74ec-a05a-8dfbdd59102a
+:END:
+
+Add one entry to =DIVERGENCES.md= saying iidy-hs honours =COLUMNS= and Rust
+does not.
