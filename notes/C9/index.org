@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C9
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C2 handoff triage (notes/C2/report--handoff-triage.org), accepted by the user 2026-11-16
 :CREATED_BY: opus-5.5-medium
@@ -10,8 +10,28 @@
 :ID: org:01a1e64b-18c0-7261-acab-1bfcf5b6d02b
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 16:34]--[2026-11-16 Mon 16:40] => 0:06
+CLOCK: [2026-11-16 Mon 16:41]--[2026-11-16 Mon 16:43] => 0:02
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:34]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 16:34]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a3a564f6f37fc422a
+- Clock-out [2026-11-16 Mon 16:40]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a3a564f6f37fc422a
+- Clock-in [2026-11-16 Mon 16:41]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a3a564f6f37fc422a
+- Clock-out [2026-11-16 Mon 16:43]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a3a564f6f37fc422a
+- Card state STARTED → DONE [2026-11-16 Mon 16:43]
+  Note: Landed 503bcfa..ac59877: real terminal size via injectable lookup, COLUMNS override bounded 1..10000, size 0 ignored; DIVERGENCES entry; Sonnet review: land, fix round 1 narrow single-function fixes landed on supervisor's diff check
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -71,17 +91,17 @@ override (it is existing behaviour; Rust has no equivalent, so record that
 in =DIVERGENCES.md=). The rest follows Rust.
 
 Done when:
-- [ ] The card records Rust's precedence as found: real terminal size, then
+- [X] The card records Rust's precedence as found: real terminal size, then
   130 (via =Nothing= and the renderer's =defaultScreenWidth=); and ours:
   valid =COLUMNS=, then real size, then =Nothing=.
-- [ ] =tcWidth= no longer returns =Just 80= for a terminal without
+- [X] =tcWidth= no longer returns =Just 80= for a terminal without
   =COLUMNS=; non-terminal output still yields =Nothing=.
-- [ ] A unit test covers the precedence with the size lookup injected
+- [X] A unit test covers the precedence with the size lookup injected
   (valid =COLUMNS= wins; invalid or zero =COLUMNS= falls through; real size
   used when no override; =Nothing= when neither), recorded failing before
   the fix for the =Just 80= case.
-- [ ] Existing output and renderer tests pass unchanged.
-- [ ] Build warning-free, full suite green, commits name C9.
+- [X] Existing output and renderer tests pass unchanged.
+- [X] Build warning-free, full suite green, commits name C9.
 
 Stop and record if: matching Rust needs a change outside the allowed paths
 (for example to the renderer's width fallback); the terminal-size lookup
@@ -89,19 +109,47 @@ cannot be injected without changing exported types used elsewhere; or the
 =COLUMNS= decision above turns out to conflict with how existing tests or
 users rely on it (question for Tavis).
 
-* TODO Record Rust's width precedence
+* DONE Record Rust's width precedence
 :PROPERTIES:
 :ID: org:01a1e64b-91e7-70e2-a35d-fbad21baf79b
 :ADDED: [2026-11-16 Mon 14:37]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:40] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a3a564f6f37fc422a
 :END:
 
 Re-read the two Rust functions named in Context, confirm the line numbers
 and the 130 fallback, and write the precedence into the card.
 
-* TODO Use terminal-size in Output.Terminal with a precedence test
+** Result
+:PROPERTIES:
+:ID: org:01a1e6bb-b36a-74b2-b92d-b5822971775c
+:ADDED: [2026-11-16 Mon 16:40]
+:END:
+Confirmed. =TerminalCapabilities::detect_terminal_width=
+(=~/src/iidy/src/output/terminal.rs:54=) is
+=terminal_size::terminal_size().map(width)=, so =None= without a terminal.
+=get_terminal_width= (=src/output/theme.rs:177=) is the same call with
+=.unwrap_or(130)=. Rust never reads =COLUMNS=. Rust order: real size, then
+130. Ours (after C9): valid =COLUMNS=, then real size (terminal only), then
+=Nothing=, which the renderer turns into 130 (=defaultScreenWidth=).
+
+Existing owners searched: =COLUMNS= is read only in
+=src/Iidy/Output/Terminal.hs=; =tcWidth= is consumed only by
+=Output/Manager.hs:90= and =Interactive/Types.hs:176= (unchanged);
+=Cli/Help.hs:195= calls =size= for help text (out of scope). So
+=Output.Terminal= is the single owner and was extended.
+* DONE Use terminal-size in Output.Terminal with a precedence test
 :PROPERTIES:
 :ID: org:01a1e64b-91e7-70e2-a35d-fbac15d409ba
 :ADDED: [2026-11-16 Mon 14:37]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:40] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a3a564f6f37fc422a
 :END:
 
 Split the width decision into a pure function over (=COLUMNS= text,
@@ -109,11 +157,94 @@ is-terminal, size lookup result) and have =detectCapabilities= call it with
 the real inputs (=System.Console.Terminal.Size.size=). Write the failing
 test first in =test/Test/TerminalTest.hs=, then make it pass.
 
-* TODO Record the COLUMNS divergence
+** Result
+:PROPERTIES:
+:ID: org:01a1e6bb-b36a-74b2-b92d-b5813512707b
+:ADDED: [2026-11-16 Mon 16:40]
+:END:
+New pure =resolveWidth= (=COLUMNS= text, is-terminal, size result) and
+=detectCapabilitiesWith= taking the injected size query;
+=detectCapabilities= passes =System.Console.Terminal.Size.size=. No
+dependency change (=terminal-size= already in cabal and flake). Exported
+types unchanged. Tests in =test/Test/TerminalTest.hs=.
+
+Failing before the fix (old =Just 80= logic behind the same signature, run
+with =-p "Output.Terminal"=): 5 of 8 failed, e.g. "real size used when
+COLUMNS unset" expected =Just 200= got =Just 80=; "terminal with no size and
+no COLUMNS is Nothing, not 80" expected =Nothing= got =Just 80=. All pass
+after the fix; full suite passes on the rebased tip.
+* DONE Record the COLUMNS divergence
 :PROPERTIES:
 :ADDED: [2026-11-16 Mon 16:30]
 :ID: org:01a1e6a4-9de1-74ec-a05a-8dfbdd59102a
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:40] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a3a564f6f37fc422a
+:END:
 
 Add one entry to =DIVERGENCES.md= saying iidy-hs honours =COLUMNS= and Rust
 does not.
+
+** Result
+:PROPERTIES:
+:ID: org:01a1e6bb-b369-71a2-a392-7586a69a8d29
+:ADDED: [2026-11-16 Mon 16:40]
+:END:
+Entry "Terminal Width: COLUMNS Override" added to =DIVERGENCES.md=.
+
+** Review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e6bc-b493-717a-a7eb-803045efad5c
+:ADDED: [2026-11-16 Mon 16:41]
+:END:
+Verdicts: b15b1f1 land; 1033efe land. 0 blocking defects, 3 low.
+
+Regression proof (independent): in the review worktree, =resolveWidth=
+changed so the no-override terminal case gives =Just 80= (base logic), run
+with =-p "Output.Terminal"=: 5 of 8 fail (zero, negative and invalid
+COLUMNS fall-through, "real size used", "Nothing not 80"); the valid-COLUMNS
+and non-terminal cases pass. Reverted with =git checkout --=.
+
+Correctness notes:
+- Handle: =TermSize.size= queries stdout; the renderer's =tcIsTty= is also
+  =hIsTerminalDevice stdout= and the interactive renderer writes to stdout
+  (spinner/status to stderr only when stdout is a tty). Rust's
+  =terminal_size()= tries stdout, then stderr, then stdin. With stdout
+  redirected Haskell gives =Nothing= (130) while Rust could pick up a
+  stderr tty; Rust's =is_terminal= check on stdout makes the renderer
+  non-interactive in that case, so no visible difference.
+- Redirected stdout: =realSize= is not queried, =Nothing=, same as before.
+- Fallback: Manager.hs:90 passes =tcWidth caps= as =ioTerminalWidth=;
+  Interactive/Types.hs:176 gives =fromMaybe (fromMaybe 130 (tcWidth caps))
+  (ioTerminalWidth opts)=, so =Nothing= yields 130 as Rust's theme.rs:177.
+- No duplication: =COLUMNS= parsing stays in one place; test module is its
+  own file and is registered in cabal and Main.hs.
+
+Defects:
+1. Low, Terminal.hs =parseColumns=: =reads= on =Int= wraps on overflow, so
+   =COLUMNS=18446744073709551716= parses as 100 and a value just above
+   =maxBound= becomes a huge or negative number (negative falls through).
+   Pre-existing logic, not introduced here. Fix: parse via =Integer= and
+   cap or reject above a sane bound. No test covers it.
+2. Low, Terminal.hs =detectCapabilitiesWith=: a size query returning
+   =Just 0= (some ptys report 0x0) becomes =tcWidth = Just 0= and the
+   renderer gets width 0, not 130. Rust has the same shape
+   (=Some(0)=), so parity holds, but the card text says zero should fall
+   through. Fix: =filter (> 0)= on the real size in =resolveWidth=, plus a
+   test.
+3. Low, DIVERGENCES.md: entry is accurate but does not note that the stdout
+   only query differs from Rust's stdout/stderr/stdin order. Optional.
+
+** Fix round 1 (2026-11-16)
+:PROPERTIES:
+:ID: org:01a1e6be-4291-7394-886b-e728bf7faa7b
+:ADDED: [2026-11-16 Mon 16:43]
+:END:
+A real size of 0 is now ignored (tests failed first: got =Just 0=). =COLUMNS=
+is parsed as =Integer= so 18446744073709551716 no longer wraps to 100, and
+is bounded to 1..10000: no real terminal is wider than that, and a larger
+value would only make the renderer pad absurdly. Tests failed first (got
+=Just 100= and =Just 10001=). The divergence entry now notes the stdout-only
+size query.
