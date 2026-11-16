@@ -10,6 +10,14 @@
       supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
       pkgsFor = system: nixpkgs.legacyPackages.${system};
+      # GHC 9.12 package set. Only leaf packages (nothing else in the set
+      # depends on them) are moved past the nixpkgs default version; see
+      # notes/C3/index.org for the packages held back and why.
+      hpkgsFor = pkgs: pkgs.haskell.packages.ghc912.override {
+        overrides = hself: _hsuper: {
+          tasty-bench = hself.tasty-bench_0_5;
+        };
+      };
       haskellDeps = hpkgs: [
         hpkgs.aeson
         hpkgs.bytestring
@@ -61,7 +69,7 @@
       packages = forAllSystems (system:
         let pkgs = pkgsFor system;
         in {
-          default = (pkgs.haskellPackages.callCabal2nix "iidy-hs" self {}).overrideAttrs (old: {
+          default = ((hpkgsFor pkgs).callCabal2nix "iidy-hs" self {}).overrideAttrs (old: {
             nativeCheckInputs = (old.nativeCheckInputs or []) ++ [ pkgs.git ];
             # The Git import test needs a local commit; flake sources omit .git.
             preCheck = (old.preCheck or "") + ''
@@ -75,7 +83,7 @@
 
       devShells = forAllSystems (system:
         let pkgs = pkgsFor system;
-            hp = pkgs.haskellPackages;
+            hp = hpkgsFor pkgs;
         in {
           default = pkgs.mkShell {
             buildInputs = [

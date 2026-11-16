@@ -56,15 +56,181 @@ reason recorded under the survey task; =make build= is warning-free under
 still runs; CI configuration matches the local toolchain. Work is committed
 with C3 in the messages.
 
-* TODO Survey current versions and available upgrades
+* DONE Survey current versions and available upgrades
 :PROPERTIES:
 :ID: org:01a1e636-0a67-706a-98d2-964f30f99821
 :ADDED: [2026-11-16 Mon 14:14]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 15:18] \\
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675/agent:a1ab98d8d02b79e5e
 :END:
 
 Record a table of the flake inputs, GHC version and each direct Haskell
 dependency: current version, newest available in nixpkgs and on Hackage, and
 any known breakage. Decide which GHC to target.
+
+** Flake inputs
+:PROPERTIES:
+:ID: org:01a1e670-895d-75ec-8209-ce3a1e568887
+:ADDED: [2026-11-16 Mon 15:18]
+:END:
+
+Both flakes have a single input, =nixpkgs= on =nixpkgs-unstable=.
+
+| Lock              | Before                  | After                   |
+|-------------------+-------------------------+-------------------------|
+| =flake.lock=      | =c9fe7d12= (2026-09-30) | =5d2b81a7= (2026-11-14) |
+| =spec/flake.lock= | =c9fe7d12= (2026-09-30) | =5d2b81a7= (2026-11-14) |
+
+Between those two revisions the default =haskellPackages= set did not move:
+every direct dependency, the default GHC (9.10.3), cabal-install, hlint,
+fourmolu, HLS and Racket (9.3) have the same versions. The store paths did
+change (rebuilt against the newer nixpkgs), so the bump still had to be
+built and tested. The bump alone built warning-free and passed the full
+suite and the Redex suite; it was committed as =72d2d6d=.
+
+** GHC
+:PROPERTIES:
+:ID: org:01a1e670-895d-75ec-8209-ce39a0621a0e
+:ADDED: [2026-11-16 Mon 15:18]
+:END:
+
+Compilers in nixpkgs at =5d2b81a7=: 9.0, 9.2, 9.4.8, 9.6.7, 9.8.4, 9.10.3
+(the default =haskellPackages=), 9.12.3 (=haskell.packages.ghc912=; 9.12.4
+exists as a bare compiler only) and 9.14.1. Each package set uses the same
+Hackage versions (one =hackage-packages.nix=), so the GHC choice does not
+change the library versions available.
+
+Cache check (=nix build --dry-run= of =ghcWithPackages haskellDeps= plus HLS):
+
+| Package set | Derivations to build locally for the dep set                     | HLS                         |
+|-------------+------------------------------------------------------------------+-----------------------------|
+| ghc910      | the wrapper only                                                 | cached                      |
+| ghc912      | 35 (amazonka-*, microlens-*, uuid, regex-tdfa, tasty-bench, ...) | cached (2.13.0.0)           |
+| ghc914      | 241                                                              | 347 derivations, not cached |
+
+GHC 9.14 is ruled out: its package set is largely uncached and HLS would be
+built from source.
+
+Decision: target GHC 9.12.3 through =haskell.packages.ghc912=. It is the
+newest series whose package set and HLS nixpkgs largely caches; the 35
+uncached derivations (amazonka and friends) build in a few minutes with
+=--max-jobs 1 --cores 4=, and CI's magic-nix-cache keeps them after the first
+run. The project compiled warning-free under =-Wall -Wcompat -Werror= on
+9.12.3 with no source changes. The trade-off: =haskell.packages.ghc912= is
+less exercised by nixpkgs than the default set, so a future lock bump may
+find a package marked broken there; the fallback is to point =hpkgsFor= in
+=flake.nix= back at =pkgs.haskellPackages=. CI (=.github/workflows/ci.yml=) builds only through
+=nix develop=, so it always uses whatever GHC the flake selects; there is no
+separate GHC 9.6 matrix to keep compatible.
+
+** Direct Haskell dependencies
+:PROPERTIES:
+:ID: org:01a1e670-895c-7747-aea5-1187c1d2a63a
+:ADDED: [2026-11-16 Mon 15:18]
+:END:
+
+"Boot" means the library ships with GHC; the table gives GHC 9.10.3's
+version. After the move to GHC 9.12.3 the boot libraries that changed are
+base 4.21.1.0, deepseq 1.5.1.0, directory 1.3.9.0, time 1.14 and
+transformers 0.6.1.2; the rest are unchanged. The
+nixpkgs column is the default =haskellPackages= version, unchanged by the
+lock bump. Versioned attributes (=foo_X_Y=) are the newer releases nixpkgs
+also carries outside its curated set.
+
+| Package                                              | Current / nixpkgs default | nixpkgs versioned attr          | Hackage latest |
+|------------------------------------------------------+---------------------------+---------------------------------+----------------|
+| base                                                 |           4.20.2.0 (boot) |                                 |       4.22.0.0 |
+| array                                                |            0.5.8.0 (boot) |                                 |        0.5.8.0 |
+| bytestring                                           |           0.12.2.0 (boot) |                                 |       0.12.2.0 |
+| containers                                           |                0.7 (boot) | =containers_0_8=                |          0.8.1 |
+| deepseq                                              |            1.5.0.0 (boot) |                                 |        1.5.2.0 |
+| directory                                            |            1.3.8.5 (boot) | =directory_1_3_10_1=            |       1.3.11.0 |
+| filepath                                             |            1.5.4.0 (boot) | =filepath_1_5_5_0=              |        1.5.5.0 |
+| process                                              |           1.6.26.1 (boot) | =process_1_6_28_0=              |       1.6.30.0 |
+| stm                                                  |            2.5.3.1 (boot) |                                 |        2.5.3.1 |
+| text                                                 |              2.1.3 (boot) | =text_2_1_4=                    |          2.1.4 |
+| time                                                 |             1.12.2 (boot) | =time_1_15=                     |       1.16.0.1 |
+| transformers                                         |            0.6.1.1 (boot) |                                 |        0.6.3.0 |
+| unix                                                 |            2.8.7.0 (boot) |                                 |        2.8.8.0 |
+| aeson                                                |                   2.2.4.1 |                                 |        2.3.2.0 |
+| aeson-pretty                                         |                    0.8.10 |                                 |         0.8.11 |
+| amazonka (+ -core, -cloudformation, -s3, -ssm, -sts) |   2.0-unstable-2025-04-16 |                                 |            2.0 |
+| ansi-terminal                                        |                     1.1.5 |                                 |          1.1.5 |
+| async                                                |                     2.2.6 |                                 |          2.2.6 |
+| conduit                                              |                   1.3.6.1 |                                 |        1.3.6.1 |
+| crypton                                              |                     1.0.6 | =crypton_1_1_2=                 |          2.2.7 |
+| edit-distance                                        |                   0.2.2.1 |                                 |        0.2.2.1 |
+| HsYAML                                               |                   0.2.1.5 |                                 |        0.2.1.6 |
+| http-client                                          |                    0.7.19 |                                 |         0.7.19 |
+| http-client-tls                                      |                   0.3.6.4 | =http-client-tls_0_4_0=         |          0.4.0 |
+| http-conduit                                         |                   2.3.9.1 |                                 |        2.3.9.1 |
+| http-types                                           |                    0.12.4 |                                 |         0.12.6 |
+| memory                                               |                    0.18.0 |                                 |         0.18.0 |
+| microlens                                            |                  0.4.14.0 | =microlens_0_5_0_0=             |        0.5.0.0 |
+| network                                              |                   3.2.8.0 |                                 |       3.2.14.0 |
+| optparse-applicative                                 |                  0.18.1.0 | =optparse-applicative_0_19_0_0= |       0.19.0.0 |
+| prettyprinter                                        |                     1.7.1 |                                 |          1.7.2 |
+| random                                               |                   1.2.1.3 | =random_1_3_1=                  |          1.3.1 |
+| regex-tdfa                                           |                   1.3.2.5 |                                 |        1.3.2.7 |
+| resourcet                                            |                     1.3.0 |                                 |          1.3.0 |
+| scientific                                           |                   0.3.8.1 |                                 |       0.3.10.0 |
+| temporary                                            |                       1.3 |                                 |            1.3 |
+| terminal-size                                        |                     0.3.4 |                                 |          0.3.4 |
+| uuid                                                 |                  1.3.16.1 |                                 |       1.3.16.1 |
+| vector                                               |                  0.13.2.0 |                                 |       0.13.2.0 |
+| QuickCheck                                           |                  2.15.0.1 | =QuickCheck_2_18_0_0=           |       2.19.0.0 |
+| tasty                                                |                     1.5.4 |                                 |          1.5.5 |
+| tasty-hunit                                          |                    0.10.2 |                                 |         0.10.2 |
+| tasty-quickcheck                                     |                    0.11.1 |                                 |         0.11.1 |
+| tasty-bench                                          |                     0.4.1 | =tasty-bench_0_5=               |          0.5.1 |
+
+Tooling (dev shell): cabal-install 3.16.1.0 (Hackage 3.18.2.0), hlint 3.10
+(3.10), fourmolu 0.19.0.1 (0.21.0.0), haskell-language-server 2.13.0.0
+(2.15.0.0). The Hackage column was read from =hackage.haskell.org/package/<p>/preferred=
+on 2026-11-16.
+
+=amazonka-sns= is not a dependency today (no SNS code), so its old GHC 9.10
+build failure is moot; nixpkgs no longer marks it broken.
+
+** Held-back packages
+:PROPERTIES:
+:ID: org:01a1e670-895c-7747-aea5-1186941441e5
+:ADDED: [2026-11-16 Mon 15:18]
+:END:
+
+The flake takes each library from the nixpkgs package set, which follows a
+Stackage snapshot. Where nixpkgs also carries a newer release as a versioned
+attribute, the cost of switching was measured by overriding that one package
+in the GHC 9.12 set and counting the derivations the dev shell would then
+build (=nix build --dry-run=):
+
+| Package              | Newer attr                      | Extra derivations | Outcome                               |
+|----------------------+---------------------------------+-------------------+---------------------------------------|
+| tasty-bench          | =tasty-bench_0_5=               |        1 (itself) | upgraded to 0.5                       |
+| microlens            | =microlens_0_5_0_0=             |                17 | held back                             |
+| http-client-tls      | =http-client-tls_0_4_0=         |                14 | held back                             |
+| crypton              | =crypton_1_1_2=                 |                23 | held back                             |
+| optparse-applicative | =optparse-applicative_0_19_0_0= |               112 | held back                             |
+| random               | =random_1_3_1=                  |               n/a | held back: override fails to evaluate |
+| QuickCheck           | =QuickCheck_2_18_0_0=           |               n/a | held back: override fails to evaluate |
+
+Reason for the held-back rows: each is a dependency of other packages in the
+set (amazonka, tls, tasty, QuickCheck and so on), so overriding it rebuilds
+those reverse dependencies from source on every machine and in CI, and moves
+them onto versions nixpkgs has not tested together. =random= and
+=QuickCheck= cannot even be swapped in alone. Boot libraries (=containers=,
+=text=, =time=, =directory=, =filepath=, =process= and the rest) stay at
+the versions GHC 9.12.3 ships, since replacing a boot library forces a
+rebuild of everything above it. Packages with no versioned attribute are
+already at the newest version nixpkgs provides.
+
+The bounds in =iidy-hs.cabal= were left as they are (=base >= 4.17 && < 5=,
+=tasty >= 1.4=, =tasty-hunit >= 0.10=, everything else unbounded): the
+package is not published to Hackage and nix pins every version, so tighter
+bounds would add maintenance without changing any build.
 
 * TODO Upgrade flake inputs and the Haskell package set
 :PROPERTIES:
