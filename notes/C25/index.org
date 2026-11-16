@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C25
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   C13 side finding: Haskell emits '  c:\n    - x', Rust serde_yaml emits '  c:\n  - x'
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
 :ID: org:01a1e6a8-aa2c-70e1-8b6e-6fcc4bc3af4c
 :ADDED: [2026-11-16 Mon 16:19]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 16:44]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C25 — Match serde_yaml sequence indentation in the YAML emitter
 #+date: 2026-11-16
