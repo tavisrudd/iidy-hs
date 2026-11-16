@@ -21,7 +21,32 @@
 :ADDED: [2026-11-16 Mon 15:39]
 :END:
 
-get-import: apply --query and end YAML output with a newline (Rust parity)
+=iidy get-import <location> [--query EXPR] [--format yaml|json]= loads one
+import and prints it. The Haskell port differs from Rust in two ways, found
+while working C7 ([[file:../C7/index.org][C7 notes]], "Side findings"):
+
+1. =--query= is parsed into =giaQuery= (=src/Iidy/Cli.hs:315=) but never
+   read. =runGetImportWith= in =src/Iidy/GetImport.hs= (call to =emitDoc=
+   at line 80) prints the whole document. Rust applies the query before
+   formatting: =~/src/iidy/src/cfn/get_import.rs:45-54= calls
+   =apply_jmespath_query= and, on error, prints the error to stderr and
+   returns exit 1. Haskell already has the pieces: =applyJmesPath :: Text
+   -> Value -> Either JMESPathError Value= (=src/Iidy/Yaml/JMESPath.hs:55=)
+   and =formatJMESPathQueryError= (=src/Iidy/Errors/JMESPath.hs=), used by
+   =render='s =queryStep= (=src/Iidy/Render.hs:89-93=).
+2. YAML output has no trailing newline. =emitDoc=
+   (=src/Iidy/GetImport.hs:125-132=) emits =emitYaml (fromValue doc)= as
+   =OdRawOutput= unchanged. Rust prints =serde_yaml::to_string= output,
+   which ends in a newline (=get_import.rs:56-57=).
+
+Related, check while here: Rust's JSON format pretty-prints
+(=serde_json::to_string_pretty= + =println!=, =get_import.rs:62-64=);
+Haskell uses compact =Aeson.encode= plus a newline.
+
+Confirmed 2026-11-16 by running both binaries on =x.yaml= containing
+=a: 1=: Haskell =get-import x.yaml | od -c= shows =a :   1= with no
+=\n=; =get-import --query a x.yaml= prints =a: 1= in Haskell and =1= in
+Rust (=~/src/iidy/target/debug/iidy=).
 
 * Scope and gate
 :PROPERTIES:
@@ -29,17 +54,51 @@ get-import: apply --query and end YAML output with a newline (Rust parity)
 :ADDED: [2026-11-16 Mon 15:39]
 :END:
 
-Define allowed paths and acceptance evidence before implementation.
+Allowed paths: =src/Iidy/GetImport.hs=, =test/Test/GetImportTest.hs=,
+=test/=, =test-fixtures/=, =notes/C13/=.
 
-* TODO get-import: apply --query and end YAML output with a newline (Rust parity)
+Gate:
+- =get-import --query EXPR= applies the JMESPath query to the loaded
+  document before formatting; an invalid query prints an error on stderr
+  and exits 1, as Rust does.
+- YAML output ends with exactly one newline.
+- JSON output layout matches Rust (pretty-printed), or the card records why
+  it differs.
+- Tests in =test/Test/GetImportTest.hs= (via =runGetImportWith=) show: a
+  field query (=a= on ={a: 1}= gives =1=), a nested query, an invalid query
+  giving exit 1 and no output, and the trailing newline on YAML output.
+- Side-by-side run of the Rust and Haskell binaries on the same inputs
+  recorded in this card, with matching stdout.
+- Build warning-free, all tests pass; committed with C13 in the message.
+
+* TODO Apply --query in get-import
 :PROPERTIES:
-:ID: org:01a1e683-91b4-768b-9769-54f23c3e46f6
-:ADDED: [2026-11-16 Mon 15:39]
+:ID: org:01a1e686-cbb6-729e-b451-7bf256f1d5f1
+:ADDED: [2026-11-16 Mon 15:42]
 :END:
 
-Refine this headline into a short, concrete outcome or unit of work before
-dispatch. Put dependencies in Context and detailed steps and the stopping
-condition in this task body.
+Thread =giaQuery= through =runGetImportWith=: apply =applyJmesPath= to
+=idDoc= before =emitDoc=; on =Left=, print the error (reuse
+=formatJMESPathQueryError= as =render= does) to stderr and return 1. Add
+tests for field, nested and invalid queries. Stop when the tests pass.
 
-Keep task notes under the relevant TODO heading. Add reports and pinned
-=file-rev:= links here as work proceeds.
+* TODO End YAML output with a newline and align JSON layout with Rust
+:PROPERTIES:
+:ID: org:01a1e686-cbb6-729e-b451-7bf1bf7504b4
+:ADDED: [2026-11-16 Mon 15:42]
+:END:
+
+Make =emitDoc= YAML output end in exactly one newline (do not double it if
+=emitYaml= already ends with one for some inputs). Compare JSON output with
+Rust's =to_string_pretty= and match it, or record the reason not to. Add
+tests on the exact output text.
+
+* TODO Verify against the Rust binary and close
+:PROPERTIES:
+:ID: org:01a1e686-cbb6-729e-b451-7bf05b1b9cb0
+:ADDED: [2026-11-16 Mon 15:42]
+:END:
+
+Run both binaries on the same inputs (plain, =--query=, invalid query,
+=--format json=) and record the outputs here. Then close the card per the
+gate.
