@@ -45,7 +45,11 @@ Finding for Tavis: Rust's =render --format json= uses
 =serde_json::to_string_pretty= (=~/src/iidy/src/render.rs= line 44), which
 is two-space; running both binaries on the same input shows Rust two-space
 and iidy-hs =render= four-space. So Render's four-space output is itself a
-divergence from Rust, but this card must not change output bytes.
+divergence from Rust.
+
+Decision (Tavis, 2026-11-16): switch =render --format json= to two-space,
+matching Rust. Both commands then use the same two-space layout, so the
+shared helper needs no indent parameter.
 
 * Scope and gate
 :PROPERTIES:
@@ -60,24 +64,26 @@ a new test file is added), =test/Test/GetImportTest.hs=, the render tests
 (=test/Test/RendererTest.hs= or =test/Test/RendererOutputTest.hs=),
 =notes/C24/=.
 
-Out of scope: changing the bytes of either command's output (in particular
-making =render --format json= two-space, see the stop rule); the other
-pretty-JSON callers listed in Context; trailing-newline behaviour.
+Out of scope: changing get-import's output bytes; any render output other
+than =--format json=; the other pretty-JSON callers listed in Context.
 
 Done when:
-- [ ] One helper takes the indent width (and returns lazy or strict text
-  as both callers need); =formatJsonPretty= and =formatJson= are defined
-  with it and no longer call aeson-pretty directly.
-- [ ] Tests pin the exact bytes of both commands' JSON output (two-space
-  plus newline for get-import, four-space for render) and pass before and
-  after the refactor; the render pin is added first on the branch base.
-- [ ] Existing get-import and render tests pass unchanged.
+- [ ] One two-space pretty-JSON helper is the only caller of aeson-pretty
+  for these two commands; =formatJsonPretty= and =formatJson= are removed
+  or are thin aliases of it.
+- [ ] A render test pinning Rust's exact =render --format json= bytes is
+  recorded failing on the branch base (four-space), then passes; the
+  get-import byte tests pass unchanged.
+- [ ] A side-by-side run of the Rust and Haskell =render --format json= on
+  the same inputs (a nested mapping and a list) is recorded in this card,
+  with matching stdout including the trailing newline.
+- [ ] Any existing render test expecting four-space JSON is updated to the
+  Rust bytes, each such change listed in the card.
 - [ ] Build warning-free, full suite green, commits name C24.
 
-Stop and record if: C13 has not landed on =main=; the helper cannot keep
-both outputs byte-identical; or you want to change render's indent to
-match Rust (question for Tavis: it changes user-visible output; the finding
-is in Context).
+Stop and record if: matching Rust's render bytes needs more than the indent
+change (for example key order or trailing newline differences): record the
+difference and report =question=.
 
 * TODO Share one pretty-JSON helper between get-import and render
 :PROPERTIES:
@@ -85,10 +91,10 @@ is in Context).
 :ADDED: [2026-11-16 Mon 16:19]
 :END:
 
-Confirm C13 has landed and re-read both functions. Add the failing-safe
-pin first: a render test asserting the current four-space bytes, next to the
-existing get-import two-space test. Then add the shared helper in its own
-module and make both functions thin wrappers over it.
+C13 has landed. Re-read both functions. Add the failing regression first:
+a render test asserting Rust's two-space bytes, failing on the base. Then
+add the shared two-space helper in its own module and use it from both
+commands.
 * TODO Run the gate and record the byte comparison
 :PROPERTIES:
 :ADDED: [2026-11-16 Mon 16:40]
