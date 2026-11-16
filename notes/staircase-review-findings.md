@@ -1,7 +1,7 @@
 # Staircase Nesting Review Findings
 
 **Date**: 2026-03-03
-**Scope**: Files from `notes/handoffs/2026-03-02-staircase-review.md`
+**Scope**: Files from `notes/archive/handoffs/2026-03-02-staircase-review.md`
 
 ---
 

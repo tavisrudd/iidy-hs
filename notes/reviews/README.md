@@ -38,14 +38,14 @@ story of how a subsystem improved:
 ## Related Handoff Documents
 
 Review findings are tracked and fixed via handoff documents in
-`notes/handoffs/`. The naming pattern is `post-review--<area>-fixes`:
+`notes/archive/handoffs/`. The naming pattern is `post-review--<area>-fixes`:
 
 | Review Area              | Fix-Tracking Handoff                                                          |
 |--------------------------|-------------------------------------------------------------------------------|
-| General (all open)       | `notes/handoffs/2026-03-02-post-review-fixes.md`                             |
-| Interactive renderer     | `notes/handoffs/done/2026-02-28-post-review--interactive-renderer-fixes.md`   |
-| YAML resolver errors     | `notes/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`   |
-| YAML resolver (leftover) | `notes/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-remaining-fixes.md` |
-| CFN operations polling   | `notes/handoffs/done/2026-03-01-post-review-loop--cfn-operations-polling.md`  |
-| Interactive renderer (2) | `notes/handoffs/done/2026-03-01-post-review-loop--interactive-renderer.md`    |
-| Spec-critical            | `notes/handoffs/done/2026-03-03-post-review--spec-critical-fixes.md`          |
+| General (all open)       | `notes/archive/handoffs/2026-03-02-post-review-fixes.md`                             |
+| Interactive renderer     | `notes/archive/handoffs/done/2026-02-28-post-review--interactive-renderer-fixes.md`   |
+| YAML resolver errors     | `notes/archive/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`   |
+| YAML resolver (leftover) | `notes/archive/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-remaining-fixes.md` |
+| CFN operations polling   | `notes/archive/handoffs/done/2026-03-01-post-review-loop--cfn-operations-polling.md`  |
+| Interactive renderer (2) | `notes/archive/handoffs/done/2026-03-01-post-review-loop--interactive-renderer.md`    |
+| Spec-critical            | `notes/archive/handoffs/done/2026-03-03-post-review--spec-critical-fixes.md`          |

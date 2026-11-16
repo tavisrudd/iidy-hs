@@ -5,7 +5,7 @@
 
 ## Problem Statement
 
-The Rust side identified this same gap (see `~/src/iidy/notes/handoffs/2026-02-19-renderer-output-capture.md`):
+The Rust side identified this same gap (see `~/src/iidy/notes/archive/handoffs/2026-02-19-renderer-output-capture.md`):
 their renderer writes directly to stdout via `println!()` so tests can't capture output.
 They planned a writer-injection refactor but haven't done it yet.
 

@@ -338,10 +338,10 @@ No performance measurement exists. Startup time and preprocessing latency unmeas
 - 3A: Narrowed `SomeException` catches to specific types at 13 AWS boundaries (c972b32)
 - 1D: Unknown top-level key validation with `edit-distance` lib and did-you-mean suggestions (870be82)
 - 1E: Made `saStackName :: !Text` non-optional, validated at parse time, removed `getStackName` (33da957)
-- Rust t-later: unknown-key validation handoff at `~/src/iidy/notes/handoffs/unknown-key-validation.md`
-- Rust t-later: getStackName unwrap-panic handoff at `~/src/iidy/notes/handoffs/getStackName-unwrap-panic.md`
-- Bug t-later: watch-stack exits early on terminal stacks (`notes/handoffs/2026-03-02-bug-watch-stack-timeouts-early.md`)
-- Refactor t-later: constructCommandMetadata takes unnecessary StackArgs (`notes/handoffs/2026-03-02-constructCommandMetadata-refactor.md`)
+- Rust t-later: unknown-key validation handoff at `~/src/iidy/notes/archive/handoffs/unknown-key-validation.md`
+- Rust t-later: getStackName unwrap-panic handoff at `~/src/iidy/notes/archive/handoffs/getStackName-unwrap-panic.md`
+- Bug t-later: watch-stack exits early on terminal stacks (`notes/archive/handoffs/2026-03-02-bug-watch-stack-timeouts-early.md`)
+- Refactor t-later: constructCommandMetadata takes unnecessary StackArgs (`notes/archive/handoffs/2026-03-02-constructCommandMetadata-refactor.md`)
 **Files modified**: 20+ files across src/, test/, app/, iidy-hs.cabal, test-fixtures/
 **Notes for next session**:
 - 1F (dot-path query returns ONull on miss) still needs user sign-off

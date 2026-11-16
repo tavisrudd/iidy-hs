@@ -261,8 +261,8 @@ refactoring plan. Instead of executing the review/spike chunks as written, the s
 3. Created a continuation handoff for further work
 
 The original chunks (1-8) were superseded. See:
-- `notes/handoffs/2026-03-02-low-hanging-fruit.md` — what was actually done (all complete)
-- `notes/handoffs/2026-03-02-continued-improvements.md` — what to do next
+- `notes/archive/handoffs/2026-03-02-low-hanging-fruit.md` — what was actually done (all complete)
+- `notes/archive/handoffs/2026-03-02-continued-improvements.md` — what to do next
 
 ## Handoff Notes
 

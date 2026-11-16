@@ -19,7 +19,8 @@ expanding the current card. Run `c check` before committing card or lane files.
 
 - There is one lane, `main`, entered through `notes/main/index.org`.
 - Cards are the source of planned and in-flight work. Do not start new
-  handoff documents under `notes/handoffs/`; file a card instead.
+  handoff documents; file a card instead. `notes/archive/` holds the old
+  handoffs and planning notes as history only.
 - Put the card ID in commit messages (for example `C3: bump amazonka`) so
   `c related ID commits` finds them.
 - A card's long write-ups (reviews, audits, research) go beside it as

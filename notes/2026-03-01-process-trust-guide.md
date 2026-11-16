@@ -92,7 +92,7 @@ repository. They are the primary evidence for trust:
 | Coding constitution         | `CLAUDE.md`                                                                      | What rules governed every AI session                             |
 | Phased workplan             | `WORKPLAN.md`                                                                    | How the work was sequenced and gated                             |
 | Phase research docs         | `notes/phases/`                                                                  | Whether research preceded implementation                         |
-| Session handoffs            | `notes/sessions/`, `notes/handoffs/`                                             | How context was carried between sessions                         |
+| Session handoffs            | `notes/sessions/`, `notes/archive/handoffs/`                                             | How context was carried between sessions                         |
 | Review round findings       | `notes/reviews/`                                                                 | What was found and fixed in each review round                    |
 | Due diligence report        | `notes/reviews/2026-03-01-review--general-due-diligence.md`                      | Independent assessment with scorecard and risk register          |
 | Architecture decision recs  | `docs/dev/adr/`                                                                  | Why major design choices were made, with trade-offs acknowledged |
@@ -100,7 +100,7 @@ repository. They are the primary evidence for trust:
 | Progress log                | `progress.log`                                                                   | Timestamped chronological record of work completed               |
 | Commit history              | `git log`                                                                        | 183 small, green, descriptive commits                            |
 | Risk review                 | `notes/reviews/2026-02-21-review--initial-workplan-risks-persona:mcconnell.md`   | Pre-implementation risk analysis using McConnell estimation      |
-| Agent resilience analysis   | `notes/archived/2026-02-21-init-planning--workplan-agent-resilience.md`           | 12 cataloged stuck states with mitigations                       |
+| Agent resilience analysis   | `notes/archive/2026-02-21-init-planning--workplan-agent-resilience.md`           | 12 cataloged stuck states with mitigations                       |
 
 **What these artifacts can tell you:**
 - Whether the work was planned before implemented (research docs predate code)

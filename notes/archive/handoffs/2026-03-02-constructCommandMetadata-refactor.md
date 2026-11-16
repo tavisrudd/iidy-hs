@@ -44,7 +44,7 @@ If no production code uses `emptyStackArgs` after this refactor (only tests), do
 | constructCommandMetadata     | grep for definition              |
 | emptyStackArgs callers       | `app/Main.hs:172,217`           |
 | emptyStackArgs definition    | `src/Iidy/Cfn/Types.hs:110-131` |
-| Post-review 4C (larger work) | `notes/handoffs/2026-03-02-post-review-fixes.md` |
+| Post-review 4C (larger work) | `notes/archive/handoffs/2026-03-02-post-review-fixes.md` |
 
 ## Delegation
 

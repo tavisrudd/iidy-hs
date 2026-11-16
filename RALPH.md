@@ -17,13 +17,14 @@ every minute while the sub-agents work.
 
 ## End-of-Session Gate (every session, non-negotiable)
 Before wrapping up, verify ALL of these:
-- WORKPLAN.md phase index is current (status, links)
-- Current phase doc checkboxes reflect actual state
-- Session handoff doc created in notes/handoffs/ with: what done, deviations, next steps
+- The card you worked (see AGENTS.md for the `c` work loop) records what
+  was done, deviations and next steps under its task headings, and its
+  state is current (`c set ID done|waiting --note ...`)
 - progress.log has entries for all completed chunks
 - MEMORY.md reflects any new learnings or status changes
-- All doc updates committed alongside code
-- No orphaned TODOs — anything deferred is tracked in a phase doc
+- All doc and card updates committed alongside code; `c check` passes
+- No orphaned TODOs — anything deferred is a task on the card or a new card
+  (`c new TITLE --origin TEXT`)
 
 ## Session Size & Delegation
 - Keep sessions SHORT. Each session = 1-2 good green commits, then exit.

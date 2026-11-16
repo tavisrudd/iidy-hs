@@ -185,7 +185,7 @@ workflow patterns (session structure, handoff format, progress tracking).
   with `src/Iidy/Cli/Parser.hs` for completeness
 - Each PRD should be self-contained but cross-reference others by filename
 - Sub-agents writing PRDs MUST read source code, not just docs
-- Detailed handoff doc with additional context: `notes/handoffs/2026-02-25-requirements-workplan.md`
+- Detailed handoff doc with additional context: `notes/archive/handoffs/2026-02-25-requirements-workplan.md`
 
 #### Session 7 — Completeness Review (2026-02-25, Session 42)
 

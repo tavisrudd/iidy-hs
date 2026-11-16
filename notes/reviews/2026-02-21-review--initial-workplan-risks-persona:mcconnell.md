@@ -2,7 +2,7 @@
 
 **Reviewer posture**: Steve McConnell (Code Complete, Software Estimation, Rapid Development)
 **Date**: 2026-02-21
-**Inputs**: WORKPLAN.md, notes/archived/2026-02-21-init-planning--ecosystem-audit.md, notes/archived/2026-02-21-init-planning--module-inventory.md, notes/archived/2026-02-21-init-planning--test-inventory.md
+**Inputs**: WORKPLAN.md, notes/archive/2026-02-21-init-planning--ecosystem-audit.md, notes/archive/2026-02-21-init-planning--module-inventory.md, notes/archive/2026-02-21-init-planning--test-inventory.md
 
 ---
 

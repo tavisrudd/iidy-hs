@@ -276,4 +276,4 @@ All 6 chunks complete. 958→1049 tests. Zero warnings.
 
 **Session 45.** All chunks executed via parallel worktree sub-agents, cherry-picked to main.
 No bugs found by property tests — all algebraic laws hold. One port bug found and fixed
-(saResourceTypes). Continuation handoff at `notes/handoffs/2026-03-02-continued-improvements.md`.
+(saResourceTypes). Continuation handoff at `notes/archive/handoffs/2026-03-02-continued-improvements.md`.

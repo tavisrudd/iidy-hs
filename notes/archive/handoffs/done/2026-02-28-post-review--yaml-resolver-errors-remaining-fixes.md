@@ -5,7 +5,7 @@
 **Session**: `bc778d26-2dea-4022-a23f-fdad1f0fd614`
 **References**:
 - Review: `notes/reviews/2026-02-28-review--yaml-resolver-errors--round-1.md`
-- Fixes so far: `notes/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`
+- Fixes so far: `notes/archive/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`
 
 ## Context
 
@@ -133,7 +133,7 @@ Not blocking anything.
 | Resolver unit tests             | `test/Test/ResolverTest.hs` (49 tests)                                       |
 | Error classification tests      | `test/Test/ErrorClassificationTest.hs` (35 tests)                            |
 | ErrorId tests                   | `test/Test/ErrorIdTest.hs` (6 tests)                                         |
-| Fixes tracking doc              | `notes/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`  |
+| Fixes tracking doc              | `notes/archive/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`  |
 | Rust resolver (read-only ref)   | `~/src/iidy/src/yaml/resolution/resolver.rs`                                 |
 
 ## Build/Test Commands
@@ -157,17 +157,17 @@ Per CLAUDE.md. Use `~/.claude/bin/run-quiet` for noisy output.
 
 ## Workflow Instructions
 
-1. Read this file and `notes/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`
+1. Read this file and `notes/archive/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`
 2. Check Progress below for what's next
 3. Launch A+B as parallel Sonnet sub-agents
 4. After A+B pass, launch C as Sonnet sub-agent, then D
 5. For E, use an Explore agent to read Rust validation code first, then implement
 6. After each issue, build + test (`cabal clean && cabal build && cabal test`)
-7. **Update `notes/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`** — move completed items from
+7. **Update `notes/archive/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`** — move completed items from
    "Remaining Unfixed Issues" table to the "Code Fixes Applied" tables above
 8. Update Progress below and add Handoff Notes
 9. **When all done**: append a `## Session Summary` section at the bottom of
-   `notes/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md` with final test count, what was fixed,
+   `notes/archive/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md` with final test count, what was fixed,
    what remains (if anything), and the revised grade assessment
 
 ## Progress
@@ -197,7 +197,7 @@ Per CLAUDE.md. Use `~/.claude/bin/run-quiet` for noisy output.
 - `test/Test/ErrorIdTest.hs`
 - `test-fixtures/example-templates/errors/expand-missing-template.yaml`
 - `test-fixtures/example-templates/errors/expand-parse-error.yaml`
-- `notes/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`
+- `notes/archive/handoffs/done/2026-02-28-post-review--yaml-resolver-errors-fixes.md`
 
 **Files modified**:
 - `src/Iidy/Yaml/Resolution/Resolver.hs` — 7 fixes

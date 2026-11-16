@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C2
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   User request 2026-11-16: adopt the c cards workflow (single main lane)
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :ID: org:01a1e634-e186-742e-8268-3a8655aa5cf5
 :ADDED: [2026-11-16 Mon 14:13]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 14:25]
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :END:
 #+title: C2 — Archive old handoffs and triage their open tasks
 #+date: 2026-11-16
@@ -66,10 +71,34 @@ unchecked or deferred item in a table under this task: source file, item,
 whether it is still relevant against current code, and a recommended
 decision. Present the table to the user and record their decisions here.
 
-* TODO Move handoffs into a single archive
+Full triage: [[file:report--handoff-triage.org][report--handoff-triage.org]]
+(written by a sub-agent, spot-checked: =src/Iidy/GetImport.hs= does set
+=icAwsEnv = Nothing=). Ten handoffs have nothing live left; eight feed six
+recommended cards; three ask for changes to the Rust repo =~/src/iidy=, which
+this repo cannot touch, and those docs do not exist in the Rust repo's notes.
+
+| # | Proposed card                                         | Recommendation |
+|---+-------------------------------------------------------+----------------|
+| 1 | Give get-import an AWS environment (Rust parity)      | card (bug)     |
+| 2 | Preserve key order in =!$parseYaml=                   | card           |
+| 3 | Detect real terminal width in the output renderer     | card           |
+| 4 | Remove dummy StackArgs and dead CLI fields            | card           |
+| 5 | Add tests for explain, demo and get-import            | card           |
+| 6 | Split StackArgsLoader and parse fields directly       | card (low)     |
+| - | Rust-repo items (no-remote-imports flag, remove       | user decision  |
+|   | use-parameters, no-profile/no-role sentinel values)   |                |
+
+User decisions: pending.
+
+* DONE Move handoffs into a single archive
 :PROPERTIES:
 :ID: org:01a1e636-0a5d-7357-9121-47eefed22f43
 :ADDED: [2026-11-16 Mon 14:14]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 14:31] \\
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :END:
 
 Move =notes/handoffs/= (including =done/=) and the contents of
@@ -77,15 +106,36 @@ Move =notes/handoffs/= (including =done/=) and the contents of
 =git mv=. Rewrite the handoffs README as a short historical note pointing to
 =c next=. Fix in-repo links to moved files (=grep -rn "notes/handoffs"=).
 
-* TODO Route RALPH.md to cards
+Result: =notes/handoffs/= (with =done/=) is now =notes/archive/handoffs/=, and
+the five planning files from =notes/archived/= sit directly in
+=notes/archive/= beside the existing =phase-13-research/=; =notes/archived/=
+is gone. The handoffs README is a short historical note. References to the
+old paths were rewritten in =AGENTS.md=, =WORKPLAN.md=, =notes/C4=, reviews,
+phase docs and the archived files themselves; the relative
+=phase-13-research= links in the archived =done/= handoffs were adjusted for
+the extra directory level. =progress.log= (append-only) and the C1/C2 card
+text, which describe the old layout, keep the old paths.
+
+* DONE Route RALPH.md to cards
 :PROPERTIES:
 :ID: org:01a1e636-0a5d-7357-9121-47edb384b011
 :ADDED: [2026-11-16 Mon 14:14]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 14:26] \\
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :END:
 
 Replace the "session handoff doc" instruction in =RALPH.md= with the card
 work loop from =AGENTS.md=, and update the agent memory index so it no longer
 names an active handoff.
+
+Result: the =RALPH.md= end-of-session gate now asks for the worked card to
+record what was done, deviations and next steps, with its state current and
+=c check= passing; deferred work becomes a card task or a new card. The
+memory index (outside the repo) now says =c next= is the status source and
+handoffs are archived history.
 
 * TODO File cards for accepted open items
 :PROPERTIES:

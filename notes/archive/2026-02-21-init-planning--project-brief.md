@@ -189,20 +189,20 @@ Launch these sub-agents in parallel. Each writes to a file and returns a summary
 - Verify each Haskell package exists on Hackage, is maintained, and covers the needed API surface
 - Special attention to: amazonka coverage of all 7 AWS services, tree-sitter Haskell bindings (check Hackage, GitHub, any prior art for FFI to tree-sitter C), brick vs ratatui feature parity
 - Flag any gaps where no equivalent exists and propose solutions
-- Write to `notes/archived/2026-02-21-init-planning--ecosystem-audit.md`
+- Write to `notes/archive/2026-02-21-init-planning--ecosystem-audit.md`
 
 **Agent C: iidy CLI + UI audit** (Sonnet, Explore)
 - Document every CLI command, subcommand, and flag from clap definitions
 - Document every output format (interactive, JSON, plain)
 - Capture the interactive terminal UI behavior: what ratatui renders, event streaming format, color scheme, progress indicators
 - Document error message format and the enhanced error context system
-- Write to `notes/archived/2026-02-21-init-planning--cli-ui-spec.md`
+- Write to `notes/archive/2026-02-21-init-planning--cli-ui-spec.md`
 
 **Agent D: iidy test inventory** (Sonnet, Explore)
 - Catalog every test file, test function, and what it tests
 - Note which tests use mocks (mockito), property tests (proptest), snapshot tests (insta), benchmarks (criterion)
 - Map each test category to Haskell testing equivalents (hspec, QuickCheck, tasty, etc.)
-- Write to `notes/archived/2026-02-21-init-planning--test-inventory.md`
+- Write to `notes/archive/2026-02-21-init-planning--test-inventory.md`
 
 ### Step 2: Synthesize the workplan (main context, Opus)
 
@@ -261,9 +261,9 @@ After the workplan is approved, execute it autonomously. The user should NOT nee
 ## Progress
 
 - [x] Step 1a: Module inventory (sub-agent) → `notes/module-inventory.md`
-- [x] Step 1b: Ecosystem audit (sub-agent) → `notes/archived/2026-02-21-init-planning--ecosystem-audit.md`
-- [x] Step 1c: CLI + UI spec (sub-agent) → `notes/archived/2026-02-21-init-planning--cli-ui-spec.md`
-- [x] Step 1d: Test inventory (sub-agent) → `notes/archived/2026-02-21-init-planning--test-inventory.md`
+- [x] Step 1b: Ecosystem audit (sub-agent) → `notes/archive/2026-02-21-init-planning--ecosystem-audit.md`
+- [x] Step 1c: CLI + UI spec (sub-agent) → `notes/archive/2026-02-21-init-planning--cli-ui-spec.md`
+- [x] Step 1d: Test inventory (sub-agent) → `notes/archive/2026-02-21-init-planning--test-inventory.md`
 - [x] Step 2: Synthesize workplan with stage gates → `WORKPLAN.md`
 - [x] Step 2.5: Risk review (3 parallel agents) → `notes/workplan-{risk-review,agent-resilience,operational-review}.md`
 - [x] Step 3: Workplan approved (user delegated review authority, self-reviewed)

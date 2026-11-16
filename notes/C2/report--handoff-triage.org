@@ -1,0 +1,319 @@
+#+title: C2 handoff triage
+#+date: 2026-11-16
+
+* Summary
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-0690c52633d7
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+
+All 21 top-level handoffs in =notes/handoffs/= were read and every open,
+unchecked or deferred item was checked against the current code (=src/=,
+=app/=, =test/=, =docs/=, git log) and, where parity mattered, against the
+Rust original in =~/src/iidy=.
+
+- 10 handoffs have nothing live left: every item is done, superseded, or not
+  worth doing (requirements gaps, staircase review, requirements audit, the
+  params / AWS / CFN-operations / YAML-core / YAML-imports Gemini review loops,
+  the on-hold architecture handoff, and the memory audit).
+- 8 handoffs feed the 6 recommended cards below.
+- 3 handoffs (=2026-03-03-rust-*=) are out of repo. All three tasks are still
+  open in =~/src/iidy= (checked =src/cli.rs= at HEAD =8e6f3ae=). They should
+  be copied into the Rust repo's =notes/handoffs/= before this archive move
+  so they are not lost; they are not cards for this repo.
+
+Notable themes:
+- The most valuable finding is a Rust-parity bug the handoffs only half
+  noticed: =get-import= never gets an AWS environment, so =iidy get-import
+  ssm:/x=, =cfn:...= and =s3://...= always fail, while Rust's =get-import=
+  builds one. The Gemini render review flagged "AWS imports disabled" for
+  =render=, but Rust =render= has the same limitation, so render is a feature
+  decision rather than a bug.
+- The nine Gemini review-loop handoffs cite round-2 review files under
+  =notes/reviews/2026-03-03-review--*-model:gemini3--round-2.md= that do not
+  exist; only round-1 files exist. Their "Success" lines are unverified. Most
+  of their leftover OPEN items are minor style points or match Rust behaviour.
+- The large structural refactors (CfnContext read/write split, OValue/Value
+  unification, OdRawOutput replacement, typed error kinds) were consciously
+  parked or superseded (ReaderT rejected in =5657b49=, CfnContext widened in
+  =fc53cb3=). Recommend dropping them rather than carrying them as cards.
+
+* Recommended cards
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-068f1308b1a4
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+
+| # | Proposed card title                                     | Source handoff(s)                                         | Scope (one line)                                                                                                                      | Why                                                                                                                                                       |
+|---+---------------------------------------------------------+-----------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 1 | Give get-import an AWS environment (Rust parity)        | render-command (Gemini R1-1)                              | Build an AWS env from global opts in =GetImport.hs= as Rust =cfn/get_import.rs:15-27= does; decide separately whether =render= should too | =GetImport.hs:35= hard-codes =icAwsEnv = Nothing=, so =cfn:=, =ssm:=, =ssm-path:= and =s3:= imports always error; Rust supports them. User-visible bug.     |
+| 2 | Preserve key order in =!$parseYaml=                     | yaml-resolver-errors (Gemini R1-4)                        | Confirm against Rust, then convert the parsed AST straight to =OValue= instead of via aeson =Value=; add a key-order fixture             | =Resolver.hs:836-843= goes through =astToValueRaw :: YamlAst -> Value= (aeson KeyMap, sorted); Rust uses order-preserving =serde_yaml_ng=. Likely divergence. |
+| 3 | Detect real terminal width in the output renderer       | interactive-renderer (Gemini R1-1)                        | Use =terminal-size= (already a dependency, used in =Cli/Help.hs:26=) in =Output/Terminal.hs=, keeping =COLUMNS= as override                | =Terminal.hs:23-34= reads only =COLUMNS= and falls back to 80; Rust =output/terminal.rs:55= queries the real size. Parity and UX.                            |
+| 4 | Remove dummy StackArgs and dead CLI fields              | constructCommandMetadata-refactor, cli-utilities (R1-4)   | Make =constructCommandMetadata= take only the fields it reads, drop =emptyStackArgs= from =Main.hs=, delete unused =naoFixtureSet=        | =app/Main.hs:125,169= still pass =emptyStackArgs=; =naoFixtureSet= (=Cli.hs:92=) is declared but never read. Small, contained cleanup.                     |
+| 5 | Add tests for explain, demo and get-import commands     | snapshot-gap-audit (recs 5-6)                             | Smoke and content tests for =Iidy.Explain=, =Iidy.Demo= and =Iidy.GetImport= output, using mock fixtures for the AWS path from card 1     | No test module imports these modules (only =CliParserTest= mentions them). Card 1 needs a test harness anyway.                                              |
+| 6 | Split StackArgsLoader and parse fields directly         | post-review-fixes (4C), refactoring-plan (Phase 7)        | Move pure validation out of =StackArgsLoader.hs= into its own module and replace the aeson-Value walk with direct field parsing           | =StackArgsLoader.hs= is 625 lines, above the project's ~500-line ceiling. Lower priority; do only if the module is being changed anyway.                    |
+
+* Per-handoff triage
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-068e4111a139
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+
+** [[file:../archive/handoffs/2026-02-25-requirements-gaps-found.md][2026-02-25-requirements-gaps-found]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-068dd92a51f9
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: done. Every gap it reported has since been closed.
+
+| Item                                             | Current state | Evidence                                                                                   | Recommendation |
+|--------------------------------------------------+---------------+--------------------------------------------------------------------------------------------+----------------|
+| =filehash:= / =filehash-base64:= loaders          | done          | =Loaders/File.hs:64= =loadFilehashImport=, dispatched at =Dispatch.hs:68=                  | done           |
+| CFN sub-types (output, export, ...)              | done          | =Loaders/Cfn.hs:5,105-109=; commit =f34ba52=                                               | done           |
+| SSM =:json= / =:yaml= suffixes and =ssm-path:=    | done          | =Loaders/Ssm.hs:5,46,79=                                                                   | done           |
+| No multi-type import dispatcher                  | done          | =Loaders/Dispatch.hs= =mkFullDispatcher=, used by Render and GetImport                     | done           |
+| Exit-code contradiction for declined prompts     | done          | =12-cross-cutting.md:447= says 130; =10-template-approval.md:385= documents deliberate 1   | done           |
+| Terminology, forward refs, overview gaps         | done          | =00-overview.md= now has Project Lineage, Personas (incl. AI agent), Key Concepts, Ubiquitous Language | done |
+
+** [[file:../archive/handoffs/2026-03-01-post-review-loop--aws-subsystem-model:gemini3.md][post-review-loop--aws-subsystem]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-068c20487b2a
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: claims "Success"; two minor items left OPEN; round-2 review file cited does not exist.
+
+| Item                                | Current state | Evidence                                                                        | Recommendation                                   |
+|-------------------------------------+---------------+---------------------------------------------------------------------------------+--------------------------------------------------|
+| R1-2 Hardcoded NTP pool             | still open    | =Aws/Timing.hs:110= =pool.ntp.org=; Rust =aws/timing.rs:41= is identical        | drop: matches Rust, no reported need             |
+| R1-5 STS failure warning is noisy   | still open    | =Aws/Sts.hs:34= prints warning to stderr; Rust propagates the error instead     | drop: low value; behaviour is defensible         |
+
+** [[file:../archive/handoffs/2026-03-01-post-review-loop--cfn-operations-model:gemini3.md][post-review-loop--cfn-operations]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-068b4754ec2a
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: claims "Success"; two minor items left OPEN.
+
+| Item                                          | Current state | Evidence                                                                            | Recommendation                           |
+|-----------------------------------------------+---------------+-------------------------------------------------------------------------------------+------------------------------------------|
+| R1-3 =percentEncode= placed to dodge a cycle   | still open    | defined in =Cfn/StackOperations.hs=                                                 | drop: cosmetic module placement          |
+| R1-5 Sequential env replace in convert-stack  | still open    | =ConvertStack.hs:82= fold of =T.replace=; Rust =convert_stack_to_iidy.rs:36-42= same | drop: matches Rust                       |
+
+** [[file:../archive/handoffs/2026-03-01-post-review-loop--cli-utilities-model:gemini3.md][post-review-loop--cli-utilities]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-068a708ded6d
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: claims "Success"; one minor item left OPEN.
+
+| Item                                    | Current state | Evidence                                                                  | Recommendation  |
+|-----------------------------------------+---------------+---------------------------------------------------------------------------+-----------------|
+| R1-4 Dead code in AWS option types      | still open    | =naoFixtureSet= at =Cli.hs:92= is never read (grep of src/app/test)       | card 4          |
+
+** [[file:../archive/handoffs/2026-03-01-post-review-loop--interactive-renderer-model:gemini3.md][post-review-loop--interactive-renderer]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-068976ffe069
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: claims "Success"; three minor items left OPEN.
+
+| Item                                     | Current state | Evidence                                                                     | Recommendation                                 |
+|------------------------------------------+---------------+------------------------------------------------------------------------------+------------------------------------------------|
+| R1-1 Terminal width only from =COLUMNS=   | still open    | =Output/Terminal.hs:23-34=; Rust =output/terminal.rs:55= uses =terminal_size= | card 3                                         |
+| R1-2 Hand-written ANSI escapes           | still open    | 20 literal =\ESC[= sites in =src/=                                           | drop: works, low value churn                   |
+| R1-3 Monolithic =OutputData= ADT          | still open    | 24 constructors in =Output/Types.hs=                                         | drop: mirrors Rust; regrouping is pure churn   |
+
+** [[file:../archive/handoffs/2026-03-01-post-review-loop--params-subsystem-model:gemini3.md][post-review-loop--params-subsystem]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-06881606ea87
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: done. No open items.
+
+** [[file:../archive/handoffs/2026-03-01-post-review-loop--render-command-model:gemini3.md][post-review-loop--render-command]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-0687d2d0a893
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: claims "Success" with one Critical item OPEN.
+
+| Item                                    | Current state | Evidence                                                                                                     | Recommendation                                            |
+|-----------------------------------------+---------------+--------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------|
+| R1-1 AWS-based imports disabled         | still open    | =Render.hs:61= and =GetImport.hs:35= set =icAwsEnv = Nothing=; Rust render also has none, Rust get-import has one | card 1 (get-import is a bug; render is a decision)   |
+| R1-2 Generic JMESPath query error       | done          | =Render.hs:94= keeps =JMESPathError=; commit =d803633= (=Iidy.Errors.JMESPath=)                                | done                                                      |
+| R1-3 Redundant ByteString/Text copies   | still open    | one =BL.toStrict= + decode at =Render.hs:58=                                                                  | drop: negligible cost                                     |
+
+** [[file:../archive/handoffs/2026-03-01-post-review-loop--yaml-core-model:gemini3.md][post-review-loop--yaml-core]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-06866882cfeb
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: claims "0 OPEN" but its own table lists three OPEN items.
+
+| Item                                     | Current state | Evidence                                                         | Recommendation                                           |
+|------------------------------------------+---------------+------------------------------------------------------------------+----------------------------------------------------------|
+| R1-2 =reads= for scalar parsing           | still open    | =Yaml/Parser.hs:131,139=                                         | drop: covered by parser property tests and fixtures      |
+| R1-3 =reads=-based quoting heuristic      | still open    | =Yaml/Emitter.hs:116-118=                                        | drop: emitter output matches Rust snapshots              |
+| R1-4 Hand-maintained =isCfnRef= key list  | still open    | =CustomResources/Params.hs:173-179=                              | drop: CFN intrinsic set changes rarely                   |
+
+** [[file:../archive/handoffs/2026-03-01-post-review-loop--yaml-imports-model:gemini3.md][post-review-loop--yaml-imports]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-06857d0b8022
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: claims "Success"; one minor item left OPEN.
+
+| Item                                 | Current state | Evidence                                                    | Recommendation                                  |
+|--------------------------------------+---------------+-------------------------------------------------------------+-------------------------------------------------|
+| R1-3 Hand-written hex/base64 helpers | still open    | =Loaders/File.hs:180= =hexToBytes=, =:194= =b64EncodeBytes= | drop: tested via =FilehashTest=; would add deps |
+
+** [[file:../archive/handoffs/2026-03-01-post-review-loop--yaml-resolver-errors-model:gemini3.md][post-review-loop--yaml-resolver-errors]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-0684c859d908
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: claims "Success"; two minor items left OPEN.
+
+| Item                                    | Current state | Evidence                                                                                        | Recommendation                          |
+|-----------------------------------------+---------------+-------------------------------------------------------------------------------------------------+-----------------------------------------|
+| R1-3 Line-search location heuristics    | still open    | =Errors/Conversion.hs= =adjustLocationForTag=                                                    | drop: needed for Rust error parity; covered by error fixtures |
+| R1-4 =!$parseYaml= fidelity loss         | still open    | =Resolver.hs:842= =fromValue (astToValueRaw ast)=; =astToValueRaw :: YamlAst -> Value= (=:913=) | card 2                                  |
+
+** [[file:../archive/handoffs/2026-03-02-arch-refactoring.md][2026-03-02-arch-refactoring]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-06831b142e26
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: ON HOLD. Its chunk plan (critique, spikes) was superseded in session 45 by
+=notes/2026-03-02-plan-critique.md= and the low-hanging-fruit and
+continued-improvements handoffs, both DONE in =done/=. Self-critique items:
+
+| Item                                         | Current state | Evidence                                                    | Recommendation                         |
+|----------------------------------------------+---------------+-------------------------------------------------------------+----------------------------------------|
+| Chunks 1-8 (multi-angle critique, spikes)    | superseded    | =notes/2026-03-02-plan-critique.md=; spikes landed as =8afb310=, =a4d77a5=, =e4b2be3= | drop |
+| =!$expand= cycle detection                    | done          | =RECircularExpansion= fix =9c023bc=                         | done                                   |
+| =unsafePerformIO= global HTTP manager         | done          | commit =93a78ad= "Eliminate partial error and unsafePerformIO" | done                                |
+| =Render.hs= writes errors straight to stderr  | still open    | =Render.hs:118-129= =hPutStr stderr=                        | drop: same as Rust; errors belong on stderr |
+| =ReaderT CfnEnv IO= transition                 | rejected      | prototype reverted =5657b49=; patch kept in =notes/patches/= | drop                                  |
+
+** [[file:../archive/handoffs/2026-03-02-constructCommandMetadata-refactor.md][2026-03-02-constructCommandMetadata-refactor]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-0682c02421ea
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: never started.
+
+| Item                                                  | Current state | Evidence                                                              | Recommendation |
+|-------------------------------------------------------+---------------+-----------------------------------------------------------------------+----------------|
+| A-D: drop =StackArgs= param, remove =emptyStackArgs= use | still open    | =app/Main.hs:125,169=; signature at =Cfn/CommandMetadata.hs:40-48=    | card 4         |
+
+** [[file:../archive/handoffs/2026-03-02-memory-context-audit.md][2026-03-02-memory-context-audit]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-068102fa9813
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: partly done in session 2026-03-02--3 (MEMORY.md trimmed, see =progress.log:77=);
+the rest is superseded by the cards workflow.
+
+| Item                                            | Current state | Evidence                                              | Recommendation                        |
+|-------------------------------------------------+---------------+-------------------------------------------------------+---------------------------------------|
+| Audit memory, CLAUDE.md, handoffs, notes, WORKPLAN | superseded | C1 adopted cards; C2 owns handoff archive and memory pointer | drop: covered by C1/C2 |
+
+** [[file:../archive/handoffs/2026-03-02-post-review-fixes.md][2026-03-02-post-review-fixes]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-068097538558
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: sections 1-3 and 4A, 4D, 4F done (table in the doc, commits verified in git log).
+Remaining:
+
+| Item                                           | Current state | Evidence                                                                                              | Recommendation                                   |
+|------------------------------------------------+---------------+-------------------------------------------------------------------------------------------------------+--------------------------------------------------|
+| 4B CfnContext read-only/mutable split          | superseded    | ReaderT rejected =5657b49=; CfnContext widened instead =fc53cb3= (=done/2026-03-04-widen-cfncontext.md=) | drop                                             |
+| 4C StackArgsLoader extraction / direct parse   | still open    | unknown-key check done (=870be82=); =StackArgsLoader.hs= is 625 lines                                  | card 6                                           |
+| 4E OValue/Value unification                    | still open    | Resolver still converts through aeson =Value= (=Resolver.hs:11-14,913=)                                | drop as a whole; the one real symptom is card 2  |
+| 3B follow-up: structured =ParseErrorKind=       | still open    | =classifyMessage'= at =Errors/Conversion.hs:239=, 19 =isInfixOf=/=isPrefixOf= uses                     | drop: 51 error fixtures + content tests pin it   |
+
+** [[file:../archive/handoffs/2026-03-02-refactoring-plan.md][2026-03-02-refactoring-plan]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-067fbb3843ad
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: PAUSED. Most phases have since landed; the rest are low value.
+
+| Item                                     | Current state | Evidence                                                          | Recommendation                          |
+|------------------------------------------+---------------+-------------------------------------------------------------------+-----------------------------------------|
+| Phase 1 OnFailure/Capability/OutputFormat enums | done   | =8afb310=, =a4ab630=                                              | done                                    |
+| Phase 2 StackStatus type                 | done          | =e4b2be3=                                                         | done                                    |
+| Phase 3 TemplateLoader =fail= to =Either=  | done          | =a4d77a5=                                                         | done                                    |
+| Phase 4 CfnContext separation            | superseded    | =fc53cb3= widened context instead                                 | drop                                    |
+| Phase 5 Replace =OdRawOutput=             | still open    | used in =Render.hs:105=, =GetImport.hs:50-56=, =Json.hs:140=       | drop: no consumer needs typed JSON here |
+| Phase 6 semantic property tests, JMESPath subset, error content tests | done | =ceaf749=, =44ac257= (=notes/jmespath-subset.md=), =43889ad= | done |
+| Phase 7 StackArgsLoader cleanup          | still open    | same as post-review 4C                                            | card 6                                  |
+| Phase 8.1 STS warning through emit       | still open    | =Aws/Sts.hs:34= =hPutStrLn stderr=                                 | drop: low value                         |
+| Phase 8.2 Document emit callback         | done          | =docs/dev/standards.md:78=                                        | done                                    |
+| Phase 9 =InactivityPolicy= type           | still open    | timeout still a plain seconds value (=StackOperations.hs:275=)    | drop: aesthetic                         |
+| Phase 10 Narrow =SomeException=           | done          | =c972b32=; 4 mentions left in src/app                             | done                                    |
+
+** [[file:../archive/handoffs/2026-03-02-snapshot-gap-audit.md][2026-03-02-snapshot-gap-audit]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-067ee8300b39
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: research doc; high-priority recommendations done, medium ones partly open.
+
+| Item                                           | Current state | Evidence                                              | Recommendation                                 |
+|------------------------------------------------+---------------+-------------------------------------------------------+------------------------------------------------|
+| Recs 1-4 (=!Select= validator, "array" wording, expected outputs, 4 Rust fixtures) | done | =836e3f5=, =63152be=, =65d54de=, =12b178f= | done |
+| Rec 5 tests for Demo and Explain               | still open    | no test module imports =Iidy.Demo= / =Iidy.Explain=   | card 5                                         |
+| Rec 6 tests for GetImport                      | still open    | only =CliParserTest= mentions get-import              | card 5                                         |
+| Rec 7 unit tests for custom-resource modules   | still open    | covered only by fixture tests                         | drop: fixtures exercise them                   |
+| Recs 8-9 CFN operations, Spinner, Terminal     | n/a           | doc itself says no action needed                      | drop                                           |
+
+** [[file:../archive/handoffs/2026-03-02-staircase-review.md][2026-03-02-staircase-review]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-067d0c0753a8
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: done. Findings and fixes recorded in =notes/staircase-review-findings.md=
+("Fix Plan (completed)"); commits =986a28a=, =0d0bf15=, =52cc848=, =6e24905=.
+
+** [[file:../archive/handoffs/2026-03-03-rust-no-remote-imports-flag.md][2026-03-03-rust-no-remote-imports-flag]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-067c7518435f
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: out of repo, still open in Rust.
+
+| Item                                                        | Current state      | Evidence                                                 | Recommendation                                      |
+|-------------------------------------------------------------+--------------------+----------------------------------------------------------+-----------------------------------------------------|
+| Add =--no-remote-imports= to Rust, blocking =http:=/=s3:= imports | open (Rust repo) | no =no_remote_imports= in =~/src/iidy/src/cli.rs=        | out of repo: move doc to =~/src/iidy/notes/handoffs/= |
+
+** [[file:../archive/handoffs/2026-03-03-rust-remove-use-parameters.md][2026-03-03-rust-remove-use-parameters]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-067be4cc62cf
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: out of repo, still open in Rust.
+
+| Item                                                     | Current state      | Evidence                                      | Recommendation                                      |
+|----------------------------------------------------------+--------------------+-----------------------------------------------+-----------------------------------------------------|
+| Delete dead =lint-template --use-parameters= flag and docs | open (Rust repo) | =~/src/iidy/src/cli.rs:663= =use_parameters= | out of repo: move doc to =~/src/iidy/notes/handoffs/= |
+
+** [[file:../archive/handoffs/2026-03-03-rust-sentinel-values.md][2026-03-03-rust-sentinel-values]]
+:PROPERTIES:
+:ID: org:01a1e645-7b55-76f0-96c6-067a99eebc8c
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: out of repo, still open in Rust (Haskell side done in =8b144b9=).
+
+| Item                                                                 | Current state      | Evidence                                                                 | Recommendation                                      |
+|----------------------------------------------------------------------+--------------------+--------------------------------------------------------------------------+-----------------------------------------------------|
+| Honour =--profile=no-profile= and =--assume-role-arn=no-role= in merge | open (Rust repo) | only help text at =~/src/iidy/src/cli.rs:143=; no handling in =stack_args.rs= or =aws/mod.rs= | out of repo: move doc to =~/src/iidy/notes/handoffs/= |
+
+** [[file:../archive/handoffs/2026-03-05-requirements-audit.md][2026-03-05-requirements-audit]]
+:PROPERTIES:
+:ID: org:01a1e645-7b54-778e-9e27-853b91fbbe4b
+:ADDED: [2026-11-16 Mon 14:31]
+:END:
+Status: done ("All audit findings resolved. Committed.", =d4c96aa=). No open items.

@@ -9,7 +9,7 @@
 
 Over 48 sessions the project has accumulated:
 - Memory files in `~/.claude/projects/-home-tavis-src-iidy-hs/memory/`
-- Handoff docs in `notes/handoffs/` (4 active, 18 in `done/`)
+- Handoff docs in `notes/archive/handoffs/` (4 active, 18 in `done/`)
 - Project notes in `notes/` (research docs, phase docs, reviews)
 - `CLAUDE.md` (operational rules), `WORKPLAN.md` (phase tracking), `DIVERGENCES.md`
 - `progress.log` (session-by-session append log)
@@ -38,7 +38,7 @@ From user (Session 48):
 - "Research Before Implementation" — still relevant or phase-era artifact?
 - "Progress Logging" — format references "Chunk X.Y" which is phase-era
 
-### 3. Handoff docs (notes/handoffs/)
+### 3. Handoff docs (notes/archive/handoffs/)
 - Which active handoffs are still relevant?
 - Should any be moved to `done/`?
 - Is the post-review-fixes handoff progress table accurate?

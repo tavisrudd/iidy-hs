@@ -105,7 +105,7 @@ Since the last pass, a substantial hardening wave landed (`6feada6`, `e5e1ed7`, 
 **Concerns**
 - Dev docs were recently updated, but metrics have already drifted again (docs still cite 851 tests while the latest successful baseline in this session is 995) ([docs/dev/codebase-guide.md:9](docs/dev/codebase-guide.md:9), [docs/dev/testing-guide.md:5](docs/dev/testing-guide.md:5), [test/Main.hs:5-90](test/Main.hs:5)).
 - Architecture doc states GHC 9.10 ([docs/dev/architecture.md:12](docs/dev/architecture.md:12)), but package config does not pin a specific GHC version in cabal metadata ([iidy-hs.cabal:1-3](iidy-hs.cabal:1)), increasing room for version-drift confusion.
-- Some handoff documents have become stale after fast implementation churn (e.g., archived global-SSM handoff still states “not yet ported”) ([notes/handoffs/done/2026-03-01-global-ssm-config.md:21-22](notes/handoffs/done/2026-03-01-global-ssm-config.md:21)).
+- Some handoff documents have become stale after fast implementation churn (e.g., archived global-SSM handoff still states “not yet ported”) ([notes/archive/handoffs/done/2026-03-01-global-ssm-config.md:21-22](notes/archive/handoffs/done/2026-03-01-global-ssm-config.md:21)).
 
 ### 7) Security
 **Strengths**
@@ -274,17 +274,17 @@ sa' <- applyParams sa params
   - `flake.nix`
   - `.github/workflows/ci.yml`
   - `notes/2026-03-01-process-trust-guide.md`
-  - `notes/handoffs/done/2026-03-01-template-loader-tests.md`
-  - `notes/handoffs/done/2026-03-01-global-ssm-config.md`
-  - `notes/handoffs/2026-03-01-source-span-info.md`
-  - `notes/handoffs/done/2026-03-01-security-review-fixes.md`
-  - `notes/handoffs/done/2026-03-01-aws-api-efficiency.md`
-  - `notes/handoffs/2026-03-01-fix-http-loader.md`
-  - `notes/handoffs/2026-03-01-fix-performance.md`
-  - `notes/handoffs/2026-03-01-fix-safety-hardening.md`
-  - `notes/handoffs/2026-03-01-fix-spinner-cleanup.md`
-  - `notes/handoffs/2026-03-01-fix-ssm-pagination.md`
-  - `notes/handoffs/2026-03-01-fix-stackargsloader.md`
+  - `notes/archive/handoffs/done/2026-03-01-template-loader-tests.md`
+  - `notes/archive/handoffs/done/2026-03-01-global-ssm-config.md`
+  - `notes/archive/handoffs/2026-03-01-source-span-info.md`
+  - `notes/archive/handoffs/done/2026-03-01-security-review-fixes.md`
+  - `notes/archive/handoffs/done/2026-03-01-aws-api-efficiency.md`
+  - `notes/archive/handoffs/2026-03-01-fix-http-loader.md`
+  - `notes/archive/handoffs/2026-03-01-fix-performance.md`
+  - `notes/archive/handoffs/2026-03-01-fix-safety-hardening.md`
+  - `notes/archive/handoffs/2026-03-01-fix-spinner-cleanup.md`
+  - `notes/archive/handoffs/2026-03-01-fix-ssm-pagination.md`
+  - `notes/archive/handoffs/2026-03-01-fix-stackargsloader.md`
   - `scripts/check-unused-deps.sh`
 - Docs:
   - `docs/SECURITY.md`

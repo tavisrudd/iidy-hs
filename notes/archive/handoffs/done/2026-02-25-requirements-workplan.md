@@ -222,7 +222,7 @@ serde_yaml tree API vs HsYAML event API", "ownership-based resource cleanup vs b
 
 Each session in the ralph loop should:
 
-1. **Read this file first** (`notes/handoffs/2026-02-25-requirements-workplan.md`)
+1. **Read this file first** (`notes/archive/handoffs/2026-02-25-requirements-workplan.md`)
 2. **Check Progress** below to see what's next
 3. **Check `.msgs/`** for any priority changes from user
 4. **Read the PRD template** section above for structure
@@ -265,7 +265,7 @@ Each session in the ralph loop should:
 
 **Session**: `e67ca969-1c4d-4ab4-b023-825844ff2c32`
 **Completed**: Created workplan, directory structure, researched full feature surface
-**Files created**: `notes/handoffs/2026-02-25-requirements-workplan.md`, `docs/requirements/` dir
+**Files created**: `notes/archive/handoffs/2026-02-25-requirements-workplan.md`, `docs/requirements/` dir
 **Research done**:
 - Read all 6 user-facing docs (command-reference, yaml-preprocessing, import-types, getting-started, custom-resource-templates, SECURITY.md)
 - Read DIVERGENCES.md, WORKPLAN.md, RALPH.md

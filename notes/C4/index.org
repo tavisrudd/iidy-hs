@@ -32,7 +32,7 @@ parameters from SSM and the environment, and calls AWS on the user's
 credentials. =SECURITY.md= documents the import security model: remote
 templates may not use the local-only import types (=file:=, =env:=, =git:=,
 =filehash:=, =filehash-base64:=). A security review and fix pass ran in
-March 2026 (=notes/handoffs/done/2026-03-01-security-review-fixes.md= and
+March 2026 (=notes/archive/handoffs/done/2026-03-01-security-review-fixes.md= and
 =2026-03-01-security-regression-tests.md=); since then the code has had
 refactors, and [[file:../C3/index.org][C3]] changes dependency versions.
 

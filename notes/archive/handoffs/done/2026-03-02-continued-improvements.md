@@ -164,7 +164,7 @@ The decision on whether to proceed with these should be based on:
 | Architecture reviews (6)       | `notes/2026-03-02-*-review.md`                     |
 | Refactoring plan (10 phases)   | `notes/2026-03-02-refactoring-plan.md`             |
 | Plan critique + alternatives   | `notes/2026-03-02-plan-critique.md`                |
-| Low-hanging fruit plan (done)  | `notes/handoffs/2026-03-02-low-hanging-fruit.md`   |
+| Low-hanging fruit plan (done)  | `notes/archive/handoffs/2026-03-02-low-hanging-fruit.md`   |
 | Property tests                 | `test/Test/PreprocessingPropertyTest.hs`           |
 | Error content tests            | `test/Test/ErrorContentTest.hs`                    |
 | JMESPath subset docs           | `notes/jmespath-subset.md`                         |

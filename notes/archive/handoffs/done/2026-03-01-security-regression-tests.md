@@ -2,7 +2,7 @@
 
 **Status**: DONE
 **Date**: 2026-03-01
-**References**: Commit `fa767b3`, handoff `notes/handoffs/done/2026-03-01-security-review-fixes.md`
+**References**: Commit `fa767b3`, handoff `notes/archive/handoffs/done/2026-03-01-security-review-fixes.md`
 
 ## Context
 
