@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C6
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   Discovered 2026-11-16 during the C1 closeout commit: the pre-commit test run hung for 8+ minutes
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :ID: org:01a1e63f-89b4-75e6-88e0-373c48849e72
 :ADDED: [2026-11-16 Mon 14:24]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 16:17]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C6 — Find and fix the intermittent hang in the test suite
 #+date: 2026-11-16
