@@ -1,0 +1,9 @@
+#+title: C15 scratch
+
+* Cache artifacts
+:PROPERTIES:
+:ID: org:01a1e6a7-16ed-7009-91bf-f2a2bfd14dcf
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+- /home/tavis/src/iidy-hs/.supervisor/tmp/claude-C15.DYTCS6
+  (local render comparison of variable inheritance, iidy-hs vs Rust); deleted when the write-up task was reported ready.

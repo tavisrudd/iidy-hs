@@ -59,11 +59,24 @@ has chosen; the chosen model is implemented with tests reproducing the
 review's exfiltration scenario and showing it blocked; docs describe the
 model; build warning-free, tests pass; committed with C15.
 
-* TODO Write up the options and compare with the TypeScript and Rust versions
+* DONE Write up the options and compare with the TypeScript and Rust versions
 :PROPERTIES:
 :ID: org:01a1e692-13fd-7254-9ca2-0d8e55c18e5e
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:18] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a9dc30432323c8a97
+:END:
+
+Write-up by worker claude-C15: [[file:report--remote-template-options.org][Remote template options and comparison with Rust and TypeScript]].
+It found that iidy-hs passes parent variables into every imported document
+while Rust and TypeScript isolate them, and that all three let a remote
+document read =ssm:= / =cfn:= values and interpolate them into an import URL.
+It recommends isolation plus blocking AWS-backed and loopback/link-local
+imports from untrusted documents, with an opt-in trust flag, and lists the
+questions for Tavis.
 
 * TODO Discuss with the user and record the decision
 :PROPERTIES:

