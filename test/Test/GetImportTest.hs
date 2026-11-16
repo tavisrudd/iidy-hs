@@ -55,36 +55,32 @@ globalOpts remote =
 jsonArgs :: Text -> GetImportArgs
 jsonArgs loc = GetImportArgs{giaImport = loc, giaFormat = RenderJson, giaQuery = Nothing}
 
-{- | Run get-import with explicit format and query on a local file; also
-returns captured stderr-free stdout chunks.
--}
-runFormat :: RenderFormat -> Maybe Text -> Text -> IO RunResult
-runFormat fmt query loc = do
-    out <- newIORef []
-    let emit = \case
-            OdRawOutput t -> atomicModifyIORef' out (\ts -> (ts <> [t], ()))
-            _other -> pure ()
-        args = GetImportArgs{giaImport = loc, giaFormat = fmt, giaQuery = query}
-    rc <- runGetImportWith (pure (error "env not needed")) emit args (globalOpts False)
-    RunResult rc <$> readIORef out <*> pure 0
-
 listFixture :: Text
 listFixture = "test-fixtures/get-import/list.yaml"
 
 docFixture :: Text
 docFixture = "test-fixtures/get-import/doc.yaml"
 
--- | Run get-import as JSON, counting env builds and collecting raw output.
-runWith :: Bool -> IO Amazonka.Env -> Text -> IO RunResult
-runWith remote mkEnv loc = do
+-- | Run get-import with the given args, counting env builds and collecting raw output.
+runArgs :: Bool -> IO Amazonka.Env -> GetImportArgs -> IO RunResult
+runArgs remote mkEnv args = do
     builds <- newIORef (0 :: Int)
     out <- newIORef []
     let countedEnv = bump builds >> mkEnv
         emit = \case
             OdRawOutput t -> atomicModifyIORef' out (\ts -> (ts <> [t], ()))
             _other -> pure ()
-    rc <- runGetImportWith countedEnv emit (jsonArgs loc) (globalOpts remote)
+    rc <- runGetImportWith countedEnv emit args (globalOpts remote)
     RunResult rc <$> readIORef out <*> readIORef builds
+
+-- | Run get-import as JSON, counting env builds and collecting raw output.
+runWith :: Bool -> IO Amazonka.Env -> Text -> IO RunResult
+runWith remote mkEnv loc = runArgs remote mkEnv (jsonArgs loc)
+
+-- | Run get-import on a local file with an explicit format and query.
+runFormat :: RenderFormat -> Maybe Text -> Text -> IO RunResult
+runFormat fmt query loc =
+    runArgs False noCredentials GetImportArgs{giaImport = loc, giaFormat = fmt, giaQuery = query}
 
 bump :: IORef Int -> IO ()
 bump ref = atomicModifyIORef' ref (\n -> (n + 1, ()))
