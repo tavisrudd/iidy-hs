@@ -220,6 +220,7 @@ test-suite iidy-hs-test
     Test.StackOpsConverterTest
     Test.TimingTest
     Test.SecurityControlsTest
+    Test.ImportTrustTest
     Test.ParamsClientTest
     Test.TemplateLoaderTest
     Test.GlobalConfigTest

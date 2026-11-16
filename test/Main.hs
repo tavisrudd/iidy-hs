@@ -24,6 +24,7 @@ import Test.GetImportTest (getImportTests)
 import Test.GlobalConfigTest (globalConfigTests)
 import Test.HandlebarsTest (handlebarsTests)
 import Test.ImportLoaderTest (importLoaderTests)
+import Test.ImportTrustTest (importTrustTests)
 import Test.IntegrationTest (integrationTests)
 import Test.JMESPathTest (jmespathTests)
 import Test.JsonRendererTest (jsonRendererTests)
@@ -95,6 +96,7 @@ main = do
             , testGroup "StackOpsConverters" stackOpsConverterTests
             , testGroup "Timing" timingTests
             , testGroup "SecurityControls" securityControlsTests
+            , testGroup "ImportTrust" importTrustTests
             , testGroup "ParamsClient" paramsClientTests
             , testGroup "TemplateLoader" templateLoaderTests
             , testGroup "GlobalConfig" globalConfigTests

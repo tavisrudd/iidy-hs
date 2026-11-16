@@ -78,7 +78,7 @@ parseImportType location baseLocation = do
         "https" -> Right ImportHttp
         "" -> Right ImportFile -- default: plain file path
         other -> Left $ ImportError $ "Unknown import type: " <> other
-    if isRemoteBase baseLocation && isLocalOnly importType
+    if not (isLocalBase baseLocation) && isLocalOnly importType
         then
             Left $
                 ImportError $
@@ -119,11 +119,16 @@ parseTypePrefix loc
         , "https"
         ]
 
-isRemoteBase :: Text -> Bool
-isRemoteBase loc =
-    T.isPrefixOf "s3://" loc
-        || T.isPrefixOf "http://" loc
-        || T.isPrefixOf "https://" loc
+{- | Whether a parent document's base location is positively a local file:
+a plain path, @./@, @../@, @/@ or @file:@. The trust gate fails closed:
+every other base (@s3:@ in either form, @ssm:@, @ssm-path:@, @cfn:@,
+@http(s):@ and any unknown or malformed prefix) is untrusted and may not
+use the local-only import types.
+-}
+isLocalBase :: Text -> Bool
+isLocalBase loc = case parseTypePrefix loc of
+    Right (prefix, _rest) -> prefix == "" || prefix == "file"
+    Left _unknownPrefix -> False
 
 isLocalOnly :: ImportType -> Bool
 isLocalOnly = \case
