@@ -41,13 +41,30 @@ The redesign of what remote templates may do at all is
 :END:
 
 Allowed paths: =src/Iidy/Yaml/Imports/=, =test/=, =test-fixtures/=,
-=notes/C14/=.
+=DIVERGENCES.md= (one entry if the fix departs from Rust), =notes/C14/=.
 
-Gate: the gate fails closed: a parent is local only when it is positively a
-local file location, and every other base (including =s3:=, =ssm:=,
-=ssm-path:=, =cfn:=, =http(s):=) is treated as untrusted; regression tests
-cover each parent spelling importing each local-only type; existing
-import tests still pass; build warning-free; committed with C14.
+Out of scope: what remote templates may inherit or import beyond the
+local-only types (variable isolation, blocking =ssm:=/=cfn:=/loopback
+imports): that is [[file:../C15/index.org][C15]]. No change to user-visible
+behaviour for templates loaded from local files.
+
+Done when:
+- [ ] The check fails closed: a parent is local only when its base is
+  positively a local file location (plain path, =./=, =../=, =/=,
+  =file:=); every other base (=s3:= short and =s3://= long forms, =ssm:=,
+  =ssm-path:=, =cfn:=, =http(s)://=, and any unknown form) is untrusted.
+- [ ] A regression test, recorded failing on the branch base before the
+  fix, covers each untrusted parent spelling importing each local-only
+  type (=file:=, plain path, =env:=, =git:=, =filehash:=,
+  =filehash-base64:=), table-driven rather than copied per case.
+- [ ] Existing import tests pass unchanged; local parents still import
+  every type.
+- [ ] Rust behaviour (=~/src/iidy/src/yaml/imports/mod.rs=) is compared
+  and any divergence is recorded in =DIVERGENCES.md=.
+- [ ] Build warning-free, full suite green, commits name C14.
+
+Stop and record if: the fix needs a change outside the allowed paths, or
+would block an import that a local template uses today.
 
 * TODO Make the trust check fail closed with regression tests
 :PROPERTIES:

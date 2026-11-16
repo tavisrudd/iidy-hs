@@ -57,19 +57,28 @@ Rust (=~/src/iidy/target/debug/iidy=).
 Allowed paths: =src/Iidy/GetImport.hs=, =test/Test/GetImportTest.hs=,
 =test/=, =test-fixtures/=, =notes/C13/=.
 
-Gate:
-- =get-import --query EXPR= applies the JMESPath query to the loaded
-  document before formatting; an invalid query prints an error on stderr
-  and exits 1, as Rust does.
-- YAML output ends with exactly one newline.
-- JSON output layout matches Rust (pretty-printed), or the card records why
-  it differs.
-- Tests in =test/Test/GetImportTest.hs= (via =runGetImportWith=) show: a
-  field query (=a= on ={a: 1}= gives =1=), a nested query, an invalid query
-  giving exit 1 and no output, and the trailing newline on YAML output.
-- Side-by-side run of the Rust and Haskell binaries on the same inputs
-  recorded in this card, with matching stdout.
-- Build warning-free, all tests pass; committed with C13 in the message.
+Out of scope: get-import's AWS environment (C7, done) and the broader
+command tests of [[file:../C11/index.org][C11]]; changes to =render= or
+=Iidy.Yaml.JMESPath=.
+
+Done when:
+- [ ] =get-import --query EXPR= applies the JMESPath query to the loaded
+  document before formatting, reusing =applyJmesPath= and
+  =formatJMESPathQueryError=; an invalid query prints the error on stderr,
+  prints nothing on stdout and exits 1, as Rust does.
+- [ ] YAML output ends with exactly one newline.
+- [ ] JSON output layout matches Rust's pretty-printed output, or the card
+  records why it differs.
+- [ ] Tests in =test/Test/GetImportTest.hs= (via =runGetImportWith=) show a
+  field query (=a= on ={a: 1}= gives =1=), a nested query, an invalid
+  query giving exit 1 and no stdout, and the exact YAML and JSON output
+  text.
+- [ ] A side-by-side run of the Rust and Haskell binaries on the same
+  inputs is recorded in this card, with matching stdout.
+- [ ] Build warning-free, full suite green, commits name C13.
+
+Stop and record if: matching Rust needs a change to a shared module
+outside the allowed paths, or the Rust binary cannot be built or run.
 
 * TODO Apply --query in get-import
 :PROPERTIES:
