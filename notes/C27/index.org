@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C27
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   C6 2026-11-16: test/Test/TimingTest.hs reliableTimeProvider tests resolve and query pool.ntp.org, a real network call in the suite and an open suspect for the C6 hang
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
 :ID: org:01a1e6b5-4fe2-73a7-9f37-be6fed53c279
 :ADDED: [2026-11-16 Mon 16:33]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 16:38]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C27 — Mock the NTP lookup in the timing tests
 #+date: 2026-11-16
