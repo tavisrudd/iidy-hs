@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C13
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :CARD_PRIORITY: B
 :MODE:     CONTRACT
 :ORIGIN:   Found while working C7: Haskell get-import ignores giaQuery (Rust applies the JMESPath query in cfn/get_import.rs) and prints YAML without a trailing newline (Rust: 'a: 1\n')
@@ -11,8 +11,21 @@
 :ID: org:01a1e683-91b4-768b-9769-54f5aa45374b
 :ADDED: [2026-11-16 Mon 15:39]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 16:12]--[2026-11-16 Mon 16:16] => 0:04
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:11]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 16:12]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a790965cc0656b397
+- Clock-out [2026-11-16 Mon 16:16]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a790965cc0656b397
+- Card state STARTED → DONE [2026-11-16 Mon 16:20]
+  Note: Landed bb66f71, 851b331: get-import applies --query, YAML ends with a newline, JSON pretty-printed like Rust; reviewed (land), fix round 1 test-only
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -67,28 +80,33 @@ command tests of [[file:../C11/index.org][C11]]; changes to =render= or
 =Iidy.Yaml.JMESPath=.
 
 Done when:
-- [ ] =get-import --query EXPR= applies the JMESPath query to the loaded
+- [X] =get-import --query EXPR= applies the JMESPath query to the loaded
   document before formatting, reusing =applyJmesPath= and
   =formatJMESPathQueryError=; an invalid query prints the error on stderr,
   prints nothing on stdout and exits 1, as Rust does.
-- [ ] YAML output ends with exactly one newline.
-- [ ] JSON output layout matches Rust's pretty-printed output, or the card
+- [X] YAML output ends with exactly one newline.
+- [X] JSON output layout matches Rust's pretty-printed output, or the card
   records why it differs.
-- [ ] Tests in =test/Test/GetImportTest.hs= (via =runGetImportWith=) show a
+- [X] Tests in =test/Test/GetImportTest.hs= (via =runGetImportWith=) show a
   field query (=a= on ={a: 1}= gives =1=), a nested query, an invalid
   query giving exit 1 and no stdout, and the exact YAML and JSON output
   text.
-- [ ] A side-by-side run of the Rust and Haskell binaries on the same
+- [X] A side-by-side run of the Rust and Haskell binaries on the same
   inputs is recorded in this card, with matching stdout.
-- [ ] Build warning-free, full suite green, commits name C13.
+- [X] Build warning-free, full suite green, commits name C13.
 
 Stop and record if: matching Rust needs a change to a shared module
 outside the allowed paths, or the Rust binary cannot be built or run.
 
-* TODO Apply --query in get-import
+* DONE Apply --query in get-import
 :PROPERTIES:
 :ID: org:01a1e686-cbb6-729e-b451-7bf256f1d5f1
 :ADDED: [2026-11-16 Mon 15:42]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:16] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a790965cc0656b397
 :END:
 
 Thread =giaQuery= through =runGetImportWith=: apply =applyJmesPath= to
@@ -96,10 +114,25 @@ Thread =giaQuery= through =runGetImportWith=: apply =applyJmesPath= to
 =formatJMESPathQueryError= as =render= does) to stderr and return 1. Add
 tests for field, nested and invalid queries. Stop when the tests pass.
 
-* TODO End YAML output with a newline and align JSON layout with Rust
+Existing owner found: =applyJmesPath= (=Iidy.Yaml.JMESPath=) and
+=formatJMESPathQueryError= (=Iidy.Errors.JMESPath=), the same pair render's
+=queryStep= / =InvalidQuery= path uses. =queryStep= is local to
+=runRender= and tied to =RenderError=, and =Iidy.Render= is out of scope, so
+=emitDoc= calls the two shared functions directly. Commit 2654bc9 (branch
+claude/C13) also holds the regression tests. Before the fix the new tests
+failed on the base (ran 2026-11-16): query tests printed the whole document
+with exit 0, the invalid query exited 0, YAML had no trailing newline,
+JSON was compact.
+
+* DONE End YAML output with a newline and align JSON layout with Rust
 :PROPERTIES:
 :ID: org:01a1e686-cbb6-729e-b451-7bf1bf7504b4
 :ADDED: [2026-11-16 Mon 15:42]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:16] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a790965cc0656b397
 :END:
 
 Make =emitDoc= YAML output end in exactly one newline (do not double it if
@@ -107,12 +140,68 @@ Make =emitDoc= YAML output end in exactly one newline (do not double it if
 Rust's =to_string_pretty= and match it, or record the reason not to. Add
 tests on the exact output text.
 
-* TODO Verify against the Rust binary and close
+YAML now ends in exactly one newline (trailing newlines stripped, one
+added). JSON uses =Pretty.encodePretty'= with two-space indent plus a
+newline, matching serde_json =to_string_pretty= (=get_import.rs:62-64=);
+render's =formatJson= uses the 4-space default and was left alone.
+Known remaining divergence (emitter, outside this card): the Haskell YAML
+emitter indents sequences inside mappings (=  c:\n    - x=), serde_yaml does
+not (=  c:\n  - x=). Fixtures avoid nested sequences in YAML output.
+
+* DONE Verify against the Rust binary and close
 :PROPERTIES:
 :ID: org:01a1e686-cbb6-729e-b451-7bf05b1b9cb0
 :ADDED: [2026-11-16 Mon 15:42]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:16] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a790965cc0656b397
 :END:
 
 Run both binaries on the same inputs (plain, =--query=, invalid query,
 =--format json=) and record the outputs here. Then close the card per the
 gate.
+
+Side-by-side, run in =test-fixtures/get-import= with the Rust binary
+=~/src/iidy/target/debug/iidy= and the worktree's =iidy-hs=; stdout
+byte-identical (cmp) and exit codes equal in every case:
+- =get-import doc.yaml= (0/0)
+- =--query a doc.yaml= (0/0), =--query b.c doc.yaml= (0/0)
+- =--query 'l[1]' list.yaml= (0/0)
+- =--query 'a[' doc.yaml= (1/1, empty stdout)
+- =--format json doc.yaml=, =--format json list.yaml=,
+  =--format json --query b doc.yaml= (0/0)
+Full suite (1263 tests) passed in the pre-commit hook on the branch tip.
+
+** Review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e6a7-9f4f-70c6-8d33-17065c5eb7d8
+:ADDED: [2026-11-16 Mon 16:18]
+:END:
+Verdict for 2654bc9: land (2 minor defects, neither blocks).
+
+Checks:
+- Reverted =src/Iidy/GetImport.hs= to base 250154c in the review worktree and
+  ran group "query and output layout": 7 of 7 tests fail (whole document
+  printed with exit 0, invalid query exit 0, no trailing newline, compact
+  JSON). Source restored to the branch tip afterwards.
+- Duplication: =applyJmesPath= and =formatJMESPathQueryError= are called, not
+  copied. =queryStep= is local to =runRender= and tied to =RenderError=, so
+  no shared helper is missed. The only parallel logic is the pretty-JSON
+  encode (see defect 1).
+- Rust parity: =get_import.rs:45-64= applies the query before formatting,
+  prints the error to stderr with exit 1, uses =print!= for YAML and
+  =to_string_pretty= + =println!= for JSON. The changed cfn:output
+  expectation (compact to two-space pretty JSON) matches that, since the
+  JSON path is shared by every import type.
+
+Defects:
+1. minor, =src/Iidy/GetImport.hs:154= =formatJsonPretty= and =src/Iidy/Render.hs:144=
+   =formatJson= both wrap =Pretty.encodePretty=; they differ only in indent
+   (2 vs 4 spaces) and Render is out of scope for this card. Smallest fix
+   (follow-up card): one shared =encodePrettyWith indent= helper.
+2. minor, =test/Test/GetImportTest.hs:58-69= =runFormat= repeats the
+   emit-capture setup of =runWith= (line ~78) and its doc comment says
+   "stderr-free stdout chunks" while it hard-codes =rrEnvBuilds= to 0. Smallest
+   fix: have =runWith= take the args (or a shared =runArgs=) and reuse it.

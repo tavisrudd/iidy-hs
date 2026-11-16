@@ -13,6 +13,7 @@
 - [2026-11-16 Mon 15:41] [[file:../C7/index.org][C7]] — get-import builds the AWS env via createAwsEnvFromSettings only for cfn:/ssm:/ssm-path:/s3: (lazy, matching Rust's observable behaviour); missing creds/region -> one 'Import error:' line, exit 1; mock-AWS tests (Test.MockAws, test-fixtures/mock-aws) show ssm: and cfn: resolving; commit 371025c. Side gaps filed as C13.
 - [2026-11-16 Mon 15:55] [[file:../C4/index.org][C4]] — Fable review in report--security-review.org (3142207); findings filed as C14-C22
 - [2026-11-16 Mon 16:02] [[file:../C23/index.org][C23]] — Supervision files, guarded-build lock and hook change committed in 0d3dd6c
+- [2026-11-16 Mon 16:20] [[file:../C13/index.org][C13]] — Landed bb66f71, 851b331: get-import applies --query, YAML ends with a newline, JSON pretty-printed like Rust; reviewed (land), fix round 1 test-only
 * COMMENT meta
 :PROPERTIES:
 :LANE: main
