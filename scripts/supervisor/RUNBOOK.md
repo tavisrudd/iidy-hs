@@ -170,11 +170,15 @@ is committed.
 2. If a fast-forward is impossible and main moved only by notes commits,
    replay the branch per `CLAUDE.md` (never a bare cherry-pick): for each
    commit, `git cherry-pick --no-commit SHA` then
-   `git commit -C CHERRY_PICK_HEAD`, so the hook runs. Stop at the first
+   `git commit -C CHERRY_PICK_HEAD`, so the hook runs. With this git, a
+   single-commit `--no-commit` pick leaves no `CHERRY_PICK_HEAD`: commit
+   with `git commit -C <SHA>` instead. Stop at the first
    failure (`git cherry-pick --abort`) and never run the close steps after
    a failed pick.
-3. Close the card on main, in this order: the worker's clock closed (resume
-   a sub-agent to run `c clock-out` if it left one open), `c check`, `c todo`
+3. Close the card on main, in this order: the worker's clock closed (check
+   for an open `CLOCK:` line first: sub-agents report "clocked out" when
+   they have not; resume the sub-agent to run `c clock-out`, since
+   `C_SESSION_ID` overrides do not accept a sub-agent's session ID), `c check`, `c todo`
    for finished tasks the worker did not mark, `c set <ID> done --note
    <commits>` at a verified gate, commit the card and lane files, append the
    `progress.log` line (format in `CLAUDE.md`) in the same commit.

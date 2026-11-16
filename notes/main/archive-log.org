@@ -15,6 +15,7 @@
 - [2026-11-16 Mon 16:02] [[file:../C23/index.org][C23]] — Supervision files, guarded-build lock and hook change committed in 0d3dd6c
 - [2026-11-16 Mon 16:20] [[file:../C13/index.org][C13]] — Landed bb66f71, 851b331: get-import applies --query, YAML ends with a newline, JSON pretty-printed like Rust; reviewed (land), fix round 1 test-only
 - [2026-11-16 Mon 16:27] [[file:../C14/index.org][C14]] — Landed 7fefd88..1c62101: import trust gate fails closed (isLocalBase), table-driven regression matrix, docs and DIVERGENCES updated; Opus review: land, fix round 1 test/docs only
+- [2026-11-16 Mon 16:37] [[file:../C8/index.org][C8]] — Landed c6ab093 (replayed baa2c9b): !$parseYaml keeps key order via astToOValueRaw; Sonnet review: land, 0 defects
 * COMMENT meta
 :PROPERTIES:
 :LANE: main
