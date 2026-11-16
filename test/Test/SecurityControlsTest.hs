@@ -25,58 +25,19 @@ securityControlsTests =
     ]
 
 ------------------------------------------------------------------------
--- Import trust gate tests
+-- Import classification tests (the trust-gate matrix lives in
+-- Test.ImportTrustTest)
 ------------------------------------------------------------------------
 
 importTrustTests :: [TestTree]
 importTrustTests =
     [ testGroup "parseImportType (pure)" parseImportTypeTests
-    , testGroup "mkFullDispatcher enforcement" dispatcherEnforcementTests
     , testGroup "--no-remote-imports enforcement" noRemoteImportsTests
     ]
 
 parseImportTypeTests :: [TestTree]
 parseImportTypeTests =
-    [ testCase "local file from local base is OK" $
-        parseImportType "file:foo.yaml" "."
-            @?= Right ImportFile
-    , testCase "env import from local base is OK" $
-        parseImportType "env:MY_VAR" "."
-            @?= Right ImportEnv
-    , testCase "local file from s3 base is REJECTED" $ do
-        let result = parseImportType "file:foo.yaml" "s3://bucket/base"
-        case result of
-            Left (ImportError e) ->
-                assertBool "mentions not allowed from remote" ("not allowed from remote" `T.isInfixOf` e)
-            Right _ -> fail "Expected Left for local import from remote base"
-    , testCase "env import from https base is REJECTED" $ do
-        let result = parseImportType "env:MY_VAR" "https://example.com"
-        case result of
-            Left (ImportError e) ->
-                assertBool "mentions not allowed from remote" ("not allowed from remote" `T.isInfixOf` e)
-            Right _ -> fail "Expected Left for env import from remote base"
-    , testCase "git import from http base is REJECTED" $ do
-        let result = parseImportType "git:sha" "http://example.com"
-        case result of
-            Left (ImportError e) ->
-                assertBool "mentions not allowed from remote" ("not allowed from remote" `T.isInfixOf` e)
-            Right _ -> fail "Expected Left for git import from remote base"
-    , testCase "filehash import from s3 base is REJECTED" $ do
-        let result = parseImportType "filehash:f" "s3://bucket/base"
-        case result of
-            Left (ImportError e) ->
-                assertBool "mentions not allowed from remote" ("not allowed from remote" `T.isInfixOf` e)
-            Right _ -> fail "Expected Left for filehash import from remote base"
-    , testCase "remote s3 from s3 base is OK" $
-        parseImportType "s3://bucket/k" "s3://bucket/base"
-            @?= Right ImportS3
-    , testCase "remote http from s3 base is OK" $
-        parseImportType "http://x" "s3://bucket/base"
-            @?= Right ImportHttp
-    , testCase "ssm import from https base is OK" $
-        parseImportType "ssm:/p" "https://example.com"
-            @?= Right ImportSsm
-    , testCase "unknown prefix 'bogus' is rejected with ImportError" $ do
+    [ testCase "unknown prefix 'bogus' is rejected with ImportError" $ do
         let result = parseImportType "bogus:x" "."
         case result of
             Left (ImportError e) ->
@@ -94,22 +55,6 @@ parseImportTypeTests =
     , testCase "relative path with colon in filename is still ImportFile" $
         parseImportType "./has:colon" "."
             @?= Right ImportFile
-    ]
-
-dispatcherEnforcementTests :: [TestTree]
-dispatcherEnforcementTests =
-    [ testCase "mkFullDispatcher rejects file: from s3 base" $ do
-        result <- mkFullDispatcher (ImportConfig Nothing AllowRemoteImports) "file:foo.yaml" "s3://bucket/base"
-        case result of
-            Left (ImportError e) ->
-                assertBool "mentions not allowed" ("not allowed" `T.isInfixOf` e)
-            Right _ -> fail "Expected Left for file: import from s3 base"
-    , testCase "mkFullDispatcher rejects env: from https base" $ do
-        result <- mkFullDispatcher (ImportConfig Nothing AllowRemoteImports) "env:X" "https://example.com/base"
-        case result of
-            Left (ImportError e) ->
-                assertBool "mentions not allowed" ("not allowed" `T.isInfixOf` e)
-            Right _ -> fail "Expected Left for env: import from https base"
     ]
 
 ------------------------------------------------------------------------

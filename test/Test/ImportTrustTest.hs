@@ -33,7 +33,7 @@ importTrustTests =
     [ testGroup "untrusted parent rejects local-only import" untrustedMatrix
     , testGroup "untrusted parent keeps non-local imports" untrustedAllowedMatrix
     , testGroup "local parent imports every type" localMatrix
-    , testGroup "dispatcher refuses env: from untrusted parent" dispatcherMatrix
+    , testGroup "dispatcher refuses local-only import from untrusted parent" dispatcherMatrix
     , testGroup "nested import from remote document" nestedMatrix
     ]
 
@@ -59,35 +59,9 @@ untrustedBases =
     , "a:b.yaml"
     ]
 
--- | Local-only imports in every spelling a template can write them.
-localOnlyImports :: [Text]
-localOnlyImports =
-    [ "file:data.yaml"
-    , "data.yaml"
-    , "./data.yaml"
-    , "../data.yaml"
-    , "/abs/data.yaml"
-    , "env:HOME"
-    , "git:branch"
-    , "filehash:data.txt"
-    , "filehash-base64:data.txt"
-    ]
-
--- | Imports that are not local-only, with their classified type.
-nonLocalImports :: [(Text, ImportType)]
-nonLocalImports =
-    [ ("random:name", ImportRandom)
-    , ("s3:bucket/data.yaml", ImportS3)
-    , ("s3://bucket/data.yaml", ImportS3)
-    , ("https://example.com/data.yaml", ImportHttp)
-    , ("cfn:export/Foo", ImportCfn)
-    , ("ssm:/param", ImportSsm)
-    , ("ssm-path:/path", ImportSsmPath)
-    ]
-
--- | Every import, local-only or not, with its classified type.
-allImports :: [(Text, ImportType)]
-allImports =
+-- | Local-only imports in every spelling a template can write them, typed.
+localOnlyTyped :: [(Text, ImportType)]
+localOnlyTyped =
     [ ("file:data.yaml", ImportFile)
     , ("data.yaml", ImportFile)
     , ("./data.yaml", ImportFile)
@@ -98,7 +72,26 @@ allImports =
     , ("filehash:data.txt", ImportFilehash)
     , ("filehash-base64:data.txt", ImportFilehashBase64)
     ]
-        <> nonLocalImports
+
+localOnlyImports :: [Text]
+localOnlyImports = map fst localOnlyTyped
+
+-- | Imports that are not local-only, with their classified type.
+nonLocalImports :: [(Text, ImportType)]
+nonLocalImports =
+    [ ("random:name", ImportRandom)
+    , ("s3:bucket/data.yaml", ImportS3)
+    , ("s3://bucket/data.yaml", ImportS3)
+    , ("http://example.com/data.yaml", ImportHttp)
+    , ("https://example.com/data.yaml", ImportHttp)
+    , ("cfn:export/Foo", ImportCfn)
+    , ("ssm:/param", ImportSsm)
+    , ("ssm-path:/path", ImportSsmPath)
+    ]
+
+-- | Every import, local-only or not, with its classified type.
+allImports :: [(Text, ImportType)]
+allImports = localOnlyTyped <> nonLocalImports
 
 {- | Base locations a local template is loaded from today.
 @dir/./c:d.yaml@ is what the file loader produces when @dir/x.yaml@
@@ -149,10 +142,11 @@ localMatrix =
 
 dispatcherMatrix :: [TestTree]
 dispatcherMatrix =
-    [ testCase (T.unpack base) $
-        mkFullDispatcher (ImportConfig Nothing AllowRemoteImports) "env:HOME" base
+    [ testCase (caseName base loc) $
+        mkFullDispatcher (ImportConfig Nothing AllowRemoteImports) loc base
             >>= assertRejected
     | base <- untrustedBases
+    , loc <- localOnlyImports
     ]
 
 ------------------------------------------------------------------------
