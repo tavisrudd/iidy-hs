@@ -112,3 +112,4 @@
 2026-11-16 16:33 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C6 parked waiting (33 runs, no hang; make test timeout landed); filed C27 NTP mock
 2026-11-16 16:41 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C24 landed (render JSON two-space, shared helper)
 2026-11-16 16:43 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C9 landed (real terminal width)
+2026-11-16 16:54 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C27 landed (timing tests no longer call NTP)

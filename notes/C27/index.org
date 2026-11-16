@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C27
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C6 2026-11-16: test/Test/TimingTest.hs reliableTimeProvider tests resolve and query pool.ntp.org, a real network call in the suite and an open suspect for the C6 hang
 :CREATED_BY: opus-5.5-medium
@@ -10,8 +10,21 @@
 :ID: org:01a1e6b5-4fe2-73a7-9f37-be6fed53c279
 :ADDED: [2026-11-16 Mon 16:33]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 16:39]--[2026-11-16 Mon 16:53] => 0:14
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:38]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 16:39]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a6a5e65a8ce7c029f
+- Clock-out [2026-11-16 Mon 16:53]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a6a5e65a8ce7c029f
+- Card state STARTED → DONE [2026-11-16 Mon 16:54]
+  Note: Landed ec681c4: NTP query parameterised (reliableTimeProviderWith); timing tests use stubs and pass with no network (unshare -rn); landed on supervisor's diff check (narrow single-function refactor, test-only otherwise)
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -47,25 +60,52 @@ Out of scope: changing what =reliableTimeProvider= does at run time (NTP
 server, retry count, timeouts, fallback); the renderer's spinner threads.
 
 Done when:
-- [ ] The NTP query is a parameter of the fallback logic (for example
+- [X] The NTP query is a parameter of the fallback logic (for example
   =reliableNowWith :: IO (Maybe UTCTime) -> IO UTCTime=), with the
   production provider passing the real =tryNtp=, so behaviour is unchanged.
-- [ ] Tests cover the fallback logic with stub queries: first try succeeds;
+- [X] Tests cover the fallback logic with stub queries: first try succeeds;
   first fails and second succeeds; both fail and system time is used; and
   =tpStartTime < tpNow=. No test resolves a host name or opens a socket.
-- [ ] =grep -n reliableTimeProvider test/= shows no test calling the real
+- [X] =grep -n reliableTimeProvider test/= shows no test calling the real
   provider's IO.
-- [ ] Build warning-free, full suite green, commits name C27.
+- [X] Build warning-free, full suite green, commits name C27.
 
 Stop and record if: the parameterisation needs changes outside the allowed
 paths.
 
-* TODO Parameterise the NTP query and test the fallback with stubs
+* DONE Parameterise the NTP query and test the fallback with stubs
 :PROPERTIES:
 :ID: org:01a1e6b5-4fe2-73a7-9f37-be6c5ff868d3
 :ADDED: [2026-11-16 Mon 16:33]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 16:47] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a6a5e65a8ce7c029f
 :END:
 
 Extract the retry and fallback logic of =reliableNow= into a function that
 takes the query action; keep =reliableTimeProvider= using the real query.
 Replace the two network tests with stub-driven tests per the gate.
+
+** Result
+:PROPERTIES:
+:ID: org:01a1e6c2-78c4-7792-b5de-8f0ab36572c5
+:ADDED: [2026-11-16 Mon 16:47]
+:END:
+Existing owners found: =TimeProvider=, =systemTimeProvider=,
+=reliableTimeProvider=, =mockTimeProvider= in =src/Iidy/Aws/Timing.hs=; the
+only other users are =cfnTimeProvider= in =src/Iidy/Cfn/Context.hs= (field
+only). No stub NTP providers existed in =test/=. Extended the one owner:
+=reliableTimeProvider= is now =reliableTimeProviderWith tryNtp=, where
+=reliableNowWith= holds the retry-twice-then-system-time logic. Run-time
+behaviour is unchanged (same query, retries, timeouts).
+
+Old tests made network calls: =reliableTimeProvider= tpNow ->
+=reliableNow= -> =tryNtp= -> =queryNtp= -> =getAddrInfo "pool.ntp.org"=,
+then =socket=/=connect=/=send=/=recv=. New tests only call
+=reliableTimeProviderWith= with in-process stubs (=pure=, IORef-backed), so
+no path reaches =tryNtp= or =queryNtp=. Check: the Timing test group
+(=-p Timing=) passes under =unshare -rn= (empty network namespace).
+=grep -n reliableTimeProvider test/= shows only =reliableTimeProviderWith=.
+

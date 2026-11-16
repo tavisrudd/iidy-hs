@@ -18,6 +18,7 @@
 - [2026-11-16 Mon 16:37] [[file:../C8/index.org][C8]] — Landed c6ab093 (replayed baa2c9b): !$parseYaml keeps key order via astToOValueRaw; Sonnet review: land, 0 defects
 - [2026-11-16 Mon 16:41] [[file:../C24/index.org][C24]] — Landed 25384f1, d602c56, 92c283f: one two-space prettyJsonText helper; render --format json matches Rust (Tavis); Params.Client uses it; Sonnet review: land, fix round 1 tests + one-line Params change
 - [2026-11-16 Mon 16:43] [[file:../C9/index.org][C9]] — Landed 503bcfa..ac59877: real terminal size via injectable lookup, COLUMNS override bounded 1..10000, size 0 ignored; DIVERGENCES entry; Sonnet review: land, fix round 1 narrow single-function fixes landed on supervisor's diff check
+- [2026-11-16 Mon 16:54] [[file:../C27/index.org][C27]] — Landed ec681c4: NTP query parameterised (reliableTimeProviderWith); timing tests use stubs and pass with no network (unshare -rn); landed on supervisor's diff check (narrow single-function refactor, test-only otherwise)
 * COMMENT meta
 :PROPERTIES:
 :LANE: main
