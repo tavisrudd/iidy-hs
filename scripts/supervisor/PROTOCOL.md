@@ -14,7 +14,7 @@ supervisor.
 
 - Your worker name is given in your first instruction, for example
   `codex-1` or `claude-C14`.
-- You work only in your own worktree: `~/.cache/iidy-hs/worktrees/<worker>`,
+- You work only in your own worktree: `~/src/iidy-hs/.supervisor/worktrees/<worker>`,
   on branch `<worker-prefix>/C<ID>` (for example `codex/codex-1/C14` or
   `claude/C14`) for the current card. The supervisor creates the worktree
   and branches. You never touch `main`, never run `git push`, never merge,
@@ -23,7 +23,7 @@ supervisor.
   never delete worktrees, branches or cache.
 - Toolchain: run every build and test command inside the project's Nix dev
   shell for your worktree: prefix commands with
-  `direnv exec ~/.cache/iidy-hs/worktrees/<worker>` (the supervisor has run
+  `direnv exec ~/src/iidy-hs/.supervisor/worktrees/<worker>` (the supervisor has run
   `direnv allow` there). Confirm once that `ghc --version` prints the version
   the dev shell pins (9.12.3 since card C3); a bare shell may find an older
   GHC.
@@ -133,7 +133,7 @@ command, so the write is atomic:
 
     printf '%s worker=%s card=C%s state=%s branch=%s msg=%s\n' \
       "$(date -Is)" codex-1 14 ready "codex/codex-1/C14" \
-      "one-line summary" >> ~/.cache/iidy-hs/supervisor/mailbox.log
+      "one-line summary" >> ~/src/iidy-hs/.supervisor/mailbox.log
 
 Claude sub-agents report the same fields in their final reply instead.
 
@@ -169,7 +169,7 @@ gate, report `question` rather than choosing.
 ## Cleanup
 
 - Make temporary directories only with
-  `mktemp -d ~/.cache/iidy-hs/tmp/<worker>.XXXXXX`, never in `/tmp` or a
+  `mktemp -d ~/src/iidy-hs/.supervisor/tmp/<worker>.XXXXXX`, never in `/tmp` or a
   shared location. Record each one in your card's `scratch.org` under a
   `Cache artifacts` heading as you go.
 - When you report a task `ready`, delete the temporary directories you made

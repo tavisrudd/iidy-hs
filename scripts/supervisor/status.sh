@@ -5,8 +5,8 @@
 # Codex workers are listed in panes.txt; Claude sub-agent worktrees
 # (worktrees/claude-C<ID>) are listed from the worktree directory.
 set -uo pipefail
-cache=$HOME/.cache/iidy-hs
-run=$cache/supervisor
+cache=$HOME/src/iidy-hs/.supervisor
+run=$cache
 repo=$HOME/src/iidy-hs
 verbose=${1:-}
 mailbox=$run/mailbox.log

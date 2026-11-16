@@ -18,7 +18,7 @@ and the card's gate ("Done when" items). Load the card with
 
 ## Workspace
 
-- Your worktree is `~/.cache/iidy-hs/worktrees/review`. Inspect a branch
+- Your worktree is `~/src/iidy-hs/.supervisor/worktrees/review`. Inspect a branch
   there with `git switch --detach <branch>`; never commit, never create
   branches, never touch the worker's worktree.
 - Build only through `scripts/guarded-build`, and only when a check needs a

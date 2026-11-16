@@ -11,3 +11,4 @@ iidy-rs
 .claude/worktrees/
 .worktrees/
 tmp/
+.supervisor/

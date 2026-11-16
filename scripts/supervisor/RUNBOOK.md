@@ -14,34 +14,40 @@ it.
 
 ## Files
 
+`~/.cache` is ephemeral on this host (Tavis, 2026-11-16): nothing the
+supervision needs to keep lives there.
+
 - Tracked, in `scripts/supervisor/`: `PROTOCOL.md` (the worker contract),
   `RUNBOOK.md` (this file), `REVIEW.md` (the review worker's brief),
-  `send.sh` (paste a message into a Codex pane) and `status.sh` (one line
-  per worker). The build lock is `scripts/guarded-build`; the pre-commit
-  hook takes it too.
-- Runtime, untracked, in `~/.cache/iidy-hs/supervisor/`:
+  `CARD-BRIEF.md` (the template for a Claude sub-agent's brief),
+  `HANDOFF.md` (the in-flight picture for the next supervisor session:
+  workers, cards, open decisions; rewrite and commit it before a session
+  ends), `send.sh` (paste a message into a Codex pane) and `status.sh` (one
+  line per worker). The build lock is `scripts/guarded-build`; the
+  pre-commit hook takes it too.
+- Runtime, untracked (git-ignored), in `~/src/iidy-hs/.supervisor/`:
   - `mailbox.log`: one line per Codex worker report (format in
     `PROTOCOL.md`).
   - `panes.txt`: `codex-1=%ID codex-2=%ID review=%ID` on one line.
   - `msg-*.txt`, `assign-*.txt`: messages written before sending.
-  - `handoff.md`: the in-flight picture for the next supervisor session
-    (workers, cards, open decisions); rewrite it before a session ends.
-- Worker worktrees: `~/.cache/iidy-hs/worktrees/<worker>`, one per worker
-  (`codex-<n>`, `review`, or `claude-C<ID>` for a sub-agent), each with its
-  own `dist-newstyle/`. They live outside the repository so the repo's
-  worktree-isolation hook (which guards `.worktrees/`) does not block
-  workers from editing their card on the main checkout.
-- Temporary directories: `~/.cache/iidy-hs/tmp/`.
+  - `build.lock`: the lock file `guarded-build` holds.
+  - `worktrees/<worker>`: one worktree per worker (`codex-<n>`, `review`,
+    or `claude-C<ID>` for a sub-agent), each with its own `dist-newstyle/`.
+    Not under `.worktrees/`, because the repo's worktree-isolation hook
+    guards that path and would block workers from editing their card on the
+    main checkout. Commits live in the main repository; only uncommitted
+    work is in the worktree, so workers make WIP commits before pausing.
+  - `tmp/`: workers' temporary directories.
 
 ## Setup (once per worker)
 
-1. `mkdir -p ~/.cache/iidy-hs/supervisor ~/.cache/iidy-hs/tmp` and create
-   an empty `mailbox.log`.
+1. `mkdir -p ~/src/iidy-hs/.supervisor/tmp ~/src/iidy-hs/.supervisor/worktrees`
+   and create an empty `~/src/iidy-hs/.supervisor/mailbox.log`.
 2. From `~/src/iidy-hs`:
-   `git worktree add ~/.cache/iidy-hs/worktrees/<worker> -b <branch> main`
+   `git worktree add ~/src/iidy-hs/.supervisor/worktrees/<worker> -b <branch> main`
    (branch `codex/codex-<n>/C<ID>` or `claude/C<ID>`; the review worktree
-   is detached: `git worktree add --detach ~/.cache/iidy-hs/worktrees/review main`).
-3. `direnv allow ~/.cache/iidy-hs/worktrees/<worker>` so the worker can run
+   is detached: `git worktree add --detach ~/src/iidy-hs/.supervisor/worktrees/review main`).
+3. `direnv allow ~/src/iidy-hs/.supervisor/worktrees/<worker>` so the worker can run
    `direnv exec` there. The first build in a fresh worktree compiles the
    whole project; the Haskell dependencies come from the Nix store.
 4. Codex workers: in Tavis's tmux, a window `iidy:codex` with one pane per
@@ -101,7 +107,7 @@ it.
 ## Monitoring
 
 - Watch the mailbox with the Monitor tool:
-  `tail -n0 -F ~/.cache/iidy-hs/supervisor/mailbox.log 2>/dev/null | grep --line-buffered -E 'worker='`
+  `tail -n0 -F ~/src/iidy-hs/.supervisor/mailbox.log 2>/dev/null | grep --line-buffered -E 'worker='`
   at the maximum timeout; re-arm on every expiry and run `status.sh` then.
   After each re-arm, `tail -3` the mailbox and handle any unanswered line.
 - `status.sh` prints one line per worker (pane alive, BUSY or IDLE, branch
@@ -260,4 +266,4 @@ iidy-hs decisions:
   options write-up for Tavis.
 - Claude sub-agents for the 2026-11-16 batch (Tavis): Opus and Sonnet
   sub-agents work the cards, no Codex panes; brief template in
-  `~/.cache/iidy-hs/supervisor/claude-briefs/card-brief.md`.
+  `scripts/supervisor/CARD-BRIEF.md`.

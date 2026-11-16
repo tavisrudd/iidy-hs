@@ -31,7 +31,7 @@ if [[ -n "${IIDY_BUILD_LOCK_HELD:-}" ]]; then
   exec "$@"
 fi
 
-lock="${IIDY_BUILD_LOCK:-$HOME/.cache/iidy-hs/build.lock}"
+lock="${IIDY_BUILD_LOCK:-$HOME/src/iidy-hs/.supervisor/build.lock}"
 min_gb="${IIDY_MIN_AVAIL_GB:-6}"
 wait_s="${IIDY_LOCK_WAIT_S:-3600}"
 

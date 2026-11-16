@@ -14,7 +14,7 @@ unsupervised; you assign cards, review, land and clean up.
 1. Read `scripts/supervisor/RUNBOOK.md` (your procedure and Tavis's
    decisions), `scripts/supervisor/PROTOCOL.md` (the contract the workers
    follow) and `scripts/supervisor/REVIEW.md` (the review worker's brief) in
-   full, then `~/.cache/iidy-hs/supervisor/handoff.md` (the last session's
+   full, then `scripts/supervisor/HANDOFF.md` (the last session's
    in-flight picture) if it exists.
 2. Follow `AGENTS.md` and `CLAUDE.md` as the main agent: read the lane
    index (`notes/main/index.org`) and `c next`.
@@ -22,13 +22,13 @@ unsupervised; you assign cards, review, land and clean up.
    - `c list --state started` and `c list --state waiting`;
    - `c worktree list`;
    - `scripts/supervisor/status.sh -v`;
-   - `tail -20 ~/.cache/iidy-hs/supervisor/mailbox.log`;
+   - `tail -20 ~/src/iidy-hs/.supervisor/mailbox.log`;
    - for detail on one Codex worker: `tmux capture-pane -p -t PANE -S -60`.
-   If `~/.cache/iidy-hs/supervisor/` is missing, the workers are not set up
+   If `~/src/iidy-hs/.supervisor/` is missing, the workers are not set up
    yet: follow the runbook's Setup section, asking Tavis before launching
    Codex panes and which kind of worker to use.
 4. If Codex panes are running, arm the mailbox watch with the Monitor tool:
-   `tail -n0 -F ~/.cache/iidy-hs/supervisor/mailbox.log 2>/dev/null | grep --line-buffered -E 'worker='`
+   `tail -n0 -F ~/src/iidy-hs/.supervisor/mailbox.log 2>/dev/null | grep --line-buffered -E 'worker='`
    with the maximum timeout, and re-arm it on every expiry.
 5. Handle anything unanswered: a `ready`, `question`, `blocked` or
    `budget-spent` line with no reply since it was written. If a pane has no
@@ -51,6 +51,6 @@ real decisions, each with a recommendation.
 
 Before the session ends, or when Tavis asks you to get ready for a fresh
 session: record any new procedure or decision in `RUNBOOK.md` and commit it,
-then rewrite `~/.cache/iidy-hs/supervisor/handoff.md` with each worker's
+then rewrite `scripts/supervisor/HANDOFF.md` with each worker's
 model, effort, card and state, the rules that bite on cards in flight, the
 next cards per worker, and any decision waiting on Tavis.
