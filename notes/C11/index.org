@@ -1,0 +1,68 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C11
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C2 handoff triage (notes/C2/report--handoff-triage.org), accepted by the user 2026-11-16
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e64b-18fe-7437-8d46-f58f48027c9f
+:ADDED: [2026-11-16 Mon 14:37]
+:DEPENDS_ON: C7
+:END:
+:LOGBOOK:
+- DEPENDS_ON (none) → C7 [2026-11-16 Mon 14:37]
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:END:
+#+title: C11 — Add tests for explain, demo and get-import commands
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e64b-91fb-7115-8ff3-3f93c7ebd391
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+Three command modules have no tests of their behaviour: =Iidy.Explain=
+(=iidy explain=), =Iidy.Demo= (=iidy demo=) and =Iidy.GetImport=
+(=iidy get-import=). Only the CLI parser tests mention them. The March
+snapshot-gap audit recommended covering them; the C2 triage
+([[file:../C2/report--handoff-triage.org][report]]) confirmed no test module
+imports them. =get-import='s AWS path is fixed in
+[[file:../C7/index.org][C7]], whose mock-backed test this card builds on.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e64b-91fb-7115-8ff3-3f9227bd19d3
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+Allowed paths: =test/= (new test modules, wired into the test suite),
+=test-fixtures/=, =iidy-hs.cabal= (test-suite =other-modules= only),
+=notes/C11/=.
+
+Gate: a test module per command covering its main output and at least one
+error path, with AWS access mocked; no real AWS calls; tests structured per
+the project's testing rules (no monolithic module); all tests pass;
+committed with C11.
+
+* TODO Tests for explain
+:PROPERTIES:
+:ID: org:01a1e64b-91fb-7115-8ff3-3f91271c008d
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+* TODO Tests for demo
+:PROPERTIES:
+:ID: org:01a1e64b-91fb-7115-8ff3-3f9058adfb65
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+* TODO Tests for get-import
+:PROPERTIES:
+:ID: org:01a1e64b-91fb-7115-8ff3-3f8f78cfbf90
+:ADDED: [2026-11-16 Mon 14:37]
+:END:

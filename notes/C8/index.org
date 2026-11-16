@@ -1,0 +1,57 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C8
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C2 handoff triage (notes/C2/report--handoff-triage.org), accepted by the user 2026-11-16
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e64b-18a4-75da-af32-09b2a3f93001
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+#+title: C8 — Preserve key order in !$parseYaml
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e64b-91dd-7176-8d4f-38a894fce63b
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+The =!$parseYaml= tag parses a YAML string inside a template. In
+=src/Iidy/Yaml/Resolver.hs= (around lines 836-843) the parsed AST goes
+through =astToValueRaw :: YamlAst -> Value=, an aeson =Value= whose object
+keys are held in aeson's =KeyMap=, which may not keep document order. The
+Rust original parses with the order-preserving =serde_yaml_ng=, so mapping
+keys come out in source order there. If the Haskell result reorders keys,
+rendered templates differ from Rust. Flagged in the March Gemini review of
+the resolver error paths and confirmed as still present by the C2 triage
+([[file:../C2/report--handoff-triage.org][report]]).
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e64b-91dd-7176-8d4f-38a7593447e3
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+Allowed paths: =src/Iidy/Yaml/=, =test/=, =test-fixtures/=, =spec/= only if
+the formal semantics state key order for this tag, =notes/C8/=.
+
+Gate: a fixture with out-of-alphabetical-order keys under =!$parseYaml= shows
+whether Haskell and Rust agree (record both outputs here); if they differ,
+the parsed AST converts directly to the ordered =OValue= type and the fixture
+matches Rust; build warning-free, all tests pass; committed with C8.
+
+* TODO Reproduce against Rust with a key-order fixture
+:PROPERTIES:
+:ID: org:01a1e64b-91dd-7176-8d4f-38a6019ff606
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+* TODO Convert the parsed AST directly to OValue if order differs
+:PROPERTIES:
+:ID: org:01a1e64b-91dd-7176-8d4f-38a59f8c8546
+:ADDED: [2026-11-16 Mon 14:37]
+:END:

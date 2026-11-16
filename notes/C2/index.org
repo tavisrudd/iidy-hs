@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C2
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   User request 2026-11-16: adopt the c cards workflow (single main lane)
 :CREATED_BY: opus-5.5-medium
@@ -12,6 +12,10 @@
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 14:25]
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+- Card state STARTED → DONE [2026-11-16 Mon 14:38]
+  Note: Handoffs archived in c8e3a99; triage report and cards C7-C12 committed with this closeout
   Agent: opus-5.5-medium
   Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :END:
@@ -60,10 +64,15 @@ open items and a decision (card filed, dropped, or already done); the user
 has approved which open items become cards; =RALPH.md= routes to cards; links
 elsewhere in the repo to moved files are updated; =make test= is unaffected.
 
-* TODO Triage open items in the active handoffs
+* DONE Triage open items in the active handoffs
 :PROPERTIES:
 :ID: org:01a1e636-0a5d-7357-9121-47efa8d26a01
 :ADDED: [2026-11-16 Mon 14:14]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 14:38] \\
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :END:
 
 Read every top-level handoff in =notes/handoffs/= and list each open,
@@ -88,7 +97,9 @@ this repo cannot touch, and those docs do not exist in the Rust repo's notes.
 | - | Rust-repo items (no-remote-imports flag, remove       | user decision  |
 |   | use-parameters, no-profile/no-role sentinel values)   |                |
 
-User decisions: pending.
+User decisions (2026-11-16): all six recommended cards accepted. The three
+Rust-repo items stay in =notes/archive/handoffs/= as history; this repo
+cannot change =~/src/iidy=, and the user can copy them there if wanted.
 
 * DONE Move handoffs into a single archive
 :PROPERTIES:
@@ -137,11 +148,21 @@ record what was done, deviations and next steps, with its state current and
 memory index (outside the repo) now says =c next= is the status source and
 handoffs are archived history.
 
-* TODO File cards for accepted open items
+* DONE File cards for accepted open items
 :PROPERTIES:
 :ID: org:01a1e636-0a5d-7357-9121-47ec7d4a4907
 :ADDED: [2026-11-16 Mon 14:14]
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 14:38] \\
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:END:
 
 Create one card per item the user accepted, each with a self-contained
 Context and its own scope and gate.
+
+Filed C7 (get-import AWS environment, priority A), C8 (=!$parseYaml= key
+order), C9 (terminal width), C10 (dummy StackArgs and dead CLI fields), C11
+(tests for explain, demo and get-import; depends on C7) and C12 (split
+StackArgsLoader, priority C).

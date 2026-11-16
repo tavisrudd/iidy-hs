@@ -1,0 +1,57 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C10
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C2 handoff triage (notes/C2/report--handoff-triage.org), accepted by the user 2026-11-16
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e64b-18dd-755e-a2c2-ebd039ce0151
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+#+title: C10 — Remove dummy StackArgs and dead CLI fields
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e64b-91f1-739a-802d-47f044509679
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+=constructCommandMetadata= requires a full =StackArgs= value, but only reads
+a few fields from it. Commands that have no stack-args file pass a dummy
+=emptyStackArgs= from =app/Main.hs= (around lines 125 and 169) to satisfy
+it. Separately, the =naoFixtureSet= field (=src/Iidy/Cli.hs= around line 92)
+is declared but never read. Both were left open by the March
+=constructCommandMetadata= refactor handoff and the CLI utilities review;
+the C2 triage ([[file:../C2/report--handoff-triage.org][report]]) confirmed
+they are still present.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e64b-91f1-739a-802d-47ef755be3b3
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+Allowed paths: =app/Main.hs=, =src/Iidy/Cli.hs=, the module defining
+=constructCommandMetadata= and its callers, =test/=, =notes/C10/=.
+
+Gate: =constructCommandMetadata= takes only the data it uses; =emptyStackArgs=
+is no longer passed from =Main.hs= (and deleted if nothing else uses it);
+=naoFixtureSet= is removed, or kept with a recorded reason if a parser test
+needs it; command metadata output is unchanged (existing snapshot tests
+pass); build warning-free; committed with C10.
+
+* TODO Narrow constructCommandMetadata's input and drop the dummy StackArgs
+:PROPERTIES:
+:ID: org:01a1e64b-91f1-739a-802d-47eeb2bf8fb1
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+* TODO Remove naoFixtureSet
+:PROPERTIES:
+:ID: org:01a1e64b-91f1-739a-802d-47ed4021dfd6
+:ADDED: [2026-11-16 Mon 14:37]
+:END:

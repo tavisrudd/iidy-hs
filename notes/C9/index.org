@@ -1,0 +1,56 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C9
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C2 handoff triage (notes/C2/report--handoff-triage.org), accepted by the user 2026-11-16
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e64b-18c0-7261-acab-1bfcf5b6d02b
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+#+title: C9 — Detect real terminal width in the output renderer
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e64b-91e7-70e2-a35d-fbaf757aafed
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+The output renderer's width comes from =src/Iidy/Output/Terminal.hs=
+(around lines 23-34), which reads only the =COLUMNS= environment variable and
+falls back to 80 columns. =COLUMNS= is usually not exported to child
+processes, so in practice output wraps at 80 on wide terminals. The Rust
+original queries the real terminal size (=output/terminal.rs= around line
+55). The =terminal-size= package is already a dependency and is used in
+=src/Iidy/Cli/Help.hs=. Flagged in the March Gemini review of the
+interactive renderer; still present per the C2 triage
+([[file:../C2/report--handoff-triage.org][report]]).
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e64b-91e7-70e2-a35d-fbae67462f0d
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+Allowed paths: =src/Iidy/Output/Terminal.hs=, =test/=, =notes/C9/=.
+
+Gate: width resolution matches Rust's order of precedence (record it here;
+expected: =COLUMNS= override, then the real terminal size, then 80 when not a
+terminal); a unit test covers the precedence with the size lookup injected;
+build warning-free, all tests pass; committed with C9.
+
+* TODO Record Rust's width precedence
+:PROPERTIES:
+:ID: org:01a1e64b-91e7-70e2-a35d-fbad21baf79b
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+* TODO Use terminal-size in Output.Terminal with a precedence test
+:PROPERTIES:
+:ID: org:01a1e64b-91e7-70e2-a35d-fbac15d409ba
+:ADDED: [2026-11-16 Mon 14:37]
+:END:

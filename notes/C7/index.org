@@ -1,0 +1,64 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C7
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: A
+:MODE:     CONTRACT
+:ORIGIN:   C2 handoff triage (notes/C2/report--handoff-triage.org), accepted by the user 2026-11-16
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e64b-1887-7738-b770-e328fd1649db
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+#+title: C7 — Give get-import an AWS environment (Rust parity)
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e64b-91d4-76b3-ac8b-78fa311421d9
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+=iidy get-import= loads one import location and prints it. In
+=src/Iidy/GetImport.hs= (=runGetImport=) the import config is built with
+=icAwsEnv = Nothing=, so every AWS-backed import type (=cfn:=, =ssm:=,
+=ssm-path:=, =s3:=) fails with an import error. The Rust original builds an
+AWS environment from the global options (profile, region, assume-role) in
+=cfn/get_import.rs= around lines 15-27, so these imports work there. This is
+a user-visible divergence from Rust. It was first flagged for =render= in
+the March Gemini review of the render command; the C2 triage
+([[file:../C2/report--handoff-triage.org][report]]) found =get-import= is
+where the gap is real. Rust =render= also has no AWS environment, so
+whether =render= should get one is a separate decision, not part of this card.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e64b-91d4-76b3-ac8b-78f9f06e097a
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+Allowed paths: =src/Iidy/GetImport.hs=, the AWS environment construction
+helpers it needs, =test/=, =test-fixtures/=, =notes/C7/=.
+
+Gate: =get-import= builds an AWS environment from the global options the
+same way Rust does (only when an AWS import needs it, if Rust is lazy);
+a test using mock AWS fixtures shows an =ssm:= and a =cfn:= import resolving
+through =get-import=; behaviour without credentials matches Rust's error;
+build warning-free, all tests pass; committed with C7 in the message.
+
+* TODO Confirm Rust behaviour and design the fix
+:PROPERTIES:
+:ID: org:01a1e64b-91d4-76b3-ac8b-78f80a5ff8f6
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+Read =~/src/iidy= =cfn/get_import.rs= and record how and when it builds the
+AWS environment and what it does on missing credentials.
+
+* TODO Build the AWS environment in get-import with a mock-backed test
+:PROPERTIES:
+:ID: org:01a1e64b-91d4-76b3-ac8b-78f776e3da83
+:ADDED: [2026-11-16 Mon 14:37]
+:END:

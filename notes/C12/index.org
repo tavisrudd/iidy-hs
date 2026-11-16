@@ -1,0 +1,56 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C12
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   C2 handoff triage (notes/C2/report--handoff-triage.org), accepted by the user 2026-11-16
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e64b-191c-7235-9fc9-4ba6abff95db
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+#+title: C12 — Split StackArgsLoader and parse fields directly
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e64b-9204-753d-924d-ded8d679b37d
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+=src/Iidy/StackArgsLoader.hs= is about 625 lines, above the project's
+guideline of roughly 300-500 lines per module. It mixes loading, pure
+validation, and a walk over an aeson =Value= to pull out fields, where direct
+field parsing would be shorter and give better errors. Left open by the
+March post-review fixes (item 4C) and the refactoring plan (phase 7); still
+true per the C2 triage ([[file:../C2/report--handoff-triage.org][report]]).
+Low priority: worth doing when the module next needs changing.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e64b-9204-753d-924d-ded7ff57c369
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+Allowed paths: =src/Iidy/StackArgsLoader.hs= and new modules split from it,
+=iidy-hs.cabal= (module lists), =test/=, =notes/C12/=.
+
+Gate: pure validation lives in its own module; fields are parsed directly
+rather than by walking an aeson =Value=; every resulting module is under
+~500 lines; stack-args error messages are unchanged or improved (record any
+change here); build warning-free, all tests pass; committed with C12.
+
+* TODO Split validation out of StackArgsLoader
+:PROPERTIES:
+:ID: org:01a1e64b-9204-753d-924d-ded6819c079d
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
+
+* TODO Replace the Value walk with direct field parsing
+:PROPERTIES:
+:ID: org:01a1e64b-9204-753d-924d-ded53697aa6b
+:ADDED: [2026-11-16 Mon 14:37]
+:END:
