@@ -165,3 +165,9 @@ output width. Otherwise it uses the real terminal size (the `terminal-size`
 package), as Rust does; with neither, the interactive renderer falls back to
 130. Rust never reads `COLUMNS`: its order is the real terminal size, then 130
 (`src/output/terminal.rs:54`, `src/output/theme.rs:177`).
+
+iidy-hs queries only stdout for the terminal size; Rust's `terminal_size`
+tries stdout, stderr and stdin in turn. So with stdout redirected, Rust can
+still find a size from stderr or stdin, while iidy-hs reports no width.
+`COLUMNS` must be a positive integer of at most 10000; anything else is
+ignored. A real size of 0 (reported by some ptys) is ignored too.
