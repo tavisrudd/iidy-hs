@@ -59,6 +59,16 @@ Loop the test binary with a per-test timeout (for example
 =--timeout=20s=) and full output, under load and with =+RTS -N= variations,
 until a run hangs; record which test and its stack or event log.
 
+Observation from the first hang (2026-11-16, GHC 9.10.3 build, before the
+C3 move to 9.12.3): SIGTERM did not stop the hung binary; it was still alive
+65 minutes later. At that point it had 76 threads (51 in =futex_do_wait=, 24
+in =do_epoll_wait=, 1 in =poll=), no signals blocked or ignored. The GHC RTS
+turns SIGTERM into an async exception to the main thread, so a main thread
+stuck in an uninterruptible wait (=mask=-ed =bracket= cleanup, an =MVar= or
+=STM= wait inside =uninterruptibleMask=, or a blocking FFI call) would explain
+both the hang and the ignored SIGTERM. The process was then killed with
+SIGKILL. Check whether the hang still occurs on GHC 9.12.3.
+
 * TODO Fix the cause and add a timeout guard
 :PROPERTIES:
 :ID: org:01a1e63f-baa2-7184-958c-c38a2e90eb80
