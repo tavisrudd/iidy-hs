@@ -93,8 +93,9 @@ supervisor.
    a failure.
 6. Known flaky hang (card C6): a test can hang forever and ignore SIGTERM.
    Always pass a per-test timeout. If a run or a commit hangs, `kill -9` the
-   `iidy-hs-test` process from your worktree, note the test name (if a
-   timeout named it) in your report, and retry once.
+   `iidy-hs-test` process from your worktree (by PID, after checking its
+   path; never `pkill -f`, which kills other workers' runs), note the test
+   name (if a timeout named it) in your report, and retry once.
 7. Mark a task heading done with
    `c --root ~/src/iidy-hs todo ~/src/iidy-hs/notes/C<ID>/index.org <HEADING-ID> DONE`
    only when its "Done when" items hold. Never run `c set`; card state

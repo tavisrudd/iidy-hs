@@ -23,7 +23,11 @@ final reply, not the mailbox.
 - Builds and tests only through `scripts/guarded-build` (host-wide lock,
   memory floor). GHC at most -j4; never two builds at once. Always pass a
   per-test timeout (`--test-options=--timeout=60s`); on a hang, `kill -9`
-  the `iidy-hs-test` process and report the test name (card C6).
+  by PID the `iidy-hs-test` process from your own worktree (never
+  `pkill -f`) and report the test name (card C6).
+- Clock in and out from `~/src/iidy-hs`, not the worktree (`c` refuses a
+  cross-root clock-in); before the final reply, check the card has no open
+  `CLOCK:` line.
 - Card: read with `c --root ~/src/iidy-hs show-full <ID> --print`. Edit card
   files only at `~/src/iidy-hs/notes/C<ID>/`, never commit them. Clock in
   with `c --root ~/src/iidy-hs clock-in <ID>` and clock out before your
