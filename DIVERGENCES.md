@@ -126,3 +126,25 @@ The following behaviors require live AWS and are verified by code review only:
 - Real terminal spinner animation timing
 - Live polling loop behavior with real CloudFormation events
 - Network NTP time synchronization
+
+## Import Trust Gate: Fails Closed
+
+**Cause**: Intentional security fix (card C14).
+
+A template may use the local-only import types (`file:`, plain paths, `env:`,
+`git:`, `filehash:`, `filehash-base64:`) only when its own base location is
+positively a local file: a plain path, `./`, `../`, `/` or `file:`. Every
+other base is untrusted: `s3:` in both the short (`s3:bucket/key`) and long
+(`s3://`) forms, `ssm:`, `ssm-path:`, `cfn:`, `http(s):`, and any unknown or
+differently-cased prefix.
+
+Rust (`src/yaml/imports/mod.rs:251-259`) treats a base as remote only when its
+lower-cased prefix is `s3`, `http` or `https`, so a document loaded through
+`ssm:`, `ssm-path:` or `cfn:` can still read local files, environment variables
+and git data, and a base with an unknown prefix counts as local.
+
+Relative imports from a remote parent also differ. Rust gives an unprefixed
+import the parent's remote type (`mod.rs:263-281`, test
+`test_relative_imports_inherit_remote_type`); Haskell classifies it as a local
+file import and rejects it from an untrusted parent. This difference predates
+C14 and is unchanged by it.
