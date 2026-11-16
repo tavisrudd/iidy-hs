@@ -1,0 +1,20 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Key order through !$parseYaml
+Resources:
+  Config:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/key-order
+      Type: String
+      Value:
+        zebra: 1
+        apple:
+          yak: a
+          bee: b
+          cat:
+            - z
+            - y
+        mango:
+          - walrus: 1
+            ant: 2
+        banana: 4

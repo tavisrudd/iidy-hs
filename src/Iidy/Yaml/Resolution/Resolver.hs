@@ -21,7 +21,6 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
-import Data.Vector qualified as V
 import Iidy.Yaml.Ast
 import Iidy.Yaml.CustomResources.Expansion (ExpansionResult (..), expandCustomResource)
 import Iidy.Yaml.Emitter (emitYaml)
@@ -839,7 +838,7 @@ resolveParseYaml ctx meta (ParseYamlTag strAst) = do
     case val of
         OString s ->
             case parseYaml (BL.fromStrict (TE.encodeUtf8 s)) "<parseYaml>" of
-                Right ast -> Right (fromValue (astToValueRaw ast))
+                Right ast -> Right (astToOValueRaw ast)
                 Left (ParseError _ msg) -> parseSyntaxError meta "!$parseYaml: " msg
         _nonString -> typeMismatchError meta "string" val
 
@@ -911,25 +910,33 @@ mergeExpandParams defs provided = List.foldl' addParam provided defs
 ------------------------------------------------------------------------
 
 astToValueRaw :: YamlAst -> Value
-astToValueRaw = \case
-    AstNull _ -> Null
-    AstBool b _ -> Bool b
-    AstNumber n _ -> Number n
-    AstPlainString s _ -> String s
-    AstTemplatedString s _ -> String s
-    AstSequence items _ -> Array $ V.fromList $ map astToValueRaw items
+astToValueRaw = toValue . astToOValueRaw
+
+{- | Raw AST to 'OValue' with mapping keys in source order. A duplicate key
+keeps its first position and takes the last value.
+-}
+astToOValueRaw :: YamlAst -> OValue
+astToOValueRaw = \case
+    AstNull _ -> ONull
+    AstBool b _ -> OBool b
+    AstNumber n _ -> ONumber n
+    AstPlainString s _ -> OString s
+    AstTemplatedString s _ -> OString s
+    AstSequence items _ -> OArray $ map astToOValueRaw items
     AstMapping pairs _ ->
-        Object $
-            KM.fromList
-                [(Key.fromText (rawKeyText k), astToValueRaw v) | (k, v) <- pairs]
-    AstPreprocessingTag _ _ -> String "!$escaped"
+        OObject $
+            List.foldl'
+                (\acc (k, v) -> insertO (rawKeyText k) (astToOValueRaw v) acc)
+                []
+                pairs
+    AstPreprocessingTag _ _ -> OString "!$escaped"
     AstCloudFormationTag tag _ ->
         let (name, inner) = cfnTagParts tag
-         in Object $ KM.singleton (Key.fromText name) (astToValueRaw inner)
+         in OObject [(name, astToOValueRaw inner)]
     AstUnknownTag (UnknownTag name inner) _ ->
-        Object $ KM.singleton (Key.fromText name) (astToValueRaw inner)
+        OObject [(name, astToOValueRaw inner)]
     AstImportedDocument (ImportedDocumentNode _ _ content _) _ ->
-        astToValueRaw content
+        astToOValueRaw content
 
 rawKeyText :: YamlAst -> Text
 rawKeyText (AstPlainString t _) = t

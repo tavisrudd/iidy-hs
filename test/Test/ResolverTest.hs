@@ -970,6 +970,27 @@ parseYamlTests =
             emptyContext
             (ppTag (PpParseYaml (ParseYamlTag (str "42"))))
             (ONumber 42)
+    , testCase "!$parseYaml keeps mapping keys in source order, nested too" $
+        assertResolves
+            emptyContext
+            ( ppTag
+                ( PpParseYaml
+                    ( ParseYamlTag
+                        (str "zebra: 1\napple:\n  yak: a\n  bee: b\nmango:\n  - walrus: 1\n    ant: 2\n")
+                    )
+                )
+            )
+            ( OObject
+                [ ("zebra", ONumber 1)
+                , ("apple", OObject [("yak", OString "a"), ("bee", OString "b")])
+                , ("mango", OArray [OObject [("walrus", ONumber 1), ("ant", ONumber 2)]])
+                ]
+            )
+    , testCase "!$parseYaml duplicate keys: the last value wins" $
+        assertResolves
+            emptyContext
+            (ppTag (PpParseYaml (ParseYamlTag (str "b: 1\na: 2\nb: 3\n"))))
+            (OObject [("b", ONumber 3), ("a", ONumber 2)])
     , testCase "!$parseYaml non-string input errors" $
         assertResolveFailsWith
             emptyContext
