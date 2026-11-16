@@ -19,6 +19,7 @@ module Iidy.Aws.Timing (
     TimeProvider (..),
     systemTimeProvider,
     reliableTimeProvider,
+    reliableTimeProviderWith,
     mockTimeProvider,
     timeProviderForOperation,
 
@@ -73,20 +74,26 @@ Attempts NTP twice (with 2-second timeout each), then falls back to system clock
 Used for write operations where timing precision matters.
 -}
 reliableTimeProvider :: TimeProvider
-reliableTimeProvider =
+reliableTimeProvider = reliableTimeProviderWith tryNtp
+
+{- | 'reliableTimeProvider' with the single-attempt NTP query as a parameter,
+so the retry and fallback logic can be tested without network access.
+-}
+reliableTimeProviderWith :: IO (Maybe UTCTime) -> TimeProvider
+reliableTimeProviderWith query =
     TimeProvider
-        { tpNow = reliableNow
-        , tpStartTime = addUTCTime (-0.5) <$> reliableNow
+        { tpNow = reliableNowWith query
+        , tpStartTime = addUTCTime (-0.5) <$> reliableNowWith query
         }
 
--- | Try NTP twice, fall back to system time.
-reliableNow :: IO UTCTime
-reliableNow = do
-    r1 <- tryNtp
+-- | Try the query twice, fall back to system time.
+reliableNowWith :: IO (Maybe UTCTime) -> IO UTCTime
+reliableNowWith query = do
+    r1 <- query
     case r1 of
         Just t -> pure t
         Nothing -> do
-            r2 <- tryNtp
+            r2 <- query
             maybe getCurrentTime pure r2
 
 -- | Attempt a single NTP query with 2-second timeout.

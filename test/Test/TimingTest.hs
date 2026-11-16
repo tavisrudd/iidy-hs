@@ -3,8 +3,9 @@ module Test.TimingTest (timingTests) where
 import Data.Bits (shiftR, (.&.))
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Maybe (isJust)
-import Data.Time (diffUTCTime, getCurrentTime)
+import Data.Time (addUTCTime, diffUTCTime, getCurrentTime)
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..))
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
@@ -19,7 +20,7 @@ import Iidy.Aws.Timing (
     ntpRequest,
     ntpTimeoutMicros,
     parseNtpResponse,
-    reliableTimeProvider,
+    reliableTimeProviderWith,
     systemTimeProvider,
  )
 
@@ -66,6 +67,7 @@ timingTests :: [TestTree]
 timingTests =
     [ testGroup "NTP packet parsing" packetTests
     , testGroup "TimeProvider behavior" providerTests
+    , testGroup "Retry and fallback (stub queries)" fallbackTests
     , testGroup "Constants" constantTests
     ]
 
@@ -165,16 +167,64 @@ providerTests =
         let diff = diffUTCTime t st
         assertBool "diff >= 0.4s" (diff >= 0.4)
         assertBool "diff < 2.0s" (diff < 2.0)
-    , testCase "reliableTimeProvider tpNow is within 5s of system clock" $ do
-        sysTime <- getCurrentTime
-        t <- tpNow reliableTimeProvider
-        let diff = abs (diffUTCTime t sysTime)
-        assertBool "within 5 seconds of system time" (diff < 5.0)
-    , testCase "reliableTimeProvider tpStartTime < tpNow" $ do
-        st <- tpStartTime reliableTimeProvider
-        t <- tpNow reliableTimeProvider
+    ]
+
+------------------------------------------------------------------------
+-- Retry and fallback tests (stub NTP queries; no network)
+------------------------------------------------------------------------
+
+{- | A stub query that returns the given results in order, counting calls.
+Calls beyond the supplied results yield 'Nothing'.
+-}
+stubQuery :: [Maybe UTCTime] -> IO (IORef Int, IO (Maybe UTCTime))
+stubQuery results = do
+    remaining <- newIORef results
+    calls <- newIORef (0 :: Int)
+    let query = do
+            modifyIORef' calls (+ 1)
+            rs <- readIORef remaining
+            case rs of
+                [] -> pure Nothing
+                (r : rest) -> writeIORef remaining rest >> pure r
+    pure (calls, query)
+
+fallbackTests :: [TestTree]
+fallbackTests =
+    [ testCase "first query succeeds: its time is used, one call" $ do
+        (calls, q) <- stubQuery [Just ntpTime, Just otherTime]
+        t <- tpNow (reliableTimeProviderWith q)
+        t @?= ntpTime
+        readIORef calls >>= (@?= 1)
+    , testCase "first query fails, second succeeds: second time, two calls" $ do
+        (calls, q) <- stubQuery [Nothing, Just otherTime]
+        t <- tpNow (reliableTimeProviderWith q)
+        t @?= otherTime
+        readIORef calls >>= (@?= 2)
+    , testCase "both queries fail: system time is used, two calls" $ do
+        (calls, q) <- stubQuery []
+        before <- getCurrentTime
+        t <- tpNow (reliableTimeProviderWith q)
+        after <- getCurrentTime
+        assertBool "system time within bounds" (t >= before && t <= after)
+        readIORef calls >>= (@?= 2)
+    , testCase "tpStartTime is 500ms before the queried time" $ do
+        (_, q) <- stubQuery [Just ntpTime]
+        st <- tpStartTime (reliableTimeProviderWith q)
+        st @?= addUTCTime (-0.5) ntpTime
+    , testCase "tpStartTime < tpNow with a constant stub" $ do
+        let tp = reliableTimeProviderWith (pure (Just ntpTime))
+        st <- tpStartTime tp
+        t <- tpNow tp
+        assertBool "startTime < now" (st < t)
+    , testCase "tpStartTime < tpNow when queries fail" $ do
+        let tp = reliableTimeProviderWith (pure Nothing)
+        st <- tpStartTime tp
+        t <- tpNow tp
         assertBool "startTime < now" (st < t)
     ]
+  where
+    ntpTime = UTCTime (fromGregorian 2026 3 1) 3600
+    otherTime = UTCTime (fromGregorian 2026 3 2) 7200
 
 ------------------------------------------------------------------------
 -- Constant tests
