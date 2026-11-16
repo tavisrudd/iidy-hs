@@ -40,11 +40,9 @@ import Control.Exception (try)
 import Control.Monad.Trans.Except (ExceptT (..), runExceptT, throwE)
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Aeson (ToJSON (..), Value (..), object, (.=))
-import Data.Aeson.Encode.Pretty (Indent (..), confIndent, defConfig, encodePretty')
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
 import Data.Bifunctor (first)
-import Data.ByteString.Lazy qualified as LBS
 import Data.Conduit (runConduit, (.|))
 import Data.Conduit.List qualified as CL
 import Data.List qualified as List
@@ -55,7 +53,6 @@ import Data.Ord (comparing)
 import Data.Scientific (coefficient, isInteger)
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text.Encoding (decodeUtf8)
 import Data.Time (UTCTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Lens.Micro ((^.))
@@ -80,6 +77,7 @@ import Iidy.Cli (
     ParamSetArgs (..),
     ParamType (..),
  )
+import Iidy.JsonPretty (prettyJsonText)
 
 ------------------------------------------------------------------------
 -- Output data types
@@ -261,7 +259,7 @@ formatUtcTime = T.pack . iso8601Show
 
 -- | Serialize a value as pretty-printed JSON text.
 formatAsJson :: (ToJSON a) => a -> Text
-formatAsJson = decodeUtf8 . LBS.toStrict . encodePretty' (defConfig{confIndent = Spaces 2})
+formatAsJson = prettyJsonText
 
 {- | Serialize a value as YAML text.
 Uses a simple Aeson Value -> YAML conversion since the project
