@@ -103,3 +103,4 @@
 2026-11-16 14:14 — 2026-11-16--2 (f2c5724c-c18a-470a-95c4-5c03105ef675): C1 adopt c cards workflow: c init main lane, AGENTS.md conventions, CLAUDE.md pointer; filed C2 (archive handoffs), C3 (deps upgrade), C4 (Fable security review).
 2026-11-16 14:31 — 2026-11-16--2 (f2c5724c-c18a-470a-95c4-5c03105ef675): C2 archive handoffs into notes/archive/, route RALPH.md to cards, handoff triage report (6 recommended cards, awaiting user decisions).
 2026-11-16 14:38 — 2026-11-16--2 (f2c5724c-c18a-470a-95c4-5c03105ef675): C2 closed; filed C7-C12 from handoff triage.
+2026-11-16 15:19 — 2026-11-16--2 (f2c5724c-c18a-470a-95c4-5c03105ef675): C3 done — nixpkgs locks bumped, GHC 9.10.3 -> 9.12.3, tasty-bench 0.5; tests, Redex spec and nix build pass.
