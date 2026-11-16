@@ -3,6 +3,10 @@
 ## What This Is
 Autonomous claude driven, Haskell port of iidy (a CloudFormation preprocessor/deployer). Porting from Rust (~/src/iidy/, read-only). See WORKPLAN.md for full plan.
 
+## Work Tracking
+Work is tracked as Org cards with the `c` CLI (single `main` lane). Read
+`AGENTS.md` for the work loop before starting; `c next` shows what to do.
+
 ## Coding Standards
 - `-Wall -Wcompat` clean, zero warnings
 - Explicit type signatures on all top-level bindings

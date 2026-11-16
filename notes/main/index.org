@@ -1,0 +1,33 @@
+#+title: main lane
+
+* Lane
+:PROPERTIES:
+:ID: org:01a1e634-cc07-7449-a8f7-1c5b5b3a6fea
+:ADDED: [2026-11-16 Mon 14:13]
+:END:
+
+Cards live at =notes/C<ID>/index.org=. =next/C<ID>= links open TODO, NEXT
+and WAITING work; =active/C<ID>= links STARTED work. Change state only with
+=c set=; DONE and CANCELLED cards have no status link.
+
+This lane uses card-owned scheduling (SCHEDULING_SCHEMA=1): priority,
+prerequisites and groups belong to each card. =archive-log.org= receives one
+completion line from each =c set ID done --note RESULT=.
+
+* Routing
+:PROPERTIES:
+:ID: org:01a1e634-cc07-7449-a8f7-1c5ab880bc48
+:ADDED: [2026-11-16 Mon 14:13]
+:END:
+
+Use =c next= to inspect started and ready work, read a card with =c ID=, then
+start it with =c set ID started=.
+
+* COMMENT meta
+:PROPERTIES:
+:LANE: main
+:KIND: lane-entry
+:SCHEDULING_SCHEMA: 1
+:ID: org:01a1e634-cc07-7449-a8f7-1c593ca79336
+:ADDED: [2026-11-16 Mon 14:13]
+:END:

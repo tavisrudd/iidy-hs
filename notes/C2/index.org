@@ -1,0 +1,97 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C2
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   User request 2026-11-16: adopt the c cards workflow (single main lane)
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e634-e186-742e-8268-3a8655aa5cf5
+:ADDED: [2026-11-16 Mon 14:13]
+:END:
+#+title: C2 — Archive old handoffs and triage their open tasks
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e636-0a5e-771b-8732-b2d671263d55
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+Before cards ([[file:../C1/index.org][C1]]), work was tracked in Markdown
+handoffs under =notes/handoffs/=, with finished ones moved to
+=notes/handoffs/done/=. The top level still holds many documents that look
+active but are not: the nine =post-review-loop--*-model:gemini3= handoffs all
+report "Success", =2026-03-02-arch-refactoring.md= is ON HOLD and
+=2026-03-02-refactoring-plan.md= is PAUSED. Others have no status line at all
+(for example =2026-03-02-post-review-fixes.md=,
+=2026-03-05-requirements-audit.md= and the three =2026-03-03-rust-*= notes).
+An agent reading the tree cannot tell which work is live, and the agent
+memory file still points at =2026-03-02-post-review-fixes.md= as the active
+handoff.
+
+Older archive locations also exist: =notes/archive/= and =notes/archived/=.
+
+=RALPH.md= (headless mode) tells agents to write a session handoff in
+=notes/handoffs/=, and =notes/handoffs/README.md= describes handoffs as the
+live tracking system. Both need to route to cards instead.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e636-0a5e-771b-8732-b2d58e4078fa
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+Allowed paths: =notes/handoffs/=, =notes/archive/=, =notes/archived/=,
+=RALPH.md=, =AGENTS.md=, =CLAUDE.md=, =notes/C2/=, and new cards created by
+=c new= for work the user accepts.
+
+Gate: no handoff document remains at the top of =notes/handoffs/=; all of them
+sit in one archive location with a README saying it is historical and that
+cards replace it; a triage table in this card lists every handoff with its
+open items and a decision (card filed, dropped, or already done); the user
+has approved which open items become cards; =RALPH.md= routes to cards; links
+elsewhere in the repo to moved files are updated; =make test= is unaffected.
+
+* TODO Triage open items in the active handoffs
+:PROPERTIES:
+:ID: org:01a1e636-0a5d-7357-9121-47efa8d26a01
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+Read every top-level handoff in =notes/handoffs/= and list each open,
+unchecked or deferred item in a table under this task: source file, item,
+whether it is still relevant against current code, and a recommended
+decision. Present the table to the user and record their decisions here.
+
+* TODO Move handoffs into a single archive
+:PROPERTIES:
+:ID: org:01a1e636-0a5d-7357-9121-47eefed22f43
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+Move =notes/handoffs/= (including =done/=) and the contents of
+=notes/archive/= and =notes/archived/= under one archive directory with
+=git mv=. Rewrite the handoffs README as a short historical note pointing to
+=c next=. Fix in-repo links to moved files (=grep -rn "notes/handoffs"=).
+
+* TODO Route RALPH.md to cards
+:PROPERTIES:
+:ID: org:01a1e636-0a5d-7357-9121-47edb384b011
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+Replace the "session handoff doc" instruction in =RALPH.md= with the card
+work loop from =AGENTS.md=, and update the agent memory index so it no longer
+names an active handoff.
+
+* TODO File cards for accepted open items
+:PROPERTIES:
+:ID: org:01a1e636-0a5d-7357-9121-47ec7d4a4907
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+Create one card per item the user accepted, each with a self-contained
+Context and its own scope and gate.

@@ -1,0 +1,108 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C1
+:LANE:     main
+:TODO_STATE: STARTED
+:MODE:     CONTRACT
+:ORIGIN:   User request 2026-11-16: adopt the c cards workflow (single main lane)
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e634-e167-76a2-b440-de66e341e5b7
+:ADDED: [2026-11-16 Mon 14:13]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 14:14]
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:END:
+#+title: C1 — Set up the repo for the c cards workflow
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e636-0a50-764f-944c-995b454d7896
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+iidy-hs tracked work in Markdown handoff documents under =notes/handoffs/=
+plus =progress.log=, =WORKPLAN.md= and the agent memory file. Nothing checked
+which handoff was current, and several "active" handoffs are finished or
+paused. The project is adopting the =c= cards workflow from
+=~/src/agentic-workflow= (as used in =~/src/peregrine=) with a single =main=
+lane, so that every planned piece of work is a card with a scope and a gate.
+
+=c init= refuses to run when =notes/= already exists, so the existing
+=notes/= tree was moved aside for the init and moved back afterwards. Nothing
+under the old =notes/= paths changed.
+
+Follow-up cards filed with this one:
+- [[file:../C2/index.org][C2]] archives the old handoffs and triages their open tasks.
+- [[file:../C3/index.org][C3]] upgrades dependencies.
+- [[file:../C4/index.org][C4]] is a security review by Fable.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e636-0a50-764f-944c-995a4627f377
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+Allowed paths: =AGENTS.md=, =CLAUDE.md=, =notes/main/=, =notes/C1/= through
+=notes/C4/=, and the =_meta_c_state= branch that =c= manages.
+
+Gate: =c check= passes; =c next= lists C2, C3 and C4; =AGENTS.md= carries the
+work loop and project conventions; =CLAUDE.md= points agents at =AGENTS.md=;
+the setup is committed with C1 in the message.
+
+* DONE Initialize the main lane and allocator
+:PROPERTIES:
+:ID: org:01a1e636-0a50-764f-944c-995959aeef57
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 14:14] \\
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:END:
+
+Ran =c init --lane main= with =notes/= moved aside, then moved every old
+entry back into =notes/=. Receipt:
+
+#+begin_example
+Initialized c in /home/tavis/src/iidy-hs
+- notes/main/: scheduling-enabled lane (index.org, archive-log.org, active/, next/)
+- _meta_c_state: allocator state; the first card is C1
+- AGENTS.md: starter agent guide with the c work loop
+#+end_example
+
+* DONE Wire the agent docs
+:PROPERTIES:
+:ID: org:01a1e636-0a50-764f-944c-99586dd29798
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 14:14] \\
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:END:
+
+=AGENTS.md= keeps the starter work loop and adds a project conventions
+section: one =main= lane, no new handoff documents, card IDs in commit
+messages, reports beside the card, and =CLAUDE.md= still governs coding,
+testing, build and git rules. =CLAUDE.md= gains a short Work Tracking section
+pointing at =AGENTS.md= and =c next=. Retiring the handoff instructions in
+=RALPH.md= and =notes/handoffs/README.md= belongs to C2.
+
+* DONE File the initial cards
+:PROPERTIES:
+:ID: org:01a1e636-0a50-764f-944c-995735e6b253
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 14:14] \\
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:END:
+
+Filed C2 (archive handoffs), C3 (dependency upgrade) and C4 (security review
+by Fable) with context, scope and gate, in that priority order.

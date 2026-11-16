@@ -1,0 +1,16 @@
+#+title: main lane archive log
+
+* Completions
+:PROPERTIES:
+:ID: org:01a1e634-cc07-7449-a8f7-1c5d782384b3
+:ADDED: [2026-11-16 Mon 14:13]
+:END:
+
+=c set <ID> done --note ...= appends one short dated completion entry here.
+* COMMENT meta
+:PROPERTIES:
+:LANE: main
+:KIND: lane-archive
+:ID: org:01a1e634-cc07-7449-a8f7-1c5cc342770b
+:ADDED: [2026-11-16 Mon 14:13]
+:END:

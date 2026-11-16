@@ -1,0 +1,80 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C3
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   User request 2026-11-16: adopt the c cards workflow (single main lane)
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e634-e1a1-7789-9032-12c12a1e549a
+:ADDED: [2026-11-16 Mon 14:13]
+:END:
+#+title: C3 — Upgrade dependencies
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e636-0a67-706a-98d2-96517dcac255
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+The last dependency work, commit =7d6ed12= on 2026-10-03, bumped =flake.lock=
+(nixpkgs-unstable), =spec/flake.lock= and the GitHub Actions versions in
+=.github/workflows/ci.yml=. It did not revisit the Haskell package set: the
+Hackage dependencies and bounds in =iidy-hs.cabal=, the =haskellDeps= list in
+=flake.nix=, the GHC version the dev shell and CI use, or any
+=cabal.project= pins. The dev shell currently runs GHC 9.10.3. Known
+constraints from earlier work: amazonka 2.0 needs qualified imports with
+=OverloadedRecordDot=, and amazonka-sns did not build against GHC 9.10.3 /
+base 4.20.
+
+A dependency is declared in two places, =iidy-hs.cabal= (=build-depends=)
+and =flake.nix= (=haskellDeps=); missing either breaks a different build
+environment.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e636-0a67-706a-98d2-9650618ce20e
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+Allowed paths: =flake.nix=, =flake.lock=, =spec/flake.nix=, =spec/flake.lock=,
+=iidy-hs.cabal=, =cabal.project=, =.github/workflows/=, and source or test
+files only where an upgrade forces an API change. =notes/C3/=.
+
+Gate: the flake inputs are current; each Haskell dependency is at the newest
+version nixpkgs provides that builds, with any held-back package and its
+reason recorded under the survey task; =make build= is warning-free under
+=-Wall -Wcompat=; the full test suite passes; the Redex spec in =spec/=
+still runs; CI configuration matches the local toolchain. Work is committed
+with C3 in the messages.
+
+* TODO Survey current versions and available upgrades
+:PROPERTIES:
+:ID: org:01a1e636-0a67-706a-98d2-964f30f99821
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+Record a table of the flake inputs, GHC version and each direct Haskell
+dependency: current version, newest available in nixpkgs and on Hackage, and
+any known breakage. Decide which GHC to target.
+
+* TODO Upgrade flake inputs and the Haskell package set
+:PROPERTIES:
+:ID: org:01a1e636-0a67-706a-98d2-964ea2123ebb
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+Update the locks and bounds, fix any API breakage, and keep
+=iidy-hs.cabal= and =flake.nix= in agreement.
+
+* TODO Verify build, tests, spec and CI
+:PROPERTIES:
+:ID: org:01a1e636-0a67-706a-98d2-964de3254f71
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+Run =make build=, the full test suite and the Redex spec suite through
+=run-quiet=, and record the results here.

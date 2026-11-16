@@ -1,0 +1,77 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C4
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   User request 2026-11-16: adopt the c cards workflow (single main lane)
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:ID: org:01a1e634-e1be-72a7-852a-b5a871623f0d
+:ADDED: [2026-11-16 Mon 14:13]
+:DEPENDS_ON: C3
+:END:
+:LOGBOOK:
+- DEPENDS_ON (none) → C3 [2026-11-16 Mon 14:14]
+  Agent: opus-5.5-medium
+  Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
+:END:
+#+title: C4 — Security review by Fable
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e636-0a70-72f9-8ecd-c12709458f9c
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+iidy-hs processes CloudFormation templates and YAML that may come from
+untrusted remote sources (S3 and HTTP/HTTPS imports), resolves secrets and
+parameters from SSM and the environment, and calls AWS on the user's
+credentials. =SECURITY.md= documents the import security model: remote
+templates may not use the local-only import types (=file:=, =env:=, =git:=,
+=filehash:=, =filehash-base64:=). A security review and fix pass ran in
+March 2026 (=notes/handoffs/done/2026-03-01-security-review-fixes.md= and
+=2026-03-01-security-regression-tests.md=); since then the code has had
+refactors, and [[file:../C3/index.org][C3]] changes dependency versions.
+
+This card asks for a fresh, independent review run by a Fable model, not a
+re-check of the March findings. Run it after C3 so it covers the upgraded
+dependency set.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e636-0a70-72f9-8ecd-c1261f0defe2
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+Allowed paths: =notes/C4/= only. The review reads the whole repository but
+changes no code; fixes become their own cards.
+
+Gate: a report at =notes/C4/report--security-review.org= written by a Fable
+reviewer, covering at least the import trust boundary (remote versus local
+templates, path traversal, URL handling and redirects, size and resource
+limits), secret handling (SSM, environment, logging and error output, temp
+files), AWS credential and region handling, shell or subprocess use, YAML
+parsing hazards, and dependency advisories; each finding carries severity,
+location, a concrete failure scenario and a recommendation. Findings the user
+accepts are filed as cards linked from the report.
+
+* TODO Run the Fable security review
+:PROPERTIES:
+:ID: org:01a1e636-0a70-72f9-8ecd-c125beaa5818
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+Launch a Fable sub-agent with read-only scope over the repository and the
+coverage list above. It writes the report beside this card.
+
+* TODO Triage findings into cards
+:PROPERTIES:
+:ID: org:01a1e636-0a70-72f9-8ecd-c1241eaac3b4
+:ADDED: [2026-11-16 Mon 14:14]
+:END:
+
+Review the findings with the user and file a card for each accepted fix,
+linked from the report.
