@@ -203,6 +203,7 @@ test-suite iidy-hs-test
     Test.ErrorColorTest
     Test.RendererTest
     Test.JsonRendererTest
+    Test.TerminalTest
     Test.ThemeVariantTest
     Test.RendererOutputTest
     Test.IntegrationTest

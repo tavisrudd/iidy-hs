@@ -47,6 +47,7 @@ import Test.StackOpsConverterTest (stackOpsConverterTests)
 import Test.TemplateDiffTest (templateDiffTests)
 import Test.TemplateHashTest (templateHashTests)
 import Test.TemplateLoaderTest (templateLoaderTests)
+import Test.TerminalTest (terminalTests)
 import Test.ThemeVariantTest (themeVariantTests)
 import Test.TimingTest (timingTests)
 import Test.WatchStackTest (watchStackTests)
@@ -81,6 +82,7 @@ main = do
             , testGroup "Renderer" rendererTests
             , testGroup "JsonRenderer" jsonRendererTests
             , testGroup "ThemeVariants" themeVariantTests
+            , terminalTests
             , testGroup "RendererOutput" rendererOutputTests
             , testGroup "Integration" integrationTests
             , testGroup "Phase14Fixes" phase14FixTests

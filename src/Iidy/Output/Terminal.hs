@@ -1,8 +1,11 @@
 module Iidy.Output.Terminal (
     TerminalCapabilities (..),
     detectCapabilities,
+    detectCapabilitiesWith,
+    resolveWidth,
 ) where
 
+import System.Console.Terminal.Size qualified as TermSize
 import System.Environment (lookupEnv)
 import System.IO (hIsTerminalDevice, stdout)
 
@@ -14,24 +17,27 @@ data TerminalCapabilities = TerminalCapabilities
     }
     deriving stock (Show, Eq)
 
--- | Detect terminal capabilities from environment
+-- | Detect terminal capabilities from environment and the real terminal size
 detectCapabilities :: IO TerminalCapabilities
-detectCapabilities = do
+detectCapabilities = detectCapabilitiesWith (fmap (fmap TermSize.width) TermSize.size)
+
+{- | 'detectCapabilities' with the terminal size query injected, so tests need
+no real TTY.
+-}
+detectCapabilitiesWith :: IO (Maybe Int) -> IO TerminalCapabilities
+detectCapabilitiesWith querySize = do
     isTty <- hIsTerminalDevice stdout
     noColor <- lookupEnv "NO_COLOR"
     forceColor <- lookupEnv "FORCE_COLOR"
     columns <- lookupEnv "COLUMNS"
+    realSize <- if isTty then querySize else pure Nothing
 
     let hasColor = case (noColor, forceColor) of
             (Just _, _) -> False
             (_, Just _) -> True
             _noOverride -> isTty
 
-        width = case columns of
-            Just s -> case reads s of
-                [(n, "")] | n > 0 -> Just n
-                _invalid -> if isTty then Just 80 else Nothing
-            Nothing -> if isTty then Just 80 else Nothing
+        width = resolveWidth columns isTty realSize
 
     pure
         TerminalCapabilities
@@ -39,3 +45,19 @@ detectCapabilities = do
             , tcWidth = width
             , tcIsTty = isTty
             }
+
+{- | Width precedence: a valid (positive integer) @COLUMNS@ override, then the
+real terminal size when output is a terminal, else 'Nothing' (the renderer
+then falls back to its default width). Rust has no @COLUMNS@ override; see
+DIVERGENCES.md.
+-}
+resolveWidth :: Maybe String -> Bool -> Maybe Int -> Maybe Int
+resolveWidth columns isTty realSize =
+    case columns >>= parseColumns of
+        Just n -> Just n
+        Nothing -> if isTty then realSize else Nothing
+  where
+    parseColumns :: String -> Maybe Int
+    parseColumns s = case reads s of
+        [(n, "")] | n > 0 -> Just n
+        _invalid -> Nothing
