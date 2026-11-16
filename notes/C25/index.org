@@ -1,0 +1,118 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C25
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C13 side finding: Haskell emits '  c:\n    - x', Rust serde_yaml emits '  c:\n  - x'
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e6a8-aa2c-70e1-8b6e-6fcc4bc3af4c
+:ADDED: [2026-11-16 Mon 16:19]
+:END:
+#+title: C25 — Match serde_yaml sequence indentation in the YAML emitter
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e6a8-aa2c-70e1-8b6e-6fcb44417caa
+:ADDED: [2026-11-16 Mon 16:19]
+:END:
+
+The shared YAML emitter =emitYaml= in =src/Iidy/Yaml/Emitter.hs= indents a
+sequence under a mapping key by two spaces (=emitMapValue= at line 210 calls
+=emitArray= at line 148 with the key's indent plus two), giving
+=  c:\n    - x=. Rust's =serde_yaml= puts the dashes at the key's indent:
+=  c:\n  - x=. Found while reviewing C13 (=notes/C13/index.org=, the DONE task
+"End YAML output with a newline ...", "Known remaining divergence").
+
+Verified by running both binaries (Rust =~/src/iidy/target/debug/iidy=):
+- =get-import= YAML output uses =serde_yaml::to_string=
+  (=~/src/iidy/src/cfn/get_import.rs= line 56) and is unindented: the
+  Rust result for =a: {c: [x, y]}= is =a:\n  c:\n  - x=. iidy-hs indents.
+- =render= YAML output in Rust uses its own emitter
+  (=serialize_yaml_iidy_js_compatible=, =~/src/iidy/src/yaml/engine.rs= line
+  652, =~/src/iidy/src/yaml/emitter.rs=) which does indent sequences, and
+  iidy-hs =render= matched it byte for byte on a nested-sequence sample.
+So the parity gap is specific to the places where Rust uses =serde_yaml=:
+=get-import=, =!$toYamlString= (=resolver.rs= around line 1781), the
+handlebars =toYaml= helper (=helpers/serialization.rs= line 57) and
+=param= YAML output (=params/mod.rs= line 234). In iidy-hs, =emitYaml= has
+these callers: =Render.hs= lines 101-102 (render, must keep indenting),
+=GetImport.hs= lines 131-132, =Cfn/TemplateLoader.hs= line 90,
+=Yaml/Handlebars/Helpers.hs= line 288 and =Yaml/Resolution/Resolver.hs=
+line 834 (=!$toYamlString=). =src/Iidy/Params/Client.hs= has a separate
+emitter (=renderYaml=, line 279, documented as serde_yaml-compatible) that
+also indents sequences under keys. Existing tests of the emitter:
+=test/Test/EmitterTest.hs=, =test/Test/CfnYamlEmitterTest.hs=; fixtures
+under =test-fixtures/= avoid nested sequences in get-import output.
+
+Changing =emitYaml= itself would change =render= output, which already
+matches Rust, so it must not be done blindly. Depends on C13 for the
+=GetImport.hs= call sites (C13 is editing that file); start after it lands.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e6a8-aa2c-70e1-8b6e-6fca12e887ab
+:ADDED: [2026-11-16 Mon 16:19]
+:END:
+
+Allowed paths: =src/Iidy/Yaml/Emitter.hs= (an option or a second entry
+point for serde_yaml-style sequences; a new sibling module if the file would
+pass about 500 lines), =src/Iidy/GetImport.hs=, =test/Test/EmitterTest.hs=,
+=test/Test/GetImportTest.hs=, fixtures under =test-fixtures/=,
+=DIVERGENCES.md= (entry for any caller left unchanged), =notes/C25/=.
+
+Out of scope: any change to =render= output (it matches Rust today);
+=src/Iidy/Params/Client.hs= (separate emitter, record it); the other
+callers beyond get-import unless the decision below says so.
+
+Done when:
+- [ ] The card records, for each iidy-hs caller of =emitYaml=, which Rust
+  emitter its counterpart uses (table in the card) and the observed output
+  of both binaries on a nested-sequence sample for =get-import= and =render=.
+- [ ] =get-import --format yaml= prints sequences under mapping keys at the
+  key's indent, byte-identical to the Rust binary on a sample with nested
+  sequences, sequences of mappings, and a mapping holding a sequence inside a
+  sequence item; a test recorded failing before the change covers it.
+- [ ] =render= YAML output is byte-identical before and after (existing
+  tests and fixtures pass unchanged; add one nested-sequence render test if
+  none exists).
+- [ ] Build warning-free, full suite green, commits name C25.
+
+Stop and record if: C13 has not landed; making the other serde_yaml-based
+callers (=!$toYamlString=, handlebars =toYaml=, =param=) match Rust as well
+would change their current output (question for Tavis, with the sample
+outputs; the project default is Rust parity, but these are user-visible and
+the card only settles get-import); the fix needs to alter =render= output;
+or it needs changes outside the allowed paths.
+
+* TODO Match serde_yaml sequence indentation in the YAML emitter
+:PROPERTIES:
+:ID: org:01a1e6a8-aa2c-70e1-8b6e-6fc9d15ee1e4
+:ADDED: [2026-11-16 Mon 16:19]
+:END:
+
+Wait for C13 to land. Build a nested-sequence sample file and capture the
+Rust and iidy-hs output of =get-import= and =render= for it into the card.
+Write the failing get-import test from the Rust bytes first.
+* TODO Add a serde_yaml-style sequence mode and use it in get-import
+:PROPERTIES:
+:ADDED: [2026-11-16 Mon 16:40]
+:ID: org:01a1e6aa-a924-752e-a4f4-54eec4780ed8
+:END:
+
+Give the emitter a way to place sequence dashes at the parent key's indent
+(a flag passed down through =emitMapValue=, =emitArray= and the inline
+variants), default off so =render= is unchanged. =GetImport.hs= turns it on.
+Reuse the one emitter; do not copy it.
+* TODO Tabulate the other callers and decide
+:PROPERTIES:
+:ADDED: [2026-11-16 Mon 16:40]
+:ID: org:01a1e6aa-a924-752e-a4f4-54edc7600527
+:END:
+
+Fill in the caller-to-Rust-emitter table in the card. Leave the other
+serde_yaml-based callers unchanged and list the exact output differences as
+the question for Tavis; add =DIVERGENCES.md= entries for those left as is.

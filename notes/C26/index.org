@@ -1,0 +1,122 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C26
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C15 side finding: plain imported document with unresolved !$ tag renders as '!$escaped' in iidy-hs, Rust keeps the tag
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e6a8-aa6a-74a5-9461-67b08b2b8768
+:ADDED: [2026-11-16 Mon 16:19]
+:END:
+#+title: C26 — Keep unresolved !$ tags in plain imported documents (Rust parity)
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e6a8-aa6a-74a5-9461-67aff36e1dbd
+:ADDED: [2026-11-16 Mon 16:19]
+:END:
+
+A plain imported document (one without =$imports= or =$defs=) whose body
+holds a preprocessing tag that is not resolved renders as the string
+='!$escaped'= in iidy-hs, while Rust keeps the tag. Found in the C15
+research (=notes/C15/report--remote-template-options.org=, "Side findings",
+last bullet).
+
+Reproduced with both binaries: a file =imp.yaml= with
+=plain:\n  note: !$ secret\n  n: 1= imported as =plain: imp.yaml= and read
+back by =get-import imp.yaml= prints =note: !$ secret= under Rust and
+=note: '!$escaped'= under iidy-hs.
+
+Cause: plain imported YAML goes through =parseYamlContent= in
+=src/Iidy/Yaml/Imports/ContentParsing.hs= (line 48), which calls
+=astToValueRaw= (=src/Iidy/Yaml/Resolution/Resolver.hs= line 908). Its case
+=AstPreprocessingTag _ _ -> String "!$escaped"= (line 925) throws the tag
+away. Rust loads these documents with =serde_yaml::from_str=
+(=~/src/iidy/src/yaml/imports/loaders/utils.rs= line 15), which keeps
+the tag. The resulting type is aeson =Value=, which cannot carry a tag. The
+same function already represents CloudFormation and unknown tags (lines
+927-930) as a one-key object whose key is the tag name (=!Ref=, ...), and
+the emitter prints a single key starting with =!= as a tag
+(=isTaggedKvs=, =src/Iidy/Yaml/Emitter.hs= around line 255), so the same
+convention can carry =!$= tags. Hazards: the AST has no function from a
+=PreprocessingTag= constructor to its tag name and raw argument, and Rust
+keeps tags with structured arguments verbatim (=a: !$map [1]= prints
+as a tag with a sequence), whereas iidy-hs fails to parse malformed =!$map=
+at all (a separate difference). Other callers of =astToValueRaw= share the
+function: =!$escape= (line 861), =!$parseYaml= (line 842), ConvertStack
+(=Cfn/Operations/ConvertStack.hs= line 193), so the change must not alter
+their output unless that is intended.
+
+Also seen in the same sample and not part of this card: iidy-hs prints the
+imported mapping's keys sorted (=n= before =note=) where Rust keeps source
+order; that is the key-order loss of C8 for the other =astToValueRaw=
+callers.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e6a8-aa6a-74a5-9461-67ae03fda014
+:ADDED: [2026-11-16 Mon 16:19]
+:END:
+
+Allowed paths: =src/Iidy/Yaml/Resolution/Resolver.hs= (=astToValueRaw=
+and a tag-name helper), =src/Iidy/Yaml/Imports/ContentParsing.hs=,
+=src/Iidy/Yaml/Ast.hs= only if a tag-name accessor belongs there,
+=test/Test/ImportLoaderTest.hs=, =test/Test/ResolverTest.hs=, a fixture pair
+under =test-fixtures/=, =DIVERGENCES.md= (only if a case cannot match),
+=notes/C26/=.
+
+Out of scope: key order of imported mappings (C8 and a future card); parse
+errors for malformed tags; resolving tags inside imported documents (they
+stay unresolved by design); the C14 and C15 trust rules.
+
+Done when:
+- [ ] A test recorded failing on the branch base shows an imported plain
+  document containing =!$ name= round-tripping through =get-import= (and a
+  =render= import) as =!$ name=, not ='!$escaped'=.
+- [ ] The card records the Rust and iidy-hs outputs for at least =!$ x=,
+  a tag with a mapping argument, and a tag with a sequence argument.
+- [ ] One place maps each preprocessing tag constructor to its tag name and
+  raw argument; no per-tag copy of the logic in the callers.
+- [ ] Output of =!$escape=, =!$parseYaml= and convert-stack tests is
+  unchanged (or the change is listed and approved, see the stop rule).
+- [ ] Build warning-free, full suite green, commits name C26.
+
+Stop and record if: reproducing the exact Rust output needs the raw source
+text of the tag rather than the parsed AST (list the cases); changing
+=astToValueRaw= alters =!$escape=, =!$parseYaml= or convert-stack output
+(question for Tavis: the safe alternative is a separate import-only
+conversion); or the change needs files outside the allowed paths.
+
+* TODO Keep unresolved !$ tags in plain imported documents (Rust parity)
+:PROPERTIES:
+:ID: org:01a1e6a8-aa6a-74a5-9461-67ad63afdf07
+:ADDED: [2026-11-16 Mon 16:19]
+:END:
+
+Record the reproduction (Rust and iidy-hs outputs for the three tag shapes in
+Done-when) in the card, then write the failing import test.
+* TODO Add a preprocessing-tag name and argument accessor
+:PROPERTIES:
+:ADDED: [2026-11-16 Mon 16:40]
+:ID: org:01a1e6aa-a940-744a-ae09-f666e8313bf4
+:END:
+
+Add one function from each =PreprocessingTag= constructor
+(=src/Iidy/Yaml/Ast.hs= lines 120-140 list them) to the tag text and the
+raw argument AST, next to =cfnTagParts= (Resolver.hs line 477). Check how the
+parser stores multi-field tags (=!$let=, =!$map=, =!$expand=) before
+choosing the argument form.
+* TODO Use it for imported documents without changing other callers
+:PROPERTIES:
+:ADDED: [2026-11-16 Mon 16:40]
+:ID: org:01a1e6aa-a940-744a-ae09-f66584726b23
+:END:
+
+Decide between changing the =AstPreprocessingTag= case of =astToValueRaw=
+and adding an import-only conversion, based on which leaves =!$escape=,
+=!$parseYaml= and convert-stack output byte-identical. Add the fixture and
+record the passing run.

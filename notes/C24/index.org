@@ -1,0 +1,100 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C24
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   C13 review 2026-11-16: GetImport.formatJsonPretty and Render.formatJson both wrap encodePretty, differing only in indent
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e6a8-a9ec-75c5-898a-bfac0bb51067
+:ADDED: [2026-11-16 Mon 16:19]
+:END:
+#+title: C24 — Share one pretty-JSON helper between get-import and render
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e6a8-a9ec-75c5-898a-bfabe8b72461
+:ADDED: [2026-11-16 Mon 16:19]
+:END:
+
+Two functions pretty-print JSON by wrapping aeson-pretty's
+=encodePretty= and differ only in indent width:
+=formatJsonPretty= in =src/Iidy/GetImport.hs= (two spaces plus a trailing
+newline, using =encodePretty'= with =confIndent = Spaces 2=) and
+=formatJson= in =src/Iidy/Render.hs= (line 144, the aeson-pretty default of
+four spaces, no trailing newline, used at line 100 for =RenderJson=). The
+C13 review (=notes/C13/index.org=, the "Review 2026-11-16" heading, defect 1)
+proposed one shared helper taking the indent. Other pretty-JSON callers
+exist (=src/Iidy/Output/Renderers/Json.hs= lines 161 and 174,
+=src/Iidy/Yaml/Handlebars/Helpers.hs= line 283,
+=src/Iidy/Cfn/Operations/ConvertStack.hs= line 568,
+=src/Iidy/Params/Client.hs= line 264 with its own two-space config); they
+are not part of this card.
+
+Dependency: C13 is changing =src/Iidy/GetImport.hs= and introduces
+=formatJsonPretty= (it exists only on the C13 branch at the time of
+writing, line 154 there; on =main= the file does not have it yet). Do not
+start this card until C13 has landed on =main=, then re-check the line
+numbers.
+
+Finding for Tavis: Rust's =render --format json= uses
+=serde_json::to_string_pretty= (=~/src/iidy/src/render.rs= line 44), which
+is two-space; running both binaries on the same input shows Rust two-space
+and iidy-hs =render= four-space. So Render's four-space output is itself a
+divergence from Rust, but this card must not change output bytes.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e6a8-a9ec-75c5-898a-bfaaa63878a4
+:ADDED: [2026-11-16 Mon 16:19]
+:END:
+
+Allowed paths: =src/Iidy/GetImport.hs=, =src/Iidy/Render.hs=, one new
+small module for the shared helper (for example =src/Iidy/JsonPretty.hs=)
+added to =exposed-modules= in =iidy-hs.cabal= (and a test module entry if
+a new test file is added), =test/Test/GetImportTest.hs=, the render tests
+(=test/Test/RendererTest.hs= or =test/Test/RendererOutputTest.hs=),
+=notes/C24/=.
+
+Out of scope: changing the bytes of either command's output (in particular
+making =render --format json= two-space, see the stop rule); the other
+pretty-JSON callers listed in Context; trailing-newline behaviour.
+
+Done when:
+- [ ] One helper takes the indent width (and returns lazy or strict text
+  as both callers need); =formatJsonPretty= and =formatJson= are defined
+  with it and no longer call aeson-pretty directly.
+- [ ] Tests pin the exact bytes of both commands' JSON output (two-space
+  plus newline for get-import, four-space for render) and pass before and
+  after the refactor; the render pin is added first on the branch base.
+- [ ] Existing get-import and render tests pass unchanged.
+- [ ] Build warning-free, full suite green, commits name C24.
+
+Stop and record if: C13 has not landed on =main=; the helper cannot keep
+both outputs byte-identical; or you want to change render's indent to
+match Rust (question for Tavis: it changes user-visible output; the finding
+is in Context).
+
+* TODO Share one pretty-JSON helper between get-import and render
+:PROPERTIES:
+:ID: org:01a1e6a8-a9eb-77c6-8201-a8b7f548cb8a
+:ADDED: [2026-11-16 Mon 16:19]
+:END:
+
+Confirm C13 has landed and re-read both functions. Add the failing-safe
+pin first: a render test asserting the current four-space bytes, next to the
+existing get-import two-space test. Then add the shared helper in its own
+module and make both functions thin wrappers over it.
+* TODO Run the gate and record the byte comparison
+:PROPERTIES:
+:ADDED: [2026-11-16 Mon 16:40]
+:ID: org:01a1e6aa-a903-7666-bb82-16ddef14cfd5
+:END:
+
+Run the full suite and, with the built binary, compare =render --format
+json= and =get-import --format json= output before and after on one sample
+file (=cmp=). Record the result in the card.
