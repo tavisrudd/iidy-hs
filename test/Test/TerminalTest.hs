@@ -23,6 +23,8 @@ terminalTests =
             resolveWidth Nothing True (Just 200) @?= Just 200
         , testCase "terminal with no size and no COLUMNS is Nothing, not 80" $
             resolveWidth Nothing True Nothing @?= Nothing
+        , testCase "real size of 0 (some ptys) falls through to Nothing" $
+            resolveWidth Nothing True (Just 0) @?= Nothing
         , testCase "non-terminal without COLUMNS is Nothing" $
             resolveWidth Nothing False (Just 200) @?= Nothing
         ]

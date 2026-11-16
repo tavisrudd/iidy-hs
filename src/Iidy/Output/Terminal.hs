@@ -55,8 +55,11 @@ resolveWidth :: Maybe String -> Bool -> Maybe Int -> Maybe Int
 resolveWidth columns isTty realSize =
     case columns >>= parseColumns of
         Just n -> Just n
-        Nothing -> if isTty then realSize else Nothing
+        Nothing -> if isTty then realSize >>= positive else Nothing
   where
+    positive :: Int -> Maybe Int
+    positive n = if n > 0 then Just n else Nothing
+
     parseColumns :: String -> Maybe Int
     parseColumns s = case reads s of
         [(n, "")] | n > 0 -> Just n
