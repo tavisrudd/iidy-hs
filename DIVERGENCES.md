@@ -141,7 +141,9 @@ imports `./c:d.yaml`). Every other base is untrusted: `s3:` in both the short
 `http(s):`, and any unknown or differently-cased scheme-shaped prefix. That
 includes a local file named like `a:b.yaml` loaded without a `./` prefix: it
 counts as local in Rust but is untrusted here, so it cannot use the local-only
-import types (write `./a:b.yaml` instead).
+import types (write `./a:b.yaml` instead). Windows drive paths such as
+`C:\configs\stack-args.yaml` are scheme shaped too, so they are untrusted in
+the same way; Rust treats them as local. There is no Windows build.
 
 Rust (`src/yaml/imports/mod.rs:251-259`) treats a base as remote only when its
 lower-cased prefix is `s3`, `http` or `https`, so a document loaded through
