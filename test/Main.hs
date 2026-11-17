@@ -15,6 +15,7 @@ import Test.ConvertStackTest (convertStackTests)
 import Test.CustomTemplateTrustTest (customTemplateTrustTests)
 import Test.DeleteStackTest (deleteStackTests)
 import Test.DemoTest (demoTests)
+import Test.DeployCommandsTest (deployCommandsTests)
 import Test.DeployTemplateTest (deployTemplateTests)
 import Test.DescribeStackTest (describeStackTests)
 import Test.EmitterTest (emitterTests)
@@ -111,6 +112,7 @@ main = do
             , testGroup "ApprovedTemplate" approvedTemplateTests
             , testGroup "ApprovalRegion" approvalRegionTests
             , testGroup "DeployTemplate" deployTemplateTests
+            , testGroup "DeployCommands" deployCommandsTests
             , testGroup "Explain" explainTests
             , testGroup "Demo" demoTests
             , testGroup "Render" renderTests

@@ -22,7 +22,7 @@ import Iidy.Cfn.RequestBuilder (buildCreateChangeSetRequest, buildCreateStackReq
 import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..))
 import Iidy.Cli (ApprovalCommands (..), ApprovalRequestArgs (..), AwsOpts (..), Cli (..), Commands (..), GlobalOpts (..))
 import Iidy.Cli.Parser (cliParserInfo)
-import Test.ApprovalFixtures (approvalArgs, simpleApprovedKey, simpleTemplate, withSizedTemplate)
+import Test.ApprovalFixtures (approvalArgs, notApproved, notApprovedIn, simpleApprovedKey, simpleTemplate, withSizedTemplate)
 import Test.MockAws
 import Test.MockCfnContext (MockCfn (..), newMockCfnContext)
 
@@ -191,20 +191,6 @@ run :: Builder -> MockAws -> StackArgs -> IO (Either Text (Maybe Text, Maybe Tex
 run b mock sa = do
     mcfn <- newMockCfnContext mock OpCreateStack "test"
     runBuilder b (mcContext mcfn) sa
-
--- | The refusal for an unapproved template, environment @test@, no profile.
-notApproved :: Text
-notApproved = notApprovedIn "test" ""
-
--- | The refusal for an unapproved template in an environment, with extra options.
-notApprovedIn :: Text -> Text -> Text
-notApprovedIn environment extra =
-    "Template version has not been approved or the current IAM principal does not have permission to access it. Run:\n"
-        <> "  iidy-hs --region us-east-1 --environment "
-        <> environment
-        <> extra
-        <> " template-approval request stack-args.yaml\n"
-        <> "to begin the approval process."
 
 -- | Stack args with approval on for this Template.
 stackArgs :: Maybe Text -> StackArgs

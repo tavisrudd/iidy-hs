@@ -9,6 +9,8 @@ module Test.ApprovalFixtures (
     simplePendingKey,
     simpleRootKey,
     validationError,
+    notApproved,
+    notApprovedIn,
     withSizedTemplate,
     withTemplateBytes,
     templateHeader,
@@ -77,3 +79,19 @@ withTemplateBytes bytes action =
 -- | A minimal template ending in an open comment, for padding.
 templateHeader :: BS.ByteString
 templateHeader = "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n# "
+
+{- | The refusal for an unapproved template with @stack-args.yaml@, environment
+@test@ and no profile.
+-}
+notApproved :: Text
+notApproved = notApprovedIn "test" ""
+
+-- | The refusal for an unapproved template in an environment, with extra options.
+notApprovedIn :: Text -> Text -> Text
+notApprovedIn environment extra =
+    "Template version has not been approved or the current IAM principal does not have permission to access it. Run:\n"
+        <> "  iidy-hs --region us-east-1 --environment "
+        <> environment
+        <> extra
+        <> " template-approval request stack-args.yaml\n"
+        <> "to begin the approval process."
