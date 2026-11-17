@@ -38,6 +38,7 @@ module Test.MockAws (
     mockRequestLog,
     mockStatus,
     mockAwsFixtureDir,
+    parseRequest,
     recordingEnvFactory,
 ) where
 
@@ -302,10 +303,13 @@ parseRequest raw = do
 s3Call :: MockRequest -> Maybe MockCall
 s3Call req = do
     let labels = BC.split '.' (BC.takeWhile (/= ':') (reqHost req))
-        (before, fromS3) = break isS3Label labels
         (pathPart, query) = BC.break (== '?') (reqPath req)
         segments = BC.split '/' (BS.drop 1 pathPart)
-    _ <- listToMaybe fromS3
+    -- The endpoint starts at the last S3 label, so a bucket name may
+    -- itself contain or start with one (s3-approvals.s3.amazonaws.com).
+    before <- case break isS3Label (reverse labels) of
+        (_, _endpoint : bucketLabels) -> Just (reverse bucketLabels)
+        (_, []) -> Nothing
     (bucket, keySegs) <-
         if null before
             then case segments of

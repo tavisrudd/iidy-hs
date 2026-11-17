@@ -6,7 +6,7 @@ module Test.MockAwsTest (mockAwsTests) where
 
 import Data.ByteString qualified as BS
 import Data.Text qualified as T
-import Test.Tasty (TestTree)
+import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 import Amazonka qualified
@@ -86,6 +86,7 @@ mockAwsTests =
                     ("body is the rendered template: " <> show (reqBody put))
                     ("AWSTemplateFormatVersion" `BS.isInfixOf` reqBody put)
             other -> assertFailure ("expected HEAD then PUT, got " <> show (map reqMethod other))
+    , testGroup "S3 request recognition" recognitionTests
     , testCase "query protocol: operation override serves error XML" $ do
         mock <- newMockAws
         mockRespond
@@ -104,6 +105,33 @@ mockAwsTests =
                     (any ("Template format error" `T.isInfixOf`) (tvErrors tv))
             other -> assertFailure ("unexpected outputs: " <> show other)
     ]
+
+recognitionTests :: [TestTree]
+recognitionTests =
+    [ testCase "virtual host: bucket before the endpoint" $
+        recognised "HEAD" "approvals.s3.amazonaws.com" "/app/t.yaml"
+            @?= Just (MockCall "s3" "HeadObject" (Just "approvals") (Just "app/t.yaml"))
+    , testCase "virtual host: bucket named s3-..." $
+        recognised "HEAD" "s3-approvals.s3.amazonaws.com" "/app/t.yaml"
+            @?= Just (MockCall "s3" "HeadObject" (Just "s3-approvals") (Just "app/t.yaml"))
+    , testCase "virtual host: dotted bucket with an s3 label" $
+        recognised "GET" "my.s3.bkt.s3.eu-west-1.amazonaws.com" "/t.yaml"
+            @?= Just (MockCall "s3" "GetObject" (Just "my.s3.bkt") (Just "t.yaml"))
+    , testCase "path style: bucket is the first path segment" $
+        recognised "PUT" "s3.eu-west-1.amazonaws.com" "/approvals/app/t%20x.yaml"
+            @?= Just (MockCall "s3" "PutObject" (Just "approvals") (Just "app/t x.yaml"))
+    , testCase "virtual host: GET /?location is GetBucketLocation" $
+        recognised "GET" "approvals.s3.amazonaws.com" "/?location"
+            @?= Just (MockCall "s3" "GetBucketLocation" (Just "approvals") Nothing)
+    , testCase "path style: GET /bucket?location= is GetBucketLocation" $
+        recognised "GET" "s3.amazonaws.com" "/approvals?location="
+            @?= Just (MockCall "s3" "GetBucketLocation" (Just "approvals") Nothing)
+    ]
+
+-- | The call the mock recognises in a request with no body.
+recognised :: BS.ByteString -> BS.ByteString -> BS.ByteString -> Maybe MockCall
+recognised method host path =
+    parseRequest (method <> " " <> path <> " HTTP/1.1\r\nHost: " <> host <> "\r\n\r\n") >>= reqCall
 
 -- | The pending object the review tests use.
 pendingUrl :: T.Text
