@@ -230,10 +230,10 @@ of JSON.
 toJsonOf :: Int -> Either Text Text
 toJsonOf n =
     first (\(InterpolateError msg) -> msg) $
-        interpolate defaultHelpers (Object (KM.fromList [("v", levels !! n)])) "{{toJson v}}"
+        interpolate defaultHelpers (Object (KM.fromList [("v", level)])) "{{toJson v}}"
   where
-    levels :: [Value]
-    levels = iterate (Array . V.fromList . replicate 10) (Array (V.fromList (replicate 150 (String "x"))))
+    level :: Value
+    level = foldr (const (Array . V.fromList . replicate 10)) (Array (V.fromList (replicate 150 (String "x")))) [1 .. n]
 
 helperTests :: [TestTree]
 helperTests =
