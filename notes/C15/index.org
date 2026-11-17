@@ -15,6 +15,7 @@
 CLOCK: [2026-11-16 Mon 18:06]--[2026-11-16 Mon 18:26] => 0:20
 CLOCK: [2026-11-16 Mon 18:33]--[2026-11-16 Mon 18:50] => 0:17
 CLOCK: [2026-11-16 Mon 18:53]--[2026-11-16 Mon 18:54] => 0:01
+CLOCK: [2026-11-16 Mon 19:02]--[2026-11-16 Mon 19:11] => 0:09
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:11]
@@ -36,6 +37,12 @@ CLOCK: [2026-11-16 Mon 18:53]--[2026-11-16 Mon 18:54] => 0:01
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
 - Clock-out [2026-11-16 Mon 18:54]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
+- Clock-in [2026-11-16 Mon 19:02]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
+- Clock-out [2026-11-16 Mon 19:11]
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
 :END:
@@ -101,7 +108,7 @@ Done when:
 - [X] Untrusted documents cannot import =ssm:=, =ssm-path:=, =cfn:= or
   =s3:= (both =s3:= forms); local documents and documents under a trusted
   prefix can; table-driven tests cross untrusted bases with each type.
-- [ ] HTTP imports requested by untrusted documents cannot reach
+- [X] HTTP imports requested by untrusted documents cannot reach
   loopback, link-local, unspecified or AWS instance-metadata addresses
   (IPv4, IPv6 and IPv4-mapped forms), checked on the first request and on
   every redirect hop, using only the public http-client API; plain HTTP
@@ -986,10 +993,15 @@ tip =f20d35f=. Reviewer's note for task 5: the HTTP filter must use the
 requester chain (=isTrustedRequester=), not only the location, or the
 laundering hole reopens for loopback and metadata addresses.
 
-* TODO Filter HTTP targets requested by untrusted documents
+* DONE Filter HTTP targets requested by untrusted documents
 :PROPERTIES:
 :ID: org:01a1e6fe-2be7-72bd-983a-90ca9d0e6f5e
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 19:11] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
 :END:
 New divergence. Public http-client API only: no
 =Network.HTTP.Client.Internal=, no new dependency (=hostAddress= and
@@ -1036,6 +1048,187 @@ fake connection factory records that no blocked address was connected.
 One test runs the real resolver on numeric literals with =AI_NUMERICHOST=
 (no DNS, no socket): =2852039166=, =0251.0376.0251.0376= and
 =::ffff:a9fe:a9fe= must all be blocked.
+
+** Implementation 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e746-448c-77c9-bbef-435d08da7476
+:ADDED: [2026-11-16 Mon 19:11]
+:END:
+By worker claude-C15. Public http-client API only; no
+=Network.HTTP.Client.Internal=, no new library dependency (=network=,
+already a library dependency, is added to the test suite's
+build-depends for =SockAddr=).
+
+- New =src/Iidy/Yaml/Imports/Loaders/HttpGuard.hs=: =isBlockedAddress=
+  (IPv4 =127/8=, =0/8=, =169.254/16=; IPv6 =::=, =::1=, =fe80::/10=,
+  =fd00:ec2::254=, and IPv4-mapped, IPv4-compatible and NAT64
+  =64:ff9b::/96= forms of the blocked IPv4 ranges; Unix sockets);
+  the seam =HttpSeam= (resolver plus a plain-connection factory) with
+  =realHttpSeam= (=getaddrinfo=, =network= sockets) and
+  =resolveHostWith= (flags, so tests pass =AI_NUMERICHOST=);
+  =httpGuardFor= (filter when =isTrustedRequester= fails, i.e. the whole
+  requester chain, per the review note; restrict redirects to
+  =isTrustedBase= locations when a trusted requester asks for a URL under
+  a trusted prefix); =guardManagerSettings= (=managerModifyRequest= checks
+  every hop; =managerRawConnection= connects plain HTTP to the approved
+  address; other hosts, i.e. a proxy, connect unfiltered).
+- The seam yields read / write / close actions (=RawIO=) and the
+  public =makeConnection= builds the connection, because the
+  =Connection= type itself is exported only from
+  =Network.HTTP.Client.Internal=; the same for =socketConnection=, which
+  is replaced by =recv= / =sendAll= on the socket.
+- http-client runs =managerModifyRequest= more than once per hop; a host
+  already approved by this manager keeps its checked addresses, so a
+  name that re-resolves differently (DNS rebinding) still connects to the
+  checked address (test below). Found when the first version re-resolved
+  and refused.
+- =Http.hs=: =loadHttpImport= takes the seam and the guard and builds its
+  manager from =tlsManagerSettings= (=HTTP_PROXY= / =HTTPS_PROXY= /
+  =NO_PROXY= honoured through http-client's default proxy setting); a
+  =GuardRefusal= handler joins the =catches=, and a refusal http-client
+  wraps in =InternalException= is spelled out. Previously =newTlsManager=,
+  which also accepted a SOCKS proxy URL in =http_proxy=; that is gone,
+  matching Rust (=reqwest= is built without its =socks= feature). For the
+  docs task.
+- =Dispatch.hs=: =ImportConfig= gains =icHttpSeam= (default
+  =realHttpSeam= in =mkImportConfig=); =dispatch= takes the =ImportBase=
+  and passes =httpGuardFor= to the HTTP loader.
+
+Tests, new =test/Test/HttpGuardTest.hs=, all through the real
+http-client parser and redirect logic over a fake resolver and canned
+bytes (no socket, no DNS): untrusted requester refused for =127.0.0.1=,
+=[::1]=, =[::ffff:169.254.169.254]=, =0.0.0.0=, =169.254.169.254= and a
+name resolving there, with nothing connected; a public URL redirecting to
+the metadata address refused after connecting only to the public
+address; a public URL loads, connected to the checked address; a name
+that re-resolves to loopback after the check connects to the checked
+address; the laundering chain (untrusted -> trusted-prefix document ->
+loopback) refused; local requester and a document under a flag-built
+trusted prefix reach loopback; redirect inside the trusted prefix
+followed, redirect leaving it refused after one request; with a proxy on
+loopback, a blocked target is refused before the proxy is contacted and
+an allowed one goes to the proxy; the real resolver with =AI_NUMERICHOST=
+blocks =2852039166=, =0251.0376.0251.0376=, =::ffff:a9fe:a9fe=, =127.1=,
+=0x7f000001=; an =isBlockedAddress= table.
+
+Failing run with =httpGuardFor= neutralised (no filter, no redirect
+rule, as on main): 9 of 39 failed, for example
+#+begin_example
+http://127.0.0.1/x.yaml: FAIL  expected a refusal, got "x: local\n"
+http://[::ffff:169.254.169.254]/latest/meta-data/: FAIL
+  expected a guard refusal, got: HTTP error 404 for ...
+a public URL redirecting to the metadata address is refused: FAIL
+trust is not gained through the chain: ...: FAIL  expected a refusal, got "x: local\n"
+a redirect leaving the trusted prefixes is refused: FAIL  expected a refusal, got "c: 3\n"
+9 out of 39 tests failed
+#+end_example
+The proxy, numeric-resolver and table cases test =guardManagerSettings=
+and =isBlockedAddress= directly, so they pass either way. Full suite
+with the change: 2020 passed.
+
+For the docs task: HTTPS keeps crypton-connection's own lookup (the
+rebinding window); with a proxy, the target is resolved and checked
+locally but the proxy may resolve it differently, and the proxy's own
+address is not filtered; SOCKS proxies in =http_proxy= are no longer
+used.
+
+** Ready 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e746-448c-77c9-bbef-435ce5edeac8
+:ADDED: [2026-11-16 Mon 19:11]
+:END:
+Rebased onto =af21966= (notes-only change since the hook run); commit
+=1fd9e64=. Full suite through the pre-commit hook: 2020 passed.
+
+** Review 2026-11-16 (task 5)
+:PROPERTIES:
+:ID: org:01a1e74a-9fc9-70bc-83f9-3c513960addb
+:ADDED: [2026-11-16 Mon 19:16]
+:END:
+By the review worker. Branch =claude/C15= at =1fd9e64=, base =af21966=.
+
+Verdict: land =1fd9e64=. The three defects are low severity and
+fail closed or are notes; defect 2 needs the supervisor's call.
+
+Checks run:
+- Guard off: =httpGuardFor= neutralised (=hgFilterAddresses= and
+  =hgAllowedHop= forced off): 9 of 39 =HttpGuard= tests FAIL (six blocked
+  literals and names, the metadata redirect, the chain case, the
+  redirect leaving the trusted prefix), matching the worker's record.
+  The chain case would also fail if the guard used =isTrustedBase= on the
+  base location, so it pins =isTrustedRequester=. Restored.
+- fourmolu =--mode check= and hlint on =src/ app/ test/= are clean.
+  =HttpGuard.hs= is 259 lines, =Http.hs= 167, the test module 344.
+  =network= is already in =flake.nix=. =Http.hs= is the only place that
+  builds an HTTP manager for imports.
+- Trust logic: =httpGuardFor= only combines =isTrustedRequester= (filter)
+  and =isTrustedBase= (hop rule) from =Types.hs=; no copy of either.
+  Trusted requesters asking for a URL under a trusted prefix get the hop
+  rule; a trusted requester asking for any other URL gets neither
+  (today's behaviour, as decided).
+- Attempts to reach a blocked address from an untrusted chain, all held:
+  - Numeric forms (=2130706433=, =0x7f.1=, =0177.0.0.1=, =127.1=, =0=)
+    go through =getaddrinfo= in both the check and, for HTTPS,
+    crypton-connection, so they resolve to the same blocked address; the
+    numeric-literal tests cover several.
+  - IPv6 zone ids: =[fe80::1%25eth0]= does not resolve (refused as
+    unresolvable); any form that resolves is in =fe80::/10=.
+  - Mapped, compatible and NAT64 =64:ff9b::/96= forms are blocked; see
+    defect 1 for the forms that are not.
+  - Names with several addresses: one blocked address refuses the
+    request; plain HTTP then connects only to the approved list.
+  - Redirects: relative and protocol-relative ones are resolved by
+    http-client into a request whose host goes through =checkHop=; a
+    redirect to =https:= is checked by name (the documented rebinding
+    window); =s3:= / =file:= locations are not followed by http-client.
+  - Proxies: the target is checked in =managerModifyRequest= before
+    any connection; the proxy host connects unfiltered (decided);
+    =NO_PROXY= targets connect directly, plain HTTP through the approved
+    list. CONNECT tunnels use http-client-tls's own proxy connection.
+  - Retries and repeated =managerModifyRequest= calls reuse the cached
+    approval for the same =(host, port)=, which only a filtered,
+    passing check writes.
+  - Connection reuse: the manager is created per =loadHttpImport= call,
+    so its pool and the approval map serve one import of one document
+    (its redirect hops) and are never shared across documents of
+    different trust. The pool is keyed by host and port, so a connection
+    to a checked host is not reused for another host.
+- Residual risks for the docs task: the HTTPS rebinding window, the proxy
+  resolving differently, the unfiltered proxy address and dropped SOCKS
+  support are recorded in the task's implementation notes. The docs task
+  list has the first three but not SOCKS (defect 1).
+
+Defects:
+1. Low (card text), the docs task's remaining-risks list
+   (=Document the model=) lacks:
+   - SOCKS proxy URLs in =http_proxy= are no longer used (accepted,
+     matches Rust);
+   - HTTP imports from local or trusted requesters are not filtered,
+     redirects included, so a public URL a local template imports can
+     redirect to =169.254.169.254= (as decided, but users should read it);
+   - behind a proxy on a network without external DNS, untrusted HTTP
+     imports fail with "cannot resolve", since the target is resolved
+     locally;
+   - IPv6 forms not filtered: 6to4 =2002::/16=, Teredo =2001::/32=,
+     local-use NAT64 =64:ff9b:1::/48= and IPv4-translated =::ffff:0:0/96=.
+     Reaching loopback through these needs a relay or translator on the
+     path, so the risk is low.
+   Fix: add these bullets to the docs task.
+2. Low (supervisor's call), =HttpGuard.hs= =blockedV6=: only
+   =fd00:ec2::254= is blocked, but AWS uses the =fd00:ec2::/32= range for
+   other link services, including the EKS Pod Identity Agent credential
+   endpoint =fd00:ec2::23=. Its IPv4 address =169.254.170.23= is already
+   blocked by =169.254/16=, so the two families differ. Fix: block
+   =fd00:ec2::/32= (=w0 == 0xfd00 && w1 == 0x0ec2=), plus one
+   =blockedCases= row.
+3. Low, =HttpGuard.hs= =checkHop=: the hop rule tests
+   =show (getUri req)=, and http-client's =getUri= leaves out a default
+   port. =parseTrustedSource= accepts =http://t.example.com:80/=, so every
+   request under that prefix is refused on its first hop with "redirect
+   to http://t.example.com/... leaves the trusted import sources", even
+   with no redirect. Fails closed, but the message is misleading. Fix:
+   reject an explicit default port in =parseTrustedSource=, with a
+   =TrustedSourceTest= row.
 
 * TODO Isolate custom templates loaded from untrusted locations
 :PROPERTIES:
