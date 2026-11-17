@@ -2,13 +2,19 @@
 :PROPERTIES:
 :CARD_ID:  C18
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 :ID: org:01a1e691-481a-7494-b72f-e21162512b87
 :ADDED: [2026-11-16 Mon 15:54]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-17 Tue 11:28]
+  Note: Assigned to Sonnet sub-agent claude-C18 (Tavis 2026-11-17)
+  Agent: opus-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
 :END:
 #+title: C18 — Filter control characters from terminal output
 #+date: 2026-11-16
