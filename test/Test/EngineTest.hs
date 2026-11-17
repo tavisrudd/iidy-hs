@@ -5,18 +5,24 @@ module Test.EngineTest (engineTests) where
 import Data.Aeson (Value (..))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
-import Data.IORef (modifyIORef, newIORef, readIORef)
+import Data.IORef (IORef, modifyIORef, newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
+import Data.ByteString.Lazy qualified as BL
+import Data.Text.Encoding qualified as TE
+
 import Iidy.Yaml.Ast
-import Iidy.Yaml.Engine (PreprocessError (..), PreprocessResult (..), preprocessYaml)
+import Iidy.Yaml.Engine (LoadImportFn, PreprocessError (..), PreprocessResult (..), preprocessYaml)
+import Iidy.Yaml.Imports.ContentParsing (parseYamlContent)
 import Iidy.Yaml.Imports.Manifest (getRecords)
 import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportRecord (..), ImportType (..))
 import Iidy.Yaml.Location (zeroPosition)
 import Iidy.Yaml.OValue (toValue)
+import Iidy.Yaml.Parser (parseYaml)
+import Iidy.Yaml.Resolution.Resolver (ResolveError (..), ResolveErrorKind (..))
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -281,6 +287,7 @@ engineTests =
                             other -> assertFailure $ "Expected String output, got: " <> show other
                         _nonObject -> assertFailure $ "Expected Object, got: " <> show v
         ]
+    , testGroup "Imported document variable isolation" isolationTests
     , testGroup
         "Import manifest recording"
         [ testCase "manifest records imports with key and location" $ do
@@ -350,3 +357,67 @@ engineTests =
                     assertBool "manifest should be empty" (null (getRecords manifest))
         ]
     ]
+
+------------------------------------------------------------------------
+-- Imported document variable isolation (C15, Rust engine.rs:409)
+------------------------------------------------------------------------
+
+{- | An imported document is resolved with only its own @$defs@ and
+@$imports@, never the importing document's variables. Every child here
+carries its own @$defs@: the engine resolves only children that have
+@$defs@ or @$imports@, so a child without either would pass either way.
+-}
+isolationTests :: [TestTree]
+isolationTests =
+    [ testCase "child cannot read a parent $defs value" $ do
+        let child = "$defs:\n  own: mine\nleak: \"{{secret}}\"\n"
+        (_calls, result) <- runParentImporting [("child.yaml", child)]
+        case result of
+            Left (PeResolveError ResolveError{reKind = REVariableNotFound path _}) ->
+                path @?= "secret"
+            Left other -> assertFailure ("expected variable-not-found, got " <> show other)
+            Right r -> assertFailure ("child read the parent's secret: " <> show (toValue (prValue r)))
+    , testCase "child cannot interpolate a parent variable into its import location" $ do
+        let child = "$defs:\n  own: mine\n$imports:\n  next: \"{{secret}}.yaml\"\nout: x\n"
+        (calls, result) <- runParentImporting [("child.yaml", child)]
+        assertBool
+            ("a load request carried the secret: " <> show calls)
+            (not (any ("s3cr3t" `T.isInfixOf`) calls))
+        case result of
+            Left _err -> pure ()
+            Right _ok -> assertFailure "expected the child's import to fail"
+    , testCase "child still resolves its own $defs" $ do
+        let child = "$defs:\n  own: mine\nvalue: \"{{own}}\"\n"
+        (_calls, result) <- runParentImporting [("child.yaml", child)]
+        case result of
+            Left err -> assertFailure ("expected success, got " <> show err)
+            Right r -> case toValue (prValue r) of
+                Object obj -> KM.lookup (Key.fromText "out") obj @?= Just (String "mine")
+                other -> assertFailure ("expected an object, got " <> show other)
+    ]
+
+{- | Preprocess a parent holding @secret@ in @$defs@ that imports
+@child.yaml@ as @c@ and emits @out: {{c.value}}@. Returns every location
+the loader was asked for.
+-}
+runParentImporting :: [(Text, Text)] -> IO ([Text], Either PreprocessError PreprocessResult)
+runParentImporting docs = do
+    callsRef <- newIORef []
+    let parent = "$defs:\n  secret: s3cr3t\n$imports:\n  c: child.yaml\nout: \"{{c.value}}\"\n"
+    case parseYaml (BL.fromStrict (TE.encodeUtf8 parent)) "parent.yaml" of
+        Left err -> assertFailure ("parent did not parse: " <> show err)
+        Right ast -> do
+            result <- preprocessYaml (textDocLoader callsRef docs) ast "parent.yaml"
+            calls <- readIORef callsRef
+            pure (calls, result)
+
+-- | Serve YAML documents by location, recording every requested location.
+textDocLoader :: IORef [Text] -> [(Text, Text)] -> LoadImportFn
+textDocLoader callsRef docs loc _base = do
+    modifyIORef callsRef (loc :)
+    pure $ case lookup loc docs of
+        Nothing -> Left (ImportError ("Unknown: " <> loc))
+        Just raw -> case parseYamlContent raw of
+            Left err -> Left (ImportError err)
+            Right doc ->
+                Right ImportData{idType = ImportFile, idLocation = loc, idRawData = raw, idDoc = doc, idOrdered = Nothing}

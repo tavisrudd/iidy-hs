@@ -196,7 +196,7 @@ processImports loader env tmplDefs manifest stack ((keyAst, locAst) : rest) base
                                         }
                                 manifest' = addRecord record manifest
                             -- Recursively preprocess if imported doc has $imports or $defs
-                            importResult <- processImportedDoc loader (idDoc importData) (idRawData importData) (idLocation importData) env manifest' stack'
+                            importResult <- processImportedDoc loader (idDoc importData) (idRawData importData) (idLocation importData) manifest' stack'
                             case importResult of
                                 Left err -> pure $ Left err
                                 Right (importedValue, manifest'', stack'') -> do
@@ -209,18 +209,21 @@ processImports loader env tmplDefs manifest stack ((keyAst, locAst) : rest) base
 ------------------------------------------------------------------------
 
 {- | Recursively preprocess an imported document if it contains $imports or $defs.
-Matches Rust's process_imported_document behavior (engine.rs:380-442).
+The document starts from an empty environment: it sees only its own
+@$defs@ and @$imports@, never the importing document's variables, so its
+import locations cannot interpolate the parent's values either. Matches
+Rust's process_imported_document (engine.rs:380-442, fresh
+@EnvValues::new()@ at :409).
 -}
 processImportedDoc ::
     LoadImportFn ->
     Value ->
     Text ->
     Text ->
-    Map Text OValue ->
     ImportManifest ->
     ImportStack ->
     IO (Either PreprocessError (OValue, ImportManifest, ImportStack))
-processImportedDoc loader doc rawData docLocation env manifest stack =
+processImportedDoc loader doc rawData docLocation manifest stack =
     case doc of
         Object obj
             | hasImportsOrDefs obj -> do
@@ -230,7 +233,7 @@ processImportedDoc loader doc rawData docLocation env manifest stack =
                         -- If re-parse fails, fall back to raw value
                         pure $ Right (fromValue doc, manifest, stack)
                     Right ast -> do
-                        result <- loadImportsAndDefs loader ast docLocation env Map.empty manifest stack
+                        result <- loadImportsAndDefs loader ast docLocation Map.empty Map.empty manifest stack
                         case result of
                             Left err -> pure $ Left err
                             Right (docEnv, _docTmplDefs, manifest', stack') -> do
