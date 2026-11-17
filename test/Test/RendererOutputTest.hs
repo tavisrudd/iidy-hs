@@ -15,6 +15,7 @@ import Data.Vector qualified as V
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
+import Iidy.Aws.ClientReqToken (DerivedTokenInfo (..), TokenInfo (..), TokenSource (..))
 import Iidy.Cfn.Status (StackStatus (..))
 import Iidy.Output.Color (colorizeResourceStatus, darkTheme)
 import Iidy.Output.Renderers.Interactive (
@@ -168,6 +169,14 @@ failedEvent =
                 }
         }
 
+derivedToken :: TokenInfo
+derivedToken =
+    TokenInfo
+        { tiValue = "tok-derived"
+        , tiSource = Derived DerivedTokenInfo{dtiFrom = payload, dtiStep = "step"}
+        , tiOperationId = "op"
+        }
+
 -- | One sink per family; each carries 'payload' in the named place.
 untrustedSinks :: [(String, OutputData)]
 untrustedSinks =
@@ -191,6 +200,7 @@ untrustedSinks =
     , ("changeset next step", OdChangeSetResult testChangeSetResult{csrNextSteps = [payload]})
     , ("drift actual value", OdStackDrift (withActual testStackDrift payload))
     , ("template stderr line", OdStackTemplate testStackTemplate{stStderrLines = [payload]})
+    , ("derived token source", OdCommandMetadata testCommandMetadata{cmDerivedTokens = [derivedToken]})
     , ("confirmation message", OdConfirmationPrompt testConfirmationRequest{cfrMessage = payload})
     ]
   where

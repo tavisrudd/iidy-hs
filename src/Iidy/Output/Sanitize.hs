@@ -24,7 +24,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Numeric (showHex)
 
-import Iidy.Aws.ClientReqToken (TokenInfo (..))
+import Iidy.Aws.ClientReqToken (DerivedTokenInfo (..), TokenInfo (..), TokenSource (..))
 import Iidy.Output.Types
 
 {- | Whether a character is escaped unconditionally: C0 controls except
@@ -119,7 +119,18 @@ escMap :: Map Text Text -> Map Text Text
 escMap = Map.fromList . map (bimap e e) . Map.toList
 
 escToken :: TokenInfo -> TokenInfo
-escToken t = t{tiValue = e (tiValue t), tiOperationId = e (tiOperationId t)}
+escToken t =
+    t
+        { tiValue = e (tiValue t)
+        , tiSource = escTokenSource (tiSource t)
+        , tiOperationId = e (tiOperationId t)
+        }
+
+-- | A derived token's source names the primary token, which a user can set.
+escTokenSource :: TokenSource -> TokenSource
+escTokenSource = \case
+    Derived d -> Derived d{dtiFrom = e (dtiFrom d), dtiStep = e (dtiStep d)}
+    other -> other
 
 escMeta :: CommandMetadata -> CommandMetadata
 escMeta m =
