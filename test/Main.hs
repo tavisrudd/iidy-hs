@@ -10,6 +10,7 @@ import Test.ChangesetTest (changesetTests)
 import Test.CliParserTest (cliParserTests)
 import Test.ConvertStackTest (convertStackTests)
 import Test.DeleteStackTest (deleteStackTests)
+import Test.DemoTest (demoTests)
 import Test.DescribeStackTest (describeStackTests)
 import Test.EmitterTest (emitterTests)
 import Test.EngineTest (engineTests)
@@ -18,6 +19,7 @@ import Test.ErrorColorTest (errorColorTests)
 import Test.ErrorContentTest (errorContentTests)
 import Test.ErrorFixtureTest (buildErrorTests)
 import Test.ErrorIdTest (errorIdTests)
+import Test.ExplainTest (explainTests)
 import Test.FilehashTest (filehashTests)
 import Test.FixtureTest (buildFixtureTests)
 import Test.GetImportTest (getImportTests)
@@ -90,6 +92,8 @@ main = do
             , testGroup "ImportLoaders" importLoaderTests
             , testGroup "AwsLoaders" awsLoaderTests
             , testGroup "GetImport" getImportTests
+            , testGroup "Explain" explainTests
+            , testGroup "Demo" demoTests
             , testGroup "Render" renderTests
             , testGroup "ErrorIds" errorIdTests
             , testGroup "ErrorClassification" errorClassificationTests

@@ -5,6 +5,11 @@ and banner display. Optionally masks AWS account numbers in output.
 -}
 module Iidy.Demo (
     runDemo,
+    DemoCommand (..),
+    parseDemoScript,
+    unpackFiles,
+    maskAwsAccountNumbers,
+    substituteIidyCommand,
 ) where
 
 import Control.Concurrent (threadDelay)

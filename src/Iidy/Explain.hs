@@ -1,5 +1,8 @@
 module Iidy.Explain (
     explainErrors,
+    explainOutput,
+    ErrorEntry (..),
+    allErrors,
 ) where
 
 import Data.Map.Strict qualified as Map
@@ -7,7 +10,7 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import System.IO (hPutStrLn, stderr)
+import System.IO (stderr)
 
 ------------------------------------------------------------------------
 -- Public API
@@ -18,23 +21,41 @@ Codes may be given as \"ERR_2001\", \"err_2001\", or just \"2001\".
 Prints to stdout for known codes, stderr for unknown codes.
 -}
 explainErrors :: [Text] -> IO ()
-explainErrors [] = hPutStrLn stderr "Usage: iidy explain <CODE>..."
-explainErrors codes = mapM_ explainOne codes
+explainErrors codes = case codes of
+    [] -> printPair (explainOutput [])
+    _ -> mapM_ (printPair . explainOne) codes
+  where
+    -- Per code, so stdout and stderr lines keep their per-code order.
+    printPair (outLines, errLines) = do
+        mapM_ TIO.putStrLn outLines
+        mapM_ (TIO.hPutStrLn stderr) errLines
+
+{- | The lines 'explainErrors' prints: (stdout lines, stderr lines).
+Known codes produce stdout lines, unknown codes and an empty list produce
+stderr lines.
+-}
+explainOutput :: [Text] -> ([Text], [Text])
+explainOutput [] = ([], ["Usage: iidy explain <CODE>..."])
+explainOutput codes = mconcat (map explainOne codes)
 
 ------------------------------------------------------------------------
 -- Per-code dispatch
 ------------------------------------------------------------------------
 
-explainOne :: Text -> IO ()
+explainOne :: Text -> ([Text], [Text])
 explainOne code =
     case lookupErrorCode code of
-        Nothing -> TIO.hPutStrLn stderr $ "Unknown error code: " <> code
-        Just entry -> do
-            TIO.putStrLn $ "Error " <> ecCode entry
-            TIO.putStrLn $ "Category: " <> ecCategory entry
-            TIO.putStrLn $ "Description: " <> ecDescription entry
-            TIO.putStrLn ""
-            TIO.putStrLn (ecDetails entry)
+        Nothing -> ([], ["Unknown error code: " <> code])
+        Just entry ->
+            (
+                [ "Error " <> ecCode entry
+                , "Category: " <> ecCategory entry
+                , "Description: " <> ecDescription entry
+                , ""
+                , ecDetails entry
+                ]
+            , []
+            )
 
 ------------------------------------------------------------------------
 -- Error code lookup

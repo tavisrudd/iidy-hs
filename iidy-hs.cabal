@@ -211,6 +211,8 @@ test-suite iidy-hs-test
     Test.FilehashTest
     Test.ImportLoaderTest
     Test.AwsLoaderTest
+    Test.DemoTest
+    Test.ExplainTest
     Test.GetImportTest
     Test.RenderTest
     Test.MockAws
