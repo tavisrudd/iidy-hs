@@ -21,8 +21,9 @@ import Test.Tasty.HUnit (assertFailure)
 
 import Iidy.Cli (Cli (..), importPolicyFromOpts)
 import Iidy.Cli.Parser (cliParserInfo)
-import Iidy.Yaml.Engine (LoadImportFn, PreprocessError, PreprocessResult, preprocessYaml)
+import Iidy.Yaml.Engine (LoadImportFn, PreprocessError, PreprocessResult)
 import Iidy.Yaml.Imports.ContentParsing (parseYamlContent)
+import Iidy.Yaml.Imports.Loaders.Dispatch (preprocessWithPolicy)
 import Iidy.Yaml.Imports.Loaders.File (loadFileImport)
 import Iidy.Yaml.Imports.Types (ImportBase (..), ImportData (..), ImportError (..), ImportPolicy, ImportType (..))
 import Iidy.Yaml.Parser (parseYaml)
@@ -48,12 +49,15 @@ unknownLoader loc _base = pure (Left (ImportError ("Unknown: " <> loc)))
 recordingLoader :: IORef [Text] -> LoadImportFn -> LoadImportFn
 recordingLoader callsRef inner loc base = modifyIORef callsRef (loc :) >> inner loc base
 
--- | Parse @source@ as a template at @baseLoc@ and preprocess it.
-preprocessText :: LoadImportFn -> Text -> Text -> IO (Either PreprocessError PreprocessResult)
-preprocessText loader baseLoc source =
+{- | Parse @source@ as a template at @baseLoc@ and preprocess it with the
+loader, giving the engine the policy's trusted sources (the loader should
+apply the same policy).
+-}
+preprocessText :: ImportPolicy -> LoadImportFn -> Text -> Text -> IO (Either PreprocessError PreprocessResult)
+preprocessText policy loader baseLoc source =
     case parseYaml (BL.fromStrict (TE.encodeUtf8 source)) baseLoc of
         Left err -> assertFailure ("template did not parse: " <> show err)
-        Right ast -> preprocessYaml loader ast baseLoc
+        Right ast -> preprocessWithPolicy policy loader False ast baseLoc
 
 {- | The import policy the real command-line parser builds from
 @--trust-import-source@ flags for these prefixes.

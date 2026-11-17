@@ -16,15 +16,11 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase)
 
 import Iidy.Yaml.Engine (PreprocessError (..), PreprocessResult (..))
-import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig, preprocessWithPolicy)
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
 import Iidy.Yaml.Imports.Types (ImportPolicy, RemoteImports (..), importPolicy)
 import Iidy.Yaml.OValue (toValue)
-import Iidy.Yaml.Parser (parseYaml)
 import Iidy.Yaml.Resolution.Resolver (ResolveError (..))
-import Test.ImportFixtures (flagPolicy, stubDocsLoader)
-
-import Data.ByteString.Lazy qualified as BL
-import Data.Text.Encoding qualified as TE
+import Test.ImportFixtures (flagPolicy, preprocessText, stubDocsLoader)
 
 customTemplateTrustTests :: [TestTree]
 customTemplateTrustTests =
@@ -74,11 +70,7 @@ check :: Bool -> IO ImportPolicy -> Text -> (Text -> Text) -> Text -> IO ()
 check expectInherit mkPolicy loc root template = do
     policy <- mkPolicy
     let loader = stubDocsLoader [(loc, template)] (mkFullDispatcher (mkImportConfig Nothing policy))
-        source = root loc
-    ast <- case parseYaml (BL.fromStrict (TE.encodeUtf8 source)) "local.yaml" of
-        Left err -> assertFailure ("root did not parse: " <> show err)
-        Right a -> pure a
-    result <- preprocessWithPolicy policy loader False ast "local.yaml"
+    result <- preprocessText policy loader "local.yaml" (root loc)
     case (expectInherit, result) of
         (True, Right r) ->
             assertBool ("expected given-s3cr3t in " <> rendered r) ("given-s3cr3t" `T.isInfixOf` T.pack (rendered r))

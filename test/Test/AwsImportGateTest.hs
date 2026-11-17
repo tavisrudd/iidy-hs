@@ -156,7 +156,7 @@ engineCases =
         let dispatcher = mkFullDispatcher (mkImportConfig (Just (mockEnv mock)) policy)
             loader = stubDocsLoader [(evilDoc, evilSource), (remoteDoc, remoteSource)] dispatcher
             root = "$imports:\n  u: \"" <> evilDoc <> "\"\nout: \"{{u.v}}\"\n"
-        result <- preprocessText loader "local.yaml" root
+        result <- preprocessText policy loader "local.yaml" root
         case result of
             Left (PeImportError (ImportError e)) ->
                 assertBool ("expected a trust refusal, got: " <> T.unpack e) (isTrustRefusal e && remoteDoc `T.isInfixOf` e)
@@ -173,7 +173,7 @@ engineCases =
     renderWith policy = do
         mock <- newMockAws
         let dispatcher = mkFullDispatcher (mkImportConfig (Just (mockEnv mock)) policy)
-        result <- preprocessText (stubDocsLoader [(remoteDoc, remoteSource)] dispatcher) "local.yaml" rootSource
+        result <- preprocessText policy (stubDocsLoader [(remoteDoc, remoteSource)] dispatcher) "local.yaml" rootSource
         pure (mock, result)
 
 ------------------------------------------------------------------------

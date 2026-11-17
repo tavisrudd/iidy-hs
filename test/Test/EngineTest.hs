@@ -14,7 +14,7 @@ import Test.Tasty.HUnit
 import Iidy.Yaml.Ast
 import Iidy.Yaml.Engine (LoadImportFn, PreprocessError (..), PreprocessResult (..), preprocessYaml)
 import Iidy.Yaml.Imports.Manifest (getRecords)
-import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportRecord (..), ImportType (..))
+import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportRecord (..), ImportType (..), RemoteImports (..), importPolicy)
 import Iidy.Yaml.Location (zeroPosition)
 import Iidy.Yaml.OValue (toValue)
 import Iidy.Yaml.Resolution.Resolver (ResolveError (..), ResolveErrorKind (..))
@@ -400,6 +400,6 @@ runParentImporting :: [(Text, Text)] -> IO ([Text], Either PreprocessError Prepr
 runParentImporting docs = do
     callsRef <- newIORef []
     let parent = "$defs:\n  secret: s3cr3t\n$imports:\n  c: child.yaml\nout: \"{{c.value}}\"\n"
-    result <- preprocessText (recordingLoader callsRef (stubDocsLoader docs unknownLoader)) "parent.yaml" parent
+    result <- preprocessText (importPolicy AllowRemoteImports) (recordingLoader callsRef (stubDocsLoader docs unknownLoader)) "parent.yaml" parent
     calls <- readIORef callsRef
     pure (calls, result)
