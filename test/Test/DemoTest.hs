@@ -26,6 +26,7 @@ import Iidy.Demo (
     unpackFiles,
  )
 import Iidy.Yaml.Imports.Types (RemoteImports (..), importPolicy)
+import Test.ImportFixtures (flagPolicy)
 
 demoTests :: [TestTree]
 demoTests =
@@ -132,7 +133,7 @@ maskTests =
 ------------------------------------------------------------------------
 
 subst :: Text -> Text
-subst cmd = substituteIidyCommand cmd (Just "/x/iidy") AllowRemoteImports
+subst cmd = substituteIidyCommand cmd (Just "/x/iidy") (importPolicy AllowRemoteImports)
 
 substituteTests :: [TestTree]
 substituteTests =
@@ -143,10 +144,14 @@ substituteTests =
     , testCase "inside parentheses" $ subst "(iidy render)" @?= "(/x/iidy render)"
     , testCase "an argument is left alone" $ subst "echo iidy" @?= "echo iidy"
     , testCase "blocked remote imports add --no-remote-imports" $
-        substituteIidyCommand "iidy render" (Just "/x/iidy") BlockRemoteImports
+        substituteIidyCommand "iidy render" (Just "/x/iidy") (importPolicy BlockRemoteImports)
             @?= "/x/iidy --no-remote-imports render"
+    , testCase "trusted import sources are passed through, quoted" $ do
+        policy <- flagPolicy ["s3://b/", "https://t.example.com/it's/"]
+        substituteIidyCommand "iidy render" (Just "/x/iidy") policy
+            @?= "/x/iidy --trust-import-source 's3://b/' --trust-import-source 'https://t.example.com/it'\\''s/' render"
     , testCase "no executable to substitute leaves the command alone" $
-        substituteIidyCommand "iidy render" Nothing BlockRemoteImports @?= "iidy render"
+        substituteIidyCommand "iidy render" Nothing (importPolicy BlockRemoteImports) @?= "iidy render"
     ]
 
 ------------------------------------------------------------------------
