@@ -6,6 +6,7 @@ upload, download and delete of a single object.
 module Iidy.Cfn.S3Objects (
     HeadResult (..),
     headObject,
+    bucketRegion,
     s3ObjectExists,
     ObjectAcl (..),
     uploadToS3,
@@ -25,6 +26,7 @@ import Amazonka qualified
 import Amazonka.Data qualified as AmazonkaData
 import Amazonka.S3 qualified as S3
 import Amazonka.S3.DeleteObject qualified as DO
+import Amazonka.S3.GetBucketLocation qualified as GBL
 import Amazonka.S3.GetObject qualified as GO
 import Amazonka.S3.HeadObject qualified as HO
 import Amazonka.S3.PutObject qualified as PO
@@ -92,6 +94,17 @@ data ObjectAcl
     | -- | @bucket-owner-full-control@
       BucketOwnerFullControl
     deriving stock (Show, Eq)
+
+{- | A bucket's region from @GetBucketLocation@, sent through the given env
+(amazonka maps the empty answer to us-east-1 and @EU@ to eu-west-1).
+-}
+bucketRegion :: Amazonka.Env -> Text -> IO (Either Text Amazonka.Region)
+bucketRegion awsEnv bucket = do
+    let req = GBL.newGetBucketLocation (S3.BucketName bucket)
+    result <- try @Amazonka.Error $ runResourceT $ Amazonka.send awsEnv req
+    pure $ case result of
+        Left ex -> Left (T.pack (show ex))
+        Right resp -> Right (S3.constraintRegion resp.locationConstraint)
 
 -- | Upload content to S3 with the given ACL.
 uploadToS3 :: Amazonka.Env -> ObjectAcl -> Text -> Text -> Text -> IO (Either Text ())

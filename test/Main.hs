@@ -3,6 +3,7 @@ module Main (main) where
 import Test.Tasty (defaultMain, testGroup)
 
 import Iidy.Cli.HelpTest qualified as HelpTest
+import Test.ApprovalRegionTest (approvalRegionTests)
 import Test.ApprovedTemplateTest (approvedTemplateTests)
 import Test.AwsImportGateTest (awsImportGateTests)
 import Test.AwsLoaderTest (awsLoaderTests)
@@ -107,6 +108,7 @@ main = do
             , testGroup "GetImport" getImportTests
             , testGroup "MockAws" mockAwsTests
             , testGroup "ApprovedTemplate" approvedTemplateTests
+            , testGroup "ApprovalRegion" approvalRegionTests
             , testGroup "Explain" explainTests
             , testGroup "Demo" demoTests
             , testGroup "Render" renderTests

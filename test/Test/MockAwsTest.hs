@@ -27,7 +27,7 @@ mockAwsTests =
         result <- templateApprovalReview (mcContext mcfn) pendingUrl 3
         result @?= Left ("Pending template not found at " <> pendingUrl)
         calls <- map reqCall <$> mockRequestLog mock
-        calls @?= [Just (s3Call "HeadObject" "app/t.yaml.pending")]
+        calls @?= [Just locationCall, Just (s3Call "HeadObject" "app/t.yaml.pending")]
     , testCase "HeadObject: 200 as configured per object" $ do
         mock <- newMockAws
         mockRespond mock (OnObject "HeadObject" "approvals" "app/t.yaml.pending") (mockStatus 200)
@@ -42,7 +42,7 @@ mockAwsTests =
                 apsApprovedLocation st @?= Just "s3://approvals/app/t.yaml"
             other -> assertFailure ("unexpected outputs: " <> show other)
         responses <- map reqMethod <$> mockRequestLog mock
-        responses @?= ["HEAD", "HEAD"]
+        responses @?= ["GET", "HEAD", "HEAD"]
     , testCase "object override wins over operation override; GetObject bodies per object" $ do
         mock <- newMockAws
         mockRespond mock (OnOperation "s3" "HeadObject") (mockStatus 200)
@@ -60,20 +60,22 @@ mockAwsTests =
         calls
             @?= map
                 Just
-                [ s3Call "HeadObject" "app/t.yaml.pending"
+                [ locationCall
+                , s3Call "HeadObject" "app/t.yaml.pending"
                 , s3Call "HeadObject" "app/t.yaml"
                 , s3Call "GetObject" "app/t.yaml.pending"
                 , s3Call "GetObject" "app/latest"
                 ]
     , testCase "PutObject in eu-west-1: raw log keeps host, method and body" $ do
         mock <- newMockAwsIn (Amazonka.Region' "eu-west-1")
+        mockRespond mock (OnOperation "s3" "GetBucketLocation") (bucketLocationReply "eu-west-1")
         mcfn <- newMockCfnContext mock OpTemplateApprovalRequest "test"
         let sa = approvalArgs (Just simpleTemplate)
         result <- templateApprovalRequest (mcContext mcfn) sa False Nothing
         result @?= Right 0
         logged <- mockRequestLog mock
         case logged of
-            [hd, put] -> do
+            [_location, hd, put] -> do
                 reqMethod hd @?= "HEAD"
                 reqMethod put @?= "PUT"
                 fmap callOperation (reqCall put) @?= Just "PutObject"
@@ -82,7 +84,7 @@ mockAwsTests =
                 assertBool
                     ("body is the rendered template: " <> show (reqBody put))
                     ("AWSTemplateFormatVersion" `BS.isInfixOf` reqBody put)
-            other -> assertFailure ("expected HEAD then PUT, got " <> show (map reqMethod other))
+            other -> assertFailure ("expected GetBucketLocation, HEAD and PUT, got " <> show (map reqMethod other))
     , testGroup "S3 request recognition" recognitionTests
     , testCase "query protocol: operation override serves error XML" $ do
         mock <- newMockAws
@@ -133,6 +135,10 @@ recognised method host path =
 -- | The pending object the review tests use.
 pendingUrl :: T.Text
 pendingUrl = "s3://approvals/app/t.yaml.pending"
+
+-- | The bucket-location call on the @approvals@ bucket.
+locationCall :: MockCall
+locationCall = MockCall "s3" "GetBucketLocation" (Just "approvals") Nothing
 
 -- | An S3 call on the @approvals@ bucket.
 s3Call :: T.Text -> T.Text -> MockCall

@@ -17,7 +17,14 @@ import Data.Either (fromRight)
 import Data.Text (Text)
 import Data.Text qualified as T
 
-import Iidy.Cfn.ApprovedTemplate (ApprovedTemplate (..), approvedKeyFromPending, approvedTemplateFor, latestKeyFromPending, pendingKeyFor)
+import Iidy.Cfn.ApprovedTemplate (
+    ApprovedTemplate (..),
+    approvalS3Env,
+    approvedKeyFromPending,
+    approvedTemplateFor,
+    latestKeyFromPending,
+    pendingKeyFor,
+ )
 import Iidy.Cfn.Context (CfnContext (..))
 import Iidy.Cfn.Operations.LintTemplate (validateTemplateBody)
 import Iidy.Cfn.S3Objects (ObjectAcl (..), deleteFromS3, downloadFromS3, s3ObjectExists, uploadToS3)
@@ -50,8 +57,11 @@ templateApprovalRequest ctx sa lintTmpl argsfilePath = do
 
         let s3Loc = "s3://" <> bucket <> "/" <> key
 
+        -- S3 calls go to the bucket's region; CloudFormation calls keep ctx
+        s3Ctx <- lift (approvalS3Context ctx bucket)
+
         -- Check if already approved
-        alreadyApproved <- liftExceptT (s3ObjectExists (cfnEnv ctx) bucket key)
+        alreadyApproved <- liftExceptT (s3ObjectExists (cfnEnv s3Ctx) bucket key)
         if alreadyApproved
             then do
                 lift $
@@ -68,7 +78,7 @@ templateApprovalRequest ctx sa lintTmpl argsfilePath = do
                 -- Lint the rendered local body before upload (Rust
                 -- template_approval_request.rs:79-89; iidy-js lints locally)
                 lintFailed <- lift $ lintFails ctx lintTmpl body
-                if lintFailed then pure 1 else uploadPending ctx bucket key body
+                if lintFailed then pure 1 else uploadPending s3Ctx bucket key body
 
 -- | Upload the pending template (with bucket-owner-full-control, as iidy-js).
 uploadPending ::
@@ -99,6 +109,12 @@ uploadPending ctx bucket key body = do
                         ]
                     }
     pure 0
+
+-- | The context with its env set for the approval bucket ('approvalS3Env').
+approvalS3Context :: CfnContext -> Text -> IO CfnContext
+approvalS3Context ctx bucket = do
+    s3Env <- approvalS3Env (cfnEnv ctx) bucket
+    pure ctx{cfnEnv = s3Env}
 
 {- | With lint on, validate the body and emit the result; 'True' when the
 validation found errors. With lint off, 'False' and no call.
@@ -134,13 +150,16 @@ templateApprovalReview ctx url contextLines = do
         let latestKey = latestKeyFromPending pendingKey
             approvedLoc = "s3://" <> bucket <> "/" <> approvedKey
 
+        -- Every call of the review is to S3, in the bucket's region
+        s3Ctx <- lift (approvalS3Context ctx bucket)
+
         -- Check pending exists
-        pendingExists <- liftExceptT (s3ObjectExists (cfnEnv ctx) bucket pendingKey)
+        pendingExists <- liftExceptT (s3ObjectExists (cfnEnv s3Ctx) bucket pendingKey)
         unless pendingExists $
             throwE ("Pending template not found at " <> url)
 
         -- Check if already approved
-        alreadyApproved <- liftExceptT (s3ObjectExists (cfnEnv ctx) bucket approvedKey)
+        alreadyApproved <- liftExceptT (s3ObjectExists (cfnEnv s3Ctx) bucket approvedKey)
 
         -- Emit approval status
         lift $
@@ -158,7 +177,7 @@ templateApprovalReview ctx url contextLines = do
             then pure 0
             else
                 reviewPendingTemplate
-                    ctx
+                    s3Ctx
                     contextLines
                     bucket
                     pendingKey

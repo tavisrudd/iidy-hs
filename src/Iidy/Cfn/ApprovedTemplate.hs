@@ -13,13 +13,17 @@ module Iidy.Cfn.ApprovedTemplate (
     approvedKeyFromPending,
     latestKeyFromPending,
     generateVersionedLocation,
+    approvalS3Env,
 ) where
 
 import Data.Text (Text)
 import Data.Text qualified as T
 import System.FilePath (takeExtension)
 
+import Amazonka qualified
+
 import Iidy.Cfn.Context (CfnContext (..), cfnImportConfig)
+import Iidy.Cfn.S3Objects (bucketRegion)
 import Iidy.Cfn.TemplateHash (calculateTemplateHash, parseS3Url)
 import Iidy.Cfn.TemplateLoader (TemplateResult (..), approvalTemplateLimit, isTemplateUrl, loadCfnTemplateWithLimit)
 import Iidy.Cfn.Types (StackArgs (..))
@@ -115,6 +119,19 @@ generateVersionedLocation baseLocation content templatePath = do
                 then fileName
                 else basePath <> "/" <> fileName
     Right (bucket, versionedKey)
+
+{- | The env for the approval bucket's S3 calls: the given env with its
+region set to the bucket's own region. That region comes from
+@GetBucketLocation@, asked of us-east-1 (which answers for any bucket);
+when that call fails (for example without @s3:GetBucketLocation@), the
+given env's region (the stack's) is kept.
+-}
+approvalS3Env :: Amazonka.Env -> Text -> IO Amazonka.Env
+approvalS3Env env bucket = do
+    located <- bucketRegion env{Amazonka.region = Amazonka.NorthVirginia} bucket
+    pure $ case located of
+        Right region -> env{Amazonka.region = region}
+        Left _ -> env
 
 -- | Suffix of a pending object's key.
 pendingSuffix :: Text

@@ -51,7 +51,8 @@ locationTests =
         result @?= Right 0
         calls <- map reqCall <$> mockRequestLog mock
         calls
-            @?= [ Just (MockCall "s3" "HeadObject" (Just "approvals") (Just simpleApprovedKey))
+            @?= [ Just (MockCall "s3" "GetBucketLocation" (Just "approvals") Nothing)
+                , Just (MockCall "s3" "HeadObject" (Just "approvals") (Just simpleApprovedKey))
                 , Just (MockCall "s3" "PutObject" (Just "approvals") (Just simplePendingKey))
                 ]
     ]
@@ -80,7 +81,8 @@ rootKeyFor location = do
     result @?= Right 0
     calls <- map reqCall <$> mockRequestLog mock
     calls
-        @?= [ Just (MockCall "s3" "HeadObject" (Just "approvals") (Just simpleRootKey))
+        @?= [ Just (MockCall "s3" "GetBucketLocation" (Just "approvals") Nothing)
+            , Just (MockCall "s3" "HeadObject" (Just "approvals") (Just simpleRootKey))
             , Just (MockCall "s3" "PutObject" (Just "approvals") (Just (pendingKeyFor simpleRootKey)))
             ]
 

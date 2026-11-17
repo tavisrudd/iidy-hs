@@ -39,6 +39,8 @@ module Test.MockAws (
     mockStatus,
     mockAwsFixtureDir,
     parseRequest,
+    s3HostRegion,
+    bucketLocationReply,
     recordingEnvFactory,
     countingEnv,
     noCredentials,
@@ -336,8 +338,41 @@ s3Call req = do
             , callBucket = Just (TE.decodeUtf8Lenient bucket)
             , callKey = if T.null key then Nothing else Just key
             }
+
+-- | An S3 endpoint label: @s3@ or @s3-\<region\>@.
+isS3Label :: ByteString -> Bool
+isS3Label l = l == "s3" || "s3-" `BS.isPrefixOf` l
+
+{- | The region an S3 request was sent to, from its host: the label after
+the endpoint's @s3@ label (@s3.eu-west-1.amazonaws.com@), the suffix of an
+@s3-\<region\>@ label, or us-east-1 for the global @s3.amazonaws.com@.
+'Nothing' for a non-S3 host.
+-}
+s3HostRegion :: MockRequest -> Maybe Text
+s3HostRegion req =
+    case break isS3Label (reverse labels) of
+        (afterRev, endpoint : _) ->
+            let regionLabel = case BS.stripPrefix "s3-" endpoint of
+                    Just r -> r
+                    Nothing -> case reverse afterRev of
+                        next : _ | next /= "amazonaws" && next /= "dualstack" -> next
+                        _ -> "us-east-1"
+             in Just (TE.decodeUtf8Lenient regionLabel)
+        (_, []) -> Nothing
   where
-    isS3Label l = l == "s3" || "s3-" `BS.isPrefixOf` l
+    labels = BC.split '.' (BC.takeWhile (/= ':') (reqHost req))
+
+{- | A @GetBucketLocation@ reply with this location constraint (empty for
+us-east-1, as S3 answers; @EU@ is the legacy name of eu-west-1).
+-}
+bucketLocationReply :: ByteString -> MockResponse
+bucketLocationReply constraint =
+    MockResponse
+        200
+        ( "<LocationConstraint xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"
+            <> constraint
+            <> "</LocationConstraint>"
+        )
 
 -- | Recognise a JSON-protocol or query-protocol request.
 protocolCall :: MockRequest -> Maybe MockCall
