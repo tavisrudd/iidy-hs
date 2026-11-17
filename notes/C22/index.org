@@ -62,6 +62,11 @@ the HTTP address filter and the remaining risks are all current.
   errors). The second is part of the "Docs and divergences" task of
   [[file:../C16/index.org][C16]] (its user-visible changes list names
   =/iidy/disable-template-approval=); check what C16 wrote before adding it.
+- Also missing (supervisor, 2026-11-17, from the C20 review): the resource
+  limits [[file:../C20/index.org][C20]] adds (alias nodes, expanded size,
+  import depth and count, helper output, HTTP total time). Tavis asked for
+  them in the security docs; C20 records them in =DIVERGENCES.md= only.
+  List them with their values from =Iidy.Constants= once C20 has landed.
 - Lines owed by cards that have not landed: C19 (session tokens in error
   messages), C20 (resource limits), C18 (control characters in terminal
   output), and C21 (NTP egress on write operations, plaintext =http:= and
