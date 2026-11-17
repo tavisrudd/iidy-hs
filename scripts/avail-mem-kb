@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# avail-mem-kb — print the memory available for a build, in KiB.
+#
+# MemAvailable leaves out the ZFS ARC, which the kernel shrinks under memory
+# pressure. Count the part of the ARC above its floor (c_min) as available.
+# Hosts without ZFS report MemAvailable alone.
+
+set -euo pipefail
+
+avail_kb=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
+arc=/proc/spl/kstat/zfs/arcstats
+if [[ -r $arc ]]; then
+  arc_kb=$(awk '$1 == "size" {s = $3} $1 == "c_min" {m = $3}
+                END {r = s - m; if (r < 0) r = 0; printf "%d", r / 1024}' "$arc")
+  avail_kb=$((avail_kb + arc_kb))
+fi
+echo "$avail_kb"

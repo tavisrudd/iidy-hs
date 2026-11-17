@@ -67,5 +67,5 @@ locked=no
 if [[ -e $cache/build.lock ]] && ! flock -n "$cache/build.lock" true 2>/dev/null; then
   locked=yes
 fi
-avail=$(awk '/^MemAvailable:/ {printf "%d", $2/1024/1024}' /proc/meminfo)
+avail=$(( $("$repo/scripts/avail-mem-kb") / 1024 / 1024 ))
 echo "notes-dirty: ${notes:-none} · build-lock: $locked · ghc: ${builds:-0} · mem-avail: ${avail}G · load $(cut -d' ' -f1 /proc/loadavg)"

@@ -13,7 +13,9 @@
 # - The command runs under `choom -n 1000`, so the kernel's OOM killer picks
 #   it before the user's session.
 # - It refuses to start when available memory is below IIDY_MIN_AVAIL_GB
-#   (default 6). Swap on this host is zram, so MemAvailable is the measure.
+#   (default 6), as measured by scripts/avail-mem-kb: MemAvailable plus the
+#   reclaimable part of the ZFS ARC. Swap on this host is zram, so swap
+#   does not count.
 # - Nested calls (the pre-commit hook run from a guarded command) reuse the
 #   held lock instead of deadlocking on it.
 #
@@ -42,7 +44,7 @@ if ! flock -n 9; then
   flock -w "$wait_s" 9 || { echo "guarded-build: build lock wait timed out" >&2; exit 75; }
 fi
 
-avail_kb=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
+avail_kb=$("$(dirname "$0")/avail-mem-kb")
 if [[ "$avail_kb" -lt $((min_gb * 1024 * 1024)) ]]; then
   echo "guarded-build: only $((avail_kb / 1024 / 1024)) GiB available (< ${min_gb}); refusing to build" >&2
   exit 75

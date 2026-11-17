@@ -23,9 +23,9 @@ template: `scripts/supervisor/CARD-BRIEF.md`.
   name to reassign (C35 used `claude/C35b`).
 - Before `c set done`: check for an open `CLOCK:` line, unfinished task
   headings and unticked gate boxes (workers often leave them unticked).
-- The memory guard refuses builds below 6 GiB MemAvailable, which leaves
-  out the ZFS ARC; on 2026-11-17 it blocked all commits (notes too) for
-  about an hour twice. Wait, never bypass. Proposal to Tavis pending (below).
+- The memory guard refuses builds below 6 GiB available; since 2026-11-17
+  it counts the reclaimable ZFS ARC (`scripts/avail-mem-kb`), which Tavis
+  approved. Wait, never bypass.
 - The C6 hang still happens: 2026-11-17 a run stuck at "directory hash is
   deterministic", outside the TemplateLoader group (recorded on C6).
 - Parity rule (Tavis): Rust parity by default; where Rust and TypeScript
@@ -69,7 +69,5 @@ convert-stack keeps its own when-to-quote policy.
 
 ## Still open for Tavis (supervisor's recommendation)
 
-1. `guarded-build`: count the reclaimable ZFS ARC (size minus `c_min`)
-   as available memory: yes.
-2. C19: a `ServiceError` with no message prints the code alone
+1. C19: a `ServiceError` with no message prints the code alone
    (`InternalFailure`, not `InternalFailure: `): keep (landed that way).
