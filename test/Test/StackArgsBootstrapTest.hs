@@ -12,7 +12,7 @@ import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
 import Iidy.Aws.CredentialSource (AwsSettings (..))
-import Iidy.Cfn.StackArgsBootstrap (loadStackArgsBootstrapped)
+import Iidy.Cfn.StackArgsBootstrap (importSettingsMismatch, loadStackArgsBootstrapped)
 import Iidy.Cfn.StackArgsLoader (CredentialField (..), LoadedStackArgs (..), RawField (..), readRawField)
 import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..))
 import Iidy.Yaml.Imports.Types (RemoteImports (..))
@@ -39,6 +39,18 @@ stackArgsBootstrapTests =
         expectRefused "Region" "--region" run
         err <- expectLeft (bsResult run)
         assertBool ("names the template: " <> T.unpack err) ("{{r}}" `T.isInfixOf` err)
+    , testCase "a duplicate top-level Profile key with an ssm: import is refused" $
+        loadWithMock noAwsSettings "probe-duplicate-key.yaml" >>= expectRefused "Profile" "--profile"
+    , testCase "a templated Profile key with an ssm: import is refused" $
+        loadWithMock noAwsSettings "probe-templated-key.yaml" >>= expectRefused "Profile" "--profile"
+    , testCase "a partly templated Profile key with an ssm: import is refused" $
+        loadWithMock noAwsSettings "probe-partly-templated-key.yaml" >>= expectRefused "Profile" "--profile"
+    , testCase "a tagged Profile key with an ssm: import is refused" $
+        loadWithMock noAwsSettings "probe-tagged-key.yaml" >>= expectRefused "Profile" "--profile"
+    , testCase "a duplicate environment-map entry with an ssm: import is refused" $
+        loadWithMock noAwsSettings "probe-envmap-duplicate-entry.yaml" >>= expectRefused "Profile" "--profile"
+    , testCase "a templated environment-map key with an ssm: import is refused" $
+        loadWithMock noAwsSettings "probe-envmap-templated-key.yaml" >>= expectRefused "Profile" "--profile"
     , testCase "computed Region with no AWS import loads as before" $ do
         run <- loadWithMock noAwsSettings "computed-region-no-aws.yaml"
         loaded <- expectRight (bsResult run)
@@ -57,11 +69,25 @@ stackArgsBootstrapTests =
         rawField "Profile: {dev: dev-profile, prod: prod-profile}" CredProfile @?= RawLiteral "dev-profile"
         rawField "StackName: x" CredAssumeRoleArn @?= RawAbsent
     , testCase "raw reading: templates, tags and missing map entries are not literal" $ do
-        rawField "Region: \"{{r}}\"" CredRegion @?= RawComputed "the handlebars template {{r}}"
-        rawField "Profile: !$ prof" CredProfile @?= RawComputed "a preprocessing tag"
-        rawField "Profile: {dev: !$ prof}" CredProfile @?= RawComputed "a preprocessing tag"
+        rawField "Region: \"{{r}}\"" CredRegion @?= RawComputed "Region is the handlebars template {{r}}"
+        rawField "Profile: !$ prof" CredProfile @?= RawComputed "Profile is a preprocessing tag"
+        rawField "Profile: {dev: !$ prof}" CredProfile @?= RawComputed "Profile is a preprocessing tag"
         rawField "Profile: {prod: p}" CredProfile
-            @?= RawComputed "an environment map with no entry for environment dev"
+            @?= RawComputed "Profile is an environment map with no entry for environment dev"
+    , testCase "raw reading: duplicate and non-plain keys are not literal" $ do
+        rawField "Profile: a\nProfile: b" CredProfile @?= RawComputed "Profile appears more than once"
+        rawField "Region: r\n\"{{k}}\": x" CredRegion
+            @?= RawComputed "the stack-args mapping has a key that is not a plain string, which could set Region"
+        rawField "Profile: {dev: a, \"{{e}}\": b}" CredProfile
+            @?= RawComputed "the environment map for Profile has a key that is not a plain string"
+    , testCase "backstop: matching import and final settings pass" $
+        importSettingsMismatch "f.yaml" literalSettings literalSettings @?= Nothing
+    , testCase "backstop: a Profile that differs from the import's is refused" $ do
+        err <- expectJust (importSettingsMismatch "f.yaml" literalSettings literalSettings{awsProfile = Just "evil-profile"})
+        mapM_ (assertMentions err) ["Profile", "literal-profile", "evil-profile", "--profile", "plain strings"]
+    , testCase "backstop: a Region set only after preprocessing is refused" $ do
+        err <- expectJust (importSettingsMismatch "f.yaml" literalSettings{awsRegion = Nothing} literalSettings)
+        mapM_ (assertMentions err) ["Region", "not set", "eu-west-1", "--region"]
     , testCase "a factory failure with an ssm: import reports its cause" $ do
         result <-
             loadStackArgsBootstrapped
@@ -110,10 +136,7 @@ and the command-line option that sets it.
 expectRefused :: Text -> Text -> BootstrapRun -> IO ()
 expectRefused key flag run = do
     err <- expectLeft (bsResult run)
-    let mentions t = assertBool ("error mentions " <> T.unpack t <> ": " <> T.unpack err) (t `T.isInfixOf` err)
-    mentions key
-    mentions flag
-    mentions "plain string"
+    mapM_ (assertMentions err) [key, flag, "plain string"]
     bsAsked run @?= []
     bsServed run @?= []
 
@@ -122,3 +145,13 @@ rawField :: String -> CredentialField -> RawField
 rawField yaml field = case parseYaml (BLC.pack yaml) "snippet.yaml" of
     Left _ -> RawComputed "unparseable test snippet"
     Right ast -> readRawField ast "dev" field
+
+assertMentions :: Text -> Text -> IO ()
+assertMentions err t = assertBool ("error mentions " <> T.unpack t <> ": " <> T.unpack err) (t `T.isInfixOf` err)
+
+expectJust :: Maybe Text -> IO Text
+expectJust = maybe (assertFailure "expected a refusal") pure
+
+-- | The settings of @literal-ssm.yaml@.
+literalSettings :: AwsSettings
+literalSettings = AwsSettings (Just "literal-profile") (Just "eu-west-1") Nothing

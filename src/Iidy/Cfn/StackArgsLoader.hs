@@ -251,37 +251,49 @@ data RawField
     = RawAbsent
     | -- | A plain string, directly or as the environment's map entry.
       RawLiteral !Text
-    | -- | Not known before preprocessing; the text says what it is.
+    | -- | Not known before preprocessing; the text is a clause saying why.
       RawComputed !Text
     deriving stock (Show, Eq)
 
-{- | Read a credential field from the raw top-level mapping. A plain string,
-or an environment map whose entry for the environment is a plain string,
-is literal. A tag, a handlebars template, any other node, an environment
-map without that entry, or a document that is not a plain mapping is not
-known before preprocessing.
+{- | Read a credential field from the raw top-level mapping. It is literal
+only when it is a plain string, or an environment map whose entry for the
+environment is a plain string, and each mapping on the way has only
+plain-string keys with the looked-up key once. Anything else is not known
+before preprocessing (fail closed): a tag, a handlebars template, any other
+node, a missing environment entry, a duplicated key (the final value keeps
+the last one), or a key that preprocessing could turn into the field's
+name (a template or a tag), and a document that is not a plain mapping.
 -}
 readRawField :: YamlAst -> Text -> CredentialField -> RawField
 readRawField (AstMapping pairs _) environment field =
-    case lookupAstField (credentialFieldKey field) pairs of
-        Nothing -> RawAbsent
-        Just (AstNull _) -> RawAbsent
-        Just (AstMapping envMap _) -> case lookupAstField environment envMap of
-            Nothing -> RawComputed ("an environment map with no entry for environment " <> environment)
-            Just entry -> plainOrComputed entry
-        Just node -> plainOrComputed node
-readRawField _ _ _ = RawComputed "a field of a document that is not a plain mapping"
+    case plainKeyLookup key pairs of
+        KeyNotPlain -> RawComputed ("the stack-args mapping has a key that is not a plain string, which could set " <> key)
+        KeyDuplicated -> RawComputed (key <> " appears more than once")
+        KeyMissing -> RawAbsent
+        KeyFound (AstNull _) -> RawAbsent
+        KeyFound (AstMapping envMap _) -> case plainKeyLookup environment envMap of
+            KeyNotPlain -> RawComputed ("the environment map for " <> key <> " has a key that is not a plain string")
+            KeyDuplicated -> RawComputed ("the environment map for " <> key <> " has the entry " <> environment <> " more than once")
+            KeyMissing -> RawComputed (key <> " is an environment map with no entry for environment " <> environment)
+            KeyFound entry -> plainOrComputed key entry
+        KeyFound node -> plainOrComputed key node
+  where
+    key = credentialFieldKey field
+readRawField _ _ field =
+    RawComputed (credentialFieldKey field <> " is read from a document that is not a plain mapping")
 
--- | Classify a raw value node.
-plainOrComputed :: YamlAst -> RawField
-plainOrComputed = \case
+-- | Classify a raw value node of the named field.
+plainOrComputed :: Text -> YamlAst -> RawField
+plainOrComputed subject = \case
     AstPlainString t _ -> RawLiteral t
-    AstTemplatedString t _ -> RawComputed ("the handlebars template " <> t)
-    AstPreprocessingTag _ _ -> RawComputed "a preprocessing tag"
-    AstCloudFormationTag _ _ -> RawComputed "a CloudFormation tag"
-    AstUnknownTag _ _ -> RawComputed "a tagged value"
-    AstImportedDocument _ _ -> RawComputed "an imported document"
-    _other -> RawComputed "a value that is not a string"
+    AstTemplatedString t _ -> computed ("the handlebars template " <> t)
+    AstPreprocessingTag _ _ -> computed "a preprocessing tag"
+    AstCloudFormationTag _ _ -> computed "a CloudFormation tag"
+    AstUnknownTag _ _ -> computed "a tagged value"
+    AstImportedDocument _ _ -> computed "an imported document"
+    _other -> computed "a value that is not a string"
+  where
+    computed what = RawComputed (subject <> " is " <> what)
 
 {- | The literal credential fields of a raw 'YamlAst' (see 'readRawField');
 a field that is absent or not known before preprocessing is 'Nothing'.
@@ -293,18 +305,26 @@ extractRawAwsFromAst ast environment = settingsFromFields $ \field ->
         RawAbsent -> Nothing
         RawComputed _ -> Nothing
 
--- | Look up a field by name in AST mapping pairs.
-lookupAstField :: Text -> [(YamlAst, YamlAst)] -> Maybe YamlAst
-lookupAstField name pairs =
-    case [v | (k, v) <- pairs, astScalarText k == Just name] of
-        (v : _) -> Just v
-        [] -> Nothing
+-- | The outcome of looking a key up in raw mapping pairs.
+data KeyLookup
+    = KeyMissing
+    | KeyFound !YamlAst
+    | KeyDuplicated
+    | -- | Some key is not a plain string, so it may become any key.
+      KeyNotPlain
 
--- | Extract text from a scalar AST node.
-astScalarText :: YamlAst -> Maybe Text
-astScalarText (AstPlainString t _) = Just t
-astScalarText (AstTemplatedString t _) = Just t
-astScalarText _ = Nothing
+-- | Look a key up, failing closed on non-plain keys and duplicates.
+plainKeyLookup :: Text -> [(YamlAst, YamlAst)] -> KeyLookup
+plainKeyLookup name pairs
+    | not (all (isPlainKey . fst) pairs) = KeyNotPlain
+    | otherwise = case [v | (AstPlainString k _, v) <- pairs, k == name] of
+        [] -> KeyMissing
+        [v] -> KeyFound v
+        _duplicates -> KeyDuplicated
+  where
+    isPlainKey = \case
+        AstPlainString _ _ -> True
+        _other -> False
 
 ------------------------------------------------------------------------
 -- Environment map resolution

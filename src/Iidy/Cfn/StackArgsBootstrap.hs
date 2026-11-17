@@ -7,15 +7,20 @@ environment is built from the credential fields as written in the file
 (@src/cfn/loadStackArgs.ts:91-118@), a credential field that is not a plain
 string or an environment map of plain strings refuses the first AWS import,
 unless the command line sets that field: otherwise the import would run
-under different credentials or region than the file finally names. A file
-without AWS imports never builds this environment and is not checked.
+under different credentials or region than the file finally names. As a
+backstop, the settings the imports ran with are compared with the final
+merged settings, and any difference refuses the load. A file without AWS
+imports never builds this environment and is not checked.
 -}
 module Iidy.Cfn.StackArgsBootstrap (
     loadStackArgsBootstrapped,
+
+    -- * Internal (exported for testing)
+    importSettingsMismatch,
 ) where
 
 import Control.Exception (SomeAsyncException, SomeException, displayException, fromException, throwIO, try)
-import Data.IORef (newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Maybe (fromMaybe, isJust, isNothing)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -25,7 +30,7 @@ import Amazonka qualified
 import Iidy.Aws.CredentialSource (AwsSettings)
 import Iidy.Cfn.StackArgsLoader (
     CredentialField,
-    LoadedStackArgs,
+    LoadedStackArgs (..),
     RawField (..),
     credentialFieldFlag,
     credentialFieldKey,
@@ -60,19 +65,56 @@ loadStackArgsBootstrapped ::
     AwsSettings ->
     RemoteImports ->
     IO (Either Text LoadedStackArgs)
-loadStackArgsBootstrapped mkEnv argsfile environment operation cliAws remoteImports =
-    loadStackArgsWith
-        (bootstrapLoader mkEnv (T.pack argsfile) environment cliAws remoteImports)
-        argsfile
-        environment
-        operation
-        cliAws
+loadStackArgsBootstrapped mkEnv argsfile environment operation cliAws remoteImports = do
+    ranWith <- newIORef Nothing
+    loaded <-
+        loadStackArgsWith
+            (bootstrapLoader ranWith mkEnv argsfileText environment cliAws remoteImports)
+            argsfile
+            environment
+            operation
+            cliAws
+    importSettings <- readIORef ranWith
+    pure $ do
+        result <- loaded
+        case importSettings >>= \settings -> importSettingsMismatch argsfileText settings (lsaMergedAws result) of
+            Just err -> Left err
+            Nothing -> Right result
+  where
+    argsfileText = T.pack argsfile
+
+{- | The refusal when the AWS imports ran with settings (first argument)
+that differ from the final merged settings (second argument), or 'Nothing'
+when they agree.
+-}
+importSettingsMismatch :: Text -> AwsSettings -> AwsSettings -> Maybe Text
+importSettingsMismatch argsfile importSettings finalSettings =
+    case [field | field <- credentialFields, setting field importSettings /= setting field finalSettings] of
+        [] -> Nothing
+        field : _ ->
+            Just $
+                "In "
+                    <> argsfile
+                    <> ", the AWS imports ran with "
+                    <> credentialFieldKey field
+                    <> " "
+                    <> settingText (setting field importSettings)
+                    <> ", but the final "
+                    <> credentialFieldKey field
+                    <> " is "
+                    <> settingText (setting field finalSettings)
+                    <> "."
+                    <> fixAdvice field
+  where
+    setting = credentialFieldSetting
 
 {- | The import loader for one parsed stack-args file. Non-AWS imports load
 as usual; the first AWS import checks the credential fields and builds the
 environment, and every later one reuses that outcome.
 -}
 bootstrapLoader ::
+    -- | set to the settings the import env was built with
+    IORef (Maybe AwsSettings) ->
     (AwsSettings -> IO Amazonka.Env) ->
     -- | argsfile path
     Text ->
@@ -82,15 +124,15 @@ bootstrapLoader ::
     RemoteImports ->
     YamlAst ->
     IO LoadImportFn
-bootstrapLoader mkEnv argsfile environment cliAws remoteImports ast = do
+bootstrapLoader ranWith mkEnv argsfile environment cliAws remoteImports ast = do
     outcome <- newIORef Nothing
     let importSettings = mergeAwsSettings cliAws (extractRawAwsFromAst ast environment)
         dispatcher mEnv = mkFullDispatcher ImportConfig{icAwsEnv = mEnv, icRemoteImports = remoteImports}
         notPlain =
-            [ (field, how)
+            [ (field, why)
             | field <- credentialFields
             , isNothing (credentialFieldSetting field cliAws)
-            , RawComputed how <- [readRawField ast environment field]
+            , RawComputed why <- [readRawField ast environment field]
             ]
         awsEnvFor location = do
             known <- readIORef outcome
@@ -98,9 +140,12 @@ bootstrapLoader mkEnv argsfile environment cliAws remoteImports ast = do
                 Just result -> pure result
                 Nothing -> do
                     result <- case notPlain of
-                        (field, how) : _ ->
-                            pure (Left (computedFieldError argsfile location importSettings field how))
-                        [] -> buildImportEnv mkEnv argsfile location importSettings
+                        (field, why) : _ ->
+                            pure (Left (computedFieldError argsfile location importSettings field why))
+                        [] -> do
+                            built <- buildImportEnv mkEnv argsfile location importSettings
+                            either (const (pure ())) (const (writeIORef ranWith (Just importSettings))) built
+                            pure built
                     writeIORef outcome (Just result)
                     pure result
     pure $ \location baseLocation ->
@@ -136,29 +181,32 @@ buildImportEnv mkEnv argsfile location settings = do
                         <> "): "
                         <> T.pack (displayException e)
 
--- | The refusal for a credential field that is not plain.
+-- | The refusal for a credential field that is not plain; @why@ is a clause.
 computedFieldError :: Text -> Text -> AwsSettings -> CredentialField -> Text -> Text
-computedFieldError argsfile location importSettings field how =
-    let key = credentialFieldKey field
-     in key
-            <> " in "
-            <> argsfile
-            <> " is "
-            <> how
-            <> ", not a plain string, so the AWS import "
-            <> location
-            <> " would run with "
-            <> key
-            <> " "
-            <> settingText (credentialFieldSetting field importSettings)
-            <> " instead of the value the file computes. In a stack-args file"
-            <> " with AWS imports, "
-            <> T.intercalate ", " (map credentialFieldKey credentialFields)
-            <> " must be plain strings or environment maps of plain strings: set "
-            <> key
-            <> " literally or pass "
-            <> credentialFieldFlag field
-            <> " on the command line"
+computedFieldError argsfile location importSettings field why =
+    "In "
+        <> argsfile
+        <> ", "
+        <> why
+        <> ", so the AWS import "
+        <> location
+        <> " would run with "
+        <> credentialFieldKey field
+        <> " "
+        <> settingText (credentialFieldSetting field importSettings)
+        <> " instead of the value the file computes."
+        <> fixAdvice field
+
+-- | What the user can do about a refused credential field.
+fixAdvice :: CredentialField -> Text
+fixAdvice field =
+    " In a stack-args file with AWS imports, "
+        <> T.intercalate ", " (map credentialFieldKey credentialFields)
+        <> " must be plain strings or environment maps of plain strings: set "
+        <> credentialFieldKey field
+        <> " literally or pass "
+        <> credentialFieldFlag field
+        <> " on the command line"
 
 -- | Each credential field of a settings value, for messages.
 describeSettings :: AwsSettings -> Text

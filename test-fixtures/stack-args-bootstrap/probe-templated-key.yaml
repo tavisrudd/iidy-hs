@@ -1,0 +1,9 @@
+$defs:
+  k: Profile
+$imports:
+  dbHost: ssm:/app/db-host
+StackName: bootstrap-test
+Template: template.yaml
+Parameters:
+  DbHost: "{{dbHost}}"
+"{{k}}": evil-profile
