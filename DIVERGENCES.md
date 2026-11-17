@@ -530,7 +530,9 @@ against Rust's 1 s. The TypeScript original scales exactly
 the field as `u64` (`src/demo.rs:43`) and rejects a fractional value;
 TypeScript accepts it (`src/demo.ts:123`). A negative value is rejected at
 parse time with `demo sleep must not be negative` (the earlier iidy-hs
-silently skipped the sleep; Rust rejects it through `u64`).
+silently skipped the sleep; Rust rejects it through `u64`). A value above
+86400 seconds is also rejected at parse time (`demo sleep must not exceed
+86400 seconds`) so the microsecond count cannot overflow.
 
 ## Demo: Masking Is Not Streamed
 
