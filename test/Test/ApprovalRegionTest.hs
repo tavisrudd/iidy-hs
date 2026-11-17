@@ -4,14 +4,17 @@ falling back to the stack's region when that call fails.
 -}
 module Test.ApprovalRegionTest (approvalRegionTests) where
 
+import Control.Monad (void)
 import Data.ByteString (ByteString)
 import Data.Text (Text)
+import Data.Text qualified as T
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
 import Amazonka qualified
 
 import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateApprovalReview)
+import Iidy.Cfn.RequestBuilder (buildCreateStackRequest)
 import Iidy.Cfn.Types (CfnOperation (..))
 import Test.ApprovalFixtures (approvalArgs, simplePendingKey, simpleTemplate)
 import Test.MockAws
@@ -21,7 +24,48 @@ approvalRegionTests :: [TestTree]
 approvalRegionTests =
     [ testGroup "request" requestTests
     , testGroup "review" reviewTests
+    , testGroup "failed lookup named in later failures" lookupNoteTests
     ]
+
+lookupNoteTests :: [TestTree]
+lookupNoteTests =
+    [ testCase "request: wrong fallback region (HeadObject 301) names the failed lookup" $ do
+        mock <- mockWithLocation "eu-west-1" Nothing
+        mockRespond mock (OnOperation "s3" "HeadObject") (mockStatus 301)
+        result <- runRequest mock
+        assertLookupNote result
+    , testCase "review: access denied after a failed lookup names it" $ do
+        mock <- mockWithLocation "eu-west-1" Nothing
+        mockRespond mock (OnOperation "s3" "HeadObject") (mockStatus 403)
+        mcfn <- newMockCfnContext mock OpTemplateApprovalReview "test"
+        result <- templateApprovalReview (mcContext mcfn) ("s3://approvals/" <> simplePendingKey) 3
+        assertLookupNote result
+    , testCase "deploy builder: HeadObject failure after a failed lookup names it" $ do
+        mock <- mockWithLocation "eu-west-1" Nothing
+        mockRespond mock (OnOperation "s3" "HeadObject") (mockStatus 301)
+        mcfn <- newMockCfnContext mock OpCreateStack "test"
+        result <- buildCreateStackRequest (mcContext mcfn) (approvalArgs (Just simpleTemplate)) True Nothing
+        assertLookupNote (void result)
+    , testCase "a successful lookup adds no note" $ do
+        mock <- mockWithLocation "eu-west-1" (Just "eu-west-1")
+        mockRespond mock (OnOperation "s3" "HeadObject") (mockStatus 301)
+        result <- runRequest mock
+        assertBool ("no lookup note: " <> show result) (either (not . T.isInfixOf "region lookup") (const False) result)
+    ]
+
+-- | The failure names the region and ends with the failed lookup's note.
+assertLookupNote :: (Show a) => Either Text a -> IO ()
+assertLookupNote result = case result of
+    Left err -> do
+        assertBool ("names the lookup failure: " <> show err) ("(bucket region lookup failed: " `T.isInfixOf` err)
+        assertBool ("says the stack's region was used: " <> show err) ("; used the stack's region)" `T.isSuffixOf` err)
+    Right r -> assertBool ("expected a failure, got " <> show r) False
+
+-- | Run the request for the fixture.
+runRequest :: MockAws -> IO (Either Text Int)
+runRequest mock = do
+    mcfn <- newMockCfnContext mock OpTemplateApprovalRequest "test"
+    templateApprovalRequest (mcContext mcfn) (approvalArgs (Just simpleTemplate)) False Nothing
 
 requestTests :: [TestTree]
 requestTests =

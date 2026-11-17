@@ -106,6 +106,9 @@ bucketRegion awsEnv bucket = do
     let req = GBL.newGetBucketLocation (S3.BucketName bucket)
     result <- try @Amazonka.Error $ runResourceT $ Amazonka.send awsEnv req
     pure $ case result of
+        Left (Amazonka.ServiceError se) ->
+            let Amazonka.ErrorCode code = se.code
+             in Left (T.pack (show (statusCode se.status)) <> " " <> code)
         Left ex -> Left (T.pack (show ex))
         Right resp -> Right (S3.constraintRegion resp.locationConstraint)
 

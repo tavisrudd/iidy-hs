@@ -15,7 +15,9 @@ module Iidy.Cfn.ApprovedTemplate (
     approvedKeyFromPending,
     latestKeyFromPending,
     generateVersionedLocation,
+    ApprovalS3 (..),
     approvalS3Env,
+    approvalObjectExists,
     resolveDeployTemplate,
 ) where
 
@@ -126,18 +128,39 @@ generateVersionedLocation baseLocation content templatePath = do
                 else basePath <> "/" <> fileName
     Right (bucket, versionedKey)
 
+-- | The env for the approval bucket's S3 calls, and how its region was found.
+data ApprovalS3 = ApprovalS3
+    { asEnv :: !Amazonka.Env
+    , asLookupError :: !(Maybe Text)
+    -- ^ the bucket-region lookup's error, when the stack's region was used
+    }
+
 {- | The env for the approval bucket's S3 calls: the given env with its
 region set to the bucket's own region. That region comes from
-@GetBucketLocation@, asked of us-east-1 (which answers for any bucket);
-when that call fails (for example without @s3:GetBucketLocation@), the
-given env's region (the stack's) is kept.
+@GetBucketLocation@, asked of us-east-1 (which answers for any bucket).
+When that call fails for any reason (no @s3:GetBucketLocation@, no route
+to us-east-1, another partition, a bucket of another account), the given
+env's region (the stack's) is kept and the error recorded. A wrong
+region then fails closed: S3 answers the later calls with a redirect or
+an error, never as approved.
 -}
-approvalS3Env :: Amazonka.Env -> Text -> IO Amazonka.Env
+approvalS3Env :: Amazonka.Env -> Text -> IO ApprovalS3
 approvalS3Env env bucket = do
     located <- bucketRegion env{Amazonka.region = Amazonka.NorthVirginia} bucket
     pure $ case located of
-        Right region -> env{Amazonka.region = region}
-        Left _ -> env
+        Right region -> ApprovalS3 env{Amazonka.region = region} Nothing
+        Left err -> ApprovalS3 env (Just err)
+
+{- | 's3ObjectExists' through the approval env; a failure after a failed
+region lookup also names that lookup.
+-}
+approvalObjectExists :: ApprovalS3 -> Text -> Text -> IO (Either Text Bool)
+approvalObjectExists s3 bucket key = do
+    exists <- s3ObjectExists (asEnv s3) bucket key
+    pure $ case (exists, asLookupError s3) of
+        (Left err, Just lookupErr) ->
+            Left (err <> " (bucket region lookup failed: " <> lookupErr <> "; used the stack's region)")
+        _ -> exists
 
 {- | The template a deploy request (create-stack, update-stack,
 create-changeset) sends. With no @ApprovedTemplateLocation@ it is the local
@@ -156,14 +179,14 @@ resolveDeployTemplate ctx sa argsfilePath = do
         Right Nothing ->
             loadCfnTemplate (saTemplate sa) argsfilePath (cfnEnvironment ctx) (cfnImportConfig ctx)
         Right (Just (ApprovedTemplate bucket key _body)) -> do
-            s3Env <- approvalS3Env (cfnEnv ctx) bucket
-            exists <- s3ObjectExists s3Env bucket key
+            s3 <- approvalS3Env (cfnEnv ctx) bucket
+            exists <- approvalObjectExists s3 bucket key
             case exists of
                 Left err -> pure (Left err)
                 Right False -> pure (Left (notApprovedMessage ctx argsfilePath))
                 Right True -> do
                     now <- getCurrentTime
-                    url <- presignGetObject s3Env now bucket key
+                    url <- presignGetObject (asEnv s3) now bucket key
                     pure (Right (TemplateResult Nothing (Just url)))
 
 {- | The refusal for a template with no approved object. The suggested

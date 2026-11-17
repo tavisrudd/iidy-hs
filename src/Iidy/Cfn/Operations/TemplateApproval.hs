@@ -18,7 +18,9 @@ import Data.Text (Text)
 import Data.Text qualified as T
 
 import Iidy.Cfn.ApprovedTemplate (
+    ApprovalS3 (..),
     ApprovedTemplate (..),
+    approvalObjectExists,
     approvalS3Env,
     approvedKeyFromPending,
     approvedTemplateFor,
@@ -27,7 +29,7 @@ import Iidy.Cfn.ApprovedTemplate (
  )
 import Iidy.Cfn.Context (CfnContext (..))
 import Iidy.Cfn.Operations.LintTemplate (validateTemplateBody)
-import Iidy.Cfn.S3Objects (ObjectAcl (..), deleteFromS3, downloadFromS3, s3ObjectExists, uploadToS3)
+import Iidy.Cfn.S3Objects (ObjectAcl (..), deleteFromS3, downloadFromS3, uploadToS3)
 import Iidy.Cfn.TemplateDiff (generateDiff)
 import Iidy.Cfn.TemplateHash (parseS3Url)
 import Iidy.Cfn.Types (StackArgs)
@@ -58,10 +60,11 @@ templateApprovalRequest ctx sa lintTmpl argsfilePath = do
         let s3Loc = "s3://" <> bucket <> "/" <> key
 
         -- S3 calls go to the bucket's region; CloudFormation calls keep ctx
-        s3Ctx <- lift (approvalS3Context ctx bucket)
+        s3 <- lift (approvalS3Env (cfnEnv ctx) bucket)
+        let s3Ctx = ctx{cfnEnv = asEnv s3}
 
         -- Check if already approved
-        alreadyApproved <- liftExceptT (s3ObjectExists (cfnEnv s3Ctx) bucket key)
+        alreadyApproved <- liftExceptT (approvalObjectExists s3 bucket key)
         if alreadyApproved
             then do
                 lift $
@@ -110,12 +113,6 @@ uploadPending ctx bucket key body = do
                     }
     pure 0
 
--- | The context with its env set for the approval bucket ('approvalS3Env').
-approvalS3Context :: CfnContext -> Text -> IO CfnContext
-approvalS3Context ctx bucket = do
-    s3Env <- approvalS3Env (cfnEnv ctx) bucket
-    pure ctx{cfnEnv = s3Env}
-
 {- | With lint on, validate the body and emit the result; 'True' when the
 validation found errors. With lint off, 'False' and no call.
 -}
@@ -151,15 +148,16 @@ templateApprovalReview ctx url contextLines = do
             approvedLoc = "s3://" <> bucket <> "/" <> approvedKey
 
         -- Every call of the review is to S3, in the bucket's region
-        s3Ctx <- lift (approvalS3Context ctx bucket)
+        s3 <- lift (approvalS3Env (cfnEnv ctx) bucket)
+        let s3Ctx = ctx{cfnEnv = asEnv s3}
 
         -- Check pending exists
-        pendingExists <- liftExceptT (s3ObjectExists (cfnEnv s3Ctx) bucket pendingKey)
+        pendingExists <- liftExceptT (approvalObjectExists s3 bucket pendingKey)
         unless pendingExists $
             throwE ("Pending template not found at " <> url)
 
         -- Check if already approved
-        alreadyApproved <- liftExceptT (s3ObjectExists (cfnEnv s3Ctx) bucket approvedKey)
+        alreadyApproved <- liftExceptT (approvalObjectExists s3 bucket approvedKey)
 
         -- Emit approval status
         lift $
