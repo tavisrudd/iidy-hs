@@ -1,0 +1,120 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C31
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C8 side finding and notes/C23/report--decisions-vs-originals.org item 1: resolveEscape uses the Value path and sorts keys; Rust and TypeScript keep source order
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e6dc-cebe-72fb-aa2c-c8790fc8172b
+:ADDED: [2026-11-16 Mon 17:16]
+:END:
+#+title: C31 — !$escape: keep mapping key order (Rust and TypeScript parity)
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e6dc-cebe-72fb-aa2c-c878b0aa2c14
+:ADDED: [2026-11-16 Mon 17:16]
+:END:
+
+Found by [[file:../C23/report--decisions-vs-originals.org][C23]] (item 1,
+"=!$escape= key order", verdict SETTLED: source order). Rust
+=resolve_escape= (=~/src/iidy/src/yaml/resolution/resolver.rs:1843=) and
+=ast_to_value_without_preprocessing= (=resolver.rs:596=) build a
+=serde_yaml::Mapping=, which keeps insertion order. TypeScript
+=visit$escape= returns =node.data= unchanged
+(=~/src/iidy-js/src/preprocess/visitor.ts:178-180=), dumped with sorting off
+(=src/yaml.ts:234-236=); it hoists integer-like keys first, a JavaScript
+object rule that iidy-hs must not copy. Checked again with the Rust binary
+(=~/src/iidy-hs/iidy-rs render FILE=, which does not reach AWS) on
+=out: !$escape= over =zeta=, =alpha=, =mid=: the output keeps that order.
+
+iidy-hs sorts. =resolveEscape= (=src/Iidy/Yaml/Resolution/Resolver.hs=
+lines 859-861) is =pure $ fromValue $ astToValueRaw contentAst=: it builds
+an ordered value (=astToOValueRaw=, lines 918-939), flattens it to an aeson
+=Value= through =astToValueRaw= (line 913), whose objects are sorted, and
+converts back. [[file:../C8/index.org][C8]] added =astToOValueRaw= and moved
+=!$parseYaml= (line 841) onto it, and left =resolveEscape= as a one-line
+follow-up (C8 task note and review). The expected fix is
+=resolveEscape _ctx _meta (EscapeTag contentAst) = pure (astToOValueRaw
+contentAst)=; the existing escape tests (=test/Test/ResolverTest.hs= around
+line 916) cover scalars only. Duplicate keys already behave as Rust's
+=Mapping= insert: first position, last value.
+
+Overlaps in =Resolver.hs=: [[file:../C28/index.org][C28]] and
+[[file:../C26/index.org][C26]] (in flight) also edit this file, C26 around
+=astToValueRaw= and the =AstPreprocessingTag= case, C28 at its callers.
+This card touches only =resolveEscape=; do not start it while C26 or C28 has
+the file open, and rebase onto whichever lands first.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e6dc-cebe-72fb-aa2c-c87709cc7cb6
+:ADDED: [2026-11-16 Mon 17:16]
+:END:
+
+Allowed paths: =src/Iidy/Yaml/Resolution/Resolver.hs= (=resolveEscape=
+only), =test/Test/ResolverTest.hs=, =test/Test/EngineTest.hs= or a fixture
+pair under =test-fixtures/= if the end-to-end case needs one, =notes/C31/=.
+
+Out of scope: =astToValueRaw= and its other callers (=parseYamlContent=,
+=ConvertStack=; C26 and C28 own them); the =!$escaped= string for nested
+preprocessing tags; JavaScript integer-key hoisting; any other tag.
+
+Done when:
+- [ ] A regression test is recorded failing before the fix: a
+  mapping under =!$escape= with keys =zeta=, =alpha=, =mid=, ="10"=, ="2"=
+  resolves to an =OObject= in exactly that order (the resolver-level test
+  next to the escape tests), plus a nested mapping and a mapping inside a
+  sequence, and a duplicate key keeping first position with the last value.
+  Record the failing assertion output in the first task note.
+- [ ] An end-to-end case renders a template with that =!$escape= and the
+  text matches the Rust binary byte for byte; record both command lines and
+  the identical output (and the pre-fix difference) in the task note. Use
+  =~/src/iidy-hs/iidy-rs render= and the freshly built iidy-hs =render= on
+  the same file; neither command reaches AWS.
+- [ ] Scalars, sequences, CloudFormation tags and nested preprocessing tags
+  under =!$escape= produce the same values as before (existing escape tests
+  unedited and passing).
+- [ ] Build warning-free, full suite green, commits name C31.
+
+Stop and record if: the fix needs more than =resolveEscape= (for example
+the ordered value is re-sorted later in the renderer or emitter); an
+existing expected value must change; Rust and iidy-hs still differ after the
+fix for some input (record it and ask Tavis); or the edit needs a path
+outside the allowed ones, including =Resolver.hs= lines that C26 or C28 has
+changed in flight.
+
+* TODO Reproduce the order loss and write the failing regression tests
+:PROPERTIES:
+:ID: org:01a1e6dc-cebe-72fb-aa2c-c876a5a28f59
+:ADDED: [2026-11-16 Mon 17:16]
+:END:
+
+Build iidy-hs (guarded build), render a file with
+=out: !$escape= over unsorted keys with both binaries, and record the
+difference. Then add the escape-order tests from the gate to
+=test/Test/ResolverTest.hs= and run them; the order assertions must fail
+and the scalar tests pass. Record the failing output here.
+
+* TODO Switch resolveEscape to astToOValueRaw
+:PROPERTIES:
+:ID: org:01a1e6df-6b8c-7368-930b-1cd92bae3b27
+:ADDED: [2026-11-16 Mon 17:19]
+:END:
+Change =resolveEscape= to return =astToOValueRaw contentAst= directly; drop
+imports that become unused. Rerun the new tests (now passing) and the full
+suite.
+
+* TODO Side-by-side run against Rust and close
+:PROPERTIES:
+:ID: org:01a1e6df-6b8c-7368-930b-1cd835cad658
+:ADDED: [2026-11-16 Mon 17:19]
+:END:
+Repeat the render comparison from the first task with the fixed build on
+the same files plus a nested and a duplicate-key case, record command lines
+and byte-identical output, and note any remaining difference. Close the
+card.

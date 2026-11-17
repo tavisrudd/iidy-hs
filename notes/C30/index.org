@@ -1,0 +1,196 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C30
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C11: differences seen while writing explain and demo tests: explain header/fallback text, demo fixed temp dir (C21 covers) and ARN masking, sleep truncation vs rounding
+:CREATED_BY: sonnet-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a4be70bdbd2b3547b
+:ID: org:01a1e6d8-1a69-7466-b044-90ec7f18c453
+:ADDED: [2026-11-16 Mon 17:11]
+:END:
+#+title: C30 — Align explain, demo temp dir, masking and sleep rounding with Rust
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e6d8-1a69-7466-b044-90eb80a02b50
+:ADDED: [2026-11-16 Mon 17:11]
+:END:
+
+Found by [[file:../C11/index.org][C11]] while it wrote the explain and demo
+tests (its Stop rule and the "Differences from Rust" note under the demo
+task). Each difference was re-checked on 2026-11-16 against the Rust source
+(=~/src/iidy=) and the TypeScript original (=~/src/iidy-js=). Haskell sites:
+=src/Iidy/Explain.hs=, =src/Iidy/Demo.hs=.
+
+*explain.* Rust: =handle_explain_command= (=src/explain.rs:14-30=) prints
+=error_id.explain()= plus a blank line to stdout per known code, prints
+=Unknown error code: CODE= to stderr, and for no codes prints =Please
+provide one or more error codes to explain (e.g., ERR_2001)= to stderr and
+returns (exit 0). =explain()= (=src/yaml/errors/ids.rs:334-356=) returns an
+embedded markdown file for four codes only (ERR_1001, 2001, 4002, 5001;
+=ids.rs:182-188=, files in =src/docs/errors/=, whose text says =IY2001=
+rather than =ERR_2001=) and otherwise =Error ERR_NNNN: description=, a blank
+line, =Category: ...=, a blank line, the description again, a blank line and
+=This error code doesn't have detailed documentation yet.= with a second
+line =For more information, see the online documentation.=. TypeScript: no
+=explain= command exists (no match in =src/= or =bin/=). Haskell:
+=explainOne= (=Explain.hs:48-62=) prints =Error ERR_NNNN=, =Category:=,
+=Description:=, a blank line and a hand-written details paragraph for all 46
+codes; the no-argument message is =Usage: iidy explain <CODE>...=
+(=Explain.hs:38-39=). The Haskell descriptions match Rust's except ERR_6002
+(=Unknown Handlebars helper= against Rust's
+=Unknown handlebars helper=, =ids.rs:= around line 153).
+=DIVERGENCES.md= (around line 41) already records the permissive code spellings; it says nothing about the layout.
+
+*demo temp directory.* Rust: fresh =tempdir()= (=src/demo.rs:86=). TypeScript:
+=tmp.dirSync()= (=src/demo.ts:56=). Haskell: fixed =<tmp>/iidy-demo=
+(=Demo.hs:105-107=) removed recursively on exit. Rust and TypeScript agree,
+and [[file:../C21/index.org][C21]] already owns the fix (its task "Demo uses a
+private temporary directory"), so this card does not touch it.
+
+*account-number masking.* Rust: =mask_aws_account_numbers=
+(=src/demo.rs:64-72=) applies =\b(\d{12})\b= (=demo.rs:22-23=) and then an
+ARN pattern =(arn:aws:[^:]*:[^:]*:)(\d{12})([:/])= (=demo.rs:25-27=). The
+ARN pass can never change anything the first pass left, because =:= and =/=
+are word boundaries, so Rust's observable result equals Haskell's single
+=\b[0-9]{12}\b= pass (=Demo.hs:288-296=). C11's note that Haskell has "a
+plain 12-digit mask" is a difference in structure, not in output.
+TypeScript: no masking and no =--mask-secrets= option (no match in =src/=).
+Rust masks only in PTY mode, line by line (=demo.rs:303-340=); Haskell masks
+the whole captured stdout and stderr separately (=Demo.hs:226-241=). That
+streaming difference is out of scope here.
+
+*sleep rounding.* Rust: =sleep: u64= (=demo.rs:43=), scaled duration
+=(secs as f64 * timescaling) as u64= whole seconds, truncating
+(=demo.rs:134-136=); the typing delay is =(50.0 * timescaling) as u64=
+milliseconds, truncating (=demo.rs:363-366=). TypeScript:
+=timeout(seconds * 1000 * timescaling)= and =timeout(50 * timescaling)=
+(=src/demo.ts:123,144=), a =setTimeout= with a fractional millisecond value,
+so effectively exact. Haskell: =DemoSleep !Int= parsed with =truncate n=
+(=Demo.hs:149=), delay =round (secs * timescaling * 1e6)= microseconds
+(=Demo.hs:197=) and typing delay =round (50 * timescaling * 1000)=
+microseconds (=Demo.hs:261=). Rust and TypeScript disagree, so the choice
+is Tavis's (see the Stop rule). Haskell is nearer TypeScript.
+
+Overlap: [[file:../C21/index.org][C21]] edits =Demo.hs= (temp dir) and
+=DemoTest.hs= (its sequential-group workaround from C11 can go once it
+lands); keep this card's =Demo.hs= edits confined to sleep and print-delay
+lines so the two merge cleanly, and prefer to run after C21.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e6d8-1a69-7466-b044-90eaccf32ab8
+:ADDED: [2026-11-16 Mon 17:11]
+:END:
+
+Allowed paths: =src/Iidy/Explain.hs=, =src/Iidy/Demo.hs= (sleep and
+print-delay lines only), =test/Test/ExplainTest.hs=,
+=test/Test/DemoTest.hs=, =DIVERGENCES.md=, =notes/C30/=.
+
+Out of scope: the demo temporary directory (C21); streaming or PTY masking
+behaviour; porting Rust's four markdown explanation files; any other
+command; =Explain.hs= restructuring beyond what the tasks need (the module is
+over 400 lines because of the data table; move the table to
+=src/Iidy/Explain/Errors.hs= only if an edit needs it, and then keep each
+module under about 300 lines of logic).
+
+Done when:
+- [ ] Questions 1 and 2 under the Stop rule are recorded in the card with
+  Tavis's answers before the code tasks that depend on them.
+- [ ] =iidy explain= with no codes prints Rust's text
+  =Please provide one or more error codes to explain (e.g., ERR_2001)= to
+  stderr and exits 0 (confirm Haskell's current exit status first and record
+  it); a test pins both.
+- [ ] ERR_6002's description is =Unknown handlebars helper= as in Rust, and
+  a test compares every description in =allErrors= with Rust's
+  =description()= list recorded in the test (=ids.rs:110-170=), so no other
+  drift exists.
+- [ ] Masking is pinned by tests for the Rust ARN cases (=demo.rs:490-530=:
+  =arn:aws:iam::123456789012:role/MyRole=,
+  =arn:aws:sts::999888777666:assumed-role/Foo=,
+  =arn:aws:iam::111222333444:user/admin=) and a standalone case with
+  surrounding spaces; no code change is expected, and if a case fails,
+  stop and record it.
+- [ ] If Tavis chose Rust truncation for sleep (question 2), the sleep and
+  typing-delay tests show whole-second truncation and a failing-first
+  record; if he kept rounding, the choice is written in =DIVERGENCES.md=.
+- [ ] Every difference that remains is listed in =DIVERGENCES.md= with its
+  cause; build warning-free, full suite green, commits name C30.
+
+Stop and record if, and ask Tavis (do not choose):
+1. explain layout. Rust prints a generic block for 42 of 46 codes and long
+   markdown (with an =IY2001= typo) for four; Haskell prints a uniform
+   header plus a hand-written details paragraph for all 46, which is more
+   useful than Rust's fallback. TypeScript has no explain. Recommendation:
+   keep the Haskell layout and details, record it in =DIVERGENCES.md=, and
+   align only the no-argument message and ERR_6002 wording. Aligning the
+   layout would delete the details text.
+2. Sleep and typing-delay rounding. Rust truncates to whole seconds and
+   whole milliseconds, which turns =sleep: 1= at =--timescaling 0.5= into no
+   sleep; TypeScript scales exactly. Recommendation: keep Haskell's
+   rounding (it is nearer TypeScript and Rust's truncation looks accidental)
+   and record it in =DIVERGENCES.md=. Also decide whether a fractional
+   =sleep:= value in a script is accepted (Rust and Haskell's =truncate=
+   both reject or floor it; TypeScript accepts it).
+3. A masking test fails, or a task needs a change outside the allowed
+   paths, or C21 has changed =Demo.hs= in a way that conflicts.
+
+* TODO Ask Tavis the two questions and record the answers
+:PROPERTIES:
+:ID: org:01a1e6d8-1a69-7466-b044-90e9d0073ede
+:ADDED: [2026-11-16 Mon 17:11]
+:END:
+
+Put questions 1 and 2 from the Stop rule to Tavis through the supervisor,
+with the recommendations, and write his answers under this heading. Do not
+start the tasks marked as depending on an answer until then. The
+masking and no-argument tasks do not depend on an answer.
+
+* TODO Explain: no-argument message, exit status and ERR_6002 wording
+:PROPERTIES:
+:ID: org:01a1e6df-6b76-715a-9d49-20e760fb942f
+:ADDED: [2026-11-16 Mon 17:19]
+:END:
+Change the empty-codes case in =Explain.hs= (=explainOutput [] =...=) to
+Rust's text. Check what exit status =app/Main.hs= line 79 gives (it returns
+after =explainErrors=, so expect 0) and pin it in the test with the stderr
+text. Fix ERR_6002's description. Add a test that holds Rust's full
+description list (=ids.rs:110-170=) and compares it with =allErrors=; write
+the list in the test as data so no Rust file is read at run time. Record the
+failing-first run for the 6002 case. If question 1 is answered "align the
+layout", do that in a separate task added under this one, with the layout
+taken from =ids.rs:334-356= and the four long texts decided with Tavis.
+
+* TODO Demo masking: pin the Rust ARN cases
+:PROPERTIES:
+:ID: org:01a1e6df-6b76-715a-9d49-20e65ecdba13
+:ADDED: [2026-11-16 Mon 17:19]
+:END:
+Add the ARN and standalone cases from =demo.rs:490-530= to the
+=maskAwsAccountNumbers= group in =test/Test/DemoTest.hs=. No code change is
+expected (see Context). Record one mutation (for example removing the
+leading =\b=) that fails them.
+
+* TODO Demo sleep rounding (after question 2)
+:PROPERTIES:
+:ID: org:01a1e6df-6b76-715a-9d49-20e52bb91f6b
+:ADDED: [2026-11-16 Mon 17:19]
+:END:
+If Tavis chose truncation: make the =sleep:= and typing delays truncate to
+whole seconds and whole milliseconds in =Demo.hs= (lines 149, 197, 261) with
+tests at timescaling 0.5 and 1.5, failing first. If he kept rounding: add
+tests that pin the current rounding and write the divergence. Do not edit
+the temp-dir lines (C21).
+
+* TODO Record remaining differences in DIVERGENCES.md
+:PROPERTIES:
+:ID: org:01a1e6df-6b76-715a-9d49-20e4ebc8109a
+:ADDED: [2026-11-16 Mon 17:19]
+:END:
+Add one entry per kept difference (explain layout if kept, sleep rounding if
+kept, masking streaming), each with cause and the Rust and TypeScript
+references from Context. Run the full suite, then close the card.
