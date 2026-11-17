@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C6
 :LANE:     main
-:TODO_STATE: WAITING
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   Discovered 2026-11-16 during the C1 closeout commit: the pre-commit test run hung for 8+ minutes
 :CREATED_BY: opus-5.5-medium
@@ -25,6 +25,13 @@ CLOCK: [2026-11-16 Mon 16:18]--[2026-11-16 Mon 16:32] => 0:14
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:abf56fd6d8807c533
 - Card state STARTED → WAITING [2026-11-16 Mon 16:33]
   Note: 33 suite runs on GHC 9.12.3, no hang; Makefile timeout landed (2a707fe); next-time capture notes and repro-loop.sh in card; NTP suspect filed as C27
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Card state WAITING → NEXT [2026-11-16 Mon 20:01]
+  Note: Reopened: first named hang (render: with malformed YAML, TemplateLoaderTest.hs:198) seen by C36
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Card state NEXT → STARTED [2026-11-16 Mon 20:01]
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
