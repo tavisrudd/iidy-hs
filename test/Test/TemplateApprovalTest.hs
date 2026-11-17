@@ -1,5 +1,5 @@
 {- | Tests for @template-approval request@ and @review@ through the mock AWS
-env: how they treat S3 errors and the approval-path size limit.
+env: S3 errors, the approval-path size limit and the pending upload.
 -}
 module Test.TemplateApprovalTest (templateApprovalTests) where
 
@@ -21,6 +21,12 @@ templateApprovalTests :: [TestTree]
 templateApprovalTests =
     [ testGroup "HeadObject errors" headErrorTests
     , testGroup "1 MB approval-path limit" sizeLimitTests
+    , testCase "request: the pending upload carries bucket-owner-full-control" $ do
+        mock <- newMockAws
+        result <- runRequest mock
+        result @?= Right 0
+        puts <- filter ((== Just "PutObject") . fmap callOperation . reqCall) <$> mockRequestLog mock
+        map (lookup "x-amz-acl" . reqHeaders) puts @?= [Just "bucket-owner-full-control"]
     ]
 
 sizeLimitTests :: [TestTree]

@@ -7,6 +7,7 @@ module Iidy.Cfn.S3Objects (
     HeadResult (..),
     headObject,
     s3ObjectExists,
+    ObjectAcl (..),
     uploadToS3,
     downloadFromS3,
     deleteFromS3,
@@ -83,11 +84,22 @@ s3ObjectExists awsEnv bucket key =
   where
     location = "s3://" <> bucket <> "/" <> key
 
--- | Upload content to S3.
-uploadToS3 :: Amazonka.Env -> Text -> Text -> Text -> IO (Either Text ())
-uploadToS3 awsEnv bucket key content = do
+-- | The canned ACL an upload carries.
+data ObjectAcl
+    = -- | none: the bucket's default
+      DefaultAcl
+    | -- | @bucket-owner-full-control@
+      BucketOwnerFullControl
+    deriving stock (Show, Eq)
+
+-- | Upload content to S3 with the given ACL.
+uploadToS3 :: Amazonka.Env -> ObjectAcl -> Text -> Text -> Text -> IO (Either Text ())
+uploadToS3 awsEnv acl bucket key content = do
     let body = Amazonka.toBody (TE.encodeUtf8 content)
-        req = PO.newPutObject (S3.BucketName bucket) (S3.ObjectKey key) body
+        cannedAcl = case acl of
+            DefaultAcl -> Nothing
+            BucketOwnerFullControl -> Just S3.ObjectCannedACL_Bucket_owner_full_control
+        req = (PO.newPutObject (S3.BucketName bucket) (S3.ObjectKey key) body){PO.acl = cannedAcl}
     result <- try @Amazonka.Error $ runResourceT $ Amazonka.send awsEnv req
     case result of
         Left ex -> pure (Left (T.pack (show ex)))

@@ -19,7 +19,7 @@ import Data.Text qualified as T
 
 import Iidy.Cfn.ApprovedTemplate (ApprovedTemplate (..), approvedKeyFromPending, approvedTemplateFor, latestKeyFromPending, pendingKeyFor)
 import Iidy.Cfn.Context (CfnContext (..))
-import Iidy.Cfn.S3Objects (deleteFromS3, downloadFromS3, s3ObjectExists, uploadToS3)
+import Iidy.Cfn.S3Objects (ObjectAcl (..), deleteFromS3, downloadFromS3, s3ObjectExists, uploadToS3)
 import Iidy.Cfn.TemplateDiff (generateDiff)
 import Iidy.Cfn.TemplateHash (parseS3Url)
 import Iidy.Cfn.Types (StackArgs)
@@ -64,10 +64,10 @@ templateApprovalRequest ctx sa _lintTmpl argsfilePath = do
                                 }
                 pure 0
             else do
-                -- Upload pending template
+                -- Upload pending template with bucket-owner-full-control (as iidy-js)
                 let pendingKey = pendingKeyFor key
                     pendingLoc = "s3://" <> bucket <> "/" <> pendingKey
-                liftExceptT (uploadToS3 (cfnEnv ctx) bucket pendingKey body)
+                liftExceptT (uploadToS3 (cfnEnv ctx) BucketOwnerFullControl bucket pendingKey body)
                     `prefixError` "Failed to upload pending template: "
                 lift $
                     emit $
@@ -230,9 +230,9 @@ approveTemplate ::
     ExceptT Text IO Int
 approveTemplate ctx bucket pendingKey approvedKey latestKey approvedLoc pending = do
     let emit = cfnEmit ctx
-    liftExceptT (uploadToS3 (cfnEnv ctx) bucket approvedKey pending)
+    liftExceptT (uploadToS3 (cfnEnv ctx) DefaultAcl bucket approvedKey pending)
         `prefixError` "Failed to upload approved template: "
-    liftExceptT (uploadToS3 (cfnEnv ctx) bucket latestKey pending)
+    liftExceptT (uploadToS3 (cfnEnv ctx) DefaultAcl bucket latestKey pending)
         `prefixError` "Failed to upload latest template: "
     liftExceptT (deleteFromS3 (cfnEnv ctx) bucket pendingKey)
         `prefixError` "Failed to delete pending template: "
