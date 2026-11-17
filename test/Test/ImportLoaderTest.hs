@@ -4,18 +4,21 @@ import Data.Aeson (Value (..))
 import Data.Char (isDigit)
 import Data.Maybe (isJust)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import System.Directory (findExecutable)
 import System.Environment (setEnv, unsetEnv)
 import System.IO.Unsafe (unsafePerformIO)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
+import Iidy.Yaml.Imports.ContentParsing (ParsedDoc (..), parseByExtensionStrict)
 import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
 import Iidy.Yaml.Imports.Loaders.Env (loadEnvImport)
 import Iidy.Yaml.Imports.Loaders.Git (loadGitImport)
 import Iidy.Yaml.Imports.Loaders.Http (urlPath)
 import Iidy.Yaml.Imports.Loaders.Random (loadRandomImport)
 import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..), RemoteImports (..))
+import Iidy.Yaml.OValue (toValue)
 
 defaultImportCfg :: ImportConfig
 defaultImportCfg = ImportConfig Nothing AllowRemoteImports
@@ -26,6 +29,7 @@ importLoaderTests =
     , testGroup "Git loader" gitTests
     , testGroup "Random loader" randomTests
     , testGroup "Http helpers" httpTests
+    , testGroup "JSON ordered view" jsonOrderedTests
     , testGroup "Dispatcher routing" dispatchTests
     ]
 
@@ -218,3 +222,20 @@ dispatchTests =
 
 isHexDigit :: Char -> Bool
 isHexDigit c = isDigit c || (c >= 'a' && c <= 'f')
+
+------------------------------------------------------------------------
+-- JSON ordered view agrees with the aeson value (C28)
+------------------------------------------------------------------------
+
+jsonOrderedTests :: [TestTree]
+jsonOrderedTests =
+    [ agrees "floats" "{\"f\": 1.5, \"g\": 1.0, \"h\": -2.25e3}"
+    , agrees "big integer" "{\"n\": 12345678901234567890}"
+    , agrees "u escapes" "{\"s\": \"caf\\u00e9 \\u0041\", \"t\": [\"\\u00e9\"]}"
+    ]
+  where
+    agrees name txt =
+        testCase ("idOrdered agrees with idDoc: " <> name) $
+            case parseByExtensionStrict ".json" txt (TE.encodeUtf8 txt) of
+                Left err -> assertBool (show err) False
+                Right pd -> fmap toValue (pdOrdered pd) @?= Just (pdValue pd)
