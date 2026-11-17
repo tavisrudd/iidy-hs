@@ -7,6 +7,7 @@ returning the AWS Simple Monthly Calculator URL via OutputData.
 -}
 module Iidy.Cfn.Operations.EstimateCost (
     estimateCost,
+    buildEstimateCostRequest,
 ) where
 
 import Data.Maybe (fromMaybe)
@@ -17,8 +18,9 @@ import Control.Monad.Trans.Resource (runResourceT)
 import Amazonka qualified
 import Amazonka.CloudFormation.EstimateTemplateCost qualified as ETC
 
-import Iidy.Cfn.Context (CfnContext (..), cfnImportConfig)
-import Iidy.Cfn.TemplateLoader (TemplateResult (..), loadCfnTemplate)
+import Iidy.Cfn.ApprovedTemplate (resolveDeployTemplate)
+import Iidy.Cfn.Context (CfnContext (..))
+import Iidy.Cfn.TemplateLoader (TemplateResult (..))
 import Iidy.Cfn.Types (StackArgs (..))
 import Iidy.Output.Types
 
@@ -38,19 +40,11 @@ estimateCost ::
     IO (Either Text Int)
 estimateCost ctx args argsfilePath = do
     let emit = cfnEmit ctx
-        env = cfnEnvironment ctx
-    -- Step 1: Load the template
-    tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (cfnImportConfig ctx)
-    case tmplEither of
+    -- Steps 1-2: Resolve the template and build the request
+    reqEither <- buildEstimateCostRequest ctx args argsfilePath
+    case reqEither of
         Left err -> pure (Left err)
-        Right tmplResult -> do
-            -- Step 2: Build the EstimateTemplateCost request
-            let req =
-                    ETC.newEstimateTemplateCost
-                        { ETC.templateBody = trTemplateBody tmplResult
-                        , ETC.templateURL = trTemplateUrl tmplResult
-                        }
-
+        Right req -> do
             -- Step 3: Send the request
             resp <- runResourceT $ Amazonka.send (cfnEnv ctx) req
 
@@ -64,3 +58,25 @@ estimateCost ctx args argsfilePath = do
                         }
             emit (OdCostEstimate (CostEstimate{ceInfo = costInfo}))
             pure $ Right 0
+
+{- | Build the EstimateTemplateCost request. The template comes from
+'resolveDeployTemplate', as for the deploy builders: with approval on, the
+presigned URL of the approved object, or a refusal before any
+CloudFormation call (iidy-js sends the approved URL here without its own
+check, @estimateStackCost.ts:9-11@).
+-}
+buildEstimateCostRequest ::
+    CfnContext ->
+    StackArgs ->
+    -- | argsfile path for template resolution
+    Maybe FilePath ->
+    IO (Either Text ETC.EstimateTemplateCost)
+buildEstimateCostRequest ctx args argsfilePath = do
+    tmplEither <- resolveDeployTemplate ctx args argsfilePath
+    pure $ do
+        tmplResult <- tmplEither
+        Right
+            ETC.newEstimateTemplateCost
+                { ETC.templateBody = trTemplateBody tmplResult
+                , ETC.templateURL = trTemplateUrl tmplResult
+                }
