@@ -10,10 +10,19 @@
 :ID: org:01a1e691-47af-74a1-9b62-c9f109d409fa
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 18:07]--[2026-11-16 Mon 18:21] => 0:14
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:11]
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 18:07]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
+- Clock-out [2026-11-16 Mon 18:21]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
 #+title: C16 — Enforce the approved template at deploy time
 #+date: 2026-11-16
@@ -295,10 +304,15 @@ separate question (iidy-js lints at deploy; Rust and iidy-hs do not).
   check and the presigned URL, so a us-east-1 bucket serves stacks in any
   region and =review= no longer needs =--region=.
 
-* TODO Mock S3 REST operations and a test CfnContext
+* DONE Mock S3 REST operations and a test CfnContext
 :PROPERTIES:
 :ID: org:01a1e6fd-8bb4-76f0-af12-17f11bb0f13d
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:13] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
 
 =test/Test/MockAws.hs= serves only JSON and query protocols: =fixtureKey=
@@ -482,10 +496,43 @@ Worker =claude-C16=. Each finding and the change made:
 11. Review seam takes =Text -> IO ConfirmResult=; the refusal gate reads
     "no mutating CloudFormation call" in "Done when" and the deploy task.
 
-* TODO Move the S3 helpers and the diff out of TemplateApproval.hs
+** Result 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e711-5513-705e-a402-a3ec9fb4b9bc
+:ADDED: [2026-11-16 Mon 18:13]
+:END:
+Commit =b64cc79= on =claude/C16= (=d21678c= before the rebase). Owner
+extended: =test/Test/MockAws.hs= (no second mock). It now recognises S3
+REST requests (virtual-host and path style; HEAD, GET, PUT, DELETE and
+=GET /?location=), records each
+request raw in =mockLog= (method, host, path, headers, body and the
+recognised =MockCall= with bucket and key), takes overrides with
+=mockRespond= keyed by =OnObject op bucket key= or =OnOperation service op=
+(object first), has built-in S3 defaults (HEAD 404, GET 404 =NoSuchKey=,
+PUT 200, DELETE 204, location us-east-1), sends no body on HEAD, uses
+status lines that match the code, answers =Expect: 100-continue= with an
+interim 100, and has =newMockAwsIn= for a region (=newMockAws= stays
+us-east-1). Fixture names and =mockRequests= are unchanged; the GetImport
+tests pass unedited. New =test/Test/MockCfnContext.hs= builds a
+=CfnContext= with =createContextFromEnv= and collects =OutputData=.
+Self-tests in =test/Test/MockAwsTest.hs= drive the existing library
+operations (review, request, lint-template) through the mock: HeadObject
+404 default and 200 configured, object override over operation override,
+GetObject bodies per object, PutObject body and host region in eu-west-1,
+and a =ValidateTemplate= error override. The tests call the library rather
+than =Amazonka.send= because the test suite does not list =resourcet= or
+=conduit= in its =build-depends= and that list is outside the allowed
+paths. Focused run: 26 tests passed; the hook's full run: 1770 passed.
+
+* DONE Move the S3 helpers and the diff out of TemplateApproval.hs
 :PROPERTIES:
 :ID: org:01a1e6fd-8bb4-76f0-af12-17f07ad58c4f
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:16] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
 
 Pure move, no behaviour change. =src/Iidy/Cfn/Operations/TemplateApproval.hs=
@@ -497,10 +544,31 @@ import at =test/Test/TemplateDiffTest.hs:9= and the =other-modules= lists.
 =TemplateApproval.hs= ends near 330 lines. Existing tests pass unedited
 apart from that import.
 
-* TODO One owner for the approved location; request and review use it
+** Result 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e713-6fdb-7538-b11f-957c5ed482d4
+:ADDED: [2026-11-16 Mon 18:16]
+:END:
+Commit =985adeb= on =claude/C16= (=8804648= before the rebase). The four
+S3 helpers moved to
+=src/Iidy/Cfn/S3Objects.hs= (69 lines) and =generateDiff= with its helpers
+to =src/Iidy/Cfn/TemplateDiff.hs= (141 lines); =diff= of the moved bodies
+against the old line ranges is empty. =TemplateApproval.hs= is 307 lines;
+it no longer exports =generateDiff= (its only outside user was
+=test/Test/TemplateDiffTest.hs=, whose import is the one test edit) and
+drops its now unused =OverloadedRecordDot= and =ScopedTypeVariables=
+pragmas. Focused =-Werror= run (TemplateDiff, MockAws): 20 passed; the
+hook's full run passed.
+
+* DONE One owner for the approved location; request and review use it
 :PROPERTIES:
 :ID: org:01a1e6fd-8bb4-76f0-af12-17ef9e861ac1
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:20] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
 
 New =src/Iidy/Cfn/ApprovedTemplate.hs= with:
@@ -523,6 +591,120 @@ asserting the new message text: request with an =s3://= and with an
 =https://= template refused before any S3 call; request with no =Template=
 refused. Also: request key unchanged for an existing fixture template;
 round trip of the two key functions.
+
+** Result 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e717-bcd0-7323-8531-7912ff5a4d29
+:ADDED: [2026-11-16 Mon 18:20]
+:END:
+Commit =713feaf= on =claude/C16= (after rebase onto main =276b335=).
+New =src/Iidy/Cfn/ApprovedTemplate.hs= owns =ApprovedTemplate= (bucket,
+approved key, rendered body), =approvedTemplateFor=, =pendingKeyFor= and
+=approvedKeyFromPending=. =TemplateLoader.hs= exports =isTemplateUrl=
+(its existing =isS3Url= or =isHttpUrl=) instead of a copy. The request
+calls =approvedTemplateFor= and =pendingKeyFor=; the review calls
+=approvedKeyFromPending= (same "URL must end with .pending suffix" error
+as before). No other code in =src/= or =app/= builds or strips these keys
+(=grep= for =.pending= and =generateVersionedLocation=; the =.pending= in
+=Params/Review.hs= is SSM parameters, not templates). The review's
+=latest= key derivation stays in the review: the card does not list it.
+
+New refusal texts (with approval on):
+- URL: "Template must be a local file when ApprovedTemplateLocation is set,
+  not a URL (<Template>): template approval hashes the rendered local
+  template"
+- none: "Template is required in stack-args.yaml when
+  ApprovedTemplateLocation is set: template approval hashes the rendered
+  local template"
+
+Failing run first (tests only, on the old code at =8804648=,
+=-p /ApprovedTemplate/=): 3 of 8 failed; the two URL cases got
+=Left "Failed to load template body"= and the missing case got
+=Left "Template is required in stack-args.yaml"=. After the change: the
+focused run passed 19 of 19, the hook's full run 1779, and the full suite
+on the rebased tip 1809, =-Werror=, fourmolu and hlint clean. Tests in
+=test/Test/ApprovedTemplateTest.hs=: the three refusals (no AWS call
+logged), no location gives =Nothing= with no call, the key for
+=test-fixtures/template-loader/simple.yaml= is the literal
+=app/4e4e06e4...c4fa.yaml= (SHA256 of the file, so unchanged), the request
+HEADs that key and PUTs it with =.pending=, and the key round trip.
+
+Rebase note: main's =c93293d= (C17) added =recordingEnvFactory= to
+=test/Test/MockAws.hs=; the rebase of =b64cc79= conflicted there and was
+resolved by keeping both (the C17 helper is unchanged).
+
+** Review 2026-11-16 (tasks 1-3)
+:PROPERTIES:
+:ID: org:01a1e71b-3ae1-7442-b0da-3882e49caa13
+:ADDED: [2026-11-16 Mon 18:24]
+:END:
+Reviewer: review worker (Claude Opus 5.5). Branch =claude/C16=, commits
+=b64cc79=, =985adeb=, =713feaf= on base =276b335=.
+
+Verdicts:
+- =b64cc79= (mock S3, test context): land; defect 1 is test-only and can
+  be fixed in the region task, which first relies on host parsing.
+- =985adeb= (move): land. The moved bodies diff empty against the old
+  lines 329-370 and 374-503 (blank lines only); the only test edit is the
+  import in =test/Test/TemplateDiffTest.hs=.
+- =713feaf= (approved-location owner): land. With
+  =src/Iidy/Cfn/Operations/TemplateApproval.hs= reverted to =985adeb= and
+  the tests kept, =-p /ApprovedTemplate/= failed 3 of 14 (both URL refusals
+  got "Failed to load template body", the missing case got the old
+  "Template is required in stack-args.yaml"); restored, worktree clean.
+  =isTemplateUrl= is the same predicate =loadCfnTemplate= dispatches on;
+  the key still uses the =Template= value for the extension, as before.
+
+Checks with no defect: one mock (=test/Test/MockAws.hs= extended, no
+second module); fixture names, =mockRequests= and =recordingEnvFactory=
+unchanged from main, and =GetImportTest= / =StackArgsBootstrapTest= not
+edited. Only =ApprovedTemplate.hs= builds or strips =.pending= or calls
+=generateVersionedLocation= (=Params/Review.hs:47= is SSM, unrelated).
+Refusal wording: iidy-js has no dedicated refusal; a =https://= or missing
+=Template= ends in "Unable to determine versioned template location"
+(=approvedTemplateVersionLocation.ts:24=, =loadCFNTemplate.ts:14-16=) and
+=s3://= in "Use https:// S3 path-based urls ..." (=loadCFNTemplate.ts:29=).
+The new texts are clearer and say why; record the wording difference with
+the other approval entries in =DIVERGENCES.md= (docs task).
+
+Defects:
+1. Low (test infra), =test/Test/MockAws.hs:305=, 332. =s3Call= splits the
+   host at the first S3-like label from the left, so a bucket whose name is
+   or starts with an =s3=/=s3-= label is misread. Virtual host
+   =s3-approvals.s3.amazonaws.com= path =/app/t.yaml= is taken as path style:
+   bucket =app=, key =t.yaml=; =my.s3.bkt.s3.amazonaws.com= gives bucket
+   =my=. Fix: split at the last S3-like label (the endpoint suffix), and
+   add self-tests for a path-style request and for =GET /?location=, which
+   no test exercises yet (the region task depends on both).
+2. Low, =src/Iidy/Cfn/Operations/TemplateApproval.hs:107-113=. The review
+   still derives the =latest= key from the pending key itself. It is a key
+   of the approval layout (iidy-js =approval/index.ts:85=, =104=, =135=:
+   =${bucketDir}/latest=) and the empty-diff task writes it, so it belongs
+   in =ApprovedTemplate.hs= beside =approvedKeyFromPending= (for example
+   =latestKeyFromPending=), with a test for a key with and without a
+   directory. Do it at latest in the "Review prompts on an empty diff" task.
+
+Pre-existing (not caused by these commits; =ApprovedTemplate.hs= is now
+the place to fix them):
+- P1. =src/Iidy/Cfn/TemplateHash.hs:69-73=. =ApprovedTemplateLocation:
+  s3://bucket/= (the form =iidy-hs init-stack-args= prints,
+  =src/Iidy/InitStackArgs.hs:42=) gives key =/<sha256>.yaml= with a leading
+  slash, and =s3://bucket= fails "Invalid S3 URL (no key)". iidy-js gives
+  =<md5>.yaml= for both (=path.join("", file)=). Fix: drop the separator
+  when the base path is empty; test both forms.
+- P2. =src/Iidy/Cfn/TemplateLoader.hs:123=. A =Template= naming a file
+  that does not exist is used as inline content, so with approval on a
+  typo is hashed and the path text uploaded as the pending template.
+  iidy-js fails reading the file. Fix (own card): refuse a non-existent
+  path on the approval path, or treat only multi-line values as inline.
+
+Supervisor (2026-11-16): tasks 1-3 landed on main as af704cc, d3b1bba,
+9d68249. For the next round, before the region task: fix defect 1 (mock
+bucket parsing at the last S3 host label, plus path-style and
+=GET /?location= tests) and defect 2 (=latestKeyFromPending= in
+=ApprovedTemplate.hs=); P1 is in scope (supervisor's call), as its own
+commit with tests for =s3://bucket/= and =s3://bucket=. P2 is filed as
+[[file:../C36/index.org][C36]].
 
 * TODO Approval bucket region has one owner
 :PROPERTIES:

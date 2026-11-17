@@ -121,3 +121,4 @@
 2026-11-16 17:46 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C31 landed (!$escape key order)
 2026-11-16 18:10 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C28 landed (get-import key order; JSON via aeson tokens)
 2026-11-16 18:19 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C17 landed (stack-args computed credential fields refused for AWS imports)
+2026-11-16 18:27 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C16 tasks 1-3 landed (mock S3, S3 helpers moved, one owner for approved keys)
