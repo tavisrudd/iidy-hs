@@ -187,3 +187,28 @@ that `create-stack` and friends send to CloudFormation
 (`params/mod.rs:234`, own emitter in `src/Iidy/Params/Client.hs`). The
 documents parse to the same data; only the bytes differ. `render` itself
 matches Rust (it uses Rust's own indenting emitter).
+
+## Unresolved Tags in Plain Imported Documents: Spelling Normalised
+
+**Cause**: the parser stores a preprocessing tag as a typed node, not as its
+source text.
+
+A plain imported document (no `$imports` or `$defs`) keeps its `!$` tags
+unresolved, as in Rust. The tag is printed from the parsed node, so three
+spellings come out in canonical form where Rust prints the source form:
+
+- Alias tags: `!$include x` prints as `!$ x`, and `!$string x` prints as
+  `!$toYamlString x`.
+- A one-element sequence argument to a single-argument tag loses its
+  sequence: `!$not [true]` prints as `!$not true`.
+- A tag whose argument is a mapping prints the fields the parser knows in a
+  fixed order, not source order.
+
+Separately, `get-import` indents the dashes of a sequence argument under any
+tag (`c: !$join\n  - ','`, and likewise for CloudFormation tags), where
+Rust puts them at the key's column (`c: !$join\n- ','`). That is the
+emitter's tag-argument layout (`emitTagArgument` in `src/Iidy/Yaml/Emitter.hs`),
+outside this card.
+
+Fixing the three spellings above needs the parser to keep the written tag name and argument node
+on the AST.
