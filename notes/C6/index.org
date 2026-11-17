@@ -45,8 +45,13 @@ CLOCK: [2026-11-16 Mon 20:02]--[2026-11-16 Mon 20:40] => 0:38
   Note: Second budget: reproduced 3 hangs in ~1150 loaded TemplateLoader group runs; threads blocked on a shared thunk, masked; suspect GHC RTS; question for Tavis: standalone reproducer (a), mitigation (b) or park (c)
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Card tag +parked [2026-11-17 Tue 11:26]
+  Note: Parked by Tavis 2026-11-17; remediation ideas (single-core test runs, -feager-blackholing, thread tagging) recorded in the card
+  Agent: opus-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
 :END:
 #+title: C6 — Find and fix the intermittent hang in the test suite
+#+filetags: :parked:
 #+date: 2026-11-16
 #+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
 
@@ -415,6 +420,29 @@ next one: run the suite without =tail=, with =+RTS -l= (event log) or
    No event log is captured (see step 1).
 5. Record the GHC version, =+RTS= flags, host load and whether the run was
    under =cabal test= or the hook.
+
+** Supervisor analysis 2026-11-17 (parked by Tavis)
+:PROPERTIES:
+:ADDED: [2026-11-17 Tue]
+:END:
+Tasty 1.5.4 (=Test.Tasty.Run.executeTest=) runs each test body in a
+=withAsync= thread started inside =restore=, so the test starts unmasked.
+The RTS refuses =throwTo= to a thread =BlockedOnBlackHole= only when the
+target is masked, so the stuck test threads were inside a masked region of
+their own path (=bracket=/=finally= cleanup, a Handle operation,
+=modifyMVar=), not masked by tasty. The four =BlockedOnException= threads
+are tasty's per-test parents cancelling their =withAsync= child after the
+timeout.
+
+Remediation ideas, untested: (1) run the suite with =+RTS -N1= (no
+cross-capability duplicate evaluation; idle runs were faster at =-N1=);
+needs about 1000 loaded runs at the 1-in-300 base rate; touches
+=iidy-hs.cabal=, outside the current allowed paths. (2) build the tests with
+=-feager-blackholing=, also a discriminating experiment. (3) label each
+test thread with its test name so the dump names the four stuck tests, then
+pre-force or move the shared thunk if it is ours. Production also runs with
+=-N= and uses =concurrently= (=src/Iidy/Cfn/StackOperations.hs=), so an RTS
+cause could in principle hang a deploy; none seen.
 
 * TODO Build a standalone reproducer and prepare the upstream report
 :PROPERTIES:

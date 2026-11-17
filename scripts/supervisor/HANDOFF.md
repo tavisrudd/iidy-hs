@@ -52,7 +52,7 @@ File overlaps: C12-era `StackArgsLoader.hs` is shared by C22 and C39;
 `Loaders/Http.hs` by C19, C20 and C21; `Demo.hs` by C21 and C30;
 `DIVERGENCES.md` by most cards (append conflicts: keep both sides).
 
-Waiting (parked): C6 until assigned again; C35 (emitter floats and
+Waiting (parked): C6 (parked by Tavis 2026-11-17; remediation ideas on the card). C35 (emitter floats and
 control characters) needs rescoping by Tavis.
 
 ## Decisions taken by Tavis on 2026-11-16 (recorded on the cards)
