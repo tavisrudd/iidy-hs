@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C11
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C2 handoff triage (notes/C2/report--handoff-triage.org), accepted by the user 2026-11-16
 :CREATED_BY: opus-5.5-medium
@@ -11,11 +11,24 @@
 :ADDED: [2026-11-16 Mon 14:37]
 :DEPENDS_ON: C7
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 16:57]--[2026-11-16 Mon 17:11] => 0:14
+:END:
 :LOGBOOK:
 - DEPENDS_ON (none) → C7 [2026-11-16 Mon 14:37]
   Agent: opus-5.5-medium
   Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 - Card state TODO → STARTED [2026-11-16 Mon 16:56]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 16:57]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a4be70bdbd2b3547b
+- Clock-out [2026-11-16 Mon 17:11]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a4be70bdbd2b3547b
+- Card state STARTED → DONE [2026-11-16 Mon 17:12]
+  Note: Landed 9a1459a, 609bc33: explain and demo tests with export-only seams (Explain output via pure explainOutput), two get-import failure cases; mutations caught; landed on supervisor's diff check
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -72,20 +85,20 @@ out. If =test/Main.hs= or =iidy-hs.cabal= has moved, rebase and re-add the
 module lines only.
 
 Done when:
-- [ ] =Test.ExplainTest= covers: the canonical code (=ERR_2001=), the
+- [X] =Test.ExplainTest= covers: the canonical code (=ERR_2001=), the
   Haskell-only spellings (=err_2001=, =2001=, =1=, which pads to
   =ERR_0001= and is unknown), an unknown code (stderr text
   =Unknown error code: X=, nothing on stdout), several codes in one call
   with stdout and stderr kept separate, and no codes (usage line on
   stderr). It asserts exact lines for one entry (header, =Category:=,
   =Description:=, blank line, details).
-- [ ] A consistency test enumerates codes with =errorIdFromCode=
+- [X] A consistency test enumerates codes with =errorIdFromCode=
   (=Iidy.Yaml.Errors.Ids=) over the range the type uses and requires each
   to have an Explain entry whose category and description are non-empty,
   and each Explain entry code to map back with =errorIdFromCode=; no
   duplicate codes. A mismatch found is recorded on the card and filed with
   =c new=, not fixed here.
-- [ ] =Test.DemoTest= covers, without sleeping (timescaling 0 or
+- [X] =Test.DemoTest= covers, without sleeping (timescaling 0 or
   =DemoSleep 0=): parsing a script (=files:= plus string, =silent=,
   =sleep=, =banner=, =setenv= commands, and each parse error text:
   not a mapping, missing =demo=, unknown command, command neither string
@@ -98,26 +111,26 @@ Done when:
   generated script: exit 0 when a =bash= step writes a marker file under a
   test temp directory, exit 1 on a parse error and on a preprocessing
   error, and a failing step raising =command failed: ...=.
-- [ ] The =runDemo= cases cannot run concurrently with each other: demo
+- [X] The =runDemo= cases cannot run concurrently with each other: demo
   uses the fixed directory =<tmpdir>/iidy-demo= (=Demo.hs= near line 101)
   and deletes it on exit (the fix belongs to
   [[file:../C21/index.org][C21]], not to this card). They sit in one
   sequential group (tasty's =sequentialTestGroup=/=after=, whichever the
   installed tasty offers) unless C21 has landed.
-- [ ] =Test.GetImportTest= gains only what is missing: a nonexistent local
+- [X] =Test.GetImportTest= gains only what is missing: a nonexistent local
   file exits 1 with no stdout, and an =env:= import with no default and the
   variable unset exits 1 with no stdout (Rust:
   =~/src/iidy/src/cfn/get_import.rs:30-41=). Existing cases are untouched.
-  The =cfn-yaml= format, which Rust rejects as unsupported
-  (=get_import.rs:70-75=), is not pinned; if it is not already in
-  =DIVERGENCES.md=, note it on this card.
-- [ ] Each new test module is a separate file registered in =Main.hs= and
+  The =yaml-cloudformation= format is not pinned here: the get-import
+  parser already rejects it (=getImportFormatReader=), and
+  [[file:../C29/index.org][C29]] owns what is left of that difference.
+- [X] Each new test module is a separate file registered in =Main.hs= and
   =iidy-hs.cabal=; no module over about 300 lines; no test calls the
   network, AWS or a real terminal.
-- [ ] Any new test was seen to fail when the behaviour it pins is broken
+- [X] Any new test was seen to fail when the behaviour it pins is broken
   (record one mutation per module in the first task note), so the tests are
   not vacuous.
-- [ ] Build warning-free, full suite green, commits name C11.
+- [X] Build warning-free, full suite green, commits name C11.
 
 Stop and record if: a test needs a change to explain or demo behaviour
 (for example the fixed temp directory, or output that differs from Rust);
@@ -133,10 +146,15 @@ Rust truncates scaled sleeps to whole seconds, Haskell rounds
 microseconds. Also stop if the work needs a change outside the allowed
 paths.
 
-* TODO Tests for explain
+* DONE Tests for explain
 :PROPERTIES:
 :ID: org:01a1e64b-91fb-7115-8ff3-3f91271c008d
 :ADDED: [2026-11-16 Mon 14:37]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 17:11] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a4be70bdbd2b3547b
 :END:
 
 Read =src/Iidy/Explain.hs= (=explainErrors=, =explainOne=, =normaliseCode=)
@@ -148,10 +166,40 @@ codes, exported for tests, with =explainErrors= printing its result. Then
 write =test/Test/ExplainTest.hs= per the gate, including the consistency
 test against =Iidy.Yaml.Errors.Ids=.
 
-* TODO Tests for demo
+** Result (claude-C11)
+:PROPERTIES:
+:ID: org:01a1e6d8-4eb8-7039-b761-cc978804c911
+:ADDED: [2026-11-16 Mon 17:11]
+:END:
+Reuse check: no new helpers were needed. =Test.GetImportTest= reuses
+=runWith=, =noCredentials= and =RunResult= as they stand; the explain and
+demo tests are pure or use =withSystemTempDirectory=; =testGlobalOpts= and
+=collectRawOutput= are only needed by get-import. Nothing in
+=Test.Shared= was copied or changed.
+
+Seam: =Iidy.Explain= now exports =explainOutput= (pure; stdout lines and
+stderr lines for a list of codes), =ErrorEntry (..)= and =allErrors=.
+=explainErrors= prints per code, so the order of stdout and stderr output
+is unchanged.
+
+Consistency test: every =ErrorId= code in 1000..9999 has exactly one
+Explain entry with non-empty category and description, every entry maps
+back through =errorIdFromCode=, entry codes are unique and the two sets
+are equal. No mismatch found.
+
+Mutation (explain): unknown codes moved to stdout. Failed:
+"1 pads to ERR_0001", "unknown code: stderr text echoes the input" and
+"several codes keep stdout and stderr separate".
+
+* DONE Tests for demo
 :PROPERTIES:
 :ID: org:01a1e64b-91fb-7115-8ff3-3f9058adfb65
 :ADDED: [2026-11-16 Mon 14:37]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 17:11] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a4be70bdbd2b3547b
 :END:
 
 =runDemo= prints with =putChar= and runs =bash= steps that inherit stdout,
@@ -163,10 +211,40 @@ the =temporary= package (already a test dependency); keep any static
 script under =test-fixtures/demo/=. Write =test/Test/DemoTest.hs= per the
 gate, with the =runDemo= cases sequential.
 
-* TODO Tests for get-import
+** Result (claude-C11)
+:PROPERTIES:
+:ID: org:01a1e6d8-4eb8-7039-b761-cc96e91a584d
+:ADDED: [2026-11-16 Mon 17:11]
+:END:
+Seam: =Iidy.Demo= additionally exports =DemoCommand (..)= (the parse tests
+compare against it), =parseDemoScript=, =unpackFiles=,
+=maskAwsAccountNumbers= and =substituteIidyCommand=.
+
+The =runDemo= cases are in a =dependentTestGroup= (=AllFinish=), which is
+tasty 1.5's non-deprecated name for =sequentialTestGroup= (the latter
+warns under =-Wdeprecations=). Steps are =bash -c= one-liners writing a
+marker file under a =withSystemTempDirectory= directory.
+
+Mutation (demo): mask regex ={12}= changed to ={13}=, and the
+exit-code check in =execDirect= disabled. Failed: "a 12-digit run is
+masked", "every 12-digit run", "a 13-digit run is left alone" and "a
+failing step raises 'command failed'".
+
+Differences from Rust, filed as [[file:../C30/index.org][C30]], not fixed
+here: explain header and fallback text (=explain.rs:15-30=,
+=ids.rs:334-356=), demo fixed temp directory (also C21) and ARN
+masking (=demo.rs:75-90=), sleep truncation versus rounding. No test pins
+a surprising behaviour beyond the gate's own list.
+
+* DONE Tests for get-import
 :PROPERTIES:
 :ID: org:01a1e64b-91fb-7115-8ff3-3f8f78cfbf90
 :ADDED: [2026-11-16 Mon 14:37]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 17:11] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a4be70bdbd2b3547b
 :END:
 
 Mock-backed AWS imports, env laziness, credential failures, =--query= and
@@ -174,10 +252,31 @@ output layout are already covered in =test/Test/GetImportTest.hs=. Add only
 the two missing cases in the gate, using =runFormat=, =runWith= and
 =noCredentials= as they stand.
 
-* TODO Wire the modules into the suite and run it
+** Result (claude-C11)
+:PROPERTIES:
+:ID: org:01a1e6d8-4eb8-7039-b761-cc95ba99e69a
+:ADDED: [2026-11-16 Mon 17:11]
+:END:
+Added "nonexistent local file exits 1 with no stdout" and "env: with no
+default and the variable unset exits 1 with no stdout" to the failure
+group, using =runWith= and =noCredentials=; existing cases untouched.
+
+Mutation (get-import): =reportImportError= returning 0 instead of 1.
+Both new cases failed (as did the existing failure cases).
+
+=cfn-yaml= (=RenderCfnYaml=, Rust =get_import.rs:70-75= rejects it) is
+not pinned, and =DIVERGENCES.md= does not list it. Noted here for the
+supervisor to decide whether to record it.
+
+* DONE Wire the modules into the suite and run it
 :PROPERTIES:
 :ID: org:01a1e6c2-5dff-760c-866e-50019224ea7f
 :ADDED: [2026-11-16 Mon 16:47]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 17:11] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a4be70bdbd2b3547b
 :END:
 
 Register =Test.ExplainTest= and =Test.DemoTest= in =test/Main.hs= (one
@@ -185,3 +284,15 @@ Register =Test.ExplainTest= and =Test.DemoTest= in =test/Main.hs= (one
 =iidy-hs.cabal=. Build and run the full suite through
 =scripts/guarded-build=, and record the mutation checks and the new
 differences found on this card.
+
+** Result (claude-C11)
+:PROPERTIES:
+:ID: org:01a1e6d8-4eb8-7039-b761-cc94a61fd360
+:ADDED: [2026-11-16 Mon 17:11]
+:END:
+=Test.ExplainTest= and =Test.DemoTest= are registered in =test/Main.hs=
+(groups "Explain" and "Demo") and in =other-modules=. Full suite green
+through =scripts/guarded-build= on the branch rebased onto =main=, with
+=-Wall -Wcompat= and no warnings; both commits passed the pre-commit hook
+(fourmolu, hlint, =-Werror=). Module sizes: ExplainTest 103 lines,
+DemoTest 230.

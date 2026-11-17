@@ -116,3 +116,4 @@
 2026-11-16 16:55 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C10 landed (dummy StackArgs and dead CLI record removed)
 2026-11-16 16:58 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C25 landed (get-import YAML sequence layout matches Rust)
 2026-11-16 17:06 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C5 landed (docs/ now Org)
+2026-11-16 17:12 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C11 landed (explain, demo, get-import tests)
