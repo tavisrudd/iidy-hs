@@ -27,15 +27,17 @@ import Iidy.Yaml.Parser.Tags (Parse, ParseError (..), classifyLocalTag)
 -- Public API
 ------------------------------------------------------------------------
 
-{- | Parse a template or stack-args document. A repeated mapping key is
-accepted and the last value wins, as in Rust's template parser.
+{- | Parse text that was already checked by 'parseYamlStrict' (a re-parse of an
+imported document). A repeated mapping key is accepted and the last value
+wins, as in Rust's template parser; also used for a template fetched from AWS.
 -}
 parseYaml :: BL.ByteString -> Text -> Parse YamlAst
 parseYaml = parseYamlWith False
 
-{- | Parse an imported document or a @!$parseYaml@ string. A repeated mapping
-key at any depth is an error, as Rust's serde_yaml reports it (@a@ and @"a"@
-are the same key; @1@ and @"1"@ are not).
+{- | Parse a user document: a template, stack-args file, demo script, imported
+document or @!$parseYaml@ string. A repeated mapping key at any depth is an
+error, as TypeScript (js-yaml) and Rust's serde_yaml imports report it (@a@ and
+@"a"@ are the same key; @1@ and @"1"@ are not).
 -}
 parseYamlStrict :: BL.ByteString -> Text -> Parse YamlAst
 parseYamlStrict = parseYamlWith True

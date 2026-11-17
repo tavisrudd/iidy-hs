@@ -35,7 +35,7 @@ import Iidy.Yaml.Imports.Types (ImportPolicy)
 import Iidy.Yaml.JMESPath (JMESPathError, applyJmesPath)
 import Iidy.Yaml.Location (Position)
 import Iidy.Yaml.OValue (OValue, fromValue, toValue)
-import Iidy.Yaml.Parser (ParseError (..), parseYaml)
+import Iidy.Yaml.Parser (ParseError (..), parseYamlStrict)
 
 ------------------------------------------------------------------------
 -- Error type
@@ -77,7 +77,7 @@ runRenderWith mkEnv emit args gopts = do
   where
     parseStep :: BL.ByteString -> Text -> Either RenderError YamlAst
     parseStep content baseLocation =
-        case parseYaml content baseLocation of
+        case parseYamlStrict content baseLocation of
             Left (ParseError pos msg) -> Left (ParseFailed pos msg)
             Right ast -> Right ast
 

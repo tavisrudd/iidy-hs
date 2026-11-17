@@ -135,22 +135,49 @@ awsEnvTests =
 
 stderrTests :: [TestTree]
 stderrTests =
-    [ testCase "ssm: import without credentials names the missing credentials on stderr" $ do
-        (r, err) <- captureStderr (renderWithEnv True noCredentials (renderFixture "ssm.yaml"))
-        rrExitCode r @?= 1
-        assertBool ("stderr: " <> T.unpack err) ("AWS credentials not available" `T.isInfixOf` err)
-    , testCase "an AWS import from an untrusted requester chain is refused without a build" $ do
-        -- The local template may read s3: (one build); the s3 document is not
-        -- a trusted source, so its own ssm: import is refused by the gate.
-        mock <- newMockAws
-        mockRespond mock (OnObject "GetObject" "tmpl" "doc.yaml") (MockResponse 200 (BC.pack "$imports:\n  p: ssm:/app/db-host\nv: !$ p\n"))
-        (r, err) <- captureStderr (renderWithEnv True (pure (mockEnv mock)) (renderFixture "s3-chain.yaml"))
-        rrExitCode r @?= 1
-        rrOutput r @?= []
-        assertBool ("stderr: " <> T.unpack err) ("not a trusted source" `T.isInfixOf` err)
-        rrEnvBuilds r @?= 1
-        served <- readIORef (mockRequests mock)
-        filter ((== "ssm") . takeWhile (/= '.')) served @?= []
+    duplicateKeyTests
+        ++ [ testCase "ssm: import without credentials names the missing credentials on stderr" $ do
+                (r, err) <- captureStderr (renderWithEnv True noCredentials (renderFixture "ssm.yaml"))
+                rrExitCode r @?= 1
+                assertBool ("stderr: " <> T.unpack err) ("AWS credentials not available" `T.isInfixOf` err)
+           , testCase "an AWS import from an untrusted requester chain is refused without a build" $ do
+                -- The local template may read s3: (one build); the s3 document is not
+                -- a trusted source, so its own ssm: import is refused by the gate.
+                mock <- newMockAws
+                mockRespond mock (OnObject "GetObject" "tmpl" "doc.yaml") (MockResponse 200 (BC.pack "$imports:\n  p: ssm:/app/db-host\nv: !$ p\n"))
+                (r, err) <- captureStderr (renderWithEnv True (pure (mockEnv mock)) (renderFixture "s3-chain.yaml"))
+                rrExitCode r @?= 1
+                rrOutput r @?= []
+                assertBool ("stderr: " <> T.unpack err) ("not a trusted source" `T.isInfixOf` err)
+                rrEnvBuilds r @?= 1
+                served <- readIORef (mockRequests mock)
+                filter ((== "ssm") . takeWhile (/= '.')) served @?= []
+           ]
+
+-- | Render @text@ written to a temp file as JSON, capturing stderr.
+renderText :: BS.ByteString -> IO (RunResult, Text)
+renderText text = withSystemTempDirectory "iidy-render-dup" $ \dir -> do
+    let path = dir <> "/t.yaml"
+    BS.writeFile path text
+    captureStderr (renderWithEnv False noCredentials (T.pack path))
+
+-- | A repeated mapping key is a parse error: exit 1, no output, and stderr names the key and its line.
+rejectsRepeat :: Text -> Text -> Int -> BS.ByteString -> TestTree
+rejectsRepeat name key line text = testCase ("repeated key rejected: " <> T.unpack name) $ do
+    (r, err) <- renderText text
+    rrExitCode r @?= 1
+    rrOutput r @?= []
+    let fragments = ["duplicate entry with key \"" <> key <> "\"", "t.yaml:" <> T.pack (show line) <> ":"]
+    assertBool ("stderr: " <> T.unpack err) (all (`T.isInfixOf` err) fragments)
+
+duplicateKeyTests :: [TestTree]
+duplicateKeyTests =
+    [ rejectsRepeat "top level" "a" 3 "a: 1\nb: 2\na: 3\n"
+    , rejectsRepeat "nested" "Type" 4 "Resources:\n  R:\n    Type: X\n    Type: Y\n"
+    , rejectsRepeat "a and \"a\"" "a" 2 "a: 1\n\"a\": 2\n"
+    , testCase "1 and \"1\" are different keys and render" $ do
+        (r, _) <- renderText "1: x\n\"1\": y\n"
+        rrExitCode r @?= 0
     ]
 
 outputTests :: [TestTree]

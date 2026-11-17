@@ -56,7 +56,7 @@ import Iidy.Yaml.Errors.Conversion (formatParseErrorEnhanced, formatPreprocessEr
 import Iidy.Yaml.Imports.Loaders.Dispatch (mkImportConfig, preprocessWithConfig)
 import Iidy.Yaml.Imports.Types (ImportPolicy (..), RemoteImports (..), trustedSourceList, trustedSourceText)
 import Iidy.Yaml.OValue (toValue)
-import Iidy.Yaml.Parser (ParseError (..), parseYaml)
+import Iidy.Yaml.Parser (ParseError (..), parseYamlStrict)
 
 ------------------------------------------------------------------------
 -- Types
@@ -81,7 +81,7 @@ runDemo scriptPath timescaling maskSecrets policy = do
     content <- BL.readFile fp
     let baseLocation = scriptPath
 
-    case parseYaml content baseLocation of
+    case parseYamlStrict content baseLocation of
         Left (ParseError pos msg) -> do
             let source = TE.decodeUtf8 (BL.toStrict content)
             formatted <- formatParseErrorEnhanced ColorAuto baseLocation source pos msg

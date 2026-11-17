@@ -47,16 +47,16 @@ stackArgsBootstrapTests =
         expectRefused "Region" "--region" run
         err <- expectLeft (bsResult run)
         assertBool ("names the template: " <> T.unpack err) ("{{r}}" `T.isInfixOf` err)
-    , testCase "a duplicate top-level Profile key with an ssm: import is refused" $
-        loadWithMock noAwsSettings "probe-duplicate-key.yaml" >>= expectRefused "Profile" "--profile"
+    , testCase "a duplicate top-level Profile key is refused at parse time, before any import" $
+        loadWithMock noAwsSettings "probe-duplicate-key.yaml" >>= expectDuplicateKey "Profile" "line 10 column 1"
     , testCase "a templated Profile key with an ssm: import is refused" $
         loadWithMock noAwsSettings "probe-templated-key.yaml" >>= expectRefused "Profile" "--profile"
     , testCase "a partly templated Profile key with an ssm: import is refused" $
         loadWithMock noAwsSettings "probe-partly-templated-key.yaml" >>= expectRefused "Profile" "--profile"
     , testCase "a tagged Profile key with an ssm: import is refused" $
         loadWithMock noAwsSettings "probe-tagged-key.yaml" >>= expectRefused "Profile" "--profile"
-    , testCase "a duplicate environment-map entry with an ssm: import is refused" $
-        loadWithMock noAwsSettings "probe-envmap-duplicate-entry.yaml" >>= expectRefused "Profile" "--profile"
+    , testCase "a duplicate environment-map entry is refused at parse time, before any import" $
+        loadWithMock noAwsSettings "probe-envmap-duplicate-entry.yaml" >>= expectDuplicateKey "dev" "line 11 column 3"
     , testCase "a templated environment-map key with an ssm: import is refused" $
         loadWithMock noAwsSettings "probe-envmap-templated-key.yaml" >>= expectRefused "Profile" "--profile"
     , testCase "computed Region with no AWS import loads as before" $ do
@@ -190,6 +190,16 @@ expectRefused :: Text -> Text -> BootstrapRun -> IO ()
 expectRefused key flag run = do
     err <- expectLeft (bsResult run)
     mapM_ (assertMentions err) [key, flag, "plain string"]
+    bsAsked run @?= []
+    bsServed run @?= []
+
+{- | The file was refused at parse time for a repeated key (before the
+bootstrap scan or any import ran): no factory call and no AWS request.
+-}
+expectDuplicateKey :: Text -> Text -> BootstrapRun -> IO ()
+expectDuplicateKey key pos run = do
+    err <- expectLeft (bsResult run)
+    mapM_ (assertMentions err) ["Parse error", "duplicate entry with key \"" <> key <> "\" at " <> pos]
     bsAsked run @?= []
     bsServed run @?= []
 

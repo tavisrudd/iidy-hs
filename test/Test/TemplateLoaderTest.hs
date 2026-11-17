@@ -98,6 +98,23 @@ relative template paths against fixtureDir.
 argsfileInFixtureDir :: FilePath
 argsfileInFixtureDir = fixtureDir </> "stack-args.yaml"
 
+-- | Load @text@ as a @render:@ template.
+renderTemplateText :: BS.ByteString -> IO (Either T.Text TemplateResult)
+renderTemplateText text = withSystemTempDirectory "tpl-loader-dup" $ \dir -> do
+    let fp = dir </> "t.yaml"
+    BS.writeFile fp text
+    loadCfnTemplate (Just (T.pack ("render:" <> fp))) Nothing "dev" defaultImportCfg
+
+-- | The load failed as a parse error naming the repeated key at (line, column).
+assertDuplicate :: T.Text -> (Int, Int) -> Either T.Text TemplateResult -> IO ()
+assertDuplicate key (line, col) r = case r of
+    Right _ -> assertFailure "expected a duplicate key parse error"
+    Left err -> do
+        assertBool ("Parse error: " <> T.unpack err) ("Parse error" `T.isInfixOf` err)
+        assertBool
+            ("message: " <> T.unpack err)
+            (("duplicate entry with key \"" <> key <> "\" at line " <> T.pack (show line) <> " column " <> T.pack (show col)) `T.isInfixOf` err)
+
 renderSuccessTests :: [TestTree]
 renderSuccessTests =
     [ testCase "render: simple template returns trTemplateBody" $ do
@@ -211,6 +228,14 @@ failureTests =
                     assertBool
                         "error mentions 'Parse error'"
                         ("Parse error" `T.isInfixOf` err)
+    , testCase "render: a repeated key at the top level is a parse error" $
+        renderTemplateText "a: 1\nb: 2\na: 3\n" >>= assertDuplicate "a" (3, 1)
+    , testCase "render: a repeated key nested in a mapping is a parse error" $
+        renderTemplateText "Resources:\n  R:\n    Type: X\n    Type: Y\n" >>= assertDuplicate "Type" (4, 5)
+    , testCase "render: a and \"a\" are the same key" $
+        renderTemplateText "a: 1\n\"a\": 2\n" >>= assertDuplicate "a" (2, 1)
+    , testCase "render: 1 and \"1\" are different keys" $
+        renderTemplateText "1: x\n\"1\": y\n" >>= either (assertFailure . ("expected success, got: " <>) . T.unpack) (const (pure ()))
     , testCase "local file with $imports: but no render: prefix returns Left" $
         withSystemTempDirectory "tpl-loader-imports" $ \dir -> do
             let fp = dir </> "has-imports.yaml"

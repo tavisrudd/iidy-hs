@@ -283,6 +283,10 @@ runTests =
         runScript False (const "demo: [unclosed\n") $ \dir rc -> do
             rc @?= 1
             markerExists dir >>= assertBool "no step should run" . not
+    , testCase "a repeated key exits 1 and runs nothing" $
+        runScript False (\dir -> writeMarker "ran" dir <> "demo: []\n") $ \dir rc -> do
+            rc @?= 1
+            markerExists dir >>= assertBool "no step should run" . not
     , testCase "a preprocessing error exits 1 and runs nothing" $
         runScript False (const "demo: !$ no_such_variable\n") $ \dir rc -> do
             rc @?= 1

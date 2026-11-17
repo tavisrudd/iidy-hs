@@ -86,10 +86,11 @@ import Iidy.Yaml.Engine (
     LoadImportFn,
     PreprocessResult (..),
  )
+import Iidy.Yaml.Imports.ContentParsing (parseErrorMessage)
 import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig, preprocessWithPolicy)
 import Iidy.Yaml.Imports.Types (ImportPolicy)
 import Iidy.Yaml.OValue (toValue)
-import Iidy.Yaml.Parser (ParseError (..), parseYaml)
+import Iidy.Yaml.Parser (parseYamlStrict)
 
 ------------------------------------------------------------------------
 -- Types
@@ -163,9 +164,9 @@ loadStackArgsWith policy mkLoader argsfile environment operation cliAws =
         let baseLocation = T.pack argsfile
 
         -- Parse YAML
-        ast <- case parseYaml content baseLocation of
-            Left (ParseError _pos msg) ->
-                throwE $ "Parse error in " <> baseLocation <> ": " <> msg
+        ast <- case parseYamlStrict content baseLocation of
+            Left perr ->
+                throwE $ "Parse error in " <> baseLocation <> ": " <> parseErrorMessage perr
             Right a -> pure a
 
         -- Preprocess (YAML 1.1 for CFN compatibility)

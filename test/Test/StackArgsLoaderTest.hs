@@ -4,6 +4,7 @@ import Control.Exception (SomeException, try)
 import Data.Aeson (Value (..))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
+import Data.ByteString qualified as BS
 import Data.Map.Strict qualified
 import Data.Text qualified as T
 import Data.Vector qualified as V
@@ -438,8 +439,32 @@ loaderTests =
                     m
             result = extractRawAwsFromAst ast "staging"
         awsRegion result @?= Nothing
+    , testCase "a repeated key at the top level is a parse error" $
+        loadText "StackName: s\nTemplate: t.yaml\nTags:\n  a: x\nTags:\n  b: y\n"
+            >>= assertDuplicate "Tags" "line 5 column 1"
+    , testCase "a repeated key nested in a mapping is a parse error" $
+        loadText "StackName: s\nTemplate: t.yaml\nParameters:\n  P: x\n  P: y\n"
+            >>= assertDuplicate "P" "line 5 column 3"
+    , testCase "a and \"a\" are the same key" $
+        loadText "StackName: s\nTemplate: t.yaml\nTags:\n  a: x\n  \"a\": y\n"
+            >>= assertDuplicate "a" "line 5 column 3"
+    , testCase "1 and \"1\" are different keys" $
+        loadText "StackName: s\nTemplate: t.yaml\nTags:\n  1: x\n  \"1\": y\n" >>= either (assertFailure . ("expected success, got: " <>) . T.unpack) (const (pure ()))
     ]
   where
+    loadText :: BS.ByteString -> IO (Either T.Text LoadedStackArgs)
+    loadText text = withSystemTempDirectory "stack-args-dup" $ \dir -> do
+        let fp = dir </> "stack-args.yaml"
+        BS.writeFile fp text
+        loadStackArgs fp "dev" OpCreateStack noAwsSettings (importPolicy AllowRemoteImports) Nothing
+    assertDuplicate :: T.Text -> T.Text -> Either T.Text LoadedStackArgs -> IO ()
+    assertDuplicate key pos r = case r of
+        Right _ -> assertFailure "expected a duplicate key parse error"
+        Left err -> do
+            assertBool ("Parse error: " <> T.unpack err) ("Parse error" `T.isInfixOf` err)
+            assertBool
+                ("message: " <> T.unpack err)
+                (("duplicate entry with key \"" <> key <> "\" at " <> pos) `T.isInfixOf` err)
     m :: SrcMeta
     m = SrcMeta "" zeroPosition zeroPosition
 

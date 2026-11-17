@@ -727,6 +727,8 @@ Tag error: 'template' missing in !$map tag @ template.yaml:2:11 (errno: ERR_4002
 
 *"bad import"*: A file import path cannot be resolved. Check that the path is correct relative to the importing document, not relative to the working directory.
 
+*"duplicate entry with key"*: A mapping repeats a key. This is an error at any depth in a template, a stack-args file, a demo script and an imported document, reported with the line and column of the repeated key. Plain and quoted spellings are the same key (=a= and ="a"=), but =1= and ="1"= are different keys. Remove or rename one of the entries.
+
 *Tag nesting*: YAML tags cannot be placed directly after another tag on the same line. Use a newline and indentation:
 
 #+begin_src yaml

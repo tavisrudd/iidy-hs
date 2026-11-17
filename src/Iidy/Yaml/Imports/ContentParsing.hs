@@ -22,6 +22,7 @@ module Iidy.Yaml.Imports.ContentParsing (
     parseYamlContent,
     parseYamlOrdered,
     parseJsonContent,
+    parseErrorMessage,
 ) where
 
 import Data.Aeson (Value (..))
@@ -67,10 +68,19 @@ reworded (with its position, as Rust does for nested keys); other syntax errors
 keep the text they had.
 -}
 describeParseError :: ParseError -> Text
-describeParseError err@(ParseError pos msg)
+describeParseError err@(ParseError _ msg)
+    | "duplicate entry" `T.isPrefixOf` msg = parseErrorMessage err
+    | otherwise = T.pack (show err)
+
+{- | The message of a YAML parse error; the duplicate key error gains
+@ at line L column C@ (1-based, at the repeated key). Shared by the import path
+and the template and stack-args loaders.
+-}
+parseErrorMessage :: ParseError -> Text
+parseErrorMessage (ParseError pos msg)
     | "duplicate entry" `T.isPrefixOf` msg =
         msg <> " at line " <> T.pack (show (posLine pos)) <> " column " <> T.pack (show (posColumn pos + 1))
-    | otherwise = T.pack (show err)
+    | otherwise = msg
 
 {- | A parsed import document: the aeson value (sorted keys) the engine uses,
 and, when the text could be read as YAML, the same document in source order.

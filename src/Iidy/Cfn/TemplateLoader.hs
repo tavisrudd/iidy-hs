@@ -30,9 +30,10 @@ import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.Engine (
     PreprocessResult (..),
  )
+import Iidy.Yaml.Imports.ContentParsing (parseErrorMessage)
 import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), preprocessWithConfig)
 import Iidy.Yaml.Location (zeroPosition)
-import Iidy.Yaml.Parser (ParseError (..), parseYaml)
+import Iidy.Yaml.Parser (parseYamlStrict)
 
 ------------------------------------------------------------------------
 -- Constants
@@ -109,9 +110,9 @@ loadCfnTemplateWithLimit limit (Just tmplSpec) argsfilePath env importCfg
         let resolvedPath = resolveTemplatePath (T.unpack renderPath) argsfilePath
             baseLocation = T.pack resolvedPath
         rawContent <- BL.readFile resolvedPath
-        case parseYaml rawContent baseLocation of
-            Left (ParseError _pos msg) ->
-                pure (Left ("Parse error in rendered template " <> baseLocation <> ": " <> msg))
+        case parseYamlStrict rawContent baseLocation of
+            Left perr ->
+                pure (Left ("Parse error in rendered template " <> baseLocation <> ": " <> parseErrorMessage perr))
             Right ast -> do
                 -- Inject $envValues before preprocessing (matches Rust template_loader.rs:117-131)
                 let astWithEnv = injectEnvValuesIntoAst ast env

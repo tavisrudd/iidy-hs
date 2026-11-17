@@ -336,7 +336,12 @@ What differs is the message:
   Rust), a boolean key `` `true` `` and a null key `duplicate entry with null
   key`.
 
-Top-level templates and stack-args accept repeated keys in both ports.
+A repeated key in a top-level template (the `render` command and a `render:`
+template), in stack-args and in a demo script is rejected the same way
+(`duplicate entry with key "k" at line L column C`, as a parse error before
+preprocessing). **Cause**: follows iidy-js (TypeScript), whose js-yaml rejects
+it. Rust accepts such a key and keeps the last value. A template body fetched
+from AWS for `convert-stack-to-iidy` stays lenient.
 Separately, iidy-hs reads a value spelled `01` as the number 1 where Rust
 reads a string; key identity above does not depend on that.
 
