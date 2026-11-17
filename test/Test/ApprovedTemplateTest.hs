@@ -7,7 +7,7 @@ import Data.Text (Text)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
 
-import Iidy.Cfn.ApprovedTemplate (ApprovedTemplate (..), approvedKeyFromPending, approvedTemplateFor, pendingKeyFor)
+import Iidy.Cfn.ApprovedTemplate (ApprovedTemplate (..), approvedKeyFromPending, approvedTemplateFor, latestKeyFromPending, pendingKeyFor)
 import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest)
 import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), emptyStackArgs)
 import Test.MockAws
@@ -57,6 +57,10 @@ pendingKeyTests =
         approvedKeyFromPending (pendingKeyFor simpleApprovedKey) @?= Right simpleApprovedKey
     , testCase "pending key appends .pending" $
         pendingKeyFor "app/abc.yaml" @?= "app/abc.yaml.pending"
+    , testCase "latest key sits in the pending key's directory" $
+        latestKeyFromPending "app/env/abc.yaml.pending" @?= "app/env/latest"
+    , testCase "latest key for a pending key with no directory" $
+        latestKeyFromPending "abc.yaml.pending" @?= "latest"
     , testCase "a key without .pending is rejected" $
         approvedKeyFromPending "app/abc.yaml" @?= Left "URL must end with .pending suffix"
     ]

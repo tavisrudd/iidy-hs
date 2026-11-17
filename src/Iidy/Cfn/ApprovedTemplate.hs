@@ -2,8 +2,8 @@
 
 The one owner of the approved object's bucket and key (derived from
 @ApprovedTemplateLocation@ and the hash of the rendered local template),
-the pending key a request uploads to, and the approved key a review
-derives from that pending key. Template approval request and review use
+the pending key a request uploads to, and the approved and @latest@ keys a
+review derives from that pending key. Template approval request and review use
 it; no other code builds or strips these keys.
 -}
 module Iidy.Cfn.ApprovedTemplate (
@@ -11,6 +11,7 @@ module Iidy.Cfn.ApprovedTemplate (
     approvedTemplateFor,
     pendingKeyFor,
     approvedKeyFromPending,
+    latestKeyFromPending,
 ) where
 
 import Data.Text (Text)
@@ -93,3 +94,15 @@ approvedKeyFromPending pendingKey =
         (Left "URL must end with .pending suffix")
         Right
         (T.stripSuffix pendingSuffix pendingKey)
+
+{- | The @latest@ key beside a pending key: @latest@ in the pending
+object's directory (iidy-js @${bucketDir}/latest@).
+-}
+latestKeyFromPending :: Text -> Text
+latestKeyFromPending pendingKey
+    | T.null parentDir = "latest"
+    | otherwise = parentDir <> "/latest"
+  where
+    parentDir = case T.breakOnEnd "/" pendingKey of
+        ("", _) -> ""
+        (dir, _) -> T.dropEnd 1 dir

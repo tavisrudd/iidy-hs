@@ -17,7 +17,7 @@ import Data.Either (fromRight)
 import Data.Text (Text)
 import Data.Text qualified as T
 
-import Iidy.Cfn.ApprovedTemplate (ApprovedTemplate (..), approvedKeyFromPending, approvedTemplateFor, pendingKeyFor)
+import Iidy.Cfn.ApprovedTemplate (ApprovedTemplate (..), approvedKeyFromPending, approvedTemplateFor, latestKeyFromPending, pendingKeyFor)
 import Iidy.Cfn.Context (CfnContext (..))
 import Iidy.Cfn.S3Objects (deleteFromS3, downloadFromS3, s3ObjectExists, uploadToS3)
 import Iidy.Cfn.TemplateDiff (generateDiff)
@@ -104,13 +104,7 @@ templateApprovalReview ctx url contextLines = do
         -- Validate .pending suffix
         approvedKey <- liftEitherT (approvedKeyFromPending pendingKey)
 
-        let parentDir = case T.breakOnEnd "/" pendingKey of
-                ("", _) -> ""
-                (dir, _) -> T.dropEnd 1 dir
-            latestKey =
-                if T.null parentDir
-                    then "latest"
-                    else parentDir <> "/latest"
+        let latestKey = latestKeyFromPending pendingKey
             approvedLoc = "s3://" <> bucket <> "/" <> approvedKey
 
         -- Check pending exists
