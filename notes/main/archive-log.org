@@ -31,6 +31,7 @@
 - [2026-11-16 Mon 19:45] [[file:../C15/index.org][C15]] — Landed d6207c1..f6726c6 plus doc fix: imported documents isolated; requester-chain trust policy with --trust-import-source; AWS-backed imports and loopback/link-local/metadata HTTP blocked for untrusted chains; untrusted custom templates isolated; exfiltration regression test; docs and DIVERGENCES. Opus plan review, five Opus reviews (land)
 - [2026-11-16 Mon 19:56] [[file:../C34/index.org][C34]] — Landed be544ae..46f8d0e: duplicate mapping keys rejected in imported YAML/JSON and !$parseYaml with Rust's key identity (spelling class, complex keys); top-level templates and stack-args left lenient pending Tavis; Sonnet review land, fix round 1, re-review land
 - [2026-11-16 Mon 19:57] [[file:../C37/index.org][C37]] — Landed 1be8bad (replayed 03f9e35): iidy demo passes --no-remote-imports and --trust-import-source to the iidy on PATH; narrow fix landed on supervisor's diff check
+- [2026-11-16 Mon 20:00] [[file:../C36/index.org][C36]] — Landed 70fdf27 (replayed 6b8392d): a Template value that names no file is inline only when it starts with { or [ or is multi-line, otherwise an error naming the resolved path; DIVERGENCES entry; narrow fix landed on supervisor's diff check
 * COMMENT meta
 :PROPERTIES:
 :LANE: main

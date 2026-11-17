@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C36
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C16 review 2026-11-16 (P2): TemplateLoader.hs:123 treats a missing Template file's path text as the template body, which template-approval request then uploads
 :CREATED_BY: opus-5.5-medium
@@ -10,8 +10,21 @@
 :ID: org:01a1e71d-4bb3-7248-8c30-cc6be16cdcfe
 :ADDED: [2026-11-16 Mon 18:26]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 19:47]--[2026-11-16 Mon 19:58] => 0:11
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 19:46]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 19:47]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a8482059573f3fca9
+- Clock-out [2026-11-16 Mon 19:58]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a8482059573f3fca9
+- Card state STARTED → DONE [2026-11-16 Mon 20:00]
+  Note: Landed 70fdf27 (replayed 6b8392d): a Template value that names no file is inline only when it starts with { or [ or is multi-line, otherwise an error naming the resolved path; DIVERGENCES entry; narrow fix landed on supervisor's diff check
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -79,19 +92,19 @@ the =$imports:= check, error-display styling of the message, any change to
 how =resolveTemplatePath= resolves paths.
 
 Done when:
-- [ ] A Template value that is not a URL, does not start with ={= or =[=,
+- [X] A Template value that is not a URL, does not start with ={= or =[=,
   and has no newline, and names no existing file, returns =Left= with an
   error naming the resolved path; the test is recorded failing first
   against the current code.
-- [ ] Real inline content still works: text starting with ={= or =[=, and
+- [X] Real inline content still works: text starting with ={= or =[=, and
   text containing a newline (YAML body), each with a test; the inline
   =$imports:= error test still passes.
-- [ ] The old test at =TemplateLoaderTest.hs:306= is replaced by the
+- [X] The old test at =TemplateLoaderTest.hs:306= is replaced by the
   missing-path test (not deleted without a replacement), and the other
   existing loader tests pass unchanged.
-- [ ] =DIVERGENCES.md= records that a short slashless non-file value is an
+- [X] =DIVERGENCES.md= records that a short slashless non-file value is an
   error in iidy-hs but inline content in Rust, with the Rust reference.
-- [ ] Build warning-free, full suite green, commits name C36.
+- [X] Build warning-free, full suite green, commits name C36.
 
 Stop and record if: the check needs a change outside the allowed paths; a
 fixture or command test relies on a bare word being inline content; or
@@ -100,10 +113,15 @@ rule is deliberate (both originals agree on it). Then put the exact rule
 choice to Tavis as a question with the recommendation above (the
 narrow rule), and do not implement until he answers.
 
-* TODO Refuse a missing Template path and keep real inline content
+* DONE Refuse a missing Template path and keep real inline content
 :PROPERTIES:
 :ID: org:01a1e71d-4bb3-7248-8c30-cc68a0a7ad6f
 :ADDED: [2026-11-16 Mon 18:26]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 19:58] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a8482059573f3fca9
 :END:
 
 Refuse a missing Template path and keep real inline content
@@ -123,3 +141,19 @@ Task order:
 
 Keep task notes under this heading. Add reports and pinned =file-rev:=
 links here as work proceeds.
+
+** Result
+:PROPERTIES:
+:ID: org:01a1e771-3b96-7346-87ac-17ce3f2d3935
+:ADDED: [2026-11-16 Mon 19:58]
+:END:
+The three missing-path tests failed against the base (run log recorded as
+=hang1.log=/=fail2.log= in the temp dir): "expected Left, got
+TemplateResult {trTemplateBody = Just \"no-such-dir/missing.yaml\"}" and
+the same for =missing-template=, with and without an argsfile. Fix in
+commit 6b8392d: =loadInlineTemplate= and =isInlineContent= in
+=TemplateLoader.hs=; the old test is replaced; DIVERGENCES.md has the entry.
+Pre-commit hook: build-strict plus the full suite passed (2050 tests). The
+first focused run hung on "render: with malformed YAML" and ignored
+=--timeout=; killed by PID and rerun, which passed (known flaky, C6).
+No evidence found that Rust's short-slashless inline rule is deliberate.

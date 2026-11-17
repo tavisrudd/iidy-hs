@@ -286,6 +286,19 @@ prints only the tail, so the failing test is unknown. A second flakiness
 signal besides the hang. Next time: keep the full test log of the hook
 (the hook's log path under =dist-newstyle/.../test/=) before retrying.
 
+Supervisor note 2026-11-16, first named hang: the C36 worker's focused
+test run (GHC 9.12.3, =--timeout=60s=) stalled on the existing test
+=render: with malformed YAML returns Left with parse error=
+(=test/Test/TemplateLoaderTest.hs:198=) and ignored the per-test timeout;
+the worker killed it by PID and the rerun passed. No =/proc= evidence was
+captured. That test renders a malformed YAML template through the template
+loader; the timeout being ignored again points at an uninterruptible wait
+(a =mask=-ed cleanup or a blocking foreign call) reached from that path.
+Next step for this card: loop that one test (=-p= on its name) a few
+hundred times with the capture steps above. Also, the supervisor's C36
+landing replay saw one pre-commit run end with no output and the retry
+pass (cause unknown).
+
 * DONE Align the Makefile test target with the hook timeout
 :PROPERTIES:
 :ADDED: [2026-11-16 Mon 16:30]
