@@ -9,14 +9,15 @@ import Data.ByteString.Lazy qualified as BL
 import Data.Char (isDigit)
 import Data.Functor.Identity (Identity (..))
 import Data.List qualified as List
+import Data.Maybe (isNothing)
 import Data.Scientific (Scientific)
 import Data.Scientific qualified as Sci
-import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.YAML qualified as Y
 import Data.YAML.Event (ScalarStyle (..), Tag, tagToText)
 import Iidy.Yaml.Ast
+import Iidy.Yaml.DuplicateKeys (KeyId, firstDuplicate, scalarKeyId)
 import Iidy.Yaml.Location (Position (..), zeroPosition)
 
 data ParseError = ParseError
@@ -56,7 +57,7 @@ parseYamlWith rejectDuplicates input uri =
         case runIdentity (Y.decodeLoader (yamlLoader rejectDuplicates uri) input') of
             Left (pos, msg) -> Left (ParseError (convertPos pos) (T.pack msg))
             Right [] -> Right (AstNull (emptyMeta uri))
-            Right (node : _) -> Right node
+            Right (node : _) -> Right (nodeAst node)
 
 parseYamlFile :: FilePath -> IO (Parse YamlAst)
 parseYamlFile path = do
@@ -67,55 +68,44 @@ parseYamlFile path = do
 -- Loader (preserves document key order)
 ------------------------------------------------------------------------
 
-yamlLoader :: Bool -> Text -> Y.Loader Identity YamlAst
+{- | A loaded node and, for a mapping key, its identity (lazy: lenient
+parsing never forces it).
+-}
+data Node = Node
+    { nodeAst :: YamlAst
+    , nodeKey :: Maybe KeyId
+    }
+
+yamlLoader :: Bool -> Text -> Y.Loader Identity Node
 yamlLoader rejectDuplicates uri =
     Y.Loader
         { Y.yScalar = \tag style text pos ->
             pure $
-                resolveScalar uri pos tag style text
-        , Y.ySequence = \tag items pos ->
+                (\ast -> Node ast (Just (scalarKeyId (isResolved tag style) text)))
+                    <$> resolveScalar uri pos tag style text
+        , Y.ySequence = \tag nodes pos ->
             pure $
-                let startP = convertPos pos
+                let items = map nodeAst nodes
+                    startP = convertPos pos
                     endP = childrenEndPos startP (map astMeta items)
                     meta = SrcMeta uri startP endP
-                 in applyTag meta tag (AstSequence items meta)
-        , Y.yMapping = \tag kvs pos ->
+                 in (`Node` Nothing) <$> applyTag meta tag (AstSequence items meta)
+        , Y.yMapping = \tag nodes pos ->
             pure $
-                let startP = convertPos pos
+                let kvs = [(nodeAst k, nodeAst v) | (k, v) <- nodes]
+                    startP = convertPos pos
                     endP = childrenEndPos startP (map (astMeta . snd) kvs)
                     meta = SrcMeta uri startP endP
-                 in case firstDuplicateKey (map fst kvs) of
-                        Just (dup, label)
-                            | rejectDuplicates ->
-                                Left (unconvertPos (smStart (astMeta dup)), "duplicate entry with key " <> label)
-                        _noDuplicate -> applyTag meta tag (AstMapping kvs meta)
+                 in case firstDuplicate [(nodeAst k, nodeKey k) | (k, _) <- nodes] of
+                        Just (dup, msg)
+                            | rejectDuplicates -> Left (unconvertPos (smStart (astMeta dup)), msg)
+                        _noDuplicate -> (`Node` Nothing) <$> applyTag meta tag (AstMapping kvs meta)
         , Y.yAlias = \_ _ node _ -> pure $ Right node
         , Y.yAnchor = \_ node _ -> pure $ Right node
         }
-
--- | A mapping key as YAML compares it: a string, number, boolean or null.
-data KeyIdentity = KeyText Text | KeyNumber Scientific | KeyBool Bool | KeyNull
-    deriving stock (Eq, Ord)
-
-keyIdentity :: YamlAst -> Maybe (KeyIdentity, String)
-keyIdentity = \case
-    AstPlainString t _ -> Just (KeyText t, show t)
-    AstTemplatedString t _ -> Just (KeyText t, show t)
-    AstNumber n _ -> Just (KeyNumber n, either (show @Double) (show @Integer) (Sci.floatingOrInteger n))
-    AstBool b _ -> Just (KeyBool b, if b then "true" else "false")
-    AstNull _ -> Just (KeyNull, "null")
-    _complexKey -> Nothing
-
--- | The first key that repeats an earlier one, with its display form.
-firstDuplicateKey :: [YamlAst] -> Maybe (YamlAst, String)
-firstDuplicateKey = go Set.empty
   where
-    go _ [] = Nothing
-    go seen (k : ks) = case keyIdentity k of
-        Nothing -> go seen ks
-        Just (ident, label)
-            | ident `Set.member` seen -> Just (k, label)
-            | otherwise -> go (Set.insert ident seen) ks
+    -- An untagged plain scalar resolves to a number, boolean or null.
+    isResolved tag style = style == Plain && isNothing (tagToText tag)
 
 ------------------------------------------------------------------------
 -- Scalar resolution (Core schema)

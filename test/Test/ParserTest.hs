@@ -210,6 +210,50 @@ duplicateKeyTests =
         assertBool "same" (isLeft (parseYamlStrict "a: 1\n\"a\": 2\n" "<test>"))
     , testCase "parseYamlStrict keeps 1 and \"1\" apart" $
         assertBool "distinct" (isRight (parseYamlStrict "1: a\n\"1\": b\n" "<test>"))
+    , testGroup "scalar key identity as Rust's serde_yaml (C34)" $
+        [keyCase "accepted" k1 k2 isRight | (k1, k2) <- acceptedPairs]
+            ++ [keyCase "rejected" k1 k2 isLeft | (k1, k2) <- rejectedPairs]
     ]
   where
     dupDoc = "a: 1\nz: 1\nz: 2\n"
+    keyCase :: Text -> Text -> Text -> (Either ParseError YamlAst -> Bool) -> TestTree
+    keyCase verdict k1 k2 ok =
+        testCase (T.unpack (verdict <> ": " <> k1 <> " with " <> k2)) $
+            assertBool "Rust's verdict" (ok (parseYamlStrict (BL.fromStrict (TE.encodeUtf8 (k1 <> ": a\n" <> k2 <> ": b\n"))) "<test>"))
+    -- Each pair checked against ~/src/iidy/target/debug/iidy (imported file).
+    acceptedPairs =
+        [ ("1", "1.0")
+        , ("1", "1e0")
+        , ("1", "01")
+        , ("1", "001")
+        , ("1", "-01")
+        , ("1", "+01")
+        , ("0", "00")
+        , ("1", "1_0")
+        , ("1", "\"1\"")
+        , ("true", "\"true\"")
+        , ("null", "\"\"")
+        , ("null", "\"null\"")
+        ]
+    rejectedPairs =
+        [ ("1", "0x1")
+        , ("1", "0x01")
+        , ("1", "0o1")
+        , ("1", "0b1")
+        , ("1", "+1")
+        , ("0", "-0")
+        , ("1.0", "1.00")
+        , ("1.0", "1.")
+        , (".5", "0.5")
+        , (".inf", ".Inf")
+        , (".nan", ".nan")
+        , ("true", "True")
+        , ("null", "~")
+        , ("1.5", "01.5")
+        , ("1.5", "+1.5")
+        , ("1.5e2", "150.0")
+        , ("0.0", "-0.0")
+        , ("1e0", "1E0")
+        , ("1.0", "1e0")
+        , ("a", "\"a\"")
+        ]

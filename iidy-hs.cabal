@@ -24,6 +24,7 @@ library
     Iidy.Yaml.Ast
     Iidy.Yaml.Detection
     Iidy.Yaml.Location
+    Iidy.Yaml.DuplicateKeys
     Iidy.Yaml.Parser
     Iidy.Yaml.PathTracker
     Iidy.Yaml.Errors.Ids
