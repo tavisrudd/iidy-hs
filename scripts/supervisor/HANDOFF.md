@@ -37,9 +37,10 @@ Landed and closed today: C5, C8, C9, C10, C11, C13, C14, C15, C17, C24,
 C25, C26, C27, C28, C29, C31, C33, C34, C36, C37.
 
 In flight:
-- C12 (Opus, `claude/C12`): split StackArgsLoader; told to report after
-  task 1 (the C17 backstop seam and its tests) for a review before the
-  moves. Review with Sonnet or Opus (refactor), then send tasks 2-4.
+- C12 landed and closed (loader split; C17 backstop wiring tested).
+- C32 (Sonnet, `claude/C32`): keep the written `!$` tag spelling for
+  unresolved-tag output; may first split Parser.hs (550 lines). Review with
+  Sonnet before landing.
 - C38 landed and closed. C21 and C22 are refined; tasks that depend on
   Tavis's answers are marked "do not start before" them.
 - C16 (Opus worker, `claude/C16` worktree; tasks 1-3, round 2 and its fix
