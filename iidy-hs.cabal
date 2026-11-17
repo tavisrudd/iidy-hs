@@ -103,6 +103,8 @@ library
     Iidy.Cfn.GlobalConfig
     Iidy.Cfn.StackArgsBootstrap
     Iidy.Cfn.StackArgs.Credentials
+    Iidy.Cfn.StackArgs.Fields
+    Iidy.Cfn.StackArgs.Validate
     Iidy.Cfn.StackArgsLoader
     Iidy.Cfn.Operations.Changeset
     Iidy.Cfn.Operations.ConvertStack
