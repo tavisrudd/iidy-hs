@@ -62,10 +62,15 @@ parseYamlOrdered content =
         Right ast -> Right (astToOValueKeepingTags ast)
         Left err -> Left (describeParseError err)
 
--- | A YAML parse error as message text with its line and column.
+{- | A YAML parse error as message text. Only the duplicate key error is
+reworded (with its position, as Rust does for nested keys); other syntax errors
+keep the text they had.
+-}
 describeParseError :: ParseError -> Text
-describeParseError (ParseError pos msg) =
-    msg <> " at line " <> T.pack (show (posLine pos)) <> " column " <> T.pack (show (posColumn pos))
+describeParseError err@(ParseError pos msg)
+    | "duplicate entry" `T.isPrefixOf` msg =
+        msg <> " at line " <> T.pack (show (posLine pos)) <> " column " <> T.pack (show (posColumn pos))
+    | otherwise = T.pack (show err)
 
 {- | A parsed import document: the aeson value (sorted keys) the engine uses,
 and, when the text could be read as YAML, the same document in source order.

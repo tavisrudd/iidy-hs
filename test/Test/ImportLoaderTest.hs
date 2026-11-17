@@ -260,6 +260,12 @@ duplicateKeyTests =
     , rejectsExt ".json" "nested json" "{\"o\":[{\"k\":1,\"k\":2}]}" "k"
     , testCase "SSM json suffix rejects" $ rejects (parseByFormatSuffix (Just "json") "{\"q\":1,\"q\":2}") "q"
     , testCase "SSM yaml suffix rejects" $ rejects (parseByFormatSuffix (Just "yaml") "q: 1\nq: 2\n") "q"
+    , testCase "a YAML syntax error keeps its pre-C34 message" $
+        case parseByExtensionStrict "t.yaml" ".yaml" "a: [unclosed\n" "" of
+            Left (ImportError msg) -> do
+                assertBool (T.unpack msg) ("Failed to parse YAML from t.yaml: ParseError {" `T.isPrefixOf` msg)
+                assertBool (T.unpack msg) (not ("at line" `T.isInfixOf` msg))
+            Right _ -> assertBool "expected a syntax error" False
     , testCase "a number key and a string key of the same digits are distinct" $
         case parseByExtensionStrict "t.yaml" ".yaml" "1: a\n\"1\": b\n" "" of
             Left err -> assertBool (show err) False
