@@ -12,9 +12,10 @@ import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 import Amazonka qualified
 
 import Iidy.Cfn.Operations.LintTemplate (lintTemplate)
-import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateApprovalReview)
+import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateApprovalReview, templateApprovalReviewWith)
 import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), emptyStackArgs)
-import Iidy.Output.Types (ApprovalResult (..), ApprovalStatus (..), OutputData (..), TemplateValidation (..))
+import Iidy.Confirm (ConfirmResult (..))
+import Iidy.Output.Types (ApprovalStatus (..), OutputData (..), TemplateDiff (..), TemplateValidation (..))
 import Test.ApprovalFixtures (approvalArgs, simpleTemplate, validationError)
 import Test.MockAws
 import Test.MockCfnContext (MockCfn (..), mockCfnOutputs, newMockCfnContext)
@@ -50,12 +51,13 @@ mockAwsTests =
         mockRespond mock (OnObject "GetObject" "approvals" "app/t.yaml.pending") (MockResponse 200 "same: body\n")
         mockRespond mock (OnObject "GetObject" "approvals" "app/latest") (MockResponse 200 "same: body\n")
         mcfn <- newMockCfnContext mock OpTemplateApprovalReview "test"
-        result <- templateApprovalReview (mcContext mcfn) pendingUrl 3
-        result @?= Right 0
+        -- Declined at the prompt (asked even for an empty diff), so no writes
+        result <- templateApprovalReviewWith (\_ -> pure Declined) (mcContext mcfn) pendingUrl 3
+        result @?= Right 1
         outputs <- mockCfnOutputs mcfn
         assertBool
-            ("identical bodies give an approval result: " <> show outputs)
-            (any isApproved outputs)
+            ("identical bodies give an empty diff: " <> show outputs)
+            (any isEmptyDiff outputs)
         calls <- map reqCall <$> mockRequestLog mock
         calls
             @?= map
@@ -144,8 +146,8 @@ locationCall = MockCall "s3" "GetBucketLocation" (Just "approvals") Nothing
 s3Call :: T.Text -> T.Text -> MockCall
 s3Call op key = MockCall "s3" op (Just "approvals") (Just key)
 
--- | An approval result that approved the template.
-isApproved :: OutputData -> Bool
-isApproved = \case
-    OdApprovalResult r -> arApproved r
+-- | A template diff with no changes.
+isEmptyDiff :: OutputData -> Bool
+isEmptyDiff = \case
+    OdTemplateDiff d -> not (tdHasChanges d)
     _ -> False

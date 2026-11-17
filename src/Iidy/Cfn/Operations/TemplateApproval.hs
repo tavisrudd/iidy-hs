@@ -8,6 +8,7 @@ The review flow downloads, diffs, and optionally approves a pending template.
 module Iidy.Cfn.Operations.TemplateApproval (
     templateApprovalRequest,
     templateApprovalReview,
+    templateApprovalReviewWith,
 ) where
 
 import Control.Monad (unless)
@@ -127,7 +128,7 @@ lintFails ctx True body = do
 -- Template Approval Review
 ------------------------------------------------------------------------
 
--- | Review a pending template approval.
+-- | Review a pending template approval, asking on the terminal.
 templateApprovalReview ::
     CfnContext ->
     -- | S3 URL of pending template
@@ -135,7 +136,19 @@ templateApprovalReview ::
     -- | context lines for diff
     Int ->
     IO (Either Text Int)
-templateApprovalReview ctx url contextLines = do
+templateApprovalReview = templateApprovalReviewWith requestConfirmation
+
+-- | 'templateApprovalReview' with the approval prompt given (a test seam).
+templateApprovalReviewWith ::
+    -- | ask the reviewer, as 'requestConfirmation'
+    (Text -> IO ConfirmResult) ->
+    CfnContext ->
+    -- | S3 URL of pending template
+    Text ->
+    -- | context lines for diff
+    Int ->
+    IO (Either Text Int)
+templateApprovalReviewWith confirm ctx url contextLines = do
     let emit = cfnEmit ctx
     runExceptT $ do
         -- Parse S3 URL
@@ -175,6 +188,7 @@ templateApprovalReview ctx url contextLines = do
             then pure 0
             else
                 reviewPendingTemplate
+                    confirm
                     s3Ctx
                     contextLines
                     bucket
@@ -185,6 +199,8 @@ templateApprovalReview ctx url contextLines = do
 
 -- | Inner logic for reviewing a non-yet-approved pending template.
 reviewPendingTemplate ::
+    -- | ask the reviewer
+    (Text -> IO ConfirmResult) ->
     CfnContext ->
     -- | context lines for diff
     Int ->
@@ -199,7 +215,7 @@ reviewPendingTemplate ::
     -- | approved S3 location (for result output)
     Text ->
     ExceptT Text IO Int
-reviewPendingTemplate ctx contextLines bucket pendingKey approvedKey latestKey approvedLoc = do
+reviewPendingTemplate confirm ctx contextLines bucket pendingKey approvedKey latestKey approvedLoc = do
     let emit = cfnEmit ctx
     -- Download templates
     pending <-
@@ -219,42 +235,29 @@ reviewPendingTemplate ctx contextLines bucket pendingKey approvedKey latestKey a
                     , tdHasChanges = hasChanges
                     }
 
-    if not hasChanges
-        then do
+    -- Always ask, even with an empty diff (iidy-js approval/index.ts:115-144)
+    result <- lift $ confirm "Would you like to approve these changes?"
+    if result == Confirmed
+        then
+            approveTemplate
+                ctx
+                bucket
+                pendingKey
+                approvedKey
+                latestKey
+                approvedLoc
+                pending
+        else do
             lift $
                 emit $
                     OdApprovalResult
                         ApprovalResult
-                            { arApproved = True
-                            , arApprovedLocation = Just approvedLoc
-                            , arLatestLocation =
-                                Just ("s3://" <> bucket <> "/" <> latestKey)
+                            { arApproved = False
+                            , arApprovedLocation = Nothing
+                            , arLatestLocation = Nothing
                             , arCleanupCompleted = False
                             }
-            pure 0
-        else do
-            result <- lift $ requestConfirmation "Would you like to approve these changes?"
-            if result == Confirmed
-                then
-                    approveTemplate
-                        ctx
-                        bucket
-                        pendingKey
-                        approvedKey
-                        latestKey
-                        approvedLoc
-                        pending
-                else do
-                    lift $
-                        emit $
-                            OdApprovalResult
-                                ApprovalResult
-                                    { arApproved = False
-                                    , arApprovedLocation = Nothing
-                                    , arLatestLocation = Nothing
-                                    , arCleanupCompleted = False
-                                    }
-                    pure 1
+            pure 1
 
 -- | Perform the actual S3 approval: copy pending to approved and latest, delete pending.
 approveTemplate ::

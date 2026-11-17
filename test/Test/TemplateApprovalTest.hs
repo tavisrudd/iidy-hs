@@ -1,18 +1,20 @@
 {- | Tests for @template-approval request@ and @review@ through the mock AWS
-env: S3 errors, the approval-path size limit, the pending upload and
-the lint step.
+env: S3 errors, the approval-path size limit, the pending upload, the
+lint step and the review prompt.
 -}
 module Test.TemplateApprovalTest (templateApprovalTests) where
 
 import Data.ByteString qualified as BS
+import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
-import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateApprovalReview)
+import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateApprovalReview, templateApprovalReviewWith)
 import Iidy.Cfn.Types (CfnOperation (..))
+import Iidy.Confirm (ConfirmResult (..))
 import Iidy.Output.Types (OutputData (..), TemplateValidation (..))
 import Test.ApprovalFixtures (
     approvalArgs,
@@ -38,7 +40,76 @@ templateApprovalTests =
         puts <- filter ((== Just "PutObject") . fmap callOperation . reqCall) <$> mockRequestLog mock
         map (lookup "x-amz-acl" . reqHeaders) puts @?= [Just "bucket-owner-full-control"]
     , testGroup "request lint" lintTests
+    , testGroup "review prompt" reviewPromptTests
     ]
+
+reviewPromptTests :: [TestTree]
+reviewPromptTests =
+    [ testCase "empty diff, yes: approved and latest written, pending deleted" $ do
+        mock <- pendingLike "a: 1\n"
+        (result, asked) <- runReviewAnswering Confirmed mock
+        result @?= Right 0
+        asked @?= ["Would you like to approve these changes?"]
+        writes <- s3Writes mock
+        writes
+            @?= [ ("PutObject", simpleApprovedKey)
+                , ("PutObject", latestKey)
+                , ("DeleteObject", simplePendingKey)
+                ]
+    , testCase "empty diff, yes: the approve writes carry no ACL, as iidy-js" $ do
+        mock <- pendingLike "a: 1\n"
+        _ <- runReviewAnswering Confirmed mock
+        puts <- filter ((== Just "PutObject") . fmap callOperation . reqCall) <$> mockRequestLog mock
+        map (lookup "x-amz-acl" . reqHeaders) puts @?= [Nothing, Nothing]
+    , testCase "empty diff, no: nothing written, decline exit code" $ do
+        mock <- pendingLike "a: 1\n"
+        (result, asked) <- runReviewAnswering Declined mock
+        result @?= Right 1
+        length asked @?= 1
+        s3Writes mock >>= (@?= [])
+    , testCase "non-empty diff: still asks" $ do
+        mock <- pendingLike "a: 2\n"
+        (result, asked) <- runReviewAnswering Declined mock
+        result @?= Right 1
+        length asked @?= 1
+    ]
+
+{- | A mock with the fixture's pending object (body @a: 1@), no approved
+object, and @latest@ holding this body.
+-}
+pendingLike :: BS.ByteString -> IO MockAws
+pendingLike latestBody = do
+    mock <- newMockAws
+    mockRespond mock (OnObject "HeadObject" "approvals" simplePendingKey) (mockStatus 200)
+    mockRespond mock (OnObject "GetObject" "approvals" simplePendingKey) (MockResponse 200 "a: 1\n")
+    mockRespond mock (OnObject "GetObject" "approvals" latestKey) (MockResponse 200 latestBody)
+    pure mock
+
+-- | Run the review answering every prompt with this; the prompts asked.
+runReviewAnswering :: ConfirmResult -> MockAws -> IO (Either Text Int, [Text])
+runReviewAnswering answer mock = do
+    asked <- newIORef []
+    let confirm prompt = modifyIORef' asked (<> [prompt]) >> pure answer
+    mcfn <- newMockCfnContext mock OpTemplateApprovalReview "test"
+    result <- templateApprovalReviewWith confirm (mcContext mcfn) ("s3://approvals/" <> simplePendingKey) 3
+    prompts <- readIORef asked
+    pure (result, prompts)
+
+-- | The S3 writes made (PutObject, DeleteObject) and their keys, in order.
+s3Writes :: MockAws -> IO [(Text, Text)]
+s3Writes mock = do
+    logged <- mockRequestLog mock
+    pure
+        [ (callOperation call, key)
+        | r <- logged
+        , Just call <- [reqCall r]
+        , callOperation call `elem` ["PutObject", "DeleteObject"]
+        , Just key <- [callKey call]
+        ]
+
+-- | The @latest@ key beside the fixture's pending key.
+latestKey :: Text
+latestKey = "app/latest"
 
 lintTests :: [TestTree]
 lintTests =
