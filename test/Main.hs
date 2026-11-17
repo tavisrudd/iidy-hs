@@ -4,6 +4,7 @@ import Test.Tasty (defaultMain, testGroup)
 
 import Iidy.Cli.HelpTest qualified as HelpTest
 import Test.ApprovedTemplateTest (approvedTemplateTests)
+import Test.AwsImportGateTest (awsImportGateTests)
 import Test.AwsLoaderTest (awsLoaderTests)
 import Test.CfnYamlEmitterTest (cfnYamlEmitterTests)
 import Test.ChangesetHelpersTest (changesetHelpersTests)
@@ -115,6 +116,7 @@ main = do
             , testGroup "SecurityControls" securityControlsTests
             , testGroup "ImportTrust" importTrustTests
             , testGroup "TrustedSource" trustedSourceTests
+            , testGroup "AwsImportGate" awsImportGateTests
             , testGroup "ParamsClient" paramsClientTests
             , testGroup "TemplateLoader" templateLoaderTests
             , testGroup "GlobalConfig" globalConfigTests

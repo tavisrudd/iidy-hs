@@ -235,6 +235,8 @@ test-suite iidy-hs-test
     Test.SecurityControlsTest
     Test.ImportTrustTest
     Test.TrustedSourceTest
+    Test.AwsImportGateTest
+    Test.ImportFixtures
     Test.ParamsClientTest
     Test.TemplateLoaderTest
     Test.GlobalConfigTest

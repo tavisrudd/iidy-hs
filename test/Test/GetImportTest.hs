@@ -14,8 +14,8 @@ import Amazonka qualified
 import Amazonka.Auth.Exception qualified as AuthEx
 
 import Iidy.Cli (GetImportArgs (..), RenderFormat (..))
-import Iidy.GetImport (needsAwsEnv, runGetImportWith)
-import Iidy.Yaml.Imports.Types (ImportType (..), RemoteImports (..))
+import Iidy.GetImport (runGetImportWith)
+import Iidy.Yaml.Imports.Types (ImportType (..), RemoteImports (..), needsAwsEnv)
 import Test.MockAws (MockAws (..), newMockAws)
 import Test.Shared (collectRawOutput, docFixture, listFixture, nestedSeqFixture, orderedJsonFixture, orderedNestedFixture, orderedYamlFixture, preprocTagsFixture, surrogateJsonFixture, testGlobalOpts)
 

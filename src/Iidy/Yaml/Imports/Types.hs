@@ -15,6 +15,9 @@ module Iidy.Yaml.Imports.Types (
     trustedSourceList,
     parseTrustedSource,
     isTrustedBase,
+    isAwsBacked,
+    needsAwsEnv,
+    checkImport,
     parseImportType,
 ) where
 
@@ -116,6 +119,50 @@ parseImportType location baseLocation = do
             Left $
                 ImportError $
                     "Import type " <> typeStr <> " is not allowed from remote templates"
+        else Right importType
+
+{- | Whether an import type is read with the user's AWS credentials
+(@cfn:@, @ssm:@, @ssm-path:@ and both @s3:@ forms).
+-}
+isAwsBacked :: ImportType -> Bool
+isAwsBacked = \case
+    ImportCfn -> True
+    ImportSsm -> True
+    ImportSsmPath -> True
+    ImportS3 -> True
+    ImportFile -> False
+    ImportEnv -> False
+    ImportGit -> False
+    ImportRandom -> False
+    ImportFilehash -> False
+    ImportFilehashBase64 -> False
+    ImportHttp -> False
+
+{- | Whether loading an import of this type needs an AWS environment.
+S3 imports are excluded when remote imports are blocked, so the user sees
+the --no-remote-imports error rather than a credentials error.
+-}
+needsAwsEnv :: RemoteImports -> ImportType -> Bool
+needsAwsEnv remoteImports ty =
+    isAwsBacked ty && (ty /= ImportS3 || remoteImports == AllowRemoteImports)
+
+{- | The import gate: 'parseImportType' (local-only types need a local
+base) plus the AWS-backed check: a document whose base is not trusted
+('isTrustedBase') may not import @cfn:@, @ssm:@, @ssm-path:@ or @s3:@.
+-}
+checkImport :: TrustedSources -> Text -> Text -> Either ImportError ImportType
+checkImport trusted location baseLocation = do
+    importType <- parseImportType location baseLocation
+    if isAwsBacked importType && not (isTrustedBase trusted baseLocation)
+        then
+            Left $
+                ImportError $
+                    "Import type "
+                        <> T.takeWhile (/= ':') location
+                        <> " is not allowed from remote templates: "
+                        <> baseLocation
+                        <> " is not a trusted source (to allow it, pass --trust-import-source"
+                        <> " with a prefix of that location)"
         else Right importType
 
 {- | Parse an import type prefix from a location string.

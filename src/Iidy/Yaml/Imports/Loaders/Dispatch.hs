@@ -1,7 +1,8 @@
 {- | Full import dispatcher.
 Routes all import types to the appropriate loader, with optional AWS env.
-Uses 'parseImportType' as a security gate to enforce the trust model
-(e.g. remote base templates cannot load local import types).
+Uses 'checkImport' as a security gate to enforce the trust model
+(remote base templates cannot load local-only import types, and untrusted
+ones cannot load AWS-backed import types).
 -}
 module Iidy.Yaml.Imports.Loaders.Dispatch (
     mkFullDispatcher,
@@ -26,7 +27,7 @@ import Iidy.Yaml.Imports.Types (
     ImportPolicy (..),
     ImportType (..),
     RemoteImports (..),
-    parseImportType,
+    checkImport,
  )
 
 ------------------------------------------------------------------------
@@ -48,16 +49,18 @@ mkImportConfig mEnv policy = ImportConfig{icAwsEnv = mEnv, icPolicy = policy}
 ------------------------------------------------------------------------
 
 {- | Create a full import dispatcher.
-First classifies the import via 'parseImportType' (enforcing the security
-model: remote base templates cannot load local-only import types), then
-dispatches to the appropriate loader.
+First classifies the import via 'checkImport' (enforcing the security
+model: remote base templates cannot load local-only import types, and
+documents outside the trusted sources cannot load AWS-backed ones), then
+dispatches to the appropriate loader. The gate runs before any loader, so
+a refused AWS-backed import never reaches 'withAwsEnv'.
 When AWS env is 'Nothing', AWS import types return an error.
 When the policy's 'ipRemoteImports' is 'BlockRemoteImports', HTTP and S3 imports
 are rejected.
 -}
 mkFullDispatcher :: ImportConfig -> LoadImportFn
 mkFullDispatcher cfg location baseLocation =
-    case parseImportType location baseLocation of
+    case checkImport (ipTrustedSources (icPolicy cfg)) location baseLocation of
         Left err -> pure (Left err)
         Right importType -> dispatch cfg importType location baseLocation
 
@@ -74,9 +77,9 @@ dispatch cfg importType location baseLocation = case importType of
     ImportFilehash -> loadFilehashImport location baseLocation False
     ImportFilehashBase64 -> loadFilehashImport location baseLocation True
     ImportHttp -> withRemote cfg $ loadHttpImport location
-    -- cfn/ssm/ssm-path are AWS API calls gated by credentials, not arbitrary
-    -- fetches.  They are NOT blocked by --no-remote-imports because they go
-    -- through the AWS SDK with IAM auth, not open HTTP.
+    -- cfn/ssm/ssm-path are AWS API calls made with the user's credentials.
+    -- They are NOT blocked by --no-remote-imports (they are not open HTTP),
+    -- but 'checkImport' refuses them, and s3:, from untrusted documents.
     ImportCfn -> withAwsEnv cfg $ \env -> loadCfnImport env location
     ImportSsm -> withAwsEnv cfg $ \env -> loadSsmImport env location
     ImportSsmPath -> withAwsEnv cfg $ \env -> loadSsmPathImport env location

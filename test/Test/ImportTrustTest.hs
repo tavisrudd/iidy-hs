@@ -8,9 +8,8 @@ each untrusted base is crossed with each local-only import.
 -}
 module Test.ImportTrustTest (importTrustTests) where
 
-import Data.Aeson (Value (..))
-import Data.Aeson.KeyMap qualified as KM
 import Data.ByteString.Lazy qualified as BL
+import Data.IORef (readIORef)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -20,7 +19,6 @@ import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 import Iidy.Yaml.Engine (LoadImportFn, PreprocessError (..), preprocessYaml)
 import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
 import Iidy.Yaml.Imports.Types (
-    ImportData (..),
     ImportError (..),
     ImportType (..),
     RemoteImports (..),
@@ -28,11 +26,14 @@ import Iidy.Yaml.Imports.Types (
     parseImportType,
  )
 import Iidy.Yaml.Parser (parseYaml)
+import Test.ImportFixtures (stubDocLoader)
+import Test.MockAws (MockAws (..), newMockAws)
 
 importTrustTests :: [TestTree]
 importTrustTests =
     [ testGroup "untrusted parent rejects local-only import" untrustedMatrix
-    , testGroup "untrusted parent keeps non-local imports" untrustedAllowedMatrix
+    , testGroup "untrusted parent keeps random and HTTP imports" untrustedAllowedMatrix
+    , testGroup "untrusted parent rejects AWS-backed import" untrustedAwsMatrix
     , testGroup "local parent imports every type" localMatrix
     , testGroup "dispatcher refuses local-only import from untrusted parent" dispatcherMatrix
     , testGroup "nested import from remote document" nestedMatrix
@@ -77,18 +78,27 @@ localOnlyTyped =
 localOnlyImports :: [Text]
 localOnlyImports = map fst localOnlyTyped
 
--- | Imports that are not local-only, with their classified type.
-nonLocalImports :: [(Text, ImportType)]
-nonLocalImports =
+-- | Imports that are neither local-only nor AWS-backed.
+openImports :: [(Text, ImportType)]
+openImports =
     [ ("random:name", ImportRandom)
-    , ("s3:bucket/data.yaml", ImportS3)
-    , ("s3://bucket/data.yaml", ImportS3)
     , ("http://example.com/data.yaml", ImportHttp)
     , ("https://example.com/data.yaml", ImportHttp)
+    ]
+
+-- | AWS-backed imports (read with the user's credentials), typed.
+awsBackedImports :: [(Text, ImportType)]
+awsBackedImports =
+    [ ("s3:bucket/data.yaml", ImportS3)
+    , ("s3://bucket/data.yaml", ImportS3)
     , ("cfn:export/Foo", ImportCfn)
     , ("ssm:/param", ImportSsm)
     , ("ssm-path:/path", ImportSsmPath)
     ]
+
+-- | Imports that are not local-only, with their classified type.
+nonLocalImports :: [(Text, ImportType)]
+nonLocalImports = openImports <> awsBackedImports
 
 -- | Every import, local-only or not, with its classified type.
 allImports :: [(Text, ImportType)]
@@ -127,7 +137,22 @@ untrustedAllowedMatrix :: [TestTree]
 untrustedAllowedMatrix =
     [ testCase (caseName base loc) $ parseImportType loc base @?= Right ty
     | base <- untrustedBases
-    , (loc, ty) <- nonLocalImports
+    , (loc, ty) <- openImports
+    ]
+
+{- | The decided C15 change: through the real dispatcher, with a mock AWS
+environment present, an untrusted base cannot import an AWS-backed type,
+and no AWS request is made.
+-}
+untrustedAwsMatrix :: [TestTree]
+untrustedAwsMatrix =
+    [ testCase (caseName base loc) $ do
+        mock <- newMockAws
+        result <- mkFullDispatcher (mkImportConfig (Just (mockEnv mock)) (importPolicy AllowRemoteImports)) loc base
+        assertRejected result
+        readIORef (mockRequests mock) >>= (@?= [])
+    | base <- untrustedBases
+    , (loc, _ty) <- awsBackedImports
     ]
 
 localMatrix :: [TestTree]
@@ -173,34 +198,22 @@ nestedMatrix =
         case parseYaml (BL.fromStrict (TE.encodeUtf8 root)) "local.yaml" of
             Left err -> assertFailure ("root template did not parse: " <> show err)
             Right ast ->
-                preprocessYaml (remoteStubLoader remoteLoc) ast "local.yaml" >>= \case
+                preprocessYaml (hostileStub remoteLoc) ast "local.yaml" >>= \case
                     Left (PeImportError err) -> assertRejected (Left err :: Either ImportError ())
                     Left other -> assertFailure ("expected trust-gate error, got " <> show other)
                     Right _ -> assertFailure "remote document read env:HOME"
     | remoteLoc <- remoteDocLocations
     ]
 
-{- | Serve a document that imports @env:HOME@ at @remoteLoc@, as the
-matching remote loader would; route every other location through the
-real dispatcher and its trust gate.
+{- | Serve a document that imports @env:HOME@ at @remoteLoc@; route every
+other location through the real dispatcher and its trust gate.
 -}
-remoteStubLoader :: Text -> LoadImportFn
-remoteStubLoader remoteLoc loc base
-    | loc == remoteLoc =
-        pure $
-            Right
-                ImportData
-                    { idType = ImportS3
-                    , idLocation = remoteLoc
-                    , idRawData = hostileRaw
-                    , idOrdered = Nothing
-                    , idDoc =
-                        Object (KM.fromList [("$imports", Object (KM.fromList [("secret", String "env:HOME")]))])
-                    }
-    | otherwise = mkFullDispatcher (mkImportConfig Nothing (importPolicy AllowRemoteImports)) loc base
-  where
-    hostileRaw :: Text
-    hostileRaw = "$imports:\n  secret: env:HOME\n"
+hostileStub :: Text -> LoadImportFn
+hostileStub remoteLoc =
+    stubDocLoader
+        remoteLoc
+        "$imports:\n  secret: env:HOME\n"
+        (mkFullDispatcher (mkImportConfig Nothing (importPolicy AllowRemoteImports)))
 
 ------------------------------------------------------------------------
 -- Helpers

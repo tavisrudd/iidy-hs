@@ -10,7 +10,6 @@ and so it does here.
 module Iidy.GetImport (
     runGetImport,
     runGetImportWith,
-    needsAwsEnv,
 ) where
 
 import Control.Exception (Handler (..), IOException, catches)
@@ -36,8 +35,7 @@ import Iidy.Yaml.Imports.Types (
     ImportData (..),
     ImportError (..),
     ImportPolicy (..),
-    ImportType (..),
-    RemoteImports (..),
+    needsAwsEnv,
     parseImportType,
  )
 import Iidy.Yaml.JMESPath (applyJmesPath)
@@ -79,24 +77,6 @@ runGetImportWith mkEnv emit args gopts = do
             case result of
                 Left (ImportError err) -> reportImportError err
                 Right importData -> emitDoc emit gopts args importData
-
-{- | Whether loading an import of this type needs an AWS environment.
-S3 imports are excluded when remote imports are blocked, so the user sees
-the --no-remote-imports error rather than a credentials error.
--}
-needsAwsEnv :: RemoteImports -> ImportType -> Bool
-needsAwsEnv remoteImports = \case
-    ImportCfn -> True
-    ImportSsm -> True
-    ImportSsmPath -> True
-    ImportS3 -> remoteImports == AllowRemoteImports
-    ImportFile -> False
-    ImportEnv -> False
-    ImportGit -> False
-    ImportRandom -> False
-    ImportFilehash -> False
-    ImportFilehashBase64 -> False
-    ImportHttp -> False
 
 ------------------------------------------------------------------------
 -- Helpers
