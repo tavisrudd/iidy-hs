@@ -29,6 +29,13 @@ March post-review fixes (item 4C) and the refactoring plan (phase 7); still
 true per the C2 triage ([[file:../C2/report--handoff-triage.org][report]]).
 Low priority: worth doing when the module next needs changing.
 
+Update 2026-11-16 (supervisor): the path is =src/Iidy/Cfn/StackArgsLoader.hs=,
+now about 700 lines after [[file:../C17/index.org][C17]], which also added
+=src/Iidy/Cfn/StackArgsBootstrap.hs=. When splitting, add a loader-level
+seam and a test proving the C17 post-preprocessing backstop is wired in:
+the C17 re-review disabled the settings recording at
+=StackArgsBootstrap.hs:147= and every bootstrap test still passed.
+
 * Scope and gate
 :PROPERTIES:
 :ID: org:01a1e64b-9204-753d-924d-ded7ff57c369

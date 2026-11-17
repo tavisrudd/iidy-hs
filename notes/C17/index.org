@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C17
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
 :CREATED_BY: opus-5.5-medium
@@ -10,8 +10,28 @@
 :ID: org:01a1e691-47e6-76d6-96d5-e48c5d51b394
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 17:50]--[2026-11-16 Mon 18:02] => 0:12
+CLOCK: [2026-11-16 Mon 18:07]--[2026-11-16 Mon 18:13] => 0:06
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 17:49]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 17:50]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a5d8e0ddabae19d26
+- Clock-out [2026-11-16 Mon 18:02]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a5d8e0ddabae19d26
+- Clock-in [2026-11-16 Mon 18:07]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a5d8e0ddabae19d26
+- Clock-out [2026-11-16 Mon 18:13]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a5d8e0ddabae19d26
+- Card state STARTED → DONE [2026-11-16 Mon 18:19]
+  Note: Landed c93293d..763b189 and the docs fix: stack-args AWS imports refused when Profile/Region/AssumeRoleARN is computed (fail-closed raw reading plus post-preprocessing backstop); Opus review fix first, fix round 1, re-review land; backstop wiring test noted on C12; scoping vs iidy-js pending Tavis
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -79,29 +99,30 @@ command's AWS handling (=get-import= builds its own env from the CLI
 settings, [[file:../C7/index.org][C7]]).
 
 Done when:
-- [ ] The Rust comparison in Context is re-checked and recorded in the first
+- [X] The Rust comparison in Context is re-checked and recorded in the first
   task note with the decision and its reason. Default decision, unless the
   check contradicts it: keep AWS imports in stack-args (an extension Rust
   lacks) and fail closed when they could have run under the wrong account.
-- [ ] Rule implemented: when the file performed an AWS import (the import
+- [X] Rule implemented: when the file performed an AWS import (the import
   manifest from =preprocessYaml11= shows an =ssm:=, =ssm-path:=, =cfn:= or
   =s3:= import; reuse =needsAwsEnv= from =Iidy.GetImport= or move it to a
   shared home, no second classifier) and the merged settings built after
   preprocessing differ from the ones the import env was built for, the tool
   stops before any AWS deployment call. The error names the field, shows
   both values, and says to set the field literally or pass it on the command
-  line.
-- [ ] The raw reading no longer treats an uninterpolated templated string
+  line. (Met in a stricter form, decided before the first AWS import runs;
+  see the implementation result.)
+- [X] The raw reading no longer treats an uninterpolated templated string
   (=Region: "{{r}}"=) or a tag as a literal: such a field counts as not
   known before preprocessing.
-- [ ] A bootstrap env failure is no longer swallowed when the file has AWS
+- [X] A bootstrap env failure is no longer swallowed when the file has AWS
   imports: the cause reaches the user. With no AWS import in the file,
   behaviour is unchanged.
-- [ ] The env factory is a parameter (for example
+- [X] The env factory is a parameter (for example
   =AwsSettings -> IO Amazonka.Env=) of the code that does the bootstrap, so
   tests use a mock env and see which settings it was asked for; the
   production call passes =createAwsEnvFromSettings=.
-- [ ] Mock-AWS tests, each recorded failing before the change where it pins
+- [X] Mock-AWS tests, each recorded failing before the change where it pins
   new behaviour: literal =Profile= and =Region= with an =ssm:= import
   succeed and the factory saw those literals; computed =Profile= (through
   an import or a =$defs= reference) with an =ssm:= import is refused;
@@ -109,9 +130,9 @@ Done when:
   equal to the final value passes; a templated =Region: "{{r}}"= with an
   AWS import is refused; a bootstrap failure with an AWS import reports its
   cause.
-- [ ] =DIVERGENCES.md= has one entry: stack-args AWS imports work here and
+- [X] =DIVERGENCES.md= has one entry: stack-args AWS imports work here and
   not in Rust, and are refused when a credential field is computed.
-- [ ] Build warning-free, full suite green, commits name C17.
+- [X] Build warning-free, full suite green, commits name C17.
 
 Stop and record if: the rule cannot be decided from the import manifest and
 the merged settings (a deeper redesign, such as a second preprocessing pass
@@ -129,10 +150,15 @@ computed credential field is refused with a clear error. TypeScript:
 [[file:../C23/report--decisions-vs-originals.org][decisions vs originals]]
 item 5.
 
-* TODO Compare with Rust and choose the fix
+* DONE Compare with Rust and choose the fix
 :PROPERTIES:
 :ID: org:01a1e692-140f-7737-921c-2be43177554e
 :ADDED: [2026-11-16 Mon 15:54]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:02] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a5d8e0ddabae19d26
 :END:
 
 Re-read =Runner.hs= lines 55-77, =extractRawAwsFromAst= and
@@ -142,10 +168,74 @@ review's scenario first: a stack-args file with a computed =Profile= and an
 the bootstrap settings (the ambient ones) while the final merged settings
 differ. Record the decision (default in the gate) here.
 
-* TODO Make the bootstrap env factory a parameter
+** Result (claude-C17, 2026-11-16)
+:PROPERTIES:
+:ID: org:01a1e707-0a91-714b-bbe2-cc78d3ab9602
+:ADDED: [2026-11-16 Mon 18:02]
+:END:
+Rust re-checked, Context holds: =load_stack_args= preprocesses first
+(=src/cfn/stack_args.rs:198=) with =ProductionImportLoader::new()=
+(=src/yaml/engine.rs:578=), which has no AWS config, so =ssm:=, =cfn:=,
+=ssm-path:= and =s3:= imports fail there ("AWS configuration required",
+=src/yaml/imports/loaders/mod.rs:72-93=); the AWS settings are read from the
+preprocessed value only (=stack_args.rs:215-223=).
+
+TypeScript (=~/src/iidy-js/src/cfn/loadStackArgs.ts:91-118=) reads
+=Profile=, =AssumeRoleARN= and =Region= before preprocessing, accepts a plain
+string or an environment map, throws "The X setting in stack-args.yaml must
+be a plain string or an environment map of strings." for anything else (a
+tag included), merges CLI overrides, then configures AWS before =transform=
+runs the imports.
+
+Reproduced on the branch base with the mock env (ghci script in the temp
+dir): a file with =Profile: !$ prof= (=$defs= =prof: prod-account=),
+=Region: "{{region}}"= and an =ssm:/app/db-host= import. The bootstrap
+settings were =Profile= unset (ambient) and =Region= the literal string
+="{{region}}"=; the mock served =ssm.GetParameter.json= under them; the final
+merged settings were =Profile prod-account=, =Region eu-west-1=. So the
+import ran under settings that differ from the final ones, silently.
+
+Decision (Tavis, recorded in the gate): keep AWS imports in stack-args and
+follow TypeScript. Fix shape, confirmed against TypeScript:
+- A credential field read before preprocessing is either absent, a literal
+  (plain string, or the current environment's plain-string entry in an
+  environment map), or not plain (a tag, a handlebars template, an
+  environment map lacking the environment or with a non-plain entry, any
+  other node, or a document that is not a plain mapping).
+- The import env is built lazily, at the first AWS import (classified by
+  =needsAwsEnv=), from the CLI settings merged over the literal fields
+  (=mergeAwsSettings=, unchanged). Before building it, a field that is not
+  plain and not given on the command line refuses the import, so no AWS call
+  runs under the wrong account. This is stricter than the gate's
+  "compare after preprocessing" wording (which still lets the import run
+  under ambient settings) and matches TypeScript, which refuses before any
+  import. Literal fields pass through preprocessing unchanged, so no
+  post-preprocessing comparison is needed.
+- Narrower than TypeScript on purpose, to meet the gate's "computed =Region=
+  with no AWS import loads as before": the refusal applies only when the file
+  performs an AWS import. A file without AWS imports loads as today.
+- A factory failure at that point is reported with its cause instead of
+  being swallowed.
+
+Duplication found and how it is handled:
+- The credential field names were spelled out in three places in
+  =StackArgsLoader.hs= (=extractRawAwsFromAst=, =resolveEnvMaps=,
+  =extractAwsSettings=); one owner, =CredentialField=, now lists them, with
+  each field's key and CLI flag.
+- AWS import classification: =needsAwsEnv= (=Iidy.GetImport=) is reused;
+  =Iidy.GetImport= is outside the allowed paths, so it is imported, not moved.
+- The env factory: production passes =createAwsEnvFromSettings=, as
+  =runGetImport= does.
+
+* DONE Make the bootstrap env factory a parameter
 :PROPERTIES:
 :ID: org:01a1e6c4-1bf1-77db-901d-6ab66436d08b
 :ADDED: [2026-11-16 Mon 16:49]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:02] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a5d8e0ddabae19d26
 :END:
 
 Move the bootstrap block of =runCfnWithArgs= into a function in
@@ -153,12 +243,278 @@ Move the bootstrap block of =runCfnWithArgs= into a function in
 No behaviour change in this step; the existing suite stays green. Add the
 mock-side recording of requested settings.
 
-* TODO Implement with tests
+** Result (claude-C17, 2026-11-16)
+:PROPERTIES:
+:ID: org:01a1e707-0a91-714b-bbe2-cc776529f2a1
+:ADDED: [2026-11-16 Mon 18:02]
+:END:
+New module =Iidy.Cfn.StackArgsBootstrap= with =loadStackArgsBootstrapped=
+taking the factory =AwsSettings -> IO Amazonka.Env=; =runCfnWithArgs=
+passes =fmap fst . createAwsEnvFromSettings=. =Test.MockAws= gains
+=recordingEnvFactory= (serves the mock env, records the settings asked
+for). In this step the bootstrap kept its old eager, exception-swallowing
+behaviour; the existing suite stayed green, plus one new test pinning the
+literal case.
+
+* DONE Implement with tests
 :PROPERTIES:
 :ID: org:01a1e692-140f-7737-921c-2be3a212fe08
 :ADDED: [2026-11-16 Mon 15:54]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:02] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a5d8e0ddabae19d26
 :END:
 
 First commit the failing tests for the computed-field, templated-string and
 swallowed-failure cases (recorded failing), then the rule, the raw-reading
 fix and the error surfacing, then the =DIVERGENCES.md= entry.
+
+** Result (claude-C17, 2026-11-16)
+:PROPERTIES:
+:ID: org:01a1e707-0a91-714b-bbe2-cc7652b52dbc
+:ADDED: [2026-11-16 Mon 18:02]
+:END:
+The pre-commit hook runs the full suite, so a red test commit is not
+possible; the failing run is recorded here and the tests land with the fix
+(the reviewer can revert =src/= to repeat it). The =DIVERGENCES.md= entry
+went in the same commit.
+
+Failing run on the task-2 commit (new tests in =Test.StackArgsBootstrapTest=,
+production code unchanged): 5 of 7 failed.
+- computed =Profile= from an import, with =ssm:=: FAIL, loaded instead of
+  refused.
+- computed =Profile= from =$defs=, with =ssm:=: FAIL, loaded.
+- templated =Region: "{{r}}"= with =ssm:=: FAIL, loaded.
+- computed =Region= with no AWS import: FAIL only on the new assertion that
+  the factory is not called (the load itself succeeded as before).
+- factory failure with =ssm:=: FAIL, error was only "AWS import type
+  requires credentials and is not available in this context", no cause.
+- literal fields with =ssm:= and CLI =--profile= equal to the computed
+  value: passed (pinned, not new behaviour).
+
+After the fix all pass, plus two raw-reading unit tests (=readRawField=).
+Sample refusal, as the user sees it (the loader's existing
+=Preprocess error in FILE: PeImportError (...)= wrapper is unchanged):
+"Profile in .../computed-profile-defs.yaml is a preprocessing tag, not a
+plain string, so the AWS import ssm:/app/db-host would run with Profile not
+set (ambient AWS configuration) instead of the value the file computes. In
+a stack-args file with AWS imports, Profile, AssumeRoleARN, Region must be
+plain strings or environment maps of plain strings: set Profile literally
+or pass --profile on the command line". A factory failure reads "cannot
+build the AWS environment for the import ssm:/app/db-host in FILE (Profile
+literal-profile, AssumeRoleARN not set (ambient AWS configuration), Region
+eu-west-1): <cause>".
+
+Notes for review:
+- The refusal is decided before the first AWS import runs, from the raw
+  fields and the CLI settings, so the import manifest is not consulted:
+  literal fields cannot change during preprocessing, so the
+  post-preprocessing comparison the gate describes would never fire on a
+  file that passes this check. The error therefore shows the value the
+  import would have used and how the file computes the field, not the final
+  computed value (which would need the import to run first).
+- The import env is now built lazily, only at the first AWS import; a file
+  without AWS imports no longer builds (and silently discards) one.
+- A document whose top level is not a plain mapping (for example a
+  top-level =!$merge=) counts as computing all three fields, so it is refused
+  only if it performs an AWS import and the CLI does not set the fields.
+- =StackArgsLoader.hs= grew to about 700 lines (credential-field owner and
+  raw reading); the split is card C12's.
+
+** Review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e70b-1d5c-7544-ba59-db9e2f550d4e
+:ADDED: [2026-11-16 Mon 18:07]
+:END:
+Reviewer: review (Claude sub-agent). Branch =claude/C17=, base =b747b3c=.
+
+Verdicts:
+- =0daa5fe= (factory as a parameter): land.
+- =6537e9b= (refusal rule): fix first. The rule can be bypassed, so the
+  gate item "Rule implemented" and the claim "literal fields cannot change
+  during preprocessing" do not hold.
+
+Check (1), reverting =src/Iidy/Cfn/StackArgsBootstrap.hs= and
+=src/Iidy/Cfn/StackArgsLoader.hs= to =0daa5fe= with the tests kept: the two
+raw-reading unit tests do not compile there (=readRawField= is new), so they
+were removed for the run; of the other 7, 5 fail and 2 pass, exactly as the
+worker recorded. The regression tests are real.
+
+Defects:
+1. High, =src/Iidy/Cfn/StackArgsLoader.hs= =readRawField= (lines 264-273)
+   with =lookupAstField= (297-300). The raw reading looks only at plain-text
+   keys and takes the first match, while preprocessing resolves mapping keys
+   (=resolvePairWith=, =src/Iidy/Yaml/Resolution/Resolver.hs:201-206=) and
+   the final =Value= keeps the last duplicate (=KM.fromList=,
+   =src/Iidy/Yaml/OValue.hs:44=). Six probes, each with
+   =$imports: {dbHost: ssm:/app/db-host}= and no CLI settings, loaded
+   successfully with the mock factory asked for one Profile and the final
+   merged settings naming =evil-profile=:
+   - duplicate top-level key: =Profile: safe-profile= ... =Profile: !$ prof=
+     (import ran as =safe-profile=);
+   - templated key: =$defs: {k: Profile}= and ="{{k}}": evil-profile=
+     (import ran with Profile unset, ambient);
+   - partly templated key: ="Prof{{x}}ile": evil-profile= with =x: ""=
+     beside =Profile: safe-profile=;
+   - tagged key: =? !$ k= / =: evil-profile= (ambient);
+   - duplicate environment-map entry: =Profile: {dev: safe-profile, dev: !$ prof}=;
+   - templated environment-map key: =Profile: {dev: safe-profile, "{{e}}": evil-profile}=
+     with =e: dev=.
+   The same holds for =Region= and =AssumeRoleARN=. Smallest fix, in two
+   parts: (a) in =readRawField=, treat the field as =RawComputed= when the
+   mapping it is read from (the top level, and the environment map) has any
+   key that is not an =AstPlainString=, or has the field's key (or the
+   environment's key) more than once; (b) add the post-preprocessing check
+   the gate describes as a backstop: when an import env was built, compare
+   the settings it was built for with the final merged settings and refuse
+   on a difference, naming the field and both values. Add one test per probe
+   class above (duplicate key, templated key, tagged key, environment-map
+   variants).
+2. Low, =src/Iidy/Cfn/StackArgsBootstrap.hs:116-118= =isAwsImport= repeats
+   the expression at =src/Iidy/GetImport.hs:67=
+   (=either (const False) (needsAwsEnv remoteImports) (parseImportType location baseLocation)=).
+   Importing =Iidy.GetImport= (a CLI command module) from the =Iidy.Cfn=
+   layer is also a layering smell. Fix: move =needsAwsEnv= and a
+   =locationNeedsAwsEnv :: RemoteImports -> Text -> Text -> Bool= into
+   =Iidy.Yaml.Imports.Types= (beside =ImportType= and =parseImportType=) and
+   call it from both. =Iidy.GetImport= is outside the card's allowed paths,
+   so the supervisor must widen them or file it.
+3. Low, docs: =docs/requirements/01-cli-interface.org:603= and
+   =docs/requirements/08-aws-integration.org:515-540= and =:614= still
+   describe the removed =extractRawAwsFromFile= and the silent fallthrough.
+   Outside the allowed paths; update them or file a card.
+4. Low, message wording: an environment map whose entry is a tag
+   (=Profile: {dev: !$ prof}=) is reported as "Profile ... is a preprocessing
+   tag"; say "the dev entry of the environment map for Profile is a
+   preprocessing tag".
+
+Attacks that were refused or are not reachable: an anchor on a tag used via
+an alias (=Profile: *t=) is refused; a computed entry inside an environment
+map is refused; an =ssm:= import nested inside an imported local file goes
+through the same loader and is refused; a YAML merge key (=<<=) is not
+expanded by this parser and fails as an unknown stack-args key; =$defs=,
+=$envValues=, =$params= and =$imports= are dropped from the output and
+cannot set a top-level field; a CLI override wins in both the import and the
+final settings. A top-level =!$merge= document is refused (counts as all
+fields computed).
+
+Scope reading (point for the supervisor, not a defect): refusing only when
+the file performs an AWS import is narrower than the decision's literal text
+("a computed credential field is refused") and than TypeScript, which refuses
+always. It leaves no hole of its own: without an AWS import no env is built
+before preprocessing, and the deployment env is built from the final values.
+It is required by the gate's own item "computed =Region= with no AWS import
+loads as before" and by the stop rule against refusing files that work
+today. The gate and the decision conflict on this point; Tavis should
+confirm which one wins. The current code follows the gate.
+
+Error text: the refusal sits inside the pre-existing
+=Preprocess error in FILE: PeImportError (ImportError "...")= wrapper, a
+=show= of the error with escaped quotes and constructor names, on one long
+line. It is readable, but the wrapper should render the message text
+instead of =show= (pre-existing, belongs with the error-display work, not
+this card). It leaks no secret: the refusal is decided before any import
+runs, so it shows only the source form (tag, or the template text such as
+={{r}}= as written in the file) and the literal or CLI value the import
+would have used; no imported value exists yet. The factory-failure message
+shows profile, role ARN and region names plus the exception text, none of
+which are credentials.
+
+Duplication and size: =CredentialField= is the single owner of the three
+field names; the old three spellings are gone. =StackArgsLoader.hs= is 703
+lines, over the limit; the split is card C12's (note only).
+
+Temporary files: one directory under =.supervisor/tmp/= and probe fixtures
+in the review worktree, both deleted.
+*** Fix round 1 result (claude-C17, 2026-11-16)
+:PROPERTIES:
+:ID: org:01a1e710-80b4-73b0-998c-241a7fceba75
+:ADDED: [2026-11-16 Mon 18:13]
+:END:
+- Defect 1 (=c2c21f2=): =readRawField= fails closed. A field is computed
+  when the mapping holding it (top level, or the environment map) has any
+  key that is not a plain string, or the looked-up key appears more than
+  once. Backstop: the settings the import env was built with are recorded
+  and compared, field by field, with the final merged settings after CLI
+  overrides; a difference refuses the load (=importSettingsMismatch=, same
+  advice text as the refusal). One test per probe (duplicate top-level
+  =Profile=, ="{{k}}"= key, ="Prof{{x}}ile"= key, tagged key =? !$ k=,
+  duplicate environment-map entry, templated environment-map key); all six
+  failed on the previous tip (=6537e9b=: 6 of 15 failed) and pass now. Three
+  backstop tests call =importSettingsMismatch= directly; two raw-reading unit
+  tests cover duplicate and non-plain keys.
+- Defect 2: =isAwsImport= is left as is; merging it with
+  =GetImport.needsAwsEnv= into =isAwsBacked= is owned by card C15.
+- Defect 3 (=1b8949e=): =docs/requirements/01-cli-interface.org= and
+  =08-aws-integration.org= now describe the lazy import environment, the
+  refusal and the backstop instead of =extractRawAwsFromFile= and the
+  silent fallback.
+- Defect 4 (=89c3fa7=): an environment-map entry is named, for example
+  "Profile (environment entry 'dev') is a preprocessing tag". Refusal
+  messages now start "In FILE, <reason>, so the AWS import ...".
+- Rebased onto =c7afc60=; full suite green (1795 tests).
+
+** Re-review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e712-9968-723d-8deb-c459cb66c303
+:ADDED: [2026-11-16 Mon 18:15]
+:END:
+Narrow re-review of the fix round on =claude/C17= rebased onto =c7afc60=:
+=e7af348=, =828ce38=, =c2c21f2=, =89c3fa7=, =1b8949e=.
+
+Verdict: land. All commits; one low defect may be fixed after landing.
+
+Checks:
+1. With the production files of =c2c21f2= reverted to =828ce38= (tests kept,
+   the three =importSettingsMismatch= unit tests removed so the module
+   compiles), the six probe tests fail, as do the two raw-reading message
+   tests; everything else passes. Restored afterwards.
+2. My six probe forms from the review are now the six committed probe tests
+   and are refused before any AWS call. New attempts, all held:
+   - CLI =--profile cli-profile= over a literal file =Profile=: the factory
+     was asked for =cli-profile= and the final settings match.
+   - CLI =--profile no-profile= (the sentinel) over a computed =Profile=:
+     the field counts as set on the command line, the import and final
+     settings both have Profile unset; no mismatch.
+   - Environment from the CLI or the default: the same =env= value reaches
+     the raw reading and =resolveEnvMaps=, so they cannot disagree.
+   - A plain key that becomes a credential field only after a merge: a
+     top-level =!$merge= document is not a plain mapping and counts as all
+     fields computed; YAML merge keys are not expanded by this parser and
+     =<<= is an unknown stack-args key; =$envValues= injection does not touch
+     the three fields; custom-template global sections need a =Resources=
+     key, which stack-args rejects.
+   - JSON stack-args go through the same =parseYaml=, so the same rules.
+   - Imports inside imported documents go through the same loader (shown
+     in the review) and are refused.
+   - The fail-closed key rule also refuses a file with a non-string
+     top-level key (number, bool) when it has an AWS import; such keys are
+     already unknown stack-args keys, so nothing that works today breaks.
+3. The backstop records =importSettings= into =ranWith= right after the
+   factory succeeds, and that is the same value passed to the factory, so it
+   compares the settings the env was built with, not a recomputation. It is
+   compared with =lsaMergedAws=, the value the Runner builds the deployment
+   env from.
+4. Docs (=docs/requirements/01-cli-interface.org=,
+   =docs/requirements/08-aws-integration.org=) match the code, including the
+   env-map entry wording from =89c3fa7=.
+
+Defects:
+1. Low, =test/Test/StackArgsBootstrapTest.hs=: the backstop's wiring is not
+   tested. With =writeIORef ranWith (Just importSettings)= replaced by
+   =writeIORef ranWith Nothing= (=src/Iidy/Cfn/StackArgsBootstrap.hs:147=)
+   all 19 bootstrap tests still pass; only =importSettingsMismatch= is
+   unit-tested. No reachable input makes the raw rule and the final settings
+   disagree now, so a loader-level test needs a seam, for example
+   an internal =loadStackArgsBootstrappedWith= that takes the raw reader,
+   or a test that reads back the recorded settings. Not a hole today: the raw
+   rule alone covers every form found.
+
+Note (not a defect): the requirements doc says iidy-js "behaves the same
+way"; iidy-js refuses a computed field even without AWS imports. The scoping
+question from the review still stands for Tavis.
+
+Temporary files: one directory under =.supervisor/tmp/=, deleted; the review
+worktree is clean.
