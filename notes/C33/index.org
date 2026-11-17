@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C33
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   C7 open question; Tavis 2026-11-16 accepted the recommendation in notes/C23/report--decisions-vs-originals.org item 9 (TypeScript builds one eagerly, Rust has none)
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
 :ID: org:01a1e6fa-660a-75ee-a9ac-822338ba31db
 :ADDED: [2026-11-16 Mon 17:48]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 19:57]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C33 — Give render an AWS environment, built lazily as get-import does
 #+date: 2026-11-16
