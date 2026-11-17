@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C29
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   C25 side finding: iidy-hs accepts it, Rust says Unsupported format
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
 :ID: org:01a1e6cc-bc1e-7064-b2be-8e64b8f5dbfe
 :ADDED: [2026-11-16 Mon 16:58]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 19:02]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C29 — get-import: reject --format yaml-cloudformation as Rust does
 #+date: 2026-11-16
