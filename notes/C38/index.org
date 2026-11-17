@@ -1,0 +1,59 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C38
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   C15 task 6 review 2026-11-16: Resolver.mergeExpandParams duplicates CustomResources.Params.mergeParams
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e758-cb03-7202-8bcd-76971dfa6b02
+:ADDED: [2026-11-16 Mon 19:31]
+:END:
+#+title: C38 — Merge mergeExpandParams into Params.mergeParams
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e758-cb03-7202-8bcd-76963cf3f9f8
+:ADDED: [2026-11-16 Mon 19:31]
+:END:
+
+=mergeExpandParams= (=src/Iidy/Yaml/Resolution/Resolver.hs=, around line
+900, used by =!$expand= around line 884) is the same function as
+=mergeParams= (=src/Iidy/Yaml/CustomResources/Params.hs=, around line 206):
+both fill missing parameters from their defaults. Found by the C15 task 6
+review. =Params.hs= also defines its own =traverse_= (around line 216),
+which shadows the standard =Data.Foldable.traverse_= for =Either=.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e758-cb03-7202-8bcd-769578ad9965
+:ADDED: [2026-11-16 Mon 19:31]
+:END:
+
+Allowed paths: =src/Iidy/Yaml/Resolution/Resolver.hs=,
+=src/Iidy/Yaml/CustomResources/Params.hs=, =notes/C38/=.
+
+Out of scope: any behaviour change.
+
+Done when:
+- [ ] =mergeExpandParams= is gone; =!$expand= calls =mergeParams=.
+- [ ] The local =traverse_= in =Params.hs= is replaced by the standard one
+  if that compiles without other changes; otherwise noted in the card.
+- [ ] Every existing test passes unchanged; build warning-free; commits
+  name C38.
+
+Stop and record if: the two functions turn out to differ in any case.
+
+* TODO Merge mergeExpandParams into Params.mergeParams
+:PROPERTIES:
+:ID: org:01a1e758-cb03-7202-8bcd-7694a1cc7f10
+:ADDED: [2026-11-16 Mon 19:31]
+:END:
+
+Export =mergeParams= if needed, delete =mergeExpandParams=, call
+=mergeParams= from the =!$expand= site, and swap the local =traverse_= for
+=Data.Foldable.traverse_=. Behaviour-neutral; one commit.
