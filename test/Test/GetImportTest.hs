@@ -4,19 +4,18 @@ mock AWS env, and the env is only built when the import type needs it.
 module Test.GetImportTest (getImportTests) where
 
 import Control.Exception (throwIO)
-import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
+import Data.IORef (newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 
 import Amazonka qualified
-import Amazonka.Auth.Exception qualified as AuthEx
 
 import Iidy.Cli (GetImportArgs (..), GetImportFormat (..))
 import Iidy.GetImport (runGetImportWith)
 import Iidy.Yaml.Imports.Types (ImportType (..), RemoteImports (..), needsAwsEnv)
-import Test.MockAws (MockAws (..), newMockAws)
+import Test.MockAws (MockAws (..), countingEnv, newMockAws, noCredentials)
 import Test.Shared (collectRawOutput, docFixture, listFixture, nestedSeqFixture, orderedJsonFixture, orderedNestedFixture, orderedYamlFixture, preprocTagsFixture, surrogateJsonFixture, testGlobalOpts)
 
 getImportTests :: [TestTree]
@@ -51,7 +50,7 @@ runArgs :: Bool -> IO Amazonka.Env -> GetImportArgs -> IO RunResult
 runArgs remote mkEnv args = do
     builds <- newIORef (0 :: Int)
     (emit, readOut) <- collectRawOutput
-    let countedEnv = bump builds >> mkEnv
+    let countedEnv = countingEnv builds mkEnv
     rc <- runGetImportWith countedEnv emit args (testGlobalOpts remote)
     RunResult rc <$> readOut <*> readIORef builds
 
@@ -63,13 +62,6 @@ runWith remote mkEnv loc = runArgs remote mkEnv (jsonArgs loc)
 runFormat :: GetImportFormat -> Maybe Text -> Text -> IO RunResult
 runFormat fmt query loc =
     runArgs False noCredentials GetImportArgs{giaImport = loc, giaFormat = fmt, giaQuery = query}
-
-bump :: IORef Int -> IO ()
-bump ref = atomicModifyIORef' ref (\n -> (n + 1, ()))
-
--- | An env provider that fails like 'Amazonka.discover' without credentials.
-noCredentials :: IO Amazonka.Env
-noCredentials = throwIO AuthEx.CredentialChainExhausted
 
 ------------------------------------------------------------------------
 -- Mock-backed AWS imports

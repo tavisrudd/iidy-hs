@@ -12,16 +12,13 @@ module Iidy.GetImport (
     runGetImportWith,
 ) where
 
-import Control.Exception (Handler (..), IOException, catches)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import System.IO (stderr)
-import System.IO.Error (ioeGetErrorString)
 
 import Amazonka qualified
-import Amazonka.Auth.Exception qualified as AuthEx
 
 import Iidy.Aws.Config (createAwsEnvFromSettings)
 import Iidy.Aws.CredentialSource (AwsSettings)
@@ -30,11 +27,10 @@ import Iidy.Errors.JMESPath (formatJMESPathQueryError)
 import Iidy.JsonPretty (prettyJsonText)
 import Iidy.Output.Types (OutputData (..))
 import Iidy.Yaml.Emitter (SeqStyle (..), emitYamlWith)
-import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
+import Iidy.Yaml.Imports.Loaders.LazyEnv (lazyAwsDispatcher)
 import Iidy.Yaml.Imports.Types (
     ImportData (..),
     ImportError (..),
-    importNeedsAwsEnv,
     rootBase,
  )
 import Iidy.Yaml.JMESPath (applyJmesPath)
@@ -54,46 +50,21 @@ runGetImport emit args gopts awsSettings =
 
 {- | Run the get-import command with an explicit AWS environment provider.
 The provider runs at most once, and only when 'importNeedsAwsEnv' holds for the
-location. Tests pass a mock environment here.
+location ('lazyAwsDispatcher'). Tests pass a mock environment here.
 -}
 runGetImportWith :: IO Amazonka.Env -> (OutputData -> IO ()) -> GetImportArgs -> GlobalOpts -> IO Int
 runGetImportWith mkEnv emit args gopts = do
     let location = giaImport args
         base = rootBase "."
-        policy = importPolicyFromOpts gopts
-        wantsEnv = importNeedsAwsEnv policy location base
-
-    envResult <-
-        if wantsEnv
-            then fmap Just <$> tryBuildEnv mkEnv
-            else pure (Right Nothing)
-
-    case envResult of
-        Left err -> reportImportError err
-        Right mEnv -> do
-            let importCfg = mkImportConfig mEnv policy
-            result <- mkFullDispatcher importCfg location base
-            case result of
-                Left (ImportError err) -> reportImportError err
-                Right importData -> emitDoc emit gopts args importData
+    loader <- lazyAwsDispatcher mkEnv (importPolicyFromOpts gopts)
+    result <- loader location base
+    case result of
+        Left (ImportError err) -> reportImportError err
+        Right importData -> emitDoc emit gopts args importData
 
 ------------------------------------------------------------------------
 -- Helpers
 ------------------------------------------------------------------------
-
-{- | Run the env provider, turning credential, region and STS failures into
-an error message. Other exceptions propagate.
--}
-tryBuildEnv :: IO Amazonka.Env -> IO (Either Text Amazonka.Env)
-tryBuildEnv mkEnv =
-    (Right <$> mkEnv)
-        `catches` [ Handler $ \(e :: AuthEx.AuthError) ->
-                        pure (Left ("AWS credentials not available: " <> T.pack (show e)))
-                  , Handler $ \(e :: IOException) ->
-                        pure (Left (T.strip (T.pack (ioeGetErrorString e))))
-                  , Handler $ \(e :: Amazonka.Error) ->
-                        pure (Left ("AWS configuration failed: " <> T.pack (show e)))
-                  ]
 
 -- | Print an import error to stderr in the Rust format and return exit code 1.
 reportImportError :: Text -> IO Int

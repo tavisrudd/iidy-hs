@@ -1,0 +1,3 @@
+$imports:
+  doc: file:../template-loader/simple.yaml
+out: !$ doc

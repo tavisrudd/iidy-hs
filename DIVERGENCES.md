@@ -368,3 +368,18 @@ resolved path (`Failed to load template from: PATH (no such file)`). Rust
 without `/` or `\` as the body, so a typo such as `Template: templat.yaml`
 is uploaded as a one-line template there. In iidy-hs a bare word naming an
 existing file still loads that file.
+
+## render: AWS Environment Built Lazily
+
+Rust `render` has no AWS environment at all: it calls `preprocess_yaml` with
+no AWS config (`render.rs:31-33`), so an `ssm:`, `ssm-path:`, `cfn:` or `s3:`
+import fails there. iidy-hs gives `render` an AWS environment built from the
+global AWS options (`--profile`, `--region`, `--assume-role-arn`), the same
+way `get-import` does (the decision recorded in C23, item 9). The
+environment is built once, at the first AWS-backed import the trust gate lets
+through, so credentials are needed only when an AWS import is used: a
+template with only `file:`, `env:` or no imports renders without any AWS
+configuration, and an AWS import refused by the gate or by
+`--no-remote-imports` never builds the environment. A credential, region or
+STS failure is reported as an import error on that import. A stack-args file
+rendered by `render` is not covered here.

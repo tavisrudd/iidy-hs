@@ -75,7 +75,7 @@ runCommand :: Cli -> IO ()
 runCommand cli = case cliCommand cli of
     CmdRender args -> do
         dispatch <- mkOutputDispatch (cliGlobalOpts cli)
-        runRender (renderOutput dispatch) args (cliGlobalOpts cli) >>= exitCode
+        runRender (renderOutput dispatch) args (cliGlobalOpts cli) (cliToAwsSettings cli) >>= exitCode
     CmdExplain codes -> explainErrors codes
     -- CloudFormation operations with stack-args
     CmdCreateStack args ->

@@ -1,0 +1,3 @@
+$imports:
+  vpc: cfn:output:network-stack/VpcId
+vpc: !$ vpc

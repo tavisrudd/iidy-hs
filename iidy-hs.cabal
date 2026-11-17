@@ -59,6 +59,7 @@ library
     Iidy.Yaml.Imports.Loaders.HttpGuard
     Iidy.Yaml.Imports.Loaders.Git
     Iidy.Yaml.Imports.Loaders.Dispatch
+    Iidy.Yaml.Imports.Loaders.LazyEnv
     Iidy.Output.Types
     Iidy.Output.Renderer
     Iidy.Output.Color

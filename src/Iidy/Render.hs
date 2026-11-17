@@ -1,7 +1,9 @@
 module Iidy.Render (
     runRender,
+    runRenderWith,
 ) where
 
+import Amazonka qualified
 import Control.Monad.Trans.Except (ExceptT (..), runExceptT)
 import Data.ByteString.Lazy qualified as BL
 import Data.Text (Text)
@@ -11,6 +13,8 @@ import Data.Text.IO qualified as TIO
 import System.Directory (doesFileExist)
 import System.IO (stderr)
 
+import Iidy.Aws.Config (createAwsEnvFromSettings)
+import Iidy.Aws.CredentialSource (AwsSettings)
 import Iidy.Cli (GlobalOpts (..), RenderArgs (..), RenderFormat (..), importPolicyFromOpts)
 import Iidy.Errors.JMESPath (formatJMESPathQueryError)
 import Iidy.JsonPretty (prettyJsonText)
@@ -20,11 +24,14 @@ import Iidy.Yaml.Ast (YamlAst)
 import Iidy.Yaml.Detection (detectYamlSpec, shouldUseYaml11Compatibility)
 import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.Engine (
+    LoadImportFn,
     PreprocessError,
     PreprocessResult (..),
  )
 import Iidy.Yaml.Errors.Conversion (formatParseErrorEnhanced, formatPreprocessErrorEnhanced)
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig, mkImportConfig, preprocessWithConfig)
+import Iidy.Yaml.Imports.Loaders.Dispatch (preprocessWithPolicy)
+import Iidy.Yaml.Imports.Loaders.LazyEnv (lazyAwsDispatcher)
+import Iidy.Yaml.Imports.Types (ImportPolicy)
 import Iidy.Yaml.JMESPath (JMESPathError, applyJmesPath)
 import Iidy.Yaml.Location (Position)
 import Iidy.Yaml.OValue (OValue, fromValue, toValue)
@@ -47,14 +54,23 @@ data RenderError
 {- | Run the render command.  Returns 0 on success, 1 on error.
 The emitter callback is used to send stdout output through the output pipeline.
 -}
-runRender :: (OutputData -> IO ()) -> RenderArgs -> GlobalOpts -> IO Int
-runRender emit args gopts = do
+runRender :: (OutputData -> IO ()) -> RenderArgs -> GlobalOpts -> AwsSettings -> IO Int
+runRender emit args gopts awsSettings =
+    runRenderWith (fst <$> createAwsEnvFromSettings awsSettings) emit args gopts
+
+{- | 'runRender' with an explicit AWS environment provider. The provider runs
+at most once, at the first AWS-backed import the gate lets through, so a
+template without AWS imports needs no credentials. Tests pass a mock here.
+-}
+runRenderWith :: IO Amazonka.Env -> (OutputData -> IO ()) -> RenderArgs -> GlobalOpts -> IO Int
+runRenderWith mkEnv emit args gopts = do
     (content, baseLocation) <- readTemplate args
     let source = TE.decodeUtf8 (BL.toStrict content)
-        importCfg = mkImportConfig Nothing (importPolicyFromOpts gopts)
+        policy = importPolicyFromOpts gopts
+    loader <- lazyAwsDispatcher mkEnv policy
     result <- runExceptT $ do
         ast <- ExceptT . pure $ parseStep content baseLocation
-        val <- ExceptT $ preprocessStep source importCfg ast
+        val <- ExceptT $ preprocessStep source policy loader ast
         outputVal <- ExceptT . pure $ queryStep val
         ExceptT $ writeStep outputVal
     either (reportError baseLocation source) pure result
@@ -65,13 +81,13 @@ runRender emit args gopts = do
             Left (ParseError pos msg) -> Left (ParseFailed pos msg)
             Right ast -> Right ast
 
-    preprocessStep :: Text -> ImportConfig -> YamlAst -> IO (Either RenderError OValue)
-    preprocessStep source importCfg ast = do
+    preprocessStep :: Text -> ImportPolicy -> LoadImportFn -> YamlAst -> IO (Either RenderError OValue)
+    preprocessStep source policy loader ast = do
         let useYaml11 = case raYamlSpec args of
                 YamlV11 -> True
                 YamlV12 -> False
                 YamlAuto -> shouldUseYaml11Compatibility (detectYamlSpec source)
-        result <- preprocessWithConfig importCfg useYaml11 ast (raTemplate args)
+        result <- preprocessWithPolicy policy loader useYaml11 ast (raTemplate args)
         pure $ case result of
             Left err -> Left (PreprocessFailed err)
             Right (PreprocessResult val _manifest) -> Right val

@@ -1,0 +1,3 @@
+host: !$ dbHost
+$imports:
+  dbHost: ssm:/app/db-host

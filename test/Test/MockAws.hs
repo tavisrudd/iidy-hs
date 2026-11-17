@@ -40,9 +40,12 @@ module Test.MockAws (
     mockAwsFixtureDir,
     parseRequest,
     recordingEnvFactory,
+    countingEnv,
+    noCredentials,
 ) where
 
 import Control.Applicative ((<|>))
+import Control.Exception (throwIO)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as BC
@@ -60,6 +63,7 @@ import System.FilePath ((</>))
 import Text.Read (readMaybe)
 
 import Amazonka qualified
+import Amazonka.Auth.Exception qualified as AuthEx
 import Amazonka.Auth.Keys qualified as Keys
 import Network.HTTP.Client qualified as Client
 import Network.HTTP.Client.Internal (Connection, makeConnection)
@@ -398,3 +402,11 @@ reasonPhrase = \case
     404 -> "Not Found"
     500 -> "Internal Server Error"
     _ -> "Unknown"
+
+-- | Wrap an env provider so each run adds one to the counter.
+countingEnv :: IORef Int -> IO Amazonka.Env -> IO Amazonka.Env
+countingEnv builds mkEnv = atomicModifyIORef' builds (\n -> (n + 1, ())) >> mkEnv
+
+-- | An env provider that fails like 'Amazonka.discover' without credentials.
+noCredentials :: IO Amazonka.Env
+noCredentials = throwIO AuthEx.CredentialChainExhausted

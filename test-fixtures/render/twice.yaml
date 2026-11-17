@@ -1,0 +1,7 @@
+$imports:
+  a: ssm:/app/db-host
+  b: ssm:/app/db-host
+  vpc: cfn:output:network-stack/VpcId
+first: !$ a
+second: !$ b
+vpc: !$ vpc
