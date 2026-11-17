@@ -196,6 +196,7 @@ accessDenied key =
     "Access denied (403) checking s3://approvals/"
         <> key
         <> ": the current credentials cannot read the template approval bucket"
+        <> " (S3 also answers 403 for a missing object when s3:ListBucket is not granted)"
 
 -- | Run the request for the fixture template under @s3://approvals/app@.
 runRequest :: MockAws -> IO (Either Text Int)

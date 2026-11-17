@@ -68,6 +68,7 @@ s3ObjectExists awsEnv bucket key =
                     ( "Access denied (403) checking "
                         <> location
                         <> ": the current credentials cannot read the template approval bucket"
+                        <> " (S3 also answers 403 for a missing object when s3:ListBucket is not granted)"
                     )
                 )
         ObjectHeadFailed err ->
