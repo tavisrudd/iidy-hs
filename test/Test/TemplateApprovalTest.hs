@@ -1,10 +1,14 @@
 {- | Tests for @template-approval request@ and @review@ through the mock AWS
-env: how they treat S3 errors.
+env: how they treat S3 errors and the approval-path size limit.
 -}
 module Test.TemplateApprovalTest (templateApprovalTests) where
 
+import Data.ByteString qualified as BS
+import Data.ByteString.Char8 qualified as BC
 import Data.Text (Text)
 import Data.Text qualified as T
+import System.FilePath ((</>))
+import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
@@ -16,7 +20,36 @@ import Test.MockCfnContext (MockCfn (..), newMockCfnContext)
 templateApprovalTests :: [TestTree]
 templateApprovalTests =
     [ testGroup "HeadObject errors" headErrorTests
+    , testGroup "1 MB approval-path limit" sizeLimitTests
     ]
+
+sizeLimitTests :: [TestTree]
+sizeLimitTests =
+    [ testCase "request: a 999999-byte template is accepted" $
+        withSizedTemplate 999999 $ \path -> do
+            mock <- newMockAws
+            result <- runRequestFor mock path
+            result @?= Right 0
+            operations mock >>= (@?= ["HeadObject", "PutObject"])
+    , testCase "request: a 1000000-byte template is refused without suggesting S3" $
+        withSizedTemplate 1000000 $ \path -> do
+            mock <- newMockAws
+            result <- runRequestFor mock path
+            result @?= Left "Template body exceeds maximum size of 999999 bytes (got 1000000 bytes)."
+            operations mock >>= (@?= [])
+    ]
+
+{- | Run an action with a local template file of exactly this many bytes
+(a YAML document padded with a comment).
+-}
+withSizedTemplate :: Int -> (Text -> IO a) -> IO a
+withSizedTemplate size action =
+    withSystemTempDirectory "iidy-approval-size" $ \dir -> do
+        let header = "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n# "
+            padding = BC.replicate (size - BS.length header - 1) 'x'
+            path = dir </> "big.yaml"
+        BS.writeFile path (header <> padding <> "\n")
+        action (T.pack path)
 
 headErrorTests :: [TestTree]
 headErrorTests =
@@ -60,9 +93,13 @@ accessDenied key =
 
 -- | Run the request for the fixture template under @s3://approvals/app@.
 runRequest :: MockAws -> IO (Either Text Int)
-runRequest mock = do
+runRequest mock = runRequestFor mock "test-fixtures/template-loader/simple.yaml"
+
+-- | Run the request for a template under @s3://approvals/app@.
+runRequestFor :: MockAws -> Text -> IO (Either Text Int)
+runRequestFor mock template = do
     mcfn <- newMockCfnContext mock OpTemplateApprovalRequest "test"
-    templateApprovalRequest (mcContext mcfn) approvalArgs False Nothing
+    templateApprovalRequest (mcContext mcfn) (approvalArgs template) False Nothing
 
 -- | Run the review of the fixture's pending object.
 runReview :: MockAws -> IO (Either Text Int)
@@ -74,11 +111,11 @@ runReview mock = do
 operations :: MockAws -> IO [Text]
 operations mock = map (maybe "?" callOperation . reqCall) <$> mockRequestLog mock
 
--- | Stack args with approval on for the fixture template.
-approvalArgs :: StackArgs
-approvalArgs =
+-- | Stack args with approval on for a template.
+approvalArgs :: Text -> StackArgs
+approvalArgs template =
     emptyStackArgs
-        { saTemplate = Just "test-fixtures/template-loader/simple.yaml"
+        { saTemplate = Just template
         , saApprovedTemplateLocation = Just "s3://approvals/app"
         }
 

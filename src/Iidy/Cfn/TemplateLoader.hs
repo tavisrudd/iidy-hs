@@ -8,6 +8,10 @@ Supports the render: prefix for YAML preprocessing (resolves $imports,
 module Iidy.Cfn.TemplateLoader (
     TemplateResult (..),
     loadCfnTemplate,
+    loadCfnTemplateWithLimit,
+    TemplateSizeLimit (..),
+    inlineTemplateLimit,
+    approvalTemplateLimit,
     isTemplateUrl,
     templateMaxBytes,
     s3TemplateMaxBytes,
@@ -43,6 +47,25 @@ templateMaxBytes = 51199
 s3TemplateMaxBytes :: Int
 s3TemplateMaxBytes = 999999
 
+-- | A template size limit and the advice its error ends with.
+data TemplateSizeLimit = TemplateSizeLimit
+    { tslMaxBytes :: !Int
+    , tslAdvice :: !(Maybe Text)
+    }
+    deriving stock (Show, Eq)
+
+-- | The limit for a template sent inline as the request body.
+inlineTemplateLimit :: TemplateSizeLimit
+inlineTemplateLimit =
+    TemplateSizeLimit templateMaxBytes (Just "Upload to S3 and use the S3 URL instead.")
+
+{- | The limit for a template on the approval path, deployed from the
+approved S3 object (iidy-js @S3_TEMPLATE_MAX_BYTES@). URL templates are
+refused on that path, so the error suggests no upload.
+-}
+approvalTemplateLimit :: TemplateSizeLimit
+approvalTemplateLimit = TemplateSizeLimit s3TemplateMaxBytes Nothing
+
 ------------------------------------------------------------------------
 -- Types
 ------------------------------------------------------------------------
@@ -66,8 +89,18 @@ Returns 'Left' with a descriptive error message on failure, instead of
 throwing via 'fail'.
 -}
 loadCfnTemplate :: Maybe Text -> Maybe FilePath -> Text -> ImportConfig -> IO (Either Text TemplateResult)
-loadCfnTemplate Nothing _ _ _ = pure (Right (TemplateResult Nothing Nothing))
-loadCfnTemplate (Just tmplSpec) argsfilePath env importCfg
+loadCfnTemplate = loadCfnTemplateWithLimit inlineTemplateLimit
+
+-- | 'loadCfnTemplate' with a given size limit for the loaded body.
+loadCfnTemplateWithLimit ::
+    TemplateSizeLimit ->
+    Maybe Text ->
+    Maybe FilePath ->
+    Text ->
+    ImportConfig ->
+    IO (Either Text TemplateResult)
+loadCfnTemplateWithLimit _ Nothing _ _ _ = pure (Right (TemplateResult Nothing Nothing))
+loadCfnTemplateWithLimit limit (Just tmplSpec) argsfilePath env importCfg
     -- S3 URL - use as template URL
     | isS3Url tmplSpec = pure (Right (TemplateResult Nothing (Just tmplSpec)))
     -- HTTP(S) URL - use as template URL
@@ -89,7 +122,7 @@ loadCfnTemplate (Just tmplSpec) argsfilePath env importCfg
                         pure (Left ("Preprocess error in rendered template " <> baseLocation <> ": " <> T.pack (show err)))
                     Right (PreprocessResult val _manifest) -> do
                         let rendered = emitYaml val
-                        case checkTemplateSize rendered of
+                        case checkTemplateSize limit rendered of
                             Left sizeErr -> pure (Left sizeErr)
                             Right () -> pure (Right (TemplateResult (Just rendered) Nothing))
     -- Local file path
@@ -116,7 +149,7 @@ loadCfnTemplate (Just tmplSpec) argsfilePath env importCfg
                                             <> "\""
                                         )
                                     )
-                            else case checkTemplateSize body of
+                            else case checkTemplateSize limit body of
                                 Left sizeErr -> pure (Left sizeErr)
                                 Right () -> pure (Right (TemplateResult (Just body) Nothing))
             else
@@ -202,21 +235,21 @@ loadFileContent path = do
         Right txt -> pure (Right txt)
         Left err -> pure (Left ("Invalid UTF-8 in template file " <> T.pack path <> ": " <> T.pack (show err)))
 
-{- | Check template size limit for inline templates.
+{- | Check a template body against a size limit, in UTF-8 bytes.
 Returns 'Left' with a descriptive message if the body exceeds the limit.
 -}
-checkTemplateSize :: Text -> Either Text ()
-checkTemplateSize body =
+checkTemplateSize :: TemplateSizeLimit -> Text -> Either Text ()
+checkTemplateSize limit body =
     let size = BS.length (TE.encodeUtf8 body)
-     in if size > templateMaxBytes
+     in if size > tslMaxBytes limit
             then
                 Left
                     ( "Template body exceeds maximum size of "
-                        <> T.pack (show templateMaxBytes)
+                        <> T.pack (show (tslMaxBytes limit))
                         <> " bytes (got "
                         <> T.pack (show size)
-                        <> " bytes). "
-                        <> "Upload to S3 and use the S3 URL instead."
+                        <> " bytes)."
+                        <> maybe "" (" " <>) (tslAdvice limit)
                     )
             else Right ()
 

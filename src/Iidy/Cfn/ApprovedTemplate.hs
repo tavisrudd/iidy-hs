@@ -19,7 +19,7 @@ import Data.Text qualified as T
 
 import Iidy.Cfn.Context (CfnContext (..))
 import Iidy.Cfn.TemplateHash (generateVersionedLocation)
-import Iidy.Cfn.TemplateLoader (TemplateResult (..), isTemplateUrl, loadCfnTemplate)
+import Iidy.Cfn.TemplateLoader (TemplateResult (..), approvalTemplateLimit, isTemplateUrl, loadCfnTemplateWithLimit)
 import Iidy.Cfn.Types (StackArgs (..))
 import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
 
@@ -36,7 +36,8 @@ data ApprovedTemplate = ApprovedTemplate
 {- | The approved object for the stack args' template: 'Nothing' when
 @ApprovedTemplateLocation@ is unset. With it set, a @Template@ that is a
 URL or is missing is refused before anything is loaded; otherwise the
-template is rendered and the key built from its hash.
+template is rendered, up to the approval-path size limit, and the key built
+from its hash.
 -}
 approvedTemplateFor ::
     CfnContext ->
@@ -66,7 +67,8 @@ approvedTemplateFor ctx sa argsfilePath = case saApprovedTemplateLocation sa of
                     )
             | otherwise -> do
                 loaded <-
-                    loadCfnTemplate
+                    loadCfnTemplateWithLimit
+                        approvalTemplateLimit
                         (Just spec)
                         argsfilePath
                         (cfnEnvironment ctx)
