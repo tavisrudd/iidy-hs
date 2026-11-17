@@ -15,7 +15,8 @@ import Network.HTTP.Types.Status (status400)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
-import Iidy.Cfn.Operations.Changeset (convertChange, convertDetail, formatAmazonkaError, generateDashedName, isNonRetryableError)
+import Iidy.Aws.Errors (formatAwsError)
+import Iidy.Cfn.Operations.Changeset (convertChange, convertDetail, generateDashedName, isNonRetryableError)
 import Iidy.Output.Types (ChangeDetail (..), ChangeInfo (..))
 
 changesetTests :: [TestTree]
@@ -104,17 +105,17 @@ changesetTests =
         names <- mapM (const generateDashedName) [(1 :: Int) .. 10]
         let uniqueNames = length (nub names)
         assertBool "should produce some variety" (uniqueNames > 1)
-    , -- formatAmazonkaError tests
+    , -- formatAwsError tests (the formatter moved to Iidy.Aws.Errors, card C19)
       testGroup
-        "formatAmazonkaError"
+        "formatAwsError"
         [ testCase "extracts code and message from ServiceError" $
-            formatAmazonkaError (mkServiceError "ValidationError" "Stack does not exist")
+            formatAwsError (mkServiceError "ValidationError" "Stack does not exist")
                 @?= "ValidationError: Stack does not exist"
         , testCase "handles ServiceError with no message" $
-            formatAmazonkaError (mkServiceErrorNoMsg "InternalFailure")
+            formatAwsError (mkServiceErrorNoMsg "InternalFailure")
                 @?= "InternalFailure: "
-        , testCase "falls back to show for non-ServiceError" $ do
-            let err = formatAmazonkaError (mkSerializeError "parse failure")
+        , testCase "describes a non-ServiceError" $ do
+            let err = formatAwsError (mkSerializeError "parse failure")
             assertBool "should contain error info" (T.length err > 0)
         ]
     , -- isNonRetryableError tests

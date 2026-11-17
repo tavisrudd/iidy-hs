@@ -35,6 +35,7 @@ import Amazonka.SSM.GetParameter qualified as GP
 import Amazonka.SSM.GetParametersByPath qualified as GBP
 import Amazonka.SSM.Types.Parameter qualified as SSMP
 
+import Iidy.Aws.Errors (formatAwsError)
 import Iidy.Yaml.Imports.ContentParsing (ParsedDoc (..), parseByFormatSuffix, parseByFormatSuffixLenient)
 import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..))
 
@@ -57,7 +58,7 @@ loadSsmImport awsEnv location = do
                     pure $
                         Left $
                             ImportError $
-                                "SSM fetch error for " <> paramName <> ": " <> T.pack (show ex)
+                                "SSM fetch error for " <> paramName <> ": " <> formatAwsError ex
                 Right val ->
                     case parseByFormatSuffix formatSuffix val of
                         Left err -> pure (Left err)
@@ -91,7 +92,7 @@ loadSsmPathImport awsEnv location = do
                     pure $
                         Left $
                             ImportError $
-                                "SSM path fetch error for " <> paramPath <> ": " <> T.pack (show ex)
+                                "SSM path fetch error for " <> paramPath <> ": " <> formatAwsError ex
                 Right params ->
                     let obj = buildResultObject paramPath formatSuffix params
                         rawData = TE.decodeUtf8 (BL.toStrict (Aeson.encode obj))

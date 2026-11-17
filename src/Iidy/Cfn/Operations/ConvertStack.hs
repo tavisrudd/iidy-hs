@@ -52,6 +52,7 @@ import Amazonka.CloudFormation.Types qualified as CF
 import Amazonka.SSM.PutParameter qualified as PP
 import Amazonka.SSM.Types.ParameterType qualified as SSMPT
 
+import Iidy.Aws.Errors (formatAwsError)
 import Iidy.Cfn.Context (CfnContext (..))
 import Iidy.Yaml.Emitter (doubleQuote, isNonPrintable)
 import Iidy.Yaml.Parser (parseYaml)
@@ -495,7 +496,7 @@ convertStackToIidy ctx stackName outputDir moveParamsToSsm sortkeys mProject = d
     gtResult <- try @Amazonka.Error $ runResourceT $ Amazonka.send (cfnEnv ctx) gtReq
     case gtResult of
         Left e ->
-            pure (Left ("Failed to get template: " <> T.pack (show e)))
+            pure (Left ("Failed to get template: " <> formatAwsError e))
         Right gtResp -> do
             let templateBody = fromMaybe "" gtResp.templateBody
                 isJson = T.isPrefixOf "{" (T.stripStart templateBody)
@@ -506,7 +507,7 @@ convertStackToIidy ctx stackName outputDir moveParamsToSsm sortkeys mProject = d
             dsResult <- try @Amazonka.Error $ runResourceT $ Amazonka.send (cfnEnv ctx) dsReq
             case dsResult of
                 Left e ->
-                    pure (Left ("Failed to describe stack: " <> T.pack (show e)))
+                    pure (Left ("Failed to describe stack: " <> formatAwsError e))
                 Right dsResp -> do
                     let stacks = fromMaybe [] dsResp.stacks
                     case stacks of
@@ -683,7 +684,7 @@ moveParamsToSSM ctx params currentEnv project = do
                             "WARNING: Failed to write SSM parameter "
                                 <> T.unpack name
                                 <> ": "
-                                <> show e
+                                <> T.unpack (formatAwsError e)
                         pure Nothing
                     Right _ -> pure (Just k)
             )

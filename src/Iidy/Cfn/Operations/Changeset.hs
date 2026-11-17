@@ -29,7 +29,6 @@ module Iidy.Cfn.Operations.Changeset (
     percentEncode,
     extractRegionFromArn,
     buildChangesetConsoleUrl,
-    formatAmazonkaError,
     isNonRetryableError,
 ) where
 
@@ -54,6 +53,7 @@ import Amazonka.CloudFormation.ListChangeSets qualified as LCS
 import Amazonka.CloudFormation.Types qualified as CF
 
 import Iidy.Aws.ClientReqToken (TokenInfo (..))
+import Iidy.Aws.Errors (formatAwsError)
 import Iidy.Cfn.Context (
     CfnContext (..),
     changesetTerminalStatuses,
@@ -157,10 +157,10 @@ pollChangesetCompletion ctx stackName csId = go (0 :: Int) (0 :: Int)
                 Left err
                     | isNonRetryableError err ->
                         -- Permanent error (not found, access denied) — fail immediately
-                        mkFailedInfo (formatAmazonkaError err)
+                        mkFailedInfo (formatAwsError err)
                     | errorCount >= maxRetries ->
                         -- Transient errors exhausted retry budget
-                        mkFailedInfo ("Polling failed after " <> T.pack (show maxRetries) <> " retries: " <> formatAmazonkaError err)
+                        mkFailedInfo ("Polling failed after " <> T.pack (show maxRetries) <> " retries: " <> formatAwsError err)
                     | otherwise -> go (errorCount + 1) (totalIterations + 1)
                 Right info ->
                     if isTerminalCsStatus (csiStatus info)
@@ -286,14 +286,6 @@ convertDescribeResponse resp =
         , csiExecutionStatus = CF.fromExecutionStatus <$> resp.executionStatus
         , csiChanges = mapMaybe convertChange (fromMaybe [] resp.changes)
         }
-
--- | Extract a clean, user-friendly error message from an Amazonka error.
-formatAmazonkaError :: Amazonka.Error -> Text
-formatAmazonkaError (Amazonka.ServiceError se) =
-    let Amazonka.ErrorCode code = se.code
-        msg = maybe "" Amazonka.fromErrorMessage se.message
-     in code <> ": " <> msg
-formatAmazonkaError e = T.pack (show e)
 
 {- | Check if an Amazonka error is non-retryable (permanent).
 Access denied and not-found errors will not resolve on retry.

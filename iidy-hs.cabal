@@ -88,6 +88,7 @@ library
     Iidy.Aws.Config
     Iidy.Aws.CredentialSource
     Iidy.Aws.ClientReqToken
+    Iidy.Aws.Errors
     Iidy.Aws.Sts
     Iidy.Aws.Timing
     Iidy.Cfn.Types
@@ -227,6 +228,7 @@ test-suite iidy-hs-test
     Test.Phase14FixTest
     Test.FilehashTest
     Test.ImportLoaderTest
+    Test.AwsErrorTest
     Test.AwsLoaderTest
     Test.DemoTest
     Test.ExplainTest

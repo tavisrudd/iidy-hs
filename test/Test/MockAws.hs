@@ -34,6 +34,10 @@ module Test.MockAws (
     MockResponse (..),
     newMockAws,
     newMockAwsIn,
+    newRefusingMockAws,
+    mockAccessKey,
+    mockSecretKey,
+    mockSessionToken,
     mockRespond,
     mockRequestLog,
     mockOperations,
@@ -147,13 +151,7 @@ newMockAwsIn region = do
                 , Client.managerTlsConnection = factory
                 }
     manager <- Client.newManager settings
-    noAuth <- Amazonka.newEnvNoAuthFromManager manager
-    let env =
-            Amazonka.once $
-                Keys.fromKeys
-                    (Amazonka.AccessKey "AKIAMOCKMOCKMOCKMOCK")
-                    (Amazonka.SecretKey "mock-secret-key")
-                    noAuth{Amazonka.region = region}
+    env <- mockEnvFor False manager region
     pure
         MockAws
             { mockEnv = env
@@ -161,6 +159,42 @@ newMockAwsIn region = do
             , mockLog = rawLog
             , mockOverrides = overrides
             }
+
+-- | The fake credentials every mock env signs its requests with.
+mockAccessKey, mockSecretKey, mockSessionToken :: Text
+mockAccessKey = "AKIAMOCKMOCKMOCKMOCK"
+mockSecretKey = "mock-secret-key"
+mockSessionToken = "mock-session-token-FwoGZXIvYXdzEJr"
+
+{- | An env over this manager that signs with the fake credentials (and the
+fake session token when asked) and does not retry.
+-}
+mockEnvFor :: Bool -> Client.Manager -> Amazonka.Region -> IO Amazonka.Env
+mockEnvFor withToken manager region = do
+    noAuth <- Amazonka.newEnvNoAuthFromManager manager
+    let base = noAuth{Amazonka.region = region}
+        accessKey = Amazonka.AccessKey (TE.encodeUtf8 mockAccessKey)
+        secretKey = Amazonka.SecretKey (TE.encodeUtf8 mockSecretKey)
+    pure . Amazonka.once $
+        if withToken
+            then Keys.fromSession accessKey secretKey (Amazonka.SessionToken (TE.encodeUtf8 mockSessionToken)) base
+            else Keys.fromKeys accessKey secretKey base
+
+{- | A mock env in us-east-1 whose connections all fail as if refused, so
+'Amazonka.send' throws a real 'Amazonka.TransportError' carrying the signed
+request. It signs with a session token as well; the other mock envs use
+static keys only.
+-}
+newRefusingMockAws :: IO Amazonka.Env
+newRefusingMockAws = do
+    let refuse = pure (\_ _ _ -> throwIO (userError "connection refused (mock)"))
+    manager <-
+        Client.newManager
+            Client.defaultManagerSettings
+                { Client.managerRawConnection = refuse
+                , Client.managerTlsConnection = refuse
+                }
+    mockEnvFor True manager (Amazonka.Region' "us-east-1")
 
 {- | An env factory that serves the mock env whatever it is asked for, and
 an action reading the settings it was asked for, in call order.

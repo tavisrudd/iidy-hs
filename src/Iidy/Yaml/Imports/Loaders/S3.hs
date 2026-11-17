@@ -21,6 +21,7 @@ import Amazonka.S3 qualified as S3
 import Amazonka.S3.GetObject qualified as GO
 import Data.Conduit (ConduitT, await)
 
+import Iidy.Aws.Errors (formatAwsError)
 import Iidy.Constants (httpMaxResponseBytes)
 import Iidy.Yaml.Imports.ContentParsing (ParsedDoc (..), parseByExtensionStrict)
 import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..))
@@ -69,7 +70,7 @@ loadS3Import awsEnv location = do
                                                     , idDoc = doc
                                                     }
                 )
-                `catches` [ Handler $ \(e :: Amazonka.Error) -> mkError (T.pack (show e))
+                `catches` [ Handler $ \(e :: Amazonka.Error) -> mkError (formatAwsError e)
                           , Handler $ \(e :: S3SizeLimitExceeded) -> mkError (T.pack (show e))
                           ]
 

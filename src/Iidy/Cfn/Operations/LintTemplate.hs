@@ -9,7 +9,6 @@ module Iidy.Cfn.Operations.LintTemplate (
 import Control.Exception (try)
 import Data.ByteString qualified as BS
 import Data.Text (Text)
-import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 
 import Control.Monad.Trans.Resource (runResourceT)
@@ -17,6 +16,7 @@ import Control.Monad.Trans.Resource (runResourceT)
 import Amazonka qualified
 import Amazonka.CloudFormation.ValidateTemplate qualified as VT
 
+import Iidy.Aws.Errors (formatAwsError)
 import Iidy.Cfn.Context (CfnContext (..), cfnImportConfig)
 import Iidy.Cfn.TemplateLoader (TemplateResult (..), loadCfnTemplate, templateMaxBytes)
 import Iidy.Cfn.Types (StackArgs (..))
@@ -76,7 +76,7 @@ validateTemplateBody ctx body
             Left e ->
                 TemplateValidation
                     { tvEnabled = True
-                    , tvErrors = ["Template validation failed: " <> T.pack (show e)]
+                    , tvErrors = ["Template validation failed: " <> formatAwsError e]
                     , tvWarnings = []
                     }
             Right _resp ->

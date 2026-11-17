@@ -27,6 +27,7 @@ import Amazonka.CloudFormation.DescribeStacks qualified as DS
 import Amazonka.CloudFormation.ListExports qualified as LE
 import Amazonka.CloudFormation.Types qualified as CF
 
+import Iidy.Aws.Errors (formatAwsError)
 import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..))
 
 ------------------------------------------------------------------------
@@ -156,7 +157,7 @@ loadCfnExport awsEnv location exportName = do
                     pure $
                         Left $
                             ImportError $
-                                "CFN ListExports error: " <> T.pack (show ex)
+                                "CFN ListExports error: " <> formatAwsError ex
                 Right exports -> do
                     let mExport = find (\e -> e.name == Just exportName) exports
                     case mExport of
@@ -240,7 +241,7 @@ loadCfnResource awsEnv location resolvedLoc = do
                     pure $
                         Left $
                             ImportError $
-                                "CFN DescribeStackResources error for " <> stackName <> ": " <> T.pack (show ex)
+                                "CFN DescribeStackResources error for " <> stackName <> ": " <> formatAwsError ex
                 Right resources ->
                     case mKey of
                         Just key -> do
@@ -368,7 +369,7 @@ withStack awsEnv location stackName handler = do
                     pure $
                         Left $
                             ImportError $
-                                "CFN fetch error for " <> stackName <> ": " <> T.pack (show ex)
+                                "CFN fetch error for " <> stackName <> ": " <> formatAwsError ex
                 Right (Left err) -> pure (Left err)
                 Right (Right stack) -> handler stack
 

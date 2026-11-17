@@ -70,6 +70,7 @@ import Amazonka.SSM.Types.ParameterType qualified as SSMPT
 import Amazonka.SSM.Types.ResourceTypeForTagging qualified as RTT
 import Amazonka.SSM.Types.Tag qualified as SSMT
 
+import Iidy.Aws.Errors (formatAwsError)
 import Iidy.Cli (
     ParamFormat (..),
     ParamGetArgs (..),
@@ -390,7 +391,7 @@ listParamTags awsEnv paramName = do
             Map.fromList
                 [(t ^. SSMT.tag_key, t ^. SSMT.tag_value) | t <- tags]
     case result of
-        Left ex -> pure $ Left $ "ListTagsForResource error for " <> paramName <> ": " <> T.pack (show ex)
+        Left ex -> pure $ Left $ "ListTagsForResource error for " <> paramName <> ": " <> formatAwsError ex
         Right m -> pure (Right m)
 
 ------------------------------------------------------------------------
@@ -411,7 +412,7 @@ fetchParam awsEnv paramName withDecryption = do
         resp <- Amazonka.send awsEnv req
         pure (resp.parameter ^. SSMP.parameter_value)
     case result of
-        Left ex -> pure (Left (T.pack (show ex)))
+        Left ex -> pure (Left (formatAwsError ex))
         Right val -> pure (Right val)
 
 -- | Fetch a single SSM parameter (full Parameter object).
@@ -425,7 +426,7 @@ fetchParameter awsEnv paramName withDecryption = do
         resp <- Amazonka.send awsEnv req
         pure resp.parameter
     case result of
-        Left ex -> pure $ Left $ T.pack (show ex)
+        Left ex -> pure $ Left $ formatAwsError ex
         Right p -> pure (Right p)
 
 {- | Get a single SSM parameter, formatted according to --format.
@@ -456,7 +457,7 @@ paramSet :: Amazonka.Env -> ParamSetArgs -> IO (Either Text ())
 paramSet awsEnv args = do
     result <- try @Amazonka.Error (putParam awsEnv args)
     case result of
-        Left ex -> pure $ Left $ "SSM PutParameter error for " <> args.psaPath <> ": " <> T.pack (show ex)
+        Left ex -> pure $ Left $ "SSM PutParameter error for " <> args.psaPath <> ": " <> formatAwsError ex
         Right _ -> pure (Right ())
 
 putParam :: Amazonka.Env -> ParamSetArgs -> IO ()
@@ -495,7 +496,7 @@ paramGetByPath :: Amazonka.Env -> ParamGetByPathArgs -> IO (Either Text GetByPat
 paramGetByPath awsEnv args = runExceptT $ do
     params <- ExceptT $ do
         result <- try @Amazonka.Error (fetchByPathRaw awsEnv args)
-        pure $ first (\ex -> "SSM GetParametersByPath error for " <> args.gpbPath <> ": " <> T.pack (show ex)) result
+        pure $ first (\ex -> "SSM GetParametersByPath error for " <> args.gpbPath <> ": " <> formatAwsError ex) result
     if null params
         then pure ByPathEmpty
         else do
@@ -547,7 +548,7 @@ paramGetHistory :: Amazonka.Env -> ParamGetArgs -> IO (Either Text Text)
 paramGetHistory awsEnv args = runExceptT $ do
     entries <- ExceptT $ do
         result <- try @Amazonka.Error (fetchHistoryRaw awsEnv args.pgaPath args.pgaDecrypt)
-        pure $ first (\ex -> "SSM GetParameterHistory error for " <> args.pgaPath <> ": " <> T.pack (show ex)) result
+        pure $ first (\ex -> "SSM GetParameterHistory error for " <> args.pgaPath <> ": " <> formatAwsError ex) result
     ne <- case NE.nonEmpty entries of
         Nothing -> throwE $ "No history found for parameter '" <> args.pgaPath <> "'"
         Just x -> pure x

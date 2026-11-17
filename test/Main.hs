@@ -5,6 +5,7 @@ import Test.Tasty (defaultMain, testGroup)
 import Iidy.Cli.HelpTest qualified as HelpTest
 import Test.ApprovalRegionTest (approvalRegionTests)
 import Test.ApprovedTemplateTest (approvedTemplateTests)
+import Test.AwsErrorTest (awsErrorTests)
 import Test.AwsImportGateTest (awsImportGateTests)
 import Test.AwsLoaderTest (awsLoaderTests)
 import Test.CfnYamlEmitterTest (cfnYamlEmitterTests)
@@ -110,6 +111,7 @@ main = do
             , testGroup "Filehash" filehashTests
             , testGroup "ImportLoaders" importLoaderTests
             , testGroup "AwsLoaders" awsLoaderTests
+            , testGroup "AwsErrors" awsErrorTests
             , testGroup "GetImport" getImportTests
             , testGroup "MockAws" mockAwsTests
             , testGroup "ApprovedTemplate" approvedTemplateTests

@@ -46,6 +46,7 @@ import Amazonka qualified
 import Amazonka.SSM.GetParametersByPath qualified as GBP
 import Amazonka.SSM.Types.Parameter qualified as SSMP
 
+import Iidy.Aws.Errors (formatAwsError)
 import Iidy.Cfn.Types (StackArgs (..))
 
 ------------------------------------------------------------------------
@@ -73,7 +74,7 @@ applyGlobalConfiguration awsEnv stackArgs = do
         Left ex -> do
             hPutStrLn stderr $
                 "Warning: failed to load global config from SSM: "
-                    <> formatAwsError ex
+                    <> T.unpack (formatAwsError ex)
             pure stackArgs
         Right params ->
             applyParams stackArgs params
@@ -118,18 +119,6 @@ applyParam sa name value =
 ------------------------------------------------------------------------
 -- Internal helpers
 ------------------------------------------------------------------------
-
--- | Format an 'Amazonka.Error' for a human-readable warning message.
-formatAwsError :: Amazonka.Error -> String
-formatAwsError (Amazonka.ServiceError se) =
-    let Amazonka.ErrorCode code = se.code
-        msg =
-            maybe
-                ""
-                (\m -> ": " <> T.unpack (Amazonka.fromErrorMessage m))
-                se.message
-     in T.unpack code <> msg
-formatAwsError err = show err
 
 {- | Fetch all parameters under the given SSM path (non-recursive, with
 decryption).  Paginates through all pages to avoid silent truncation

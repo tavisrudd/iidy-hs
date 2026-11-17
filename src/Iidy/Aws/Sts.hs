@@ -12,11 +12,14 @@ module Iidy.Aws.Sts (
 import Control.Exception (catch)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
+import Data.Text qualified as T
 import System.IO (hPutStrLn, stderr)
 
 import Amazonka qualified
 import Amazonka.STS.GetCallerIdentity qualified as STS
 import Control.Monad.Trans.Resource (runResourceT)
+
+import Iidy.Aws.Errors (formatAwsError)
 
 {- | Get the current IAM caller identity (account, ARN).
 Returns (account, arn). Falls back to ("unknown", "unknown") on error.
@@ -31,5 +34,5 @@ getCallerIdentity env = do
             pure (account, arn)
         )
         `catch` \(e :: Amazonka.Error) -> do
-            hPutStrLn stderr $ "Warning: STS GetCallerIdentity failed: " <> show e
+            hPutStrLn stderr $ "Warning: STS GetCallerIdentity failed: " <> T.unpack (formatAwsError e)
             pure ("unknown", "unknown")

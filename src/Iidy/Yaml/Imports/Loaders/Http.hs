@@ -29,6 +29,7 @@ import Network.HTTP.Types.Status (statusCode)
 import System.FilePath (takeExtension)
 import System.Timeout (timeout)
 
+import Iidy.Aws.Errors (formatHttpException)
 import Iidy.Constants (httpMaxResponseBytes, httpTimeoutSeconds, httpTotalTimeoutSeconds)
 import Iidy.Yaml.Imports.ContentParsing (ParsedDoc (..), parseByExtensionStrict)
 import Iidy.Yaml.Imports.Loaders.HttpGuard (GuardRefusal (..), HttpGuard, HttpSeam, guardManagerSettings)
@@ -123,7 +124,7 @@ httpExceptionText :: HttpException -> Text
 httpExceptionText = \case
     HttpExceptionRequest _req (InternalException e)
         | Just (GuardRefusal why) <- fromException e -> "refused: " <> why
-    other -> T.pack (show other)
+    other -> formatHttpException other
 
 ------------------------------------------------------------------------
 -- HTTP fetch (streaming with size limit)
