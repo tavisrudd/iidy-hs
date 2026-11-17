@@ -39,6 +39,10 @@ locationTests =
                 atBucket at @?= "approvals"
                 atKey at @?= simpleApprovedKey
             other -> assertFailure ("expected an approved template, got " <> show other)
+    , testCase "ApprovedTemplateLocation s3://bucket/ gives a root key" $
+        rootKeyFor "s3://approvals/"
+    , testCase "ApprovedTemplateLocation s3://bucket gives a root key" $
+        rootKeyFor "s3://approvals"
     , testCase "request HEADs the approved key and uploads the pending key" $ do
         mock <- newMockAws
         mcfn <- newMockCfnContext mock OpTemplateApprovalRequest "test"
@@ -64,6 +68,24 @@ pendingKeyTests =
     , testCase "a key without .pending is rejected" $
         approvedKeyFromPending "app/abc.yaml" @?= Left "URL must end with .pending suffix"
     ]
+
+-- | The request for the fixture under this location uses @<sha256>.yaml@.
+rootKeyFor :: Text -> IO ()
+rootKeyFor location = do
+    mock <- newMockAws
+    mcfn <- newMockCfnContext mock OpTemplateApprovalRequest "test"
+    let sa = (approvalArgs (Just simpleTemplate)){saApprovedTemplateLocation = Just location}
+    result <- templateApprovalRequest (mcContext mcfn) sa False Nothing
+    result @?= Right 0
+    calls <- map reqCall <$> mockRequestLog mock
+    calls
+        @?= [ Just (MockCall "s3" "HeadObject" (Just "approvals") (Just simpleRootKey))
+            , Just (MockCall "s3" "PutObject" (Just "approvals") (Just (simpleRootKey <> ".pending")))
+            ]
+
+-- | The fixture's approved key at the bucket root.
+simpleRootKey :: Text
+simpleRootKey = "4e4e06e485ce06aabba82ff4af435f0e58425b8ea1ecdfee2f52709ea663c4fa.yaml"
 
 -- | A local template fixture.
 simpleTemplate :: Text

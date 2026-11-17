@@ -51,7 +51,9 @@ parseS3Url url
                     | otherwise -> Right (bucket, T.drop 1 keyWithSlash)
 
 {- | Generate a versioned S3 location for a template.
-Returns (bucket, versioned_key) where key = basePath/hash.extension
+Returns (bucket, versioned_key) where key = basePath/hash.extension, or
+hash.extension when the base location names only the bucket
+(@s3://bucket@ or @s3://bucket/@), as iidy-js (@path.join@).
 -}
 generateVersionedLocation ::
     -- | base S3 location (e.g., s3://bucket/templates/)
@@ -62,7 +64,12 @@ generateVersionedLocation ::
     Text ->
     Either Text (Text, Text)
 generateVersionedLocation baseLocation content templatePath = do
-    (bucket, baseKey) <- parseS3Url baseLocation
+    -- A bucket-only location has no key for parseS3Url; give it an empty one.
+    let withKey =
+            if T.any (== '/') (T.drop 5 baseLocation)
+                then baseLocation
+                else baseLocation <> "/"
+    (bucket, baseKey) <- parseS3Url withKey
     let hash = calculateTemplateHash content
         ext = T.pack (takeExtension (T.unpack templatePath))
         -- Ensure trailing slash is handled
@@ -70,5 +77,9 @@ generateVersionedLocation baseLocation content templatePath = do
             if T.isSuffixOf "/" baseKey
                 then T.dropEnd 1 baseKey
                 else baseKey
-        versionedKey = basePath <> "/" <> hash <> ext
+        fileName = hash <> ext
+        versionedKey =
+            if T.null basePath
+                then fileName
+                else basePath <> "/" <> fileName
     Right (bucket, versionedKey)
