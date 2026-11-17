@@ -423,7 +423,8 @@ next one: run the suite without =tail=, with =+RTS -l= (event log) or
 
 ** Supervisor analysis 2026-11-17 (parked by Tavis)
 :PROPERTIES:
-:ADDED: [2026-11-17 Tue]
+:ID: org:01a1eac3-2754-7403-aba6-e9e50716c8c3
+:ADDED: [2026-11-17 Tue 11:27]
 :END:
 Tasty 1.5.4 (=Test.Tasty.Run.executeTest=) runs each test body in a
 =withAsync= thread started inside =restore=, so the test starts unmasked.
