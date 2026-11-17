@@ -1,0 +1,67 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C37
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C15 re-review 2026-11-16: substituteIidyCommand passes no flags when the running binary is the iidy on PATH, so --no-remote-imports (and --trust-import-source) are silently dropped; fails open
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e736-0207-767b-aa95-cd7f406640e4
+:ADDED: [2026-11-16 Mon 18:53]
+:END:
+#+title: C37 — iidy demo drops --no-remote-imports when running the iidy on PATH
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e736-0207-767b-aa95-cd7e6e4ad744
+:ADDED: [2026-11-16 Mon 18:53]
+:END:
+
+=iidy demo= runs the shell commands of a demo script and rewrites each
+=iidy= command so it runs the current binary, adding =--no-remote-imports=
+(and, after [[file:../C15/index.org][C15]], one =--trust-import-source=
+per trusted prefix) so the commands inherit the demo's import policy. When
+the current binary is the =iidy= found on =PATH= (=getIidyExe= in
+=src/Iidy/Demo.hs= returns =Nothing=), =substituteIidyCommand= leaves the
+command untouched, so the flags are dropped and the commands run with
+remote imports allowed and no trusted prefixes: =--no-remote-imports=
+fails open. Rust (=~/src/iidy/src/demo.rs:93-112=) skips substitution the
+same way. Found by the C15 re-review.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e736-0207-767b-aa95-cd7d1e78ba75
+:ADDED: [2026-11-16 Mon 18:53]
+:END:
+
+Allowed paths: =src/Iidy/Demo.hs=, =test/Test/DemoTest.hs=,
+=DIVERGENCES.md=, =notes/C37/=. Starts after C15 has landed (it changes
+=substituteIidyCommand=).
+
+Out of scope: masking, sleep timing and the demo temp directory (C30,
+C21).
+
+Done when:
+- [ ] When any import-policy flag is set, every =iidy= command in the
+  script receives the flags, whether or not the current binary is the one
+  on =PATH= (substitute the command name with itself plus the flags);
+  without flags the behaviour is unchanged.
+- [ ] A test, recorded failing first, covers the on-=PATH= case with
+  =--no-remote-imports= and with a trusted prefix.
+- [ ] =DIVERGENCES.md= notes the difference from Rust.
+- [ ] Build warning-free, full suite green, commits name C37.
+
+Stop and record if: the fix needs a change outside the allowed paths.
+
+* TODO iidy demo drops --no-remote-imports when running the iidy on PATH
+:PROPERTIES:
+:ID: org:01a1e736-0207-767b-aa95-cd7c4be0e665
+:ADDED: [2026-11-16 Mon 18:53]
+:END:
+
+Make the substitution apply whenever the policy adds flags, using the
+current executable path (or =iidy= itself when it is the one on =PATH=).
+Add the failing test first, then the fix and the =DIVERGENCES.md= entry.
