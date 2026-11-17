@@ -445,6 +445,12 @@ pre-force or move the shared thunk if it is ours. Production also runs with
 =-N= and uses =concurrently= (=src/Iidy/Cfn/StackOperations.hs=), so an RTS
 cause could in principle hang a deploy; none seen.
 
+Sighting 2026-11-17 (supervisor, from the C19 worker): a full-suite run
+under =--timeout=60s= stalled about 10 minutes at the test "directory hash
+is deterministic" (a different group from TemplateLoader), ignoring the
+timeout; killed by PID, the rerun passed. Host memory was tight (4-5 GiB
+available, ZFS cache large). No thread dump captured.
+
 * TODO Build a standalone reproducer and prepare the upstream report
 :PROPERTIES:
 :ID: org:01a1e7e3-f922-7019-868f-d4f97b179cca
