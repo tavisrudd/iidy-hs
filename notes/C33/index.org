@@ -1,0 +1,203 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C33
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C7 open question; Tavis 2026-11-16 accepted the recommendation in notes/C23/report--decisions-vs-originals.org item 9 (TypeScript builds one eagerly, Rust has none)
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e6fa-660a-75ee-a9ac-822338ba31db
+:ADDED: [2026-11-16 Mon 17:48]
+:END:
+#+title: C33 — Give render an AWS environment, built lazily as get-import does
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e6fa-660a-75ee-a9ac-822218e96e8d
+:ADDED: [2026-11-16 Mon 17:48]
+:END:
+
+Decision (Tavis, 2026-11-16): give =render= an AWS environment from the
+global options, built lazily as =get-import= does (C7), so local-only
+templates keep working without credentials. The reasoning is in
+[[file:../C23/report--decisions-vs-originals.org][C23's report]] item 9:
+TypeScript =renderMain= calls =configureAWS= first (=src/render.ts:31=) and
+resolves credentials eagerly (=configureAWS.ts:62-73=), so its =render=
+needs credentials even without AWS imports; Rust =render.rs:31-33= calls
+=preprocess_yaml= with no AWS config at all. Eager TypeScript behaviour is
+not wanted. Origin: an open question left by [[file:../C7/index.org][C7]].
+
+What fails today: =runRender= (=src/Iidy/Render.hs:59=) builds
+=ImportConfig{icAwsEnv = Nothing, ...}=. =withAwsEnv=
+(=src/Iidy/Yaml/Imports/Loaders/Dispatch.hs:84=) then answers any
+=ssm:=, =ssm-path:=, =cfn:= or (with remote imports allowed) =s3:= import
+with "AWS import type requires credentials and is not available in this
+context". =app/Main.hs:78= calls =runRender= without the AWS settings.
+
+How =get-import= does it (C7, =src/Iidy/GetImport.hs=):
+- =runGetImport= (line 54) passes =fst <$> createAwsEnvFromSettings
+  awsSettings= to =runGetImportWith= (line 62), which takes an
+  =IO Amazonka.Env= provider.
+- It decides from the one location with =needsAwsEnv= (line 87), runs the
+  provider at most once through =tryBuildEnv= (line 107), which turns
+  credential, region and STS failures into one message, and reports
+  "Import error: ..." with exit 1.
+- =test/Test/GetImportTest.hs= counts builds: =runArgs= (line 51) wraps the
+  provider in =bump=, and =rrEnvBuilds= is asserted 0 for file:, env: and
+  blocked s3: imports (lazinessTests) and 1 for the mock-backed ssm: and
+  cfn: cases (mockAwsTests, using =mockEnv= from =Test.MockAws=).
+
+The difference for =render=: imports are discovered while the template is
+resolved, not named up front, so "build only if an AWS import is used"
+cannot be decided before preprocessing. The env must be built on first use
+inside the import dispatcher, once, and a build failure must surface as an
+import error on that import. =ImportConfig.icAwsEnv= is a plain
+=Maybe Amazonka.Env= today and has four other constructors:
+=src/Iidy/GetImport.hs:77=, =src/Iidy/Cfn/StackArgsLoader.hs:119=,
+=src/Iidy/Demo.hs:87= and three in =src/Iidy/Cfn/RequestBuilder.hs=.
+
+Ownership rule: the env-building logic (run the provider once, memoise it,
+map =AuthError=, =IOException= and =Amazonka.Error= to the message) has one
+owner, shared by =get-import= and =render=. Extract =tryBuildEnv= and the
+memoising provider out of =GetImport.hs= (for example next to
+=ImportConfig= in =Dispatch.hs=, or a small module beside it); do not copy
+them into =Render.hs=. =get-import= may keep its up-front =needsAwsEnv=
+check or move onto the same lazy path, as long as its existing tests pass
+unedited.
+
+Out of this card: a stack-args file rendered by =render= (C23 item 9 says it
+should follow the stack-args AWS rules of item 5); that belongs to
+[[file:../C17/index.org][C17]], which owns those rules.
+
+Overlaps: [[file:../C29/index.org][C29]] edits =src/Iidy/GetImport.hs=,
+=test/Test/GetImportTest.hs= and =DIVERGENCES.md=;
+[[file:../C28/index.org][C28]] edits the loaders under
+=src/Iidy/Yaml/Imports/= and may touch =Dispatch.hs= callers;
+[[file:../C17/index.org][C17]] edits =StackArgsLoader.hs=. Do not start
+this card while any of them has the shared file open; rebase onto whichever
+lands first.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e6fa-660a-75ee-a9ac-8221bc4b7f94
+:ADDED: [2026-11-16 Mon 17:48]
+:END:
+
+Allowed paths: =src/Iidy/Render.hs=, =src/Iidy/GetImport.hs= (only to move
+the env-building logic out and call it), =src/Iidy/Yaml/Imports/Loaders/Dispatch.hs=
+(or one new small module beside it, with =iidy-hs.cabal= to register it),
+the callers of =ImportConfig= that the compiler flags
+(=src/Iidy/Cfn/StackArgsLoader.hs=, =src/Iidy/Demo.hs=,
+=src/Iidy/Cfn/RequestBuilder.hs=, one-line changes only), =app/Main.hs=
+(pass =cliToAwsSettings cli= to =runRender=), =test/Test/RenderTest.hs=,
+=test/Test/GetImportTest.hs= (only to share the harness helpers),
+=test/Test/MockAws.hs=, =test-fixtures/= (a render fixture with an ssm:
+import), =DIVERGENCES.md= (one entry), =notes/C33/=.
+
+Out of scope: stack-args files under =render= (C17); changing which imports
+need AWS; credentials or region resolution itself
+(=src/Iidy/Aws/Config.hs=); eager building as TypeScript does; the
+=--format= work (C29) and the import-data work (C28); any real AWS call.
+
+Done when:
+- [ ] A regression test is recorded failing before the fix: =runRender= on a
+  template with an =ssm:= import and a mock provider exits 1 with "not
+  available in this context". Record the failing output in the first task
+  note.
+- [ ] =render= of a template with an =ssm:= import (and one with a
+  =cfn:output:= import) resolves it through a mock AWS environment
+  (=Test.MockAws=, no network) and renders the mocked value; the mock records
+  the served request.
+- [ ] =render= of a template with no AWS import (a =file:= import, an
+  =env:= import, and a template with no imports) never builds the
+  environment: the provider is wrapped in a counter as =runArgs= does in
+  =GetImportTest.hs= and the count is asserted 0. A template with AWS
+  imports used twice builds it exactly once.
+- [ ] Missing credentials fail only when an AWS import is used: with a
+  provider that throws =CredentialChainExhausted=, a local-only template
+  renders (exit 0, count 0) and a template with an =ssm:= import exits 1 with
+  one "Import error:" style message naming missing credentials, no stdout.
+  With remote imports blocked, an =s3:= import reports the
+  =--no-remote-imports= error, not a credentials error, and the count is 0.
+- [ ] The env-building logic has one owner used by both commands (name the
+  function and its callers in the task note); =Render.hs= contains no copy of
+  =tryBuildEnv= or the =catches= handlers. All existing get-import tests pass
+  unedited.
+- [ ] =DIVERGENCES.md= has one entry: Rust =render= has no AWS environment
+  (AWS imports fail there); iidy-hs builds one lazily from the global AWS
+  options, following the C23 item 9 decision. State that credentials are
+  needed only when an AWS import is used.
+- [ ] Build warning-free, full suite green, commits name C33. No test or
+  command reaches real AWS.
+
+Stop and record if: the lazy build needs =ImportConfig= callers beyond
+one-line changes; a mid-resolution build failure cannot be reported as an
+import error with the existing =ImportError=; an existing get-import
+expectation must change; the shared helper cannot be placed without a
+module cycle (record the cycle and ask Tavis); or the edit needs a path
+outside the allowed ones, including lines that C17, C28 or C29 have changed
+in flight.
+
+* TODO Record the failing render-with-AWS-import regression
+:PROPERTIES:
+:ID: org:01a1e6fa-660a-75ee-a9ac-822082478cea
+:ADDED: [2026-11-16 Mon 17:48]
+:END:
+
+Add a render-level harness to =test/Test/RenderTest.hs= that takes an env
+provider and counts builds, mirroring =runArgs= in
+=test/Test/GetImportTest.hs= (share the helpers rather than copying them;
+=bump= and the counting wrapper move to a common test module if needed). Add
+a fixture template with an =ssm:= import. The test calls the new
+provider-taking entry point (task below), so first add its signature only
+if needed to compile, or record the failure against today's =runRender=.
+Record the failing output here.
+
+* TODO Move the env-building logic to one shared owner
+:PROPERTIES:
+:ID: org:01a1e6fa-660a-75ee-a9ac-822082478ce0
+:ADDED: [2026-11-16 Mon 17:48]
+:END:
+
+Extract =tryBuildEnv= and the once-only memoised provider from
+=src/Iidy/GetImport.hs= into the shared place named in Context, and make
+=get-import= call it. Run the get-import tests unedited; they must pass
+before render changes. Search for any other copy of the
+credential-failure mapping before adding code.
+
+* TODO Give ImportConfig a lazily built environment
+:PROPERTIES:
+:ID: org:01a1e6fa-660a-75ee-a9ac-822082478ce1
+:ADDED: [2026-11-16 Mon 17:48]
+:END:
+
+Make =withAwsEnv= obtain the environment on first use from the shared
+memoised provider, reporting a build failure as an =ImportError= with the
+shared message. Keep the existing "not available in this context" error for
+callers that pass no provider (=Demo=). Update the flagged callers with
+one-line changes.
+
+* TODO Wire render to the provider and pass AWS settings from Main
+:PROPERTIES:
+:ID: org:01a1e6fa-660a-75ee-a9ac-822082478ce2
+:ADDED: [2026-11-16 Mon 17:48]
+:END:
+
+Add =runRenderWith= taking an =IO Amazonka.Env= provider (as
+=runGetImportWith= does) and make =runRender= take =AwsSettings= and pass
+=fst <$> createAwsEnvFromSettings settings=. Pass =cliToAwsSettings cli= in
+=app/Main.hs=. Make the failing test pass, then add the laziness, single
+build, missing-credentials and blocked-s3 cases from the gate.
+
+* TODO Divergence entry, full suite, close
+:PROPERTIES:
+:ID: org:01a1e6fa-660a-75ee-a9ac-822082478ce3
+:ADDED: [2026-11-16 Mon 17:48]
+:END:
+
+Add the =DIVERGENCES.md= entry. Run the full suite warning-free and tick the
+gate. Note any remaining difference from the C23 item 9 decision, and that
+the stack-args-under-render case is left to C17.
