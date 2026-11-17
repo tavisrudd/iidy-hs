@@ -10,10 +10,19 @@
 :ID: org:01a1e6fa-660a-75ee-a9ac-822338ba31db
 :ADDED: [2026-11-16 Mon 17:48]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 19:58]--[2026-11-16 Mon 20:01] => 0:03
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 19:57]
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 19:58]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac15475fee34eae57
+- Clock-out [2026-11-16 Mon 20:01]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac15475fee34eae57
 :END:
 #+title: C33 — Give render an AWS environment, built lazily as get-import does
 #+date: 2026-11-16
@@ -108,34 +117,34 @@ need AWS; credentials or region resolution itself
 =--format= work (C29) and the import-data work (C28); any real AWS call.
 
 Done when:
-- [ ] A regression test is recorded failing before the fix: =runRender= on a
+- [X] A regression test is recorded failing before the fix: =runRender= on a
   template with an =ssm:= import and a mock provider exits 1 with "not
   available in this context". Record the failing output in the first task
   note.
-- [ ] =render= of a template with an =ssm:= import (and one with a
+- [X] =render= of a template with an =ssm:= import (and one with a
   =cfn:output:= import) resolves it through a mock AWS environment
   (=Test.MockAws=, no network) and renders the mocked value; the mock records
   the served request.
-- [ ] =render= of a template with no AWS import (a =file:= import, an
+- [X] =render= of a template with no AWS import (a =file:= import, an
   =env:= import, and a template with no imports) never builds the
   environment: the provider is wrapped in a counter as =runArgs= does in
   =GetImportTest.hs= and the count is asserted 0. A template with AWS
   imports used twice builds it exactly once.
-- [ ] Missing credentials fail only when an AWS import is used: with a
+- [X] Missing credentials fail only when an AWS import is used: with a
   provider that throws =CredentialChainExhausted=, a local-only template
   renders (exit 0, count 0) and a template with an =ssm:= import exits 1 with
   one "Import error:" style message naming missing credentials, no stdout.
   With remote imports blocked, an =s3:= import reports the
   =--no-remote-imports= error, not a credentials error, and the count is 0.
-- [ ] The env-building logic has one owner used by both commands (name the
+- [X] The env-building logic has one owner used by both commands (name the
   function and its callers in the task note); =Render.hs= contains no copy of
   =tryBuildEnv= or the =catches= handlers. All existing get-import tests pass
   unedited.
-- [ ] =DIVERGENCES.md= has one entry: Rust =render= has no AWS environment
+- [X] =DIVERGENCES.md= has one entry: Rust =render= has no AWS environment
   (AWS imports fail there); iidy-hs builds one lazily from the global AWS
   options, following the C23 item 9 decision. State that credentials are
   needed only when an AWS import is used.
-- [ ] Build warning-free, full suite green, commits name C33. No test or
+- [X] Build warning-free, full suite green, commits name C33. No test or
   command reaches real AWS.
 
 Stop and record if: the lazy build needs =ImportConfig= callers beyond
@@ -146,10 +155,15 @@ module cycle (record the cycle and ask Tavis); or the edit needs a path
 outside the allowed ones, including lines that C17, C28 or C29 have changed
 in flight.
 
-* TODO Record the failing render-with-AWS-import regression
+* DONE Record the failing render-with-AWS-import regression
 :PROPERTIES:
 :ID: org:01a1e6fa-660a-75ee-a9ac-822082478cea
 :ADDED: [2026-11-16 Mon 17:48]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 20:01] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac15475fee34eae57
 :END:
 
 Add a render-level harness to =test/Test/RenderTest.hs= that takes an env
@@ -161,10 +175,24 @@ provider-taking entry point (task below), so first add its signature only
 if needed to compile, or record the failure against today's =runRender=.
 Record the failing output here.
 
-* TODO Move the env-building logic to one shared owner
+Re-verified pointers: C15 (ImportPolicy, importNeedsAwsEnv gate) and C17
+(StackArgsBootstrap, own memo with a settings-aware message) landed. Failing
+run on the base (runRenderWith stub ignoring the provider), 4 of 8 new tests
+failed: ssm: expected 0 exit with the mocked value, got exit 1, no output,
+0 builds ("AWS import type requires credentials and is not available in this
+context"); same for cfn:output; twice.yaml and the no-credentials ssm: case
+likewise (0 builds, expected 1). The file:, env:, no-import and blocked-s3
+tests passed already. Log: .supervisor/tmp/claude-C33.20mzd6/fail.log.
+
+* DONE Move the env-building logic to one shared owner
 :PROPERTIES:
 :ID: org:01a1e6fa-660a-75ee-a9ac-822082478ce0
 :ADDED: [2026-11-16 Mon 17:48]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 20:01] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac15475fee34eae57
 :END:
 
 Extract =tryBuildEnv= and the once-only memoised provider from
@@ -173,10 +201,22 @@ Extract =tryBuildEnv= and the once-only memoised provider from
 before render changes. Search for any other copy of the
 credential-failure mapping before adding code.
 
-* TODO Give ImportConfig a lazily built environment
+Owner: =lazyAwsDispatcher= and =tryBuildEnv= in new module
+=src/Iidy/Yaml/Imports/Loaders/LazyEnv.hs=. Callers: =runGetImportWith= and
+=runRenderWith=. No other copy of the credential mapping existed;
+StackArgsBootstrap keeps its own memo because its message names the
+stack-args settings and it merges per-file settings. get-import tests pass
+unedited (only their shared helpers moved to Test.MockAws).
+
+* DONE Give ImportConfig a lazily built environment
 :PROPERTIES:
 :ID: org:01a1e6fa-660a-75ee-a9ac-822082478ce1
 :ADDED: [2026-11-16 Mon 17:48]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 20:01] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac15475fee34eae57
 :END:
 
 Make =withAwsEnv= obtain the environment on first use from the shared
@@ -185,10 +225,21 @@ shared message. Keep the existing "not available in this context" error for
 callers that pass no provider (=Demo=). Update the flagged callers with
 one-line changes.
 
-* TODO Wire render to the provider and pass AWS settings from Main
+Not done as written, no stop rule hit: ImportConfig.icAwsEnv stays a
+plain =Maybe Env=. =lazyAwsDispatcher= wraps =mkFullDispatcher= and decides
+per import with =importNeedsAwsEnv= (the C15 gate, so a refused import never
+builds the env), the pattern C17 already uses. No ImportConfig callers
+changed; Demo keeps "not available in this context".
+
+* DONE Wire render to the provider and pass AWS settings from Main
 :PROPERTIES:
 :ID: org:01a1e6fa-660a-75ee-a9ac-822082478ce2
 :ADDED: [2026-11-16 Mon 17:48]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 20:01] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac15475fee34eae57
 :END:
 
 Add =runRenderWith= taking an =IO Amazonka.Env= provider (as
@@ -197,12 +248,71 @@ Add =runRenderWith= taking an =IO Amazonka.Env= provider (as
 =app/Main.hs=. Make the failing test pass, then add the laziness, single
 build, missing-credentials and blocked-s3 cases from the gate.
 
-* TODO Divergence entry, full suite, close
+=runRenderWith= added; =runRender= takes =AwsSettings=; Main passes
+=cliToAwsSettings cli=. All 8 render AWS tests and 135 Render/GetImport
+tests pass; full pre-commit suite: 2113 tests passed, commit e0c82bd.
+
+* DONE Divergence entry, full suite, close
 :PROPERTIES:
 :ID: org:01a1e6fa-660a-75ee-a9ac-822082478ce3
 :ADDED: [2026-11-16 Mon 17:48]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 20:01] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac15475fee34eae57
 :END:
 
 Add the =DIVERGENCES.md= entry. Run the full suite warning-free and tick the
 gate. Note any remaining difference from the C23 item 9 decision, and that
 the stack-args-under-render case is left to C17.
+
+DIVERGENCES.md entry "render: AWS Environment Built Lazily" added. Remaining
+difference from C23 item 9: none; stack-args under render left to C17.
+
+** Review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e775-9189-72d8-b60c-8570dc17d573
+:ADDED: [2026-11-16 Mon 20:03]
+:END:
+Verdict for 2806ec5: land. 2 low defects, no blockers.
+
+Checks run:
+- Revert proof: in the review worktree, runRenderWith used
+  =mkFullDispatcher (mkImportConfig Nothing policy)= instead of
+  =lazyAwsDispatcher=. Of the 8 "AWS environment" tests, 4 failed (ssm:,
+  cfn:output, twice, ssm: without credentials); file:, env:, no-imports and
+  blocked-s3 passed, as they should on the old behaviour. Restored; worktree clean.
+- One owner: =lazyAwsDispatcher= and =tryBuildEnv= live only in
+  =Loaders/LazyEnv.hs=; =runGetImportWith= and =runRenderWith= call it. No
+  =catches= handler in Render.hs or GetImport.hs. StackArgsBootstrap keeps its
+  own IORef memo (=outcome=) because its failure message names stack-args
+  settings and the build is keyed to merged per-file settings. Merging is not
+  warranted now; a later card could let LazyEnv take an optional
+  per-failure message hook, but the duplicated part is only a ten-line memo.
+- C15 gate: =lazyAwsDispatcher= builds only if =importNeedsAwsEnv= (which
+  uses =checkImport=, so an untrusted-chain or blocked s3:/ssm: import
+  yields False). The refused import then goes to =mkFullDispatcher= with no
+  env, which returns the gate's own error. Verified by reading; no
+  lazyAwsDispatcher-level test (defect 2).
+- get-import: same decision function, same =tryBuildEnv= text, same
+  "Import error:" path, exit 1; one import per run so build count is
+  unchanged (0 or 1). Tests unedited apart from helpers moved to MockAws.
+- Concurrency: =modifyMVar= holds the lock across the build, so concurrent
+  imports wait and the provider runs once. Failure (Left) is cached, matching
+  StackArgsBootstrap; get-import had one import so no earlier behaviour
+  differs. An uncaught exception from the provider leaves the cache empty
+  (retry), also as before for get-import (it propagated).
+- DIVERGENCES.md: option names (--profile, --region, --assume-role-arn)
+  exist; text matches the implementation.
+
+Defects:
+1. low, test/Test/RenderTest.hs "ssm: import without credentials": asserts
+   =RunResult 1 [] 1= but not the stderr message, so the gate item "one
+   Import error naming missing credentials" is unchecked (stderr is not
+   captured). Smallest fix: capture stderr or test via lazyAwsDispatcher
+   returning =Left (ImportError msg)= and assert "credentials".
+2. low, no test that lazyAwsDispatcher skips the build for an import the
+   gate refuses from an untrusted requester (blocked s3: covers only the
+   remote-imports flag), and none that a second AWS import after a failed
+   build does not rerun the provider. Add both at LazyEnv level.
