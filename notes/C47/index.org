@@ -1,0 +1,72 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C47
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: B
+:MODE:     CONTRACT
+:ORIGIN:   C18 2026-11-17: dieTxt, stderr writes and Params/Review print external text raw
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
+:ID: org:01a1eb31-607a-7406-98d9-b14f4ffe7eb7
+:ADDED: [2026-11-17 Tue 13:27]
+:END:
+#+title: C47 — Filter control characters from error text printed outside the renderer
+#+date: 2026-11-17
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1eb31-607a-7406-98d9-b14e3b89c5b8
+:ADDED: [2026-11-17 Tue 13:27]
+:END:
+
+Found by [[file:../C18/index.org][C18]] (2026-11-17). C18 escapes control
+characters in renderer output only (=Iidy.Output.Sanitize.escapeOutputData=).
+Text from outside the tool still reaches the terminal raw through direct
+writes (inventory in =notes/C18/report--sinks.org=, "Direct writes outside
+the renderer"): =src/Iidy/Errors.hs= (=dieTxt= and the ERROR lines with
+exception text, lines 36-59), =src/Iidy/GetImport.hs= 72 and 90,
+=src/Iidy/Render.hs= 124-135, =src/Iidy/Demo.hs= 85-100 and 240-242,
+=src/Iidy/Explain.hs= 30-31, and =src/Iidy/Params/Review.hs= 62-80, which
+prints current and pending parameter values (external text, the same attack
+as the C4 review's diff-overwrite finding). C18's rules and visible form
+(=\uNNNN=) apply unchanged.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1eb31-607a-7406-98d9-b14daea0782a
+:ADDED: [2026-11-17 Tue 13:27]
+:END:
+
+Allowed paths: =src/Iidy/Errors.hs=, =src/Iidy/GetImport.hs=,
+=src/Iidy/Render.hs=, =src/Iidy/Demo.hs=, =src/Iidy/Explain.hs=,
+=src/Iidy/Params/Review.hs= (call sites only), their test modules,
+=DIVERGENCES.md= (extend C18's entry), =notes/C47/=.
+
+Out of scope: the escaping rules and =Iidy.Output.Sanitize= itself (reuse
+=escapeControl=, do not copy it); tool-authored text (=Confirm.hs=,
+=Cli/Help.hs=, =Cli/Parser.hs=); document outputs meant for redirection
+(=render= and =get-import= bodies on stdout stay byte-exact).
+
+Done when:
+- [ ] Every listed sink escapes external text with =escapeControl=; the
+  inventory is re-checked and recorded under the task.
+- [ ] A test per sink family (an error message, a parameter value in
+  params review, a stderr warning) with ESC and a bare CR, recorded failing
+  first.
+- [ ] No existing expected output changed.
+- [ ] Build warning-free, full suite green, commits name C47.
+
+Stop and record if: a sink mixes tool colour codes with external text so
+escaping must happen earlier than the write; a document output would
+change.
+
+* TODO Filter control characters from error text printed outside the renderer
+:PROPERTIES:
+:ID: org:01a1eb31-6079-750e-8020-6d124fb24c67
+:ADDED: [2026-11-17 Tue 13:27]
+:END:
+
+Re-check the inventory, write the failing tests, then route each sink
+through =escapeControl=.

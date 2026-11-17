@@ -38,6 +38,7 @@
 - [2026-11-16 Mon 21:45] [[file:../C32/index.org][C32]] — Landed b66effc, 88f01f8: unresolved !$ tags keep their written name and argument (WrittenTag); tag construction moved to Parser/Tags.hs; get-import keeps one-element sequence arguments as Rust does (emitter change accepted as supervisor's call); Sonnet review land, 0 defects
 - [2026-11-16 Mon 22:39] [[file:../C16/index.org][C16]] — Landed af704cc..d3600cb plus doc fixes: approved template enforced at deploy (create/update/changeset/create-or-update/estimate-cost send a presigned approved URL or refuse), bucket region via GetBucketLocation with stack-region fallback (Tavis), HeadObject classes, 1 MB, ACL, request lint, review always prompts; Opus plan review and four Opus reviews (land)
 - [2026-11-17 Tue 12:12] [[file:../C20/index.org][C20]] — Landed ada10c8..0e15639: alias node cap, 50 MiB expanded-size cap, import depth 32 and count 1000, helper output 1 MiB on every helper, HTTP total 60 s; Opus review + 2 fix rounds; follow-ups C44 C45 C46
+- [2026-11-17 Tue 13:27] [[file:../C18/index.org][C18]] — Landed 82f48c8..c433818: escapeControl + one escapeOutputData pass in the renderer, raw outputs exempt; Opus review, fix round 1 (derived token); follow-ups C47 C48
 * COMMENT meta
 :PROPERTIES:
 :LANE: main

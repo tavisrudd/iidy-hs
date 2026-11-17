@@ -1,0 +1,71 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C48
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   C4 security review via C18 2026-11-17: a pending template swapped between diff and approve is approved unseen
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
+:ID: org:01a1eb31-609e-74f5-bae1-ccc70e124f43
+:ADDED: [2026-11-17 Tue 13:27]
+:END:
+#+title: C48 — Bind template approval to the hash of the template the reviewer saw
+#+date: 2026-11-17
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1eb31-609e-74f5-bae1-ccc6c5786089
+:ADDED: [2026-11-17 Tue 13:27]
+:END:
+
+From the C4 security review
+(=notes/C4/report--security-review.org=, the diff-overwrite finding,
+recommendation): "For the approval diff specifically, also print the
+SHA-256 of the pending content and check it against the key name before
+prompting." [[file:../C18/index.org][C18]] escaped the diff; this half was
+out of its scope. The pending object
+(=s3://.../<hash>.yaml.pending=) is written by the requester, the party the
+approval checks; =template-approval review= shows a diff of it and then
+approves. Nothing checks that the pending bytes hash to the key's name, or
+that the bytes approved are the bytes that were shown. This changes the
+approval workflow (the trust model), so it starts with a design note for
+Tavis, as C16 did.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1eb31-609e-74f5-bae1-ccc59464a0f4
+:ADDED: [2026-11-17 Tue 13:27]
+:END:
+
+Allowed paths: =notes/C48/= for the design task; code paths are set
+after Tavis's decision (likely =src/Iidy/Cfn/Operations/TemplateApproval.hs=,
+=src/Iidy/Cfn/ApprovedTemplate.hs= and their tests).
+
+Out of scope: the deploy-time check (C16, landed); MD5 versus SHA-256 key
+names (decided in C16).
+
+Done when:
+- [ ] A design note under the first task: what iidy-js and Rust do, the
+  options (verify hash of the pending bytes equals the key name before the
+  diff; approve by copying the exact bytes that were hashed and shown, e.g.
+  read once and write those bytes; print the hash in the prompt), and a
+  recommendation. Tavis decides before any code.
+- [ ] After the decision: tests with the mock S3 for a pending object whose
+  bytes do not match its key, recorded failing first; build warning-free,
+  full suite green, commits name C48.
+
+Stop and record if: the fix needs a change to the request side's key
+layout.
+
+* TODO Bind template approval to the hash of the template the reviewer saw
+:PROPERTIES:
+:ID: org:01a1eb31-609e-74f5-bae1-ccc486fdc27e
+:ADDED: [2026-11-17 Tue 13:27]
+:END:
+
+Write the design note with Rust (=~/src/iidy=) and iidy-js
+(=~/src/iidy-js/src/cfn/approval/=) references and a recommendation; stop for
+Tavis's decision.

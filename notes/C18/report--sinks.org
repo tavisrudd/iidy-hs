@@ -1,0 +1,100 @@
+#+title: C18 untrusted-text sinks in the interactive renderer
+
+Existing-owner search (duplication rule): no function in =src/= escapes or
+strips terminal control characters for display. =Iidy.Yaml.Emitter= escapes
+control characters inside YAML scalars (its own quoting rules, for YAML
+output, not terminal text) and the JSON renderer relies on aeson; neither
+fits, so a new pure module =Iidy.Output.Sanitize= is the single owner.
+=Iidy.Output.Terminal= is out of scope. Test helpers reused:
+=Test.Shared.mkColoredRenderer= / =mkPlainRenderer= (refactored to share one
+constructor so a handle-capturing variant can be added).
+
+Routing design: =Interactive.hs= =renderOutputData= applies one pure pass,
+=escapeOutputData= (in =Iidy.Output.Sanitize=), to the whole =OutputData=
+before any rendering. Every Text field of every record is escaped there, so
+colour codes are added to, and widths computed from, the visible text, and
+=Sections.hs= needs no per-site calls. The Route column below therefore reads
+"escapeOutputData" for every row except the two exemptions.
+
+* Sinks in Interactive/Sections.hs and Interactive.hs
+:PROPERTIES:
+:ID: org:01a1eac6-f8b4-756a-8125-fee0ff9269d6
+:ADDED: [2026-11-17 Tue 11:31]
+:END:
+
+| Call site (function)           | Value                              | Route                                |
+|--------------------------------+------------------------------------+--------------------------------------|
+| renderCommandMetadata          | env, region, profile, role, principal, credential source, CLI args, version, tokens | escapeOutputData |
+| renderStackDefinition          | name, StackSetName tag, description, status reason, capabilities, role, region, tags, parameters, ARNs, policy, ARN, URL | escapeOutputData |
+| renderStackEvents              | section title (sedTitle)           | escapeOutputData |
+| renderSingleStackEvent         | resource type, logical id (padRight, colorize) | escapeOutputData |
+| renderSingleStackEvent         | status reason (wrapped)            | escapeOutputData |
+| renderStackContents            | resource ids, types, physical ids, output keys and values, export names, values, importing stacks, status reason | escapeOutputData |
+| renderStackContents            | changeset status (csiStatus), name, reason, description | escapeOutputData |
+| renderStatusUpdate             | suMessage (LevelInfo uncoloured)   | escapeOutputData |
+| renderCommandResult            | crMessage                          | escapeOutputData |
+| renderStackList                | stack name, StackSetName tag, tags, status reason | escapeOutputData |
+| renderChangesetResult          | console URL, status, next steps    | escapeOutputData |
+| renderChangesetChange          | logical id, resource type, physical id, scope, detail target and source | escapeOutputData |
+| renderStackDrift               | property path, expected, actual, difference type (uncoloured) | escapeOutputData |
+| renderStackDrift               | logical id, type, physical id, drift status | escapeOutputData |
+| renderError                    | eiMessage                          | escapeOutputData |
+| renderError                    | details text (uncoloured)          | escapeOutputData |
+| renderError                    | suggestions                        | escapeOutputData |
+| renderConfirmationPrompt       | cfrMessage (non-tty branch uncoloured) | escapeOutputData |
+| renderStackAbsent              | stack name, env, region, account, auth arn | escapeOutputData |
+| renderCostEstimate             | URL                                | escapeOutputData |
+| renderStackTemplate            | stderr lines                       | escapeOutputData |
+| renderStackTemplate            | template body                      | EXEMPT (document output, bytes exact) |
+| renderApprovalRequestResult    | pending location, next steps       | escapeOutputData |
+| renderTemplateValidation       | errors, warnings                   | escapeOutputData |
+| renderApprovalStatus           | locations                          | escapeOutputData |
+| renderTemplateDiff             | tdDiffOutput (uncoloured, line 728) | escapeOutputData |
+| renderApprovalResult           | approved location                  | escapeOutputData |
+| startSpinner (Types.hs)        | OdPollingStarted message           | escapeOutputData |
+| Interactive.hs OdRawOutput     | raw text                           | EXEMPT (bytes exact)                 |
+
+* Direct writes outside the renderer (for the follow-up card)
+:PROPERTIES:
+:ID: org:01a1eac6-f8b4-756a-8125-fedfa64998a4
+:ADDED: [2026-11-17 Tue 11:31]
+:END:
+
+Text reaching the terminal without passing the renderer:
+- =src/Iidy/Errors.hs= (=dieTxt=, lines 36-59: ERROR lines with exception text)
+- =src/Iidy/GetImport.hs= 72, 90; =src/Iidy/Render.hs= 124-135;
+  =src/Iidy/Demo.hs= 85-100, 240-242
+- =src/Iidy/Explain.hs= 30-31
+- =src/Iidy/Params/Review.hs= 62-80 (prints current and pending parameter
+  values, which are external text)
+- =src/Iidy/Confirm.hs=, =src/Iidy/Cli/Help.hs=, =src/Iidy/Cli/Parser.hs=
+  (tool-authored text; lower risk)
+
+* Proposed cards for the supervisor to file
+:PROPERTIES:
+:ID: org:01a1eac6-f8b4-756a-8125-fede00cc8888
+:ADDED: [2026-11-17 Tue 11:31]
+:END:
+
+** Proposed: Filter control characters from error text printed outside the renderer
+:PROPERTIES:
+:ID: org:01a1eac6-f8b4-756a-8125-fedd83be5052
+:ADDED: [2026-11-17 Tue 11:31]
+:END:
+Context: C18 escapes renderer output only. Errors.hs dieTxt and the ERROR
+lines, GetImport/Render/Demo/Explain stderr writes and Params/Review
+(current and pending parameter values) print exception or AWS text raw.
+Reuse =Iidy.Output.Sanitize.escapeControl=.
+Allowed paths: =src/Iidy/Errors.hs=, =src/Iidy/Params/Review.hs=,
+=src/Iidy/GetImport.hs=, =src/Iidy/Render.hs=, their tests.
+
+** Proposed: Hash and verify the pending template at approval time
+:PROPERTIES:
+:ID: org:01a1eac6-f8b4-756a-8125-fedccab5087b
+:ADDED: [2026-11-17 Tue 11:31]
+:END:
+Context: the security review's second recommendation (C18 out of scope):
+bind the approval to the hash of the template the reviewer saw, so a
+template swapped between diff and approve is rejected.
+Allowed paths: =src/Iidy/Cfn/Operations/TemplateApproval.hs=,
+=src/Iidy/Cfn/TemplateHash.hs=, their tests.

@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C18
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
 :CREATED_BY: opus-5.5-medium
@@ -10,9 +10,36 @@
 :ID: org:01a1e691-481a-7494-b72f-e21162512b87
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
+:CLOCK:
+CLOCK: [2026-11-17 Tue 11:29]--[2026-11-17 Tue 11:59] => 0:30
+CLOCK: [2026-11-17 Tue 12:05]--[2026-11-17 Tue 12:10] => 0:05
+CLOCK: [2026-11-17 Tue 13:16]--[2026-11-17 Tue 13:27] => 0:11
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-17 Tue 11:28]
   Note: Assigned to Sonnet sub-agent claude-C18 (Tavis 2026-11-17)
+  Agent: opus-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
+- Clock-in [2026-11-17 Tue 11:29]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
+- Clock-out [2026-11-17 Tue 11:59]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
+- Clock-in [2026-11-17 Tue 12:05]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
+- Clock-out [2026-11-17 Tue 12:10]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
+- Clock-in [2026-11-17 Tue 13:16]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
+- Clock-out [2026-11-17 Tue 13:27]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
+- Card state STARTED → DONE [2026-11-17 Tue 13:27]
+  Note: Landed 82f48c8..c433818: escapeControl + one escapeOutputData pass in the renderer, raw outputs exempt; Opus review, fix round 1 (derived token); follow-ups C47 C48
   Agent: opus-5.5-medium
   Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
 :END:
@@ -90,28 +117,28 @@ these and asks about anything else that changes what the user sees):
   exact.
 
 Done when:
-- [ ] One pure function (for example =escapeControl :: Text -> Text= in
+- [X] One pure function (for example =escapeControl :: Text -> Text= in
   =Iidy.Output.Sanitize=) implements the rules above; unit tests cover each
   class (ESC, CR with and without LF, NUL, DEL, a C1 character, U+202E, tab
   and newline kept, ordinary and non-ASCII text such as accented letters and
   emoji unchanged) and a property that the output has no escaped-class
   character and equals the input when it has none.
-- [ ] The first task's inventory lists every place text from outside the
+- [X] The first task's inventory lists every place text from outside the
   tool reaches =Interactive/Sections.hs= and =Interactive.hs=, and each one
   is routed through the function; the template-approval diff
   (=renderTemplateDiff=, =Sections.hs= line 728) is covered.
-- [ ] A renderer test per sink family (the diff, an event status reason, a
+- [X] A renderer test per sink family (the diff, an event status reason, a
   stack tag or parameter value, a stack output value, an error message)
   renders a value containing =ESC[2K= or a bare =\r= and asserts the visible
   =\u001b= form and no raw ESC from the data, with the renderer's own colour
   codes still present when colour is on.
-- [ ] A test pins that =OdRawOutput= and the =OdStackTemplate= body pass
+- [X] A test pins that =OdRawOutput= and the =OdStackTemplate= body pass
   through unchanged.
-- [ ] No existing expected output changed (the suite passes without edits
+- [X] No existing expected output changed (the suite passes without edits
   to expected values); if one must change, stop.
-- [ ] =DIVERGENCES.md= has one entry for the escaping and the raw-output
+- [X] =DIVERGENCES.md= has one entry for the escaping and the raw-output
   exemption.
-- [ ] Build warning-free, full suite green, commits name C18.
+- [X] Build warning-free, full suite green, commits name C18.
 
 Stop and record if: any user-visible output change not listed above is
 needed (for example column widths, a different form for tabs, or filtering
@@ -120,10 +147,15 @@ change outside the allowed paths (for example the diff can only be escaped
 where it is built).
 A reviewer (Opus) checks the escaped character classes against the list.
 
-* TODO Inventory untrusted-text sinks in the renderer
+* DONE Inventory untrusted-text sinks in the renderer
 :PROPERTIES:
 :ID: org:01a1e692-1419-7071-aafc-dcedf66fbd46
 :ADDED: [2026-11-16 Mon 15:54]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 11:31] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
 :END:
 
 Walk =Interactive/Sections.hs= and =Interactive.hs= for every value that
@@ -136,22 +168,155 @@ drift values (around 554), error messages (around 579), the template body
 (668, exempt) and =OdRawOutput= (=Interactive.hs= line 97, exempt). List
 direct writes outside the renderer for the follow-up card.
 
-* TODO Add the escaping function and its unit tests
+Result: see [[file:report--sinks.org][the sinks report]]. It holds the
+existing-owner search (no existing terminal-text escaper; Emitter escaping is
+YAML-specific), the sink table, the direct writes outside the renderer, and
+two proposed cards (error text outside the renderer; hashing the pending
+template) for the supervisor to file.
+
+* DONE Add the escaping function and its unit tests
 :PROPERTIES:
 :ID: org:01a1e692-1419-7071-aafc-dceca320ebc1
 :ADDED: [2026-11-16 Mon 15:54]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 11:38] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
 :END:
 
 Create =Iidy.Output.Sanitize= with the pure function and
 =test/Test/SanitizeTest.hs= (separate from the renderer tests), register
 both, and run them. No renderer call sites yet.
 
-* TODO Route the sinks through it, with renderer tests
+* DONE Route the sinks through it, with renderer tests
 :PROPERTIES:
 :ID: org:01a1e6c5-455b-71dc-a53d-890145cec89e
 :ADDED: [2026-11-16 Mon 16:50]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 11:59] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
 :END:
 
 Apply the function at the call sites from the inventory, add the renderer
 tests and the raw-output pins from the gate, and add the =DIVERGENCES.md=
 entry. Record the full-suite result.
+
+** Result (worker claude-C18)
+:PROPERTIES:
+:ID: org:01a1eae1-59a9-71b0-8da6-89a5cdc8f8ff
+:ADDED: [2026-11-17 Tue 11:59]
+:END:
+Design change from the inventory sketch: instead of editing each call site,
+=Interactive.hs= =renderOutputData= applies =escapeOutputData= (new, in
+=Iidy.Output.Sanitize=) once to the whole =OutputData= before dispatch. All
+external text is therefore escaped before colour codes and before
+=calcPadding= / =padRight= measure widths, and no sink in =Sections.hs= can
+be missed. =OdRawOutput= and the =OdStackTemplate= body are returned
+unchanged by that function. One incidental change: =OdRawOutput= was written
+with =TIO.putStr= (process stdout) and is now written with =rPutStr r= (the
+renderer's stdout handle, which is process stdout in production) so tests can
+capture it.
+
+Tests written first and run on the branch base (production files from commit
+a1d763d, new tests and Shared helper applied): 44 of 45 "untrusted text is
+escaped" tests failed (every sink in colored and plain form, plus the column
+alignment test); the pins for the OdStackTemplate body passed by design and
+the OdRawOutput pin failed only because the renderer wrote it to process
+stdout. After the change all 45 pass. Unit tests (commit c15a09e) cover each
+escaped class plus two QuickCheck properties; the module did not exist on
+the base so they cannot run there.
+
+Full suite: run by the pre-commit hook on the final tip 97674c5 (main
+unchanged at a1d763d, so already rebased): -Werror build clean, fourmolu and
+hlint clean, all tests pass, no per-test timeouts hit, no hang.
+
+** Review 2026-11-17
+:PROPERTIES:
+:ID: org:01a1eae6-137b-7777-bfaf-774e45cff451
+:ADDED: [2026-11-17 Tue 12:05]
+:END:
+Reviewer: review worker. =c15a09e= (escapeControl and unit tests): *land*.
+=97674c5= (escapeOutputData in the renderer): *land*; two low items below
+can follow or be fixed first at the supervisor's choice.
+
+Checked and fine: =renderOutputData= is the only interactive entry point
+(=Output/Manager.hs:39=), and it escapes before the spinner, colour and
+width code. The constructor =case= in =escapeOutputData= is total (a new
+constructor fails the =-Werror= build). Every =Text= field of every record
+reachable from =OutputData= is escaped, except the one in item 1; the
+=ChangeUpdateWithChanges= stack ID is never rendered. Only =OdRawOutput= and
+=stTemplateBody= are exempt (=stStderrLines= is escaped). No producer outside
+=src/Iidy/Output/= puts colour codes into =OutputData= (the coloured YAML
+error display goes straight to stderr in =Render.hs:124-132=), so no tool
+colour is mangled. The =OdRawOutput= move to =rPutStr r= is
+=TIO.hPutStr stdout= in production (=newInteractiveRenderer= passes
+=stdout=): no visible change. The rules match the card: lower-case
+=\uNNNN= via =showHex=, CR kept only before LF (=\r\r\n= escapes the first
+CR), C0 except tab and LF, DEL, C1, U+2028/2029, U+202A-202E, U+2066-2069.
+Key collisions in =escMap= need a literal =\u001b= key beside a key with a
+raw ESC at the same place; AWS tag keys allow neither a backslash nor control
+characters, parameter names are alphanumeric and CLI argument keys are
+tool-defined, so the risk is negligible. =mkRendererOn= removes the old
+duplicate constructor; =renderCaptured= injects handles and does not repeat
+=RenderTest.captureStderr= (which redirects process stderr). Full suite at
+=97674c5=: 2257 tests pass. With =Interactive.hs= reverted to =a1d763d=,
+=-p "untrusted text is escaped"=: 44 of 45 fail; only the
+=OdStackTemplate= body pin passes, which it should.
+
+1. Low, =src/Iidy/Output/Sanitize.hs= =escToken=: escapes =tiValue= and
+   =tiOperationId= but not =tiSource=. =Derived DerivedTokenInfo{dtiFrom,
+   dtiStep}= is printed by =formatTokenSource=
+   (=Interactive/Types.hs:408=), and =dtiFrom= is the primary token value
+   (=ClientReqToken.hs:64=), which can come from =--client-request-token=.
+   So an ESC in that flag is escaped on the token line and printed raw in
+   "derived from ...". Fix: escape both =DerivedTokenInfo= fields in
+   =escToken=, and add the case to the sink tests.
+2. Low, =notes/C18/report--sinks.org=: the "Routing design" paragraph and
+   the Route column describe the per-call-site design that was dropped
+   (shadowed =colorize=, escaping inside =padRight=, explicit calls). None
+   of that exists. Fix: say that =escapeOutputData= covers every row and
+   keep the two exemptions.
+
+Note (not a defect): the traversal is total over constructors but not over
+fields. A =Text= field added later to any output record passes through
+unescaped without a warning. A one-line haddock on =OutputData= in
+=Iidy.Output.Types= pointing to =escapeOutputData= would guard it; that
+file is outside this card's paths.
+
+** Fix round 1 (worker claude-C18)
+:PROPERTIES:
+:ID: org:01a1eaeb-0d67-71f7-ab96-25362523b82e
+:ADDED: [2026-11-17 Tue 12:10]
+:END:
+Review item 1: =escToken= now escapes the derived token source
+(=dtiFrom=, =dtiStep=). Test "derived token source" (colored and plain)
+recorded failing first (2 of 2 failed), then passing. Item 2: the routing
+paragraph and Route column of =report--sinks.org= now describe the single
+=escapeOutputData= pass. Rebased onto main 7d9ab05 (tip 1d5ee6a); full suite
+2259 tests pass.
+
+*** Re-review 2026-11-17
+:PROPERTIES:
+:ID: org:01a1eb02-c9e4-7578-a137-eb8618128846
+:ADDED: [2026-11-17 Tue 12:36]
+:END:
+Rebased on =7d9ab05=: =git range-diff= shows =82f48c8= and =426c41a=
+identical to =c15a09e= and =97674c5=. Fix =1d5ee6a=: *land*, 0 defects
+(one check pending).
+- Item 1 resolved by reading: =escToken= now escapes =tiSource= through
+  =escTokenSource= (=dtiFrom= and =dtiStep= of =Derived=), and the sink
+  list gains "derived token source" (=OdCommandMetadata= with =dtiFrom =
+  payload=), run in colour and plain. Not run: the proof that this case
+  fails with =escTokenSource= disabled. =scripts/guarded-build= refused
+  every build (MemAvailable about 4.7 GiB). By construction the payload
+  reaches =formatTokenSource= (=Interactive/Types.hs:408=) unescaped
+  without the fix, so the test should fail there; supervisor to run it or
+  ask me once builds are allowed.
+- Item 2 resolved: =report--sinks.org= describes the single
+  =escapeOutputData= pass, and every Route cell reads =escapeOutputData=
+  except the two exemptions.
+- Pending check run: with =Sanitize.hs= at =1d5ee6a^=, "derived token
+  source" fails in colour and plain (2 of 47); passes at =1d5ee6a=. Land.
