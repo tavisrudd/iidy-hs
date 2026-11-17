@@ -1,0 +1,68 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C35
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C28 review 2026-11-16: the emitter prints 1.0 as 1, 1e5 as 100000 and 'a\tb\x01' as a quoted raw tab while dropping \x01; Rust prints 1.0, 100000.0 and "a\tb\x01"
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e700-105d-7600-affb-617edd580164
+:ADDED: [2026-11-16 Mon 17:55]
+:END:
+#+title: C35 — YAML emitter: print floats and control characters as Rust does
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e700-105d-7600-affb-617db0af8371
+:ADDED: [2026-11-16 Mon 17:55]
+:END:
+
+Found by the C28 review ([[file:../C28/index.org][C28]], "Review
+2026-11-16", pre-existing items). The YAML emitter
+(=src/Iidy/Yaml/Emitter.hs=) prints the float =1.0= as =1= and =1e5= as
+=100000=, so a float turns into an integer on output, and prints a string
+holding a tab and the control character U+0001 as a quoted raw tab with the
+U+0001 dropped, which loses data. Rust prints =1.0=, =100000.0= and
+="a\tb\x01"=. Applies to every command that emits YAML (=render=,
+=get-import=). Distinct from [[file:../C18/index.org][C18]], which is about
+terminal output, not YAML documents.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e700-105d-7600-affb-617c8b5680df
+:ADDED: [2026-11-16 Mon 17:55]
+:END:
+
+Allowed paths: =src/Iidy/Yaml/Emitter.hs=, =test/Test/EmitterTest.hs=,
+=test-fixtures/= (expected outputs only where they were wrong against
+Rust), =notes/C35/=.
+
+Out of scope: sequence indentation (decided), key order, JSON output.
+
+Done when:
+- [ ] Floats keep a fractional part or exponent as Rust prints them
+  (=1.0=, =100000.0=, and the Rust output for =1.5e300=, =-0.0=, =.inf=,
+  =.nan=), recorded from the Rust binary in the card; tests recorded
+  failing first.
+- [ ] Strings with control characters are double-quoted with escapes and
+  lose no character (=\t=, =\x01=, =\x7f=, =\u0085=, U+2028), matching
+  Rust; tests recorded failing first.
+- [ ] Every fixture expected output changed by the fix is listed in the
+  card with the Rust output that justifies it.
+- [ ] Build warning-free, full suite green, commits name C35.
+
+Stop and record if: an expected output that came from Rust changes; the
+fix needs the parser to keep the original number text.
+
+* TODO YAML emitter: print floats and control characters as Rust does
+:PROPERTIES:
+:ID: org:01a1e700-105d-7600-affb-617b3144f247
+:ADDED: [2026-11-16 Mon 17:55]
+:END:
+
+Record the Rust and iidy-hs output for each case in the gate with local
+files only. Add the failing emitter tests, then fix the float and string
+rendering in the emitter's one scalar path.
