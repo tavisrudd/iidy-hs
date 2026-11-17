@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C28
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   C25 side finding: iidy-hs get-import prints keys sorted, Rust keeps document order; ImportData would need to keep order
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
 :ID: org:01a1e6cc-bbfb-73fa-9536-c7405324ad68
 :ADDED: [2026-11-16 Mon 16:58]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 17:47]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C28 — get-import: keep document key order (Rust parity)
 #+date: 2026-11-16
