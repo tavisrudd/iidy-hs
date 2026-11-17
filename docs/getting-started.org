@@ -391,9 +391,16 @@ All fields are optional except =StackName= and =Template=.
 | =UsePreviousTemplate=         | boolean           | Reuse the existing template during update                                          |
 | =UsePreviousParameterValues=  | list              | Parameter keys to carry forward from previous values                               |
 | =ApprovedTemplateLocation=    | string            | S3 location for the template approval workflow                                     |
-| =CommandsBefore=              | list              | Shell commands to run before the CloudFormation operation                          |
+| =CommandsBefore=              | list              | Not run by iidy-hs (see below)                                                     |
 
 Fields marked "env map" accept either a string or a mapping of environment names to strings. The =--environment= flag selects which value to use.
+
+=CommandsBefore= is accepted but iidy-hs never runs its commands. Rust iidy
+and iidy-js run them through bash before =create-stack=, =update-stack=,
+=create-changeset= and =create-or-update=, so those four commands refuse a
+stack-args file that sets it rather than skip the commands silently: remove
+the field, or run the commands yourself before running iidy-hs. Every other
+command accepts the file and ignores the field.
 
 --------------
 

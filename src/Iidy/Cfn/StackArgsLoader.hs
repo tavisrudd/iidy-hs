@@ -80,7 +80,7 @@ import Iidy.Cfn.StackArgs.Fields (
     valueToStackArgs,
  )
 import Iidy.Cfn.StackArgs.Validate (validateNoUnknownKeys)
-import Iidy.Cfn.Types (CfnOperation, StackArgs, cfnOperationStr)
+import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), cfnOperationStr)
 import Iidy.Yaml.Ast (YamlAst)
 import Iidy.Yaml.Engine (
     LoadImportFn,
@@ -210,12 +210,45 @@ loadStackArgsWith policy mkLoader argsfile environment operation cliAws =
                     "Failed to parse stack args from " <> baseLocation <> ": " <> err
             Right sa -> pure sa
 
+        refuseCommandsBefore baseLocation operation stackArgs
+
         pure
             LoadedStackArgs
                 { lsaStackArgs = stackArgs
                 , lsaMergedAws = mergedAws
                 , lsaDetectionCtx = detectionCtx
                 }
+
+------------------------------------------------------------------------
+-- CommandsBefore
+------------------------------------------------------------------------
+
+{- | Refuse a stack-args file with @CommandsBefore@ for the operations that
+would run it in Rust (@should_process_commands_before@,
+@src/cfn/stack_args.rs:483-490@) and iidy-js (@loadStackArgs.ts:137-166@).
+iidy-hs never runs the commands (see DIVERGENCES.md), so going ahead would
+skip them silently. Other operations accept the field and ignore it.
+-}
+refuseCommandsBefore :: (Monad m) => Text -> CfnOperation -> StackArgs -> ExceptT Text m ()
+refuseCommandsBefore argsfile operation sa = case saCommandsBefore sa of
+    Just _
+        | runsCommandsBefore operation ->
+            throwE $
+                "CommandsBefore in "
+                    <> argsfile
+                    <> " is not supported: iidy-hs does not run these commands for "
+                    <> cfnOperationStr operation
+                    <> ". Remove CommandsBefore from the file, or run the commands yourself before running iidy-hs."
+    _notRun -> pure ()
+
+-- | The operations Rust and iidy-js run @CommandsBefore@ for.
+runsCommandsBefore :: CfnOperation -> Bool
+runsCommandsBefore = \case
+    OpCreateStack -> True
+    OpUpdateStack -> True
+    OpCreateChangeset -> True
+    OpCreateOrUpdate -> True
+    _other -> False
 
 ------------------------------------------------------------------------
 -- Environment map resolution

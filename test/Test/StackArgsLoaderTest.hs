@@ -7,19 +7,29 @@ import Data.Aeson.KeyMap qualified as KM
 import Data.Map.Strict qualified
 import Data.Text qualified as T
 import Data.Vector qualified as V
+import System.Directory (copyFile, doesFileExist)
+import System.FilePath ((</>))
+import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
 import Iidy.Aws.CredentialSource (AwsSettings (..))
 import Iidy.Cfn.StackArgsLoader (LoadedStackArgs (..), extractRawAwsFromAst, getInt, getStrListValidated, loadStackArgs, mergeAwsSettings, mergeSentinel, noProfileSentinel, noRoleSentinel, parseCapabilityText, parseOnFailureText, resolveEnvMaps, validateNoUnknownKeys)
-import Iidy.Cfn.Types (Capability (..), CfnOperation (..), OnFailure (..), StackArgs (..))
+import Iidy.Cfn.Types (Capability (..), CfnOperation (..), OnFailure (..), StackArgs (..), cfnOperationStr)
+import Iidy.Cli (RenderArgs (..), RenderFormat (..))
+import Iidy.Render (runRenderWith)
+import Iidy.Types (YamlSpec (..))
 import Iidy.Yaml.Ast (SrcMeta (..), YamlAst (..))
 import Iidy.Yaml.Imports.Types (RemoteImports (..), importPolicy)
 import Iidy.Yaml.Location (zeroPosition)
-import Test.Shared (noAwsSettings)
+import Test.MockAws (noCredentials)
+import Test.Shared (collectRawOutput, noAwsSettings, testGlobalOpts)
 
 stackArgsLoaderTests :: [TestTree]
-stackArgsLoaderTests =
+stackArgsLoaderTests = loaderTests <> commandsBeforeTests
+
+loaderTests :: [TestTree]
+loaderTests =
     [ testCase "load basic stack args" $ do
         result <- loadStackArgs "test-fixtures/test-stack-args.yaml" "dev" OpCreateStack noAwsSettings (importPolicy AllowRemoteImports) Nothing
         case result of
@@ -432,3 +442,68 @@ stackArgsLoaderTests =
   where
     m :: SrcMeta
     m = SrcMeta "" zeroPosition zeroPosition
+
+{- | CommandsBefore is refused for the operations Rust and iidy-js would run
+it for (Rust @should_process_commands_before@, stack_args.rs:483-490), and
+left alone for every other operation and for render.
+-}
+commandsBeforeTests :: [TestTree]
+commandsBeforeTests =
+    [ testCase ("CommandsBefore is refused for " <> T.unpack (cfnOperationStr op)) $
+        withCommandsBeforeCopy $ \dir argsfile -> do
+            result <- loadStackArgs argsfile "dev" op noAwsSettings (importPolicy AllowRemoteImports) Nothing
+            case result of
+                Right _ -> assertFailure "expected CommandsBefore to be refused"
+                Left err -> do
+                    let mentions t = assertBool ("error mentions " <> T.unpack t <> ": " <> T.unpack err) (t `T.isInfixOf` err)
+                    mentions (T.pack argsfile)
+                    mentions "CommandsBefore"
+                    mentions (cfnOperationStr op)
+                    mentions "Remove CommandsBefore"
+            assertNoMarker dir
+    | op <- [OpCreateStack, OpUpdateStack, OpCreateChangeset, OpCreateOrUpdate]
+    ]
+        <> [ testCase "CommandsBefore is accepted and not run for delete-stack" $
+                withCommandsBeforeCopy $ \dir argsfile -> do
+                    result <- loadStackArgs argsfile "dev" OpDeleteStack noAwsSettings (importPolicy AllowRemoteImports) Nothing
+                    case result of
+                        Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
+                        Right (LoadedStackArgs sa _aws _ctx) ->
+                            saCommandsBefore sa @?= Just ["touch commands-before-ran.marker"]
+                    assertNoMarker dir
+           , testCase "a stack-args file with CommandsBefore renders" $
+                withCommandsBeforeCopy $ \dir argsfile -> do
+                    (emit, readOut) <- collectRawOutput
+                    rc <- runRenderWith noCredentials emit (renderStdout (T.pack argsfile)) (testGlobalOpts False)
+                    rc @?= 0
+                    out <- T.concat <$> readOut
+                    assertBool ("render output keeps CommandsBefore: " <> T.unpack out) ("CommandsBefore" `T.isInfixOf` out)
+                    assertNoMarker dir
+           ]
+  where
+    marker :: FilePath
+    marker = "commands-before-ran.marker"
+    -- The fixture's command would create the marker in the argsfile's
+    -- directory (where Rust and iidy-js run it) or in the current one.
+    assertNoMarker :: FilePath -> Assertion
+    assertNoMarker dir = do
+        inArgsDir <- doesFileExist (dir </> marker)
+        inCwd <- doesFileExist marker
+        assertBool "a CommandsBefore command ran" (not (inArgsDir || inCwd))
+    renderStdout :: T.Text -> RenderArgs
+    renderStdout path =
+        RenderArgs
+            { raTemplate = path
+            , raOutfile = "-"
+            , raFormat = RenderYaml
+            , raQuery = Nothing
+            , raOverwrite = False
+            , raYamlSpec = YamlAuto
+            }
+
+-- | Run with a copy of the CommandsBefore fixture in a fresh directory.
+withCommandsBeforeCopy :: (FilePath -> FilePath -> IO a) -> IO a
+withCommandsBeforeCopy act = withSystemTempDirectory "iidy-commands-before" $ \dir -> do
+    let argsfile = dir </> "stack-args.yaml"
+    copyFile "test-fixtures/test-stack-args-commands-before.yaml" argsfile
+    act dir argsfile

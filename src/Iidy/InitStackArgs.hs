@@ -79,6 +79,8 @@ stackArgsTemplate =
         , "# ResourceTypes: <list of aws resource types allowed in the template>"
         , ""
         , "# shell commands to run prior the cfn stack operation"
+        , "# (not run by iidy-hs: create-stack, update-stack, create-changeset and"
+        , "# create-or-update refuse a file that sets it)"
         , "# CommandsBefore:"
         , "#   - make build # for example"
         ]

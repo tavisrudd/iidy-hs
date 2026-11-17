@@ -545,3 +545,23 @@ the Rust ARN cases (`demo.rs:490-530`, pinned by tests): Rust's second ARN
 pass can never change what its first `\b\d{12}\b` pass left, so iidy-hs
 uses the single pass. The TypeScript original has no masking and no
 `--mask-secrets` option.
+
+## CommandsBefore: Refused, Never Run
+
+**Cause**: Intentional (Tavis, card C22); running it needs a trust design
+first (card C40).
+
+Rust and iidy-js run each `CommandsBefore` entry through bash in the
+argsfile's directory, after expanding Handlebars with the `iidy` namespace,
+for `create-stack`, `update-stack`, `create-changeset` and
+`create-or-update`, and fail the load on a non-zero exit (Rust
+`src/cfn/stack_args.rs:277-313`, `should_process_commands_before` at
+`:483-490`, `process_commands_before` from `:493`; iidy-js
+`src/cfn/loadStackArgs.ts:137-166`, `src/cfn/runCommandSet.ts:11-67`). For
+every other command both drop the field.
+
+iidy-hs never runs the commands. For those four commands a stack-args file
+that sets `CommandsBefore` is refused before any stack operation, with an
+error naming the file, the field and the command, so a pre-deploy step (a
+build, a check, an upload) is never skipped silently. Every other command,
+and `render`, accepts the file; the field is parsed and ignored.
