@@ -96,7 +96,8 @@ importMaxTotal :: Int
 importMaxTotal = 1000
 
 {- | Longest result, in characters, of a single Handlebars helper (1 MiB, the
-size of the largest deployable template). Only @pad@ can amplify its input.
+size of the largest deployable template). Checked on the result of every
+helper; @pad@ and @replace@ also check before they build it.
 -}
 helperMaxOutputChars :: Int
 helperMaxOutputChars = 1048576

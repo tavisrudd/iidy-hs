@@ -7,23 +7,26 @@ is missing shows as a timeout rather than a hang.
 -}
 module Test.ResourceLimitsTest (resourceLimitsTests) where
 
-import Control.Concurrent (threadDelay)
 import Control.Monad (forM)
 import Data.Aeson (Value (..))
 import Data.Aeson.KeyMap qualified as KM
 import Data.Bifunctor (first)
-import Data.ByteString.Char8 qualified as BC
 import Data.ByteString.Lazy qualified as BL
 import Data.Either (isRight)
-import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
+import Data.IORef (newIORef, readIORef)
+import Data.List qualified as List
+import Data.Ord (Down (..))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
-import Network.Socket qualified as NS
+import Data.Vector qualified as V
 import System.Directory (doesDirectoryExist, listDirectory)
 import System.FilePath (takeExtension, (</>))
 import Test.Tasty (TestTree, localOption, mkTimeout, testGroup)
 import Test.Tasty.HUnit
+
+import Test.FakeHttp (FakeNetwork (..), Reply (..), fakeSeam, newFakeNet)
+import Test.ImportFixtures (preprocessText, recordingLoader, stubDocsLoader, unknownLoader)
 
 import Iidy.Constants (
     helperMaxOutputChars,
@@ -32,11 +35,11 @@ import Iidy.Constants (
     yamlMaxAliasNodes,
     yamlMaxExpandedBytes,
  )
-import Iidy.Yaml.Engine (LoadImportFn, PreprocessError (..), PreprocessResult, preprocessYaml)
+import Iidy.Yaml.Engine (PreprocessError (..), PreprocessResult)
 import Iidy.Yaml.Handlebars.Engine (InterpolateError (..), defaultHelpers, interpolate)
 import Iidy.Yaml.Imports.Loaders.Http (loadHttpImportWithin)
-import Iidy.Yaml.Imports.Loaders.HttpGuard (HttpGuard (..), HttpSeam (..), RawIO (..), resolveHostWith)
-import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..))
+import Iidy.Yaml.Imports.Loaders.HttpGuard (HttpGuard (..), HttpSeam)
+import Iidy.Yaml.Imports.Types (ImportError (..), RemoteImports (..), importPolicy)
 import Iidy.Yaml.Parser (parseYaml, parseYamlFile)
 
 resourceLimitsTests :: TestTree
@@ -70,6 +73,17 @@ bombDoc levels =
     n :: Int -> Text
     n = T.pack . show
 
+{- | The bomb in the C4 review: level 0 a list of ten scalars, then five levels
+of ten aliases each, in a few hundred bytes (over a million nodes).
+-}
+classicBombDoc :: Text
+classicBombDoc =
+    T.unlines $
+        "l0: &l0 [x, x, x, x, x, x, x, x, x, x]"
+            : [ "l" <> tshow i <> ": &l" <> tshow i <> " [" <> T.intercalate ", " (replicate 10 ("*l" <> tshow (i - 1))) <> "]"
+              | i <- [1 .. 5]
+              ]
+
 parseText :: Text -> Either String ()
 parseText doc = either (Left . show) (const (Right ())) (parseYaml (BL.fromStrict (TE.encodeUtf8 doc)) "bomb.yaml")
 
@@ -92,10 +106,12 @@ aliasTests :: [TestTree]
 aliasTests =
     [ testCase "a six-level alias bomb (over the node limit) is rejected quickly" $
         assertRejected ("exceeds " <> show yamlMaxAliasNodes <> " nodes in bomb.yaml") (parseText (bombDoc 6))
-    , testCase "a five-level alias bomb (under the node limit) still loads and preprocesses" $ do
+    , testCase "the C4 review's bomb (ten scalars, then five levels of ten aliases) is rejected" $
+        assertRejected ("exceeds " <> show yamlMaxAliasNodes <> " nodes in bomb.yaml") (parseText classicBombDoc)
+    , testCase "five levels over a single scalar (123,463 nodes, under the node limit) still loads and preprocesses" $ do
         let doc = bombDoc 5
         parseText doc @?= Right ()
-        result <- preprocessText (\_ _ -> pure (Left (ImportError "none"))) doc
+        result <- preprocessText (importPolicy AllowRemoteImports) unknownLoader "root.yaml" doc
         assertBool "preprocesses" (isRight result)
     , testCase "scalar text expanded to exactly the size limit loads" $
         parseText (bigScalarDoc (yamlMaxExpandedBytes `div` 65536)) @?= Right ()
@@ -114,8 +130,10 @@ corpusTests =
     [ testCase "no fixture or example template comes near the alias node limit" $ do
         files <- concat <$> mapM yamlFilesUnder ["test-fixtures", "fixtures"]
         sizes <- mapM nodesOf files
-        let (biggest, file) = maximum (zip sizes files)
-        assertBool (file <> " has " <> show biggest <> " nodes") (biggest < yamlMaxAliasNodes `div` 10)
+        case List.sortOn (Down . fst) (zip sizes files) of
+            [] -> assertFailure "no YAML files found (wrong working directory?)"
+            (biggest, file) : _ ->
+                assertBool (file <> " has " <> show biggest <> " nodes") (biggest < yamlMaxAliasNodes `div` 10)
     ]
   where
     nodesOf :: FilePath -> IO Int
@@ -133,32 +151,26 @@ yamlFilesUnder dir = do
             then yamlFilesUnder path
             else pure [path | takeExtension path `elem` [".yaml", ".yml"]]
 
-preprocessText :: LoadImportFn -> Text -> IO (Either PreprocessError PreprocessResult)
-preprocessText loader doc = case parseYaml (BL.fromStrict (TE.encodeUtf8 doc)) "root.yaml" of
-    Left err -> assertFailure ("did not parse: " <> show err)
-    Right ast -> preprocessYaml loader ast "root.yaml"
-
 ------------------------------------------------------------------------
 -- Import depth and count
 ------------------------------------------------------------------------
 
--- | A loader serving @nI.yaml@ for every I: each imports @n(I+1).yaml@ while @more I@.
-chainLoader :: IORef Int -> (Int -> Bool) -> LoadImportFn
-chainLoader calls more loc _base = do
-    modifyIORef' calls (+ 1)
-    let i = read (T.unpack (T.dropEnd 5 (T.drop 1 loc))) :: Int
-        raw
-            | more i = "$imports:\n  next: n" <> T.pack (show (i + 1)) <> ".yaml\n"
-            | otherwise = "value: 1\n"
-    pure $
-        Right
-            ImportData
-                { idType = ImportFile
-                , idLocation = loc
-                , idRawData = raw
-                , idOrdered = Nothing
-                , idDoc = Object (if more i then KM.fromList [("$imports", Object KM.empty)] else KM.fromList [("value", Number 1)])
-                }
+-- | Documents @n1.yaml@ ... @nK.yaml@; each imports the next while @more i@.
+chainDocs :: Int -> (Int -> Bool) -> [(Text, Text)]
+chainDocs k more =
+    [ ("n" <> tshow i <> ".yaml", if more i then "$imports:\n  next: n" <> tshow (i + 1) <> ".yaml\n" else "value: 1\n")
+    | i <- [1 .. k]
+    ]
+
+tshow :: Int -> Text
+tshow = T.pack . show
+
+-- | Preprocess a root document that imports from the stub documents; the second result counts loader calls.
+preprocessWith :: [(Text, Text)] -> Text -> IO (Either PreprocessError PreprocessResult, Int)
+preprocessWith docs root = do
+    calls <- newIORef []
+    result <- preprocessText (importPolicy AllowRemoteImports) (recordingLoader calls (stubDocsLoader docs unknownLoader)) "root.yaml" root
+    (,) result . length <$> readIORef calls
 
 rootImports :: [Text] -> Text
 rootImports locs = "$imports:\n" <> T.concat ["  k" <> T.pack (show i) <> ": " <> l <> "\n" | (i, l) <- zip [0 :: Int ..] locs]
@@ -172,33 +184,29 @@ importMessage = \case
 importTests :: [TestTree]
 importTests =
     [ testCase "a chain exactly at the depth limit loads" $ do
-        calls <- newIORef 0
-        result <- preprocessText (chainLoader calls (< importMaxDepth)) (rootImports ["n1.yaml"])
-        assertBool ("loads: " <> show (either show (const "") result)) (isRight result)
-        readIORef calls >>= (@?= importMaxDepth)
+        (result, calls) <- preprocessWith (chainDocs importMaxDepth (< importMaxDepth)) (rootImports ["n1.yaml"])
+        assertBool ("loads: " <> either show (const "") result) (isRight result)
+        calls @?= importMaxDepth
     , testCase "an endless import chain is refused one level past the limit, naming the chain" $ do
-        calls <- newIORef 0
-        result <- preprocessText (chainLoader calls (const True)) (rootImports ["n1.yaml"])
+        (result, calls) <- preprocessWith (chainDocs (importMaxDepth + 8) (const True)) (rootImports ["n1.yaml"])
         case importMessage result of
             Right msg -> do
                 assertBool ("names limit and value: " <> T.unpack msg) ("import depth 33 exceeds 32: root.yaml" `T.isPrefixOf` msg)
                 assertBool "names the chain" ("n1.yaml \8594 n2.yaml" `T.isInfixOf` msg)
             Left err -> assertFailure err
-        readIORef calls >>= (@?= importMaxDepth) -- the 33rd is refused before it is fetched
+        calls @?= importMaxDepth -- the 33rd is refused before it is fetched
     , testCase "as many imports as the total limit load" $ do
-        calls <- newIORef 0
-        result <- preprocessText (chainLoader calls (const False)) (rootImports (fanOut importMaxTotal))
+        (result, _) <- preprocessWith (chainDocs importMaxTotal (const False)) (rootImports (fanOut importMaxTotal))
         assertBool "loads" (isRight result)
     , testCase "one import past the total limit is refused" $ do
-        calls <- newIORef 0
-        result <- preprocessText (chainLoader calls (const False)) (rootImports (fanOut (importMaxTotal + 1)))
+        (result, _) <- preprocessWith (chainDocs (importMaxTotal + 1) (const False)) (rootImports (fanOut (importMaxTotal + 1)))
         case importMessage result of
             Right msg -> assertBool ("names limit and value: " <> T.unpack msg) ("import count 1001 exceeds 1000" `T.isPrefixOf` msg)
             Left err -> assertFailure err
     ]
   where
     fanOut :: Int -> [Text]
-    fanOut k = ["n" <> T.pack (show i) <> ".yaml" | i <- [1 .. k]]
+    fanOut k = ["n" <> tshow i <> ".yaml" | i <- [1 .. k]]
 
 ------------------------------------------------------------------------
 -- Helper output
@@ -215,9 +223,27 @@ padTo width = render ("{{pad \"ab\" " <> T.pack (show width) <> " \"-\"}}")
 replaceOf :: Int -> Int -> Either Text Text
 replaceOf n len = render ("{{replace \"" <> T.replicate n "a" <> "\" \"a\" \"" <> T.replicate len "b" <> "\"}}")
 
+{- | @toJson@ of level @n@ of a value in which each level holds ten references
+to the one below (as aliases or @$defs@ do), level 0 being 600 characters
+of JSON.
+-}
+toJsonOf :: Int -> Either Text Text
+toJsonOf n =
+    first (\(InterpolateError msg) -> msg) $
+        interpolate defaultHelpers (Object (KM.fromList [("v", levels !! n)])) "{{toJson v}}"
+  where
+    levels :: [Value]
+    levels = iterate (Array . V.fromList . replicate 10) (Array (V.fromList (replicate 150 (String "x"))))
+
 helperTests :: [TestTree]
 helperTests =
     [ testCase "pad to a small width is unchanged" $ padTo 5 @?= Right "ab---"
+    , testCase "toJson of a value that shares its parts stays small under the limit" $
+        assertBool "serializes" (either (const False) ((< helperMaxOutputChars) . T.length) (toJsonOf 1))
+    , testCase "toJson of a shared value that serializes past the limit errors, naming the helper" $
+        case toJsonOf 4 of
+            Left msg -> assertBool (T.unpack msg) ("toJson would produce" `T.isInfixOf` msg && "over the helper output limit of 1048576" `T.isInfixOf` msg)
+            Right _ -> assertFailure "expected an error"
     , testCase "pad to exactly the limit loads" $
         fmap T.length (padTo helperMaxOutputChars) @?= Right helperMaxOutputChars
     , testCase "pad one character past the limit errors, naming the limit" $
@@ -238,25 +264,17 @@ helperTests =
 -- HTTP total time
 ------------------------------------------------------------------------
 
-{- | A server that sends the headers at once and then drips the body one
-byte every 50 ms, never finishing (no socket, no network).
--}
-drippingSeam :: HttpSeam
-drippingSeam = HttpSeam{hsResolve = resolveHostWith [NS.AI_NUMERICHOST], hsConnect = const connectDrip}
+-- | A fake network whose only host serves a body that never finishes.
+drippingSeam :: IO HttpSeam
+drippingSeam = fakeSeam network <$> newFakeNet
   where
-    connectDrip = do
-        sent <- newIORef False
-        let readChunk = do
-                headersSent <- readIORef sent
-                if headersSent
-                    then threadDelay 50000 >> pure "x"
-                    else modifyIORef' sent (const True) >> pure (BC.pack "HTTP/1.1 200 OK\r\nContent-Length: 1000000\r\n\r\n")
-        pure RawIO{rioRead = readChunk, rioWrite = \_ -> pure (), rioClose = pure ()}
+    network = FakeNetwork{fwHosts = [], fwReplies = [(("10.0.0.1", "*"), Drip)]}
 
 httpTests :: [TestTree]
 httpTests =
     [ testCase "an HTTP import whose body drips past the total time errors" $ do
-        result <- loadHttpImportWithin 1000000 drippingSeam (HttpGuard False Nothing "root.yaml") "http://10.0.0.1/doc.yaml"
+        seam <- drippingSeam
+        result <- loadHttpImportWithin 1000000 seam (HttpGuard False Nothing "root.yaml") "http://10.0.0.1/doc.yaml"
         case result of
             Left (ImportError msg) -> do
                 assertBool (T.unpack msg) ("total time limit of 1 seconds exceeded" `T.isInfixOf` msg)

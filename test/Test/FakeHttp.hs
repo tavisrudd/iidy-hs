@@ -16,6 +16,7 @@ module Test.FakeHttp (
 ) where
 
 import Control.Applicative ((<|>))
+import Control.Concurrent (threadDelay)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as BC
@@ -29,8 +30,10 @@ import Network.Socket qualified as NS
 
 import Iidy.Yaml.Imports.Loaders.HttpGuard (HttpSeam (..), RawIO (..), resolveHostWith)
 
--- | A canned response.
-data Reply = Ok Text | Redirect Text
+{- | A canned response. 'Drip' sends the headers of a long body at once, then
+one byte every 50 ms and never finishes.
+-}
+data Reply = Ok Text | Redirect Text | Drip
 
 {- | The fake network's contents: successive resolver answers per host
 name (the last one repeats), and replies by (Host header, path), where
@@ -72,13 +75,17 @@ fakeSeam network net = HttpSeam{hsResolve = resolve, hsConnect = connect}
         atomicModifyIORef' (fnConnected net) (\as -> (as <> [addr], ()))
         written <- newIORef BS.empty
         pending <- newIORef Nothing
+        dripping <- newIORef False
         let readChunk = do
                 mResp <- readIORef pending
+                isDrip <- readIORef dripping
                 resp <- case mResp of
+                    Just _ | isDrip -> threadDelay 50000 >> pure "x"
                     Just r -> pure r
                     Nothing -> do
                         req <- readIORef written
                         atomicModifyIORef' (fnRequests net) (\rs -> (rs <> [req], ()))
+                        writeIORef dripping (isDripReply (fwReplies network) req)
                         pure (respond (fwReplies network) req)
                 writeIORef pending (Just BS.empty)
                 pure resp
@@ -94,15 +101,28 @@ nthOrLast n answers = case drop n answers of
     a : _ -> a
     [] -> concat (take 1 (reverse answers))
 
+-- | The canned reply for a raw HTTP request (direct or via a proxy), if any.
+replyFor :: [((ByteString, ByteString), Reply)] -> ByteString -> Maybe Reply
+replyFor replies req =
+    let (h, path) = requestKey req
+     in lookup (h, path) replies <|> lookup (h, "*") replies
+
+isDripReply :: [((ByteString, ByteString), Reply)] -> ByteString -> Bool
+isDripReply replies req = case replyFor replies req of
+    Just Drip -> True
+    _other -> False
+
 -- | The raw HTTP response for a raw HTTP request (direct or via a proxy).
 respond :: [((ByteString, ByteString), Reply)] -> ByteString -> ByteString
 respond replies req =
-    let (h, path) = requestKey req
-     in case lookup (h, path) replies <|> lookup (h, "*") replies of
-            Just (Ok body) -> response "200 OK" [] (TE.encodeUtf8 body)
-            Just (Redirect loc) -> response "302 Found" [("Location", TE.encodeUtf8 loc)] ""
-            Nothing -> response "404 Not Found" [] "missing"
+    case replyFor replies req of
+        Just Drip -> dripHeaders
+        Just (Ok body) -> response "200 OK" [] (TE.encodeUtf8 body)
+        Just (Redirect loc) -> response "302 Found" [("Location", TE.encodeUtf8 loc)] ""
+        Nothing -> response "404 Not Found" [] "missing"
   where
+    dripHeaders :: ByteString
+    dripHeaders = "HTTP/1.1 200 OK\r\nContent-Length: 1000000\r\nConnection: close\r\n\r\n"
     response :: ByteString -> [(ByteString, ByteString)] -> ByteString -> ByteString
     response status headers body =
         BS.concat $

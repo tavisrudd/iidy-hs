@@ -35,8 +35,22 @@ type HelperFn = [Value] -> Either Text Value
 -- Registry
 ------------------------------------------------------------------------
 
+{- | Every helper, each wrapped once so that no result passes
+'helperMaxOutputChars' (a serializer over a value that aliases or @$defs@
+share can expand it far past its source). @pad@ and @replace@ also check
+before building their result, so they fail without allocating it.
+-}
 defaultHelpers :: Map Text HelperFn
-defaultHelpers =
+defaultHelpers = Map.mapWithKey limitOutput helperTable
+
+limitOutput :: Text -> HelperFn -> HelperFn
+limitOutput name fn args =
+    fn args >>= \case
+        String s | T.length s > helperMaxOutputChars -> Left (outputLimitError name (T.length s))
+        result -> Right result
+
+helperTable :: Map Text HelperFn
+helperTable =
     Map.fromList
         -- String case
         [ ("toLowerCase", oneString "toLowerCase" (String . T.toLower))
