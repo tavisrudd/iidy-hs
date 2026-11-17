@@ -1,0 +1,159 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C28
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C25 side finding: iidy-hs get-import prints keys sorted, Rust keeps document order; ImportData would need to keep order
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e6cc-bbfb-73fa-9536-c7405324ad68
+:ADDED: [2026-11-16 Mon 16:58]
+:END:
+#+title: C28 — get-import: keep document key order (Rust parity)
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e6cc-bbfb-73fa-9536-c73f56a33d74
+:ADDED: [2026-11-16 Mon 16:58]
+:END:
+
+Found by [[file:../C25/index.org][C25]] (its side findings). For a
+document whose keys are not in alphabetical order, Rust =get-import= prints
+the keys in document order and iidy-hs prints them sorted. Reproduced on
+2026-11-16 with the Rust binary (=~/src/iidy-hs/iidy-rs=) on a file
+=z: [1]\na: 2\n=, and on nested =k: {z: 1, a: 2}=:
+- Rust, default YAML format: =z= before =a=, and nested =z= before =a=
+  (the same for a =.json= file ={"z": 1, "a": 2}=: Rust parses JSON as
+  YAML and keeps its order).
+- Rust =--format json=: sorted (={"a":2,"z":[1]}= pretty-printed), because
+  it goes through =serde_json= (=yaml_to_json_value=).
+- Rust =--query=: the result is sorted too (=--query k= prints =a= before
+  =z=; =--query '@'= sorts the whole document), because the query runs on
+  the =serde_json= form (=~/src/iidy/src/cfn/get_import.rs:45-64=).
+So only unqueried YAML output keeps document order; JSON and queried output
+are sorted in both tools, and must stay as they are. The iidy-hs binary in
+the repository root predates C25, so rebuild before comparing.
+
+Where the order is lost: =ImportData= (=src/Iidy/Yaml/Imports/Types.hs=
+lines 34-39) holds =idDoc :: Value=, an aeson value whose objects are
+sorted. The YAML loaders build it with =parseYamlContent= in
+=src/Iidy/Yaml/Imports/ContentParsing.hs= line 48, which calls
+=astToValueRaw=; =astToValueRaw= is =toValue . astToOValueRaw=
+(=src/Iidy/Yaml/Resolution/Resolver.hs= lines 913-929), and
+=astToOValueRaw= already keeps source order, so the owner to reuse exists
+and the order is dropped only by the =toValue= step. JSON files, and
+=:json= SSM values, go through =parseJsonContent= (aeson), which also loses
+order. =GetImport.emitDoc= (=src/Iidy/GetImport.hs= lines 129-144) then
+emits =fromValue= of the sorted value.
+
+Who depends on =ImportData=: the parse loaders (=Loaders/File.hs= line 44,
+=S3.hs= line 59, =Http.hs= line 74, =Ssm.hs= lines 62 and 197) call
+=parseByExtensionStrict= and the format-suffix parsers; every other loader
+(=Cfn.hs=, =Random.hs=, env, git, filehash) builds an =ImportData=
+directly; the engine reads =idDoc= (=src/Iidy/Yaml/Engine.hs= lines 182 and
+199) for =$params= and nested preprocessing; tests construct it in
+=EngineTest= and =ImportTrustTest= and read =idDoc= in =FilehashTest= and
+=ImportLoaderTest=. =astToValueRaw= is also used by
+=Cfn/Operations/ConvertStack.hs= line 193 and in =Resolver.hs= itself.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e6cc-bbfb-73fa-9536-c73e979cc647
+:ADDED: [2026-11-16 Mon 16:58]
+:END:
+
+Allowed paths: =src/Iidy/Yaml/Imports/Types.hs=,
+=src/Iidy/Yaml/Imports/ContentParsing.hs=, the parsing loaders
+=src/Iidy/Yaml/Imports/Loaders/File.hs=, =S3.hs=, =Http.hs= and =Ssm.hs=,
+and the one-line field addition in the other loaders that build an
+=ImportData= (=Cfn.hs=, =Random.hs=, and any other the compiler flags),
+=src/Iidy/GetImport.hs=, =test/Test/GetImportTest.hs=,
+=test/Test/ImportLoaderTest.hs=, the =ImportData= construction sites in
+=test/Test/EngineTest.hs= and =test/Test/ImportTrustTest.hs=,
+=test-fixtures/get-import/= (new ordered fixtures), =DIVERGENCES.md= (only
+for a residual difference), =notes/C28/=.
+
+Overlap: [[file:../C26/index.org][C26]] lists =Yaml/Resolution/Resolver.hs=
+(=astToValueRaw=) and =Imports/ContentParsing.hs= as allowed paths. Land one
+of the two first and rebase the other; do not edit =Resolver.hs= here
+(reuse =astToOValueRaw= as it is). [[file:../C29/index.org][C29]] and
+[[file:../C11/index.org][C11]] also touch =GetImport.hs= or its test
+module; rebase, do not rewrite their lines.
+
+Out of scope: JSON output and =--query= output (sorted in Rust, keep them
+sorted); how the engine resolves imports (its values stay exactly what they
+are today); other emitters; the cfn, env, git, filehash and random loaders'
+content; changing =astToValueRaw= semantics for =ConvertStack= and the
+resolver; the YAML sequence layout (done in C25).
+
+Design choice (the worker decides, recording why): preferred is a new field
+on =ImportData= (for example =idOrdered :: !(Maybe OValue)=) filled by the
+parsing loaders from =astToOValueRaw= and by a JSON-text parse that keeps
+key order, with =Nothing= meaning "use =fromValue idDoc=" and =idDoc=
+unchanged for the engine and every existing assertion. The alternative,
+changing =idDoc= to =OValue=, touches every consumer above and is not
+preferred. If keeping JSON order needs a YAML-based parse that could change
+the values existing JSON imports produce (numbers, duplicate keys), keep the
+aeson value for =idDoc= and use the new parse for the ordered field only.
+
+Done when:
+- [ ] Reproduction recorded on the first task: the same three commands
+  (default YAML, a nested mapping, a =.json= file) on a fresh build of
+  iidy-hs and on the Rust binary, showing the order difference before the
+  change.
+- [ ] A regression test, recorded failing before the fix, for each of: a
+  top-level =z=, =a= YAML file; a nested =z=, =a= mapping; a =.json= file
+  with unsorted keys; duplicate keys (first position, last value, as
+  =astToOValueRaw= documents). Expected output is the text Rust prints,
+  pinned as literal strings.
+- [ ] Tests pin that =--format json= and any =--query= result stay sorted,
+  and that a scalar, a list and an =env:= import are unchanged.
+- [ ] No existing test needed an edited expected value (only the added
+  =ImportData= field at construction sites); the engine's resolved values
+  are unchanged.
+- [ ] A byte comparison against the Rust binary for the fixtures is
+  recorded (command lines and the identical output).
+- [ ] Build warning-free, full suite green, commits name C28.
+
+Stop and record if: the order cannot be kept without changing what the
+engine or =ConvertStack= sees; an existing expected value must change; the
+change needs a file outside the allowed paths (including =Resolver.hs=
+while C26 is in flight); or a residual order difference remains for some
+import type (record it in =DIVERGENCES.md= and ask Tavis whether it is
+acceptable).
+
+* TODO Reproduce the order difference with both binaries
+:PROPERTIES:
+:ID: org:01a1e6cc-bbfb-73fa-9536-c73d9ddbbde5
+:ADDED: [2026-11-16 Mon 16:58]
+:END:
+
+Build iidy-hs on the branch base through =scripts/guarded-build= (the root
+=iidy-hs= link is stale). Create the fixtures under
+=test-fixtures/get-import/= (for example =ordered.yaml=: =z: [1]=, =a: 2=
+and a nested mapping with unsorted keys; =ordered.json=). Run get-import on
+each with both binaries, default format, =--format json= and =--query=, and
+record the outputs here.
+
+* TODO Failing tests for ordered output
+:PROPERTIES:
+:ID: org:01a1e6cf-add4-7612-9ad4-c77482449b5f
+:ADDED: [2026-11-16 Mon 17:02]
+:END:
+
+Add the cases from the gate to =test/Test/GetImportTest.hs= using the
+existing =runFormat= helper and =collectRawOutput=; record the failing run.
+
+* TODO Carry the document order through ImportData
+:PROPERTIES:
+:ID: org:01a1e6cf-add4-7612-9ad4-c773c262fd48
+:ADDED: [2026-11-16 Mon 17:02]
+:END:
+
+Add the ordered field, fill it in the YAML and JSON parsing loaders and
+=ContentParsing.hs=, give the other constructors the default, and make
+=emitDoc= use it when there is no =--query= and the format is YAML. Record
+the passing run, the Rust byte comparison and the full suite.

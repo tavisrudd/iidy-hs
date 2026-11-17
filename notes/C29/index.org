@@ -1,0 +1,136 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C29
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C25 side finding: iidy-hs accepts it, Rust says Unsupported format
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e6cc-bc1e-7064-b2be-8e64b8f5dbfe
+:ADDED: [2026-11-16 Mon 16:58]
+:END:
+#+title: C29 — get-import: reject --format yaml-cloudformation as Rust does
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e6cc-bc1e-7064-b2be-8e63fe29af79
+:ADDED: [2026-11-16 Mon 16:58]
+:END:
+
+[[file:../C25/index.org][C25]] noted that iidy-hs accepts =get-import
+--format yaml-cloudformation= while Rust rejects it. That is only true
+below the command line: the parser already rejects it. On 2026-11-16,
+=getImportFormatReader= (=src/Iidy/Cli/Parser.hs= lines 881-890, used at
+line 757) accepts only =json=, =yaml= and =yml= (case-insensitive) and
+fails with "Unknown output format: X. Valid formats: json, yaml"; a test
+(=CliParserTest= "get-import --format yaml-cloudformation is rejected")
+pins that. What remains is what is left of the difference:
+- =GetImportArgs.giaFormat= (=src/Iidy/Cli.hs= line 303) is the shared
+  =RenderFormat= (=RenderJson | RenderYaml | RenderCfnYaml=, line 141) that
+  =render= also uses (=raFormat=, line 294, parsed by =renderFormatReader=,
+  which must keep accepting =yaml-cloudformation=). So =emitDoc= in
+  =src/Iidy/GetImport.hs= (lines 139-141) still has a =RenderCfnYaml= branch
+  that the command line can never reach, and a function-level caller (tests,
+  =runGetImportWith=) can still ask for it.
+- Message and timing differ from Rust. Rust takes any string
+  (=~/src/iidy/src/cli.rs= line 641, =pub format: String=), loads the import
+  and applies the query first, then prints =Unsupported format: 'X'. Use
+  'yaml' or 'json'.= on stderr and exits 1
+  (=~/src/iidy/src/cfn/get_import.rs= lines 66-76). Verified with the Rust
+  binary: =yaml-cloudformation= and =bogus= both give that line, exit code
+  1, nothing on stdout. iidy-hs rejects before loading, with an optparse
+  usage error (=error: option --format: ...=, then usage), exit code 1.
+  iidy-hs also accepts =yml= and upper-case spellings, which Rust rejects.
+- Docs (=docs/command-reference.md= lines 326-332) already say "=yaml= or
+  =json=" for get-import; they are out of scope here.
+
+Other commands share the type: =render --format= (=RenderArgs.raFormat=)
+needs all three constructors and must not change.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e6cc-bc1e-7064-b2be-8e628e324865
+:ADDED: [2026-11-16 Mon 16:58]
+:END:
+
+Allowed paths: =src/Iidy/Cli.hs= (the get-import argument type only),
+=src/Iidy/Cli/Parser.hs= (=getImportFormatReader= and
+=getImportArgsParser= only), =src/Iidy/GetImport.hs=, =app/Main.hs= only if
+it reads =giaFormat= (it does not today),
+=test/Test/CliParserTest.hs=, =test/Test/GetImportTest.hs=, =DIVERGENCES.md=
+(one entry), =notes/C29/=.
+
+Overlap: [[file:../C28/index.org][C28]] edits =emitDoc= in =GetImport.hs=
+and the get-import tests, and [[file:../C11/index.org][C11]] adds cases to
+=GetImportTest.hs=: land in sequence and rebase, never rewrite their lines.
+
+Out of scope: =render= and every other command's format type and reader
+(=RenderFormat=, =renderFormatReader=, =paramFormatReader=); the C28 key
+order; docs (=docs/= is owned by other cards); the output of the supported
+formats.
+
+Proposed decision (for Tavis to confirm before the card is assigned; it is
+a user-visible choice): keep rejecting at the command line, which fails
+earlier and reads better than Rust's late check, and make the type say so:
+a get-import-only format type with two constructors (JSON, YAML) so the
+unreachable =RenderCfnYaml= branch disappears from =emitDoc= and a caller
+cannot ask for it. Record the remaining differences (message text, usage
+error versus one-line error, rejection before the import is loaded,
+=yml= and case-insensitive spellings accepted) in one =DIVERGENCES.md=
+entry. The alternative is exact Rust parity (accept a string, check after
+loading, print the Rust line); it costs a worse error for the user, so it
+is not the default.
+
+Done when:
+- [ ] Reproduction recorded on the first task: =yaml-cloudformation= and
+  =bogus= on a fresh iidy-hs build and on the Rust binary, with stdout,
+  stderr and exit code of each.
+- [ ] =giaFormat= has a type that cannot hold =RenderCfnYaml=; =emitDoc=
+  matches exhaustively on it with no wildcard and no unreachable branch;
+  =render= still accepts all three formats (its tests untouched and green).
+- [ ] Tests: the parser rejects =yaml-cloudformation= and a bogus value for
+  get-import with exit code 1 and the expected message; accepts =yaml=,
+  =json= (and the spelling decision made for =yml= and case); =render
+  --format yaml-cloudformation= still parses. The existing get-import
+  parser tests pass with only the type name changed.
+- [ ] =DIVERGENCES.md= has one entry for the differences in the Decision
+  paragraph; if Tavis chooses exact parity instead, the entry is not needed
+  and the tests pin the Rust text and the post-load timing.
+- [ ] Build warning-free, full suite green, commits name C29.
+
+Stop and record if: Tavis has not confirmed the decision above; making the
+type get-import-only needs changes to =render= or any other command; or the
+work needs a change outside the allowed paths.
+
+* TODO Reproduce the rejection with both binaries
+:PROPERTIES:
+:ID: org:01a1e6cc-bc1e-7064-b2be-8e61e4cbe2bc
+:ADDED: [2026-11-16 Mon 16:58]
+:END:
+
+Build iidy-hs through =scripts/guarded-build= (the root =iidy-hs= link is
+stale) and run =get-import --format yaml-cloudformation=, =--format bogus=
+and =--format YAML= on a small file with both binaries. Record stdout,
+stderr and exit code, and the Decision once Tavis has confirmed it.
+
+* TODO Give get-import its own format type
+:PROPERTIES:
+:ID: org:01a1e6cf-adf0-731d-b83d-7ad56a862567
+:ADDED: [2026-11-16 Mon 17:02]
+:END:
+
+Add the two-constructor type in =Cli.hs=, use it in
+=getImportFormatReader= and =getImportArgsParser=, update =emitDoc= and the
+tests that build =GetImportArgs= (=GetImportTest= helpers, =CliParserTest=).
+
+* TODO Tests and the divergence entry
+:PROPERTIES:
+:ID: org:01a1e6cf-adf0-731d-b83d-7ad4b6f1cf5d
+:ADDED: [2026-11-16 Mon 17:02]
+:END:
+
+Add the parser cases from the gate, add the =DIVERGENCES.md= entry, and
+record the full-suite result.
