@@ -1,0 +1,9 @@
+$defs:
+  prof: computed-profile
+$imports:
+  dbHost: ssm:/app/db-host
+StackName: bootstrap-test
+Template: template.yaml
+Profile: !$ prof
+Parameters:
+  DbHost: "{{dbHost}}"

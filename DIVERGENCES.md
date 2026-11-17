@@ -212,3 +212,24 @@ outside this card.
 
 Fixing the three spellings above needs the parser to keep the written tag name and argument node
 on the AST.
+
+## AWS Imports in Stack-Args Files
+
+**Cause**: feature kept from iidy-js (TypeScript); Rust lacks it.
+
+A stack-args file may use AWS imports (`ssm:`, `ssm-path:`, `cfn:`, `s3:`).
+Rust preprocesses stack-args with an import loader that has no AWS
+configuration (`src/cfn/stack_args.rs`, `src/yaml/engine.rs`), so those
+imports fail there with "AWS configuration required". iidy-hs follows
+iidy-js (`src/cfn/loadStackArgs.ts`): the imports run under an AWS
+environment built from `Profile`, `Region` and `AssumeRoleARN` as written in
+the file, merged under `--profile`, `--region` and `--assume-role-arn`.
+
+Those three fields must then be plain strings or environment maps of plain
+strings. When one is computed (a `!$` or other tag, a `{{...}}` template, or
+an environment map without an entry for the environment) and the command
+line does not set it, the first AWS import is refused before any AWS call,
+naming the field and the option that sets it. Unlike iidy-js, a file
+without AWS imports may still compute these fields; they take effect for
+the deployment itself. A failure to build the import environment is
+reported with its cause.

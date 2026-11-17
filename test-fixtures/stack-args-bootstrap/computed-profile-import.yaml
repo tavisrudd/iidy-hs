@@ -1,0 +1,8 @@
+$imports:
+  account: profile.yaml
+  dbHost: ssm:/app/db-host
+StackName: bootstrap-test
+Template: template.yaml
+Profile: !$ account.profile
+Parameters:
+  DbHost: "{{dbHost}}"

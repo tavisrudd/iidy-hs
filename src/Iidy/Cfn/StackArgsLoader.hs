@@ -10,10 +10,19 @@ Mirrors Rust's cfn::stack_args::load_stack_args:
 -}
 module Iidy.Cfn.StackArgsLoader (
     loadStackArgs,
+    loadStackArgsWith,
     LoadedStackArgs (..),
 
+    -- * Credential fields
+    CredentialField (..),
+    credentialFields,
+    credentialFieldKey,
+    credentialFieldFlag,
+    credentialFieldSetting,
+
     -- * AWS settings bootstrap (for pre-import credential creation)
-    extractRawAwsFromFile,
+    RawField (..),
+    readRawField,
     mergeAwsSettings,
 
     -- * Internal (exported for testing)
@@ -57,6 +66,7 @@ import Iidy.Aws.CredentialSource (
 import Iidy.Cfn.Types (Capability (..), CfnOperation, OnFailure (..), StackArgs (..), cfnOperationStr)
 import Iidy.Yaml.Ast (YamlAst (..))
 import Iidy.Yaml.Engine (
+    LoadImportFn,
     PreprocessResult (..),
     preprocessYaml11,
  )
@@ -105,6 +115,29 @@ loadStackArgs ::
     Maybe Amazonka.Env ->
     IO (Either Text LoadedStackArgs)
 loadStackArgs argsfile environment operation cliAws remoteImports mAwsEnv =
+    loadStackArgsWith
+        (\_ast -> pure (mkFullDispatcher ImportConfig{icAwsEnv = mAwsEnv, icRemoteImports = remoteImports}))
+        argsfile
+        environment
+        operation
+        cliAws
+
+{- | Like 'loadStackArgs', with the import loader built from the parsed file
+(see "Iidy.Cfn.StackArgsBootstrap").
+-}
+loadStackArgsWith ::
+    -- | import loader for the parsed argsfile
+    (YamlAst -> IO LoadImportFn) ->
+    -- | argsfile path
+    FilePath ->
+    -- | environment name
+    Text ->
+    -- | operation being performed
+    CfnOperation ->
+    -- | CLI-provided AWS settings
+    AwsSettings ->
+    IO (Either Text LoadedStackArgs)
+loadStackArgsWith mkLoader argsfile environment operation cliAws =
     runExceptT $ do
         content <- lift $ BL.readFile argsfile
         let baseLocation = T.pack argsfile
@@ -116,9 +149,9 @@ loadStackArgs argsfile environment operation cliAws remoteImports mAwsEnv =
             Right a -> pure a
 
         -- Preprocess (YAML 1.1 for CFN compatibility)
-        let importCfg = ImportConfig{icAwsEnv = mAwsEnv, icRemoteImports = remoteImports}
+        loader <- lift (mkLoader ast)
         preprocessResult <- ExceptT $ do
-            r <- preprocessYaml11 (mkFullDispatcher importCfg) ast baseLocation
+            r <- preprocessYaml11 loader ast baseLocation
             pure $ case r of
                 Left err ->
                     Left $
@@ -165,46 +198,100 @@ loadStackArgs argsfile environment operation cliAws remoteImports mAwsEnv =
                 }
 
 ------------------------------------------------------------------------
--- Raw AWS settings extraction (pre-preprocessing bootstrap)
+-- Credential fields
 ------------------------------------------------------------------------
 
-{- | Extract AWS settings from a raw argsfile before preprocessing.
-Parses the YAML and extracts Profile\/Region\/AssumeRoleARN from the
-top-level mapping, handling both plain strings and environment maps.
-Returns empty settings on any parse failure (callers should proceed
-to 'loadStackArgs' which will report the error properly).
+{- | The stack-args fields that choose the AWS account and region. This is
+the one list of them: the raw reading, the environment-map resolution, the
+settings extraction and the import bootstrap all go through it.
 -}
-extractRawAwsFromFile :: FilePath -> Text -> IO AwsSettings
-extractRawAwsFromFile argsfile environment = do
-    content <- BL.readFile argsfile
-    let baseLocation = T.pack argsfile
-    case parseYaml content baseLocation of
-        Left _ -> pure (AwsSettings Nothing Nothing Nothing)
-        Right ast -> pure (extractRawAwsFromAst ast environment)
+data CredentialField = CredProfile | CredAssumeRoleArn | CredRegion
+    deriving stock (Show, Eq, Ord, Enum, Bounded)
 
-{- | Extract AWS settings from a raw 'YamlAst' top-level mapping.
-Resolves environment maps (e.g. @Region: {dev: us-east-1, prod: eu-west-1}@)
-using the given environment name.
+-- | Every credential field, in the order errors are checked.
+credentialFields :: [CredentialField]
+credentialFields = [minBound .. maxBound]
+
+-- | The field's key in a stack-args file.
+credentialFieldKey :: CredentialField -> Text
+credentialFieldKey = \case
+    CredProfile -> "Profile"
+    CredAssumeRoleArn -> "AssumeRoleARN"
+    CredRegion -> "Region"
+
+-- | The command-line option that sets the field.
+credentialFieldFlag :: CredentialField -> Text
+credentialFieldFlag = \case
+    CredProfile -> "--profile"
+    CredAssumeRoleArn -> "--assume-role-arn"
+    CredRegion -> "--region"
+
+-- | The field's value in a settings record.
+credentialFieldSetting :: CredentialField -> AwsSettings -> Maybe Text
+credentialFieldSetting = \case
+    CredProfile -> awsProfile
+    CredAssumeRoleArn -> awsAssumeRoleArn
+    CredRegion -> awsRegion
+
+-- | Build settings from a value per credential field.
+settingsFromFields :: (CredentialField -> Maybe Text) -> AwsSettings
+settingsFromFields get =
+    AwsSettings
+        { awsProfile = get CredProfile
+        , awsRegion = get CredRegion
+        , awsAssumeRoleArn = get CredAssumeRoleArn
+        }
+
+------------------------------------------------------------------------
+-- Raw credential fields (before preprocessing)
+------------------------------------------------------------------------
+
+-- | A credential field as written in the file, before preprocessing.
+data RawField
+    = RawAbsent
+    | -- | A plain string, directly or as the environment's map entry.
+      RawLiteral !Text
+    | -- | Not known before preprocessing; the text says what it is.
+      RawComputed !Text
+    deriving stock (Show, Eq)
+
+{- | Read a credential field from the raw top-level mapping. A plain string,
+or an environment map whose entry for the environment is a plain string,
+is literal. A tag, a handlebars template, any other node, an environment
+map without that entry, or a document that is not a plain mapping is not
+known before preprocessing.
+-}
+readRawField :: YamlAst -> Text -> CredentialField -> RawField
+readRawField (AstMapping pairs _) environment field =
+    case lookupAstField (credentialFieldKey field) pairs of
+        Nothing -> RawAbsent
+        Just (AstNull _) -> RawAbsent
+        Just (AstMapping envMap _) -> case lookupAstField environment envMap of
+            Nothing -> RawComputed ("an environment map with no entry for environment " <> environment)
+            Just entry -> plainOrComputed entry
+        Just node -> plainOrComputed node
+readRawField _ _ _ = RawComputed "a field of a document that is not a plain mapping"
+
+-- | Classify a raw value node.
+plainOrComputed :: YamlAst -> RawField
+plainOrComputed = \case
+    AstPlainString t _ -> RawLiteral t
+    AstTemplatedString t _ -> RawComputed ("the handlebars template " <> t)
+    AstPreprocessingTag _ _ -> RawComputed "a preprocessing tag"
+    AstCloudFormationTag _ _ -> RawComputed "a CloudFormation tag"
+    AstUnknownTag _ _ -> RawComputed "a tagged value"
+    AstImportedDocument _ _ -> RawComputed "an imported document"
+    _other -> RawComputed "a value that is not a string"
+
+{- | The literal credential fields of a raw 'YamlAst' (see 'readRawField');
+a field that is absent or not known before preprocessing is 'Nothing'.
 -}
 extractRawAwsFromAst :: YamlAst -> Text -> AwsSettings
-extractRawAwsFromAst (AstMapping pairs _) environment =
-    AwsSettings
-        { awsProfile = resolveRawField "Profile" pairs environment
-        , awsRegion = resolveRawField "Region" pairs environment
-        , awsAssumeRoleArn = resolveRawField "AssumeRoleARN" pairs environment
-        }
-extractRawAwsFromAst _ _ = AwsSettings Nothing Nothing Nothing
-
--- | Resolve a field from raw AST pairs, handling plain strings and env maps.
-resolveRawField :: Text -> [(YamlAst, YamlAst)] -> Text -> Maybe Text
-resolveRawField name pairs environment =
-    case lookupAstField name pairs of
-        Nothing -> Nothing
-        Just (AstNull _) -> Nothing
-        Just (AstPlainString t _) -> Just t
-        Just (AstTemplatedString t _) -> Just t
-        Just (AstMapping envMap _) -> lookupAstTextField environment envMap
-        Just _ -> Nothing
+extractRawAwsFromAst ast environment = settingsFromFields $ \field ->
+    case readRawField ast environment field of
+        RawLiteral t -> Just t
+        RawAbsent -> Nothing
+        RawComputed _ -> Nothing
 
 -- | Look up a field by name in AST mapping pairs.
 lookupAstField :: Text -> [(YamlAst, YamlAst)] -> Maybe YamlAst
@@ -212,10 +299,6 @@ lookupAstField name pairs =
     case [v | (k, v) <- pairs, astScalarText k == Just name] of
         (v : _) -> Just v
         [] -> Nothing
-
--- | Look up a text field by name in AST mapping pairs.
-lookupAstTextField :: Text -> [(YamlAst, YamlAst)] -> Maybe Text
-lookupAstTextField name pairs = lookupAstField name pairs >>= astScalarText
 
 -- | Extract text from a scalar AST node.
 astScalarText :: YamlAst -> Maybe Text
@@ -238,7 +321,7 @@ resolveEnvMaps (Object obj) env =
         <$> foldM
             (\acc key -> resolveEnvMapField acc key env)
             obj
-            ["Profile", "AssumeRoleARN", "Region"]
+            (map credentialFieldKey credentialFields)
 resolveEnvMaps v _ = Right v
 
 resolveEnvMapField :: KM.KeyMap Value -> Text -> Text -> Either Text (KM.KeyMap Value)
@@ -325,12 +408,7 @@ buildEnvValues env operation aws =
 
 -- | Extract AWS settings from preprocessed argsfile Value
 extractAwsSettings :: Value -> AwsSettings
-extractAwsSettings (Object obj) =
-    AwsSettings
-        { awsProfile = getStr obj "Profile"
-        , awsRegion = getStr obj "Region"
-        , awsAssumeRoleArn = getStr obj "AssumeRoleARN"
-        }
+extractAwsSettings (Object obj) = settingsFromFields (getStr obj . credentialFieldKey)
 extractAwsSettings _ = AwsSettings Nothing Nothing Nothing
 
 getStr :: KM.KeyMap Value -> Text -> Maybe Text

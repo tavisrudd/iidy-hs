@@ -1,0 +1,9 @@
+$defs:
+  r: us-west-2
+$imports:
+  dbHost: ssm:/app/db-host
+StackName: bootstrap-test
+Template: template.yaml
+Region: "{{r}}"
+Parameters:
+  DbHost: "{{dbHost}}"

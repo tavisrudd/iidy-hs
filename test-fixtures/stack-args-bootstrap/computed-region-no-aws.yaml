@@ -1,0 +1,5 @@
+$defs:
+  region: eu-west-1
+StackName: bootstrap-test
+Template: template.yaml
+Region: !$ region
