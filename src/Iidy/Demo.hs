@@ -21,6 +21,7 @@ import Data.Aeson.KeyMap qualified as KM
 import Data.ByteString.Lazy qualified as BL
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe, isNothing)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -300,13 +301,24 @@ maskString str =
 ------------------------------------------------------------------------
 
 {- | Replace 'iidy' command at command positions with the actual executable path.
+When the current binary is the @iidy@ on @PATH@ ('Nothing'), the command is
+left alone unless the policy adds flags; then the name is kept and the flags
+follow it, so the policy is never dropped.
 The import policy is passed on immediately after the executable:
 @--no-remote-imports@ when remote imports are blocked, and one
 @--trust-import-source@ per trusted prefix, shell-quoted.
 -}
 substituteIidyCommand :: Text -> Maybe String -> ImportPolicy -> Text
-substituteIidyCommand cmd Nothing _ = cmd
-substituteIidyCommand cmd (Just exe) policy =
+substituteIidyCommand cmd mexe policy
+    | null flags && isNothing mexe = cmd
+    | otherwise = T.pack $ substAll (T.unpack cmd) (exe ++ flags)
+  where
+    exe = fromMaybe "iidy" mexe
+    flags = policyFlags policy
+
+-- | The command-line flags that carry the import policy to a child iidy.
+policyFlags :: ImportPolicy -> String
+policyFlags policy =
     let remoteFlag = case ipRemoteImports policy of
             BlockRemoteImports -> " --no-remote-imports"
             AllowRemoteImports -> ""
@@ -315,7 +327,7 @@ substituteIidyCommand cmd (Just exe) policy =
                 [ " --trust-import-source " ++ shellQuote (T.unpack (trustedSourceText p))
                 | p <- trustedSourceList (ipTrustedSources policy)
                 ]
-     in T.pack $ substAll (T.unpack cmd) (exe ++ remoteFlag ++ trustFlags)
+     in remoteFlag ++ trustFlags
 
 -- | Single-quote a word for the shell.
 shellQuote :: String -> String

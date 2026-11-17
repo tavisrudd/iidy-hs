@@ -230,6 +230,13 @@ default port, trailing `/`, no `.` or `..` segment) and match as literal,
 case-sensitive text prefixes. Trust comes from the command line only. `iidy
 demo` passes the flag on to the commands it runs.
 
+`iidy demo` passes `--no-remote-imports` and `--trust-import-source` to every
+`iidy` command in the script, including when the running binary is the
+`iidy` on `PATH` (the command name is kept and the flags follow it). Rust
+skips substitution in that case (`demo.rs:93-112`), so its demo commands run
+with remote imports allowed. Without any such flag the commands are left
+untouched.
+
 ## Terminal Width: COLUMNS Override
 
 **Cause**: Kept from the earlier Haskell implementation (card C9).

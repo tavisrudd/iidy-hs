@@ -150,8 +150,15 @@ substituteTests =
         policy <- flagPolicy ["s3://b/", "https://t.example.com/it's/"]
         substituteIidyCommand "iidy render" (Just "/x/iidy") policy
             @?= "/x/iidy --trust-import-source 's3://b/' --trust-import-source 'https://t.example.com/it'\\''s/' render"
-    , testCase "no executable to substitute leaves the command alone" $
-        substituteIidyCommand "iidy render" Nothing (importPolicy BlockRemoteImports) @?= "iidy render"
+    , testCase "no executable and no flags leaves the command alone" $
+        substituteIidyCommand "iidy render" Nothing (importPolicy AllowRemoteImports) @?= "iidy render"
+    , testCase "iidy on PATH still receives --no-remote-imports" $
+        substituteIidyCommand "iidy render | iidy lint" Nothing (importPolicy BlockRemoteImports)
+            @?= "iidy --no-remote-imports render | iidy --no-remote-imports lint"
+    , testCase "iidy on PATH still receives trusted import sources" $ do
+        policy <- flagPolicy ["s3://b/"]
+        substituteIidyCommand "iidy render" Nothing policy
+            @?= "iidy --trust-import-source 's3://b/' render"
     ]
 
 ------------------------------------------------------------------------
