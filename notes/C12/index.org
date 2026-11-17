@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C12
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :CARD_PRIORITY: C
 :MODE:     CONTRACT
 :ORIGIN:   C2 handoff triage (notes/C2/report--handoff-triage.org), accepted by the user 2026-11-16
@@ -11,8 +11,28 @@
 :ID: org:01a1e64b-191c-7235-9fc9-4ba6abff95db
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 21:22]--[2026-11-16 Mon 21:26] => 0:04
+CLOCK: [2026-11-16 Mon 21:26]--[2026-11-16 Mon 21:34] => 0:08
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 21:22]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 21:22]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a5df58f7988d80848
+- Clock-out [2026-11-16 Mon 21:26]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a5df58f7988d80848
+- Clock-in [2026-11-16 Mon 21:26]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a5df58f7988d80848
+- Clock-out [2026-11-16 Mon 21:34]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a5df58f7988d80848
+- Card state STARTED → DONE [2026-11-16 Mon 21:35]
+  Note: Landed 4e722e8 (backstop seam, tested) and fc5c44c..69359cb: StackArgsLoader split into StackArgs/{Credentials,Fields,Validate}, one-pass field parser, error texts pinned byte-identical; Sonnet review land, 0 defects
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -94,29 +114,29 @@ refusal rules; =CommandsBefore= handling (C22); the =Types.hs= definition
 of =StackArgs=; the preprocessing engine; new stack-args fields.
 
 Done when:
-- [ ] A test through =loadStackArgsBootstrapped= with the real
+- [X] A test through =loadStackArgsBootstrapped= with the real
   =bootstrapLoader= and the mock factory fails when the settings recording
   is removed, and a second test fails when the post-load comparison is
   removed. Each removal is tried by hand against the tests, and the test
   names and failure output are recorded in the card (the C17 re-review
   found both removals passing the suite).
-- [ ] The credential-field code, the unknown-key and getter validation, and
+- [X] The credential-field code, the unknown-key and getter validation, and
   =valueToStackArgs= live in their own modules, each under about 500
   lines; =StackArgsLoader.hs= keeps the public API, environment-map and
   =$envValues= handling and the settings merge, also under about 500
   lines. =wc -l= of every module involved is recorded in the card.
-- [ ] =valueToStackArgs= no longer walks an aeson =Value= with a separate
+- [X] =valueToStackArgs= no longer walks an aeson =Value= with a separate
   lookup per field: fields are parsed in one pass by a small field-parser
   (for example an =aeson= =Parser= with =withObject= and field helpers, or
   a few combinators over =KeyMap Value=), and the error text for each
   existing error case is byte-identical, shown by the existing tests
   passing unchanged. Any message that improves is listed in the card with
   before and after, and has a test.
-- [ ] The existing =StackArgsLoaderTest=, =StackArgsBootstrapTest= and
+- [X] The existing =StackArgsLoaderTest=, =StackArgsBootstrapTest= and
   =Phase14FixTest= cases pass with no expected value edited (imports may
   change only if a re-export was dropped, and then in a separate commit
   noted in the card).
-- [ ] Build warning-free, full suite green, each commit names C12.
+- [X] Build warning-free, full suite green, each commit names C12.
 
 Stop and record if: a split needs a behaviour change to compile (for
 example the order in which unknown keys and type errors are reported
@@ -126,10 +146,15 @@ exceeds about 500 lines after the split and cannot be split further without
 a new concept; or C22 has landed a =CommandsBefore= edit in
 =valueToStackArgs= that conflicts (then rebase onto it, do not drop it).
 
-* TODO Make the C17 backstop observable and test that it is wired in
+* DONE Make the C17 backstop observable and test that it is wired in
 :PROPERTIES:
 :ID: org:01a1e64b-9204-753d-924d-ded6819c079d
 :ADDED: [2026-11-16 Mon 14:37]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 21:26] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a5df58f7988d80848
 :END:
 
 Do this first, before moving any code, so the split is covered. In
@@ -160,10 +185,69 @@ Tests (fixtures under =test-fixtures/stack-args-bootstrap/=, mock AWS only):
    test 1 fail; restore it; delete the call to (b), see test 2 fail;
    restore it. Record both outputs. Never commit a deleted line.
 
-* TODO Move the credential-field code into its own module
+** Result 2026-11-16 (claude-C12)
+:PROPERTIES:
+:ID: org:01a1e7c1-76f8-727a-bf9b-a4132ebab8f9
+:ADDED: [2026-11-16 Mon 21:26]
+:END:
+Commit 4e722e8 (rebased onto main 79c4461) on =claude/C12=.
+=StackArgsBootstrap.hs= now has:
+- (a) =loadRecordingImportSettings mkEnv :: RecordingLoad=, which runs
+  =loadStackArgsWith= with the real =bootstrapLoader= and returns
+  =(Either Text LoadedStackArgs, Maybe AwsSettings)=;
+- (b) =checkImportSettings argsfile recorded loaded=, the old comparison
+  verbatim;
+- =loadAndCheckWith load= runs a =RecordingLoad= then (b);
+- =loadStackArgsBootstrapped mkEnv = loadAndCheckWith
+  (loadRecordingImportSettings mkEnv)=, all four exported under "Internal
+  (exported for testing)" with the =RecordingLoad= type.
+
+Test 2 option chosen: no fixture can make the recorded and final settings
+differ (both are =mergeAwsSettings cliAws= of the same plain literals; any
+non-plain field is refused before the import, and the YAML parser has no
+=<<= merge keys that could add a field after the raw read). So test 2 runs
+=loadAndCheckWith= with the real (a) on =literal-ssm.yaml= and the mock
+factory, replacing only the recorded settings with a different profile,
+and asserts the refusal equals the =importSettingsMismatch= text. This is
+the least artificial option: the real loader, real bootstrap and real
+comparison all run, only the unreachable condition is simulated, and
+production behaviour is unchanged. The fixture-independent property is
+structural: =loadStackArgsBootstrapped= is one line, the composition of
+the two exported pieces through =loadAndCheckWith=, so deleting the call
+to (b) can only happen inside =loadAndCheckWith=, which test 2 covers.
+
+Tests added to =test/Test/StackArgsBootstrapTest.hs=: "seam: the load
+records the settings an ssm: import ran with", "seam: a load with no AWS
+import records no settings", "seam: import settings that differ from the
+final ones refuse the load", "seam: the comparison passes a failed load
+through".
+
+Mutation 1, the =writeIORef ranWith (Just importSettings)= line deleted:
+#+begin_example
+seam: the load records the settings an ssm: import ran with:  FAIL (0.01s)
+  expected: Just (AwsSettings {awsProfile = Just "literal-profile", awsRegion = Just "eu-west-1", awsAssumeRoleArn = Nothing})
+   but got: Nothing
+1 out of 23 tests failed (0.02s)
+#+end_example
+Mutation 2, =pure (checkImportSettings (T.pack argsfile) importSettings
+loaded)= replaced by =pure loaded=:
+#+begin_example
+seam: import settings that differ from the final ones refuse the load:  FAIL (0.01s)
+  expected the load to be refused
+1 out of 23 tests failed (0.03s)
+#+end_example
+Both restored from a saved copy (=cmp= clean) before the commit; the
+pre-commit hook ran the full suite green.
+
+* DONE Move the credential-field code into its own module
 :PROPERTIES:
 :ID: org:01a1e7bd-0c54-70f5-a90f-616146222012
 :ADDED: [2026-11-16 Mon 21:21]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 21:34] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a5df58f7988d80848
 :END:
 
 Create =src/Iidy/Cfn/StackArgs/Credentials.hs= holding =CredentialField=,
@@ -176,10 +260,34 @@ per module (the settings merge is the other half of the credential rules).
 Move code verbatim; =StackArgsLoader= re-exports every name it exported
 before. Add the module to =iidy-hs.cabal=. Build, run the suite, commit.
 
-* TODO Move validation and the typed getters into their own modules
+** Result 2026-11-16 (claude-C12)
+:PROPERTIES:
+:ID: org:01a1e7c8-c53a-775a-9a15-ed4762a8ef23
+:ADDED: [2026-11-16 Mon 21:34]
+:END:
+Commit fc5c44c. =src/Iidy/Cfn/StackArgs/Credentials.hs= holds the
+credential-field code (=CredentialField= through =plainKeyLookup=) and the
+command-line merge (=mergeAwsSettings=, =mergeSentinel=, the two sentinels),
+moved verbatim: every removed line of =StackArgsLoader.hs= other than
+blanks, section rules and two import lines appears unchanged in the new
+module (checked with =grep -vxFf=). =StackArgsLoader= imports and
+re-exports every name it exported before; no importer changed.
+
+=extractAwsSettings= stayed in =StackArgsLoader=: it reads the
+preprocessed =Value= with =getStr= (a field getter, moved to =Fields.hs=
+in the next task), and the Done-when item keeps "the settings merge" in
+the loader. So the loader keeps the step that extracts and merges the
+settings, and the credential module owns the merge rules it calls.
+
+* DONE Move validation and the typed getters into their own modules
 :PROPERTIES:
 :ID: org:01a1e7bd-0c54-70f5-a90f-6160f6f20ee4
 :ADDED: [2026-11-16 Mon 21:21]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 21:34] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a5df58f7988d80848
 :END:
 
 Create =src/Iidy/Cfn/StackArgs/Validate.hs= with =validTopLevelKeys=,
@@ -192,10 +300,32 @@ verbatim; =StackArgsLoader= re-exports the names it exported before (the
 "Internal (exported for testing)" list). Build, run the suite, commit.
 Record =wc -l= for every module.
 
-* TODO Replace the Value walk with direct field parsing
+** Result 2026-11-16 (claude-C12)
+:PROPERTIES:
+:ID: org:01a1e7c8-c53a-775a-9a15-ed46ca9d2c56
+:ADDED: [2026-11-16 Mon 21:34]
+:END:
+Commit cfb9ec0. =Validate.hs= holds =validTopLevelKeys=,
+=validateNoUnknownKeys=, =formatUnknownKey=, =findSuggestion=; =Fields.hs=
+holds =valueToStackArgs=, the getters, =describeType=, =describeValue= and
+the OnFailure and capability parsers, all moved verbatim (same =grep -vxFf=
+check: only blanks, section rules and the two narrowed import lines
+differ). =getStr= moved next to the other getters and is imported back by
+the loader for =extractAwsSettings=. =StackArgsLoader= re-exports the same
+"Internal (exported for testing)" names.
+
+=wc -l= after this task: =StackArgsLoader.hs= 323, =Credentials.hs= 190,
+=Fields.hs= 218, =Validate.hs= 95, =StackArgsBootstrap.hs= 262.
+
+* DONE Replace the Value walk with direct field parsing
 :PROPERTIES:
 :ID: org:01a1e64b-9204-753d-924d-ded53697aa6b
 :ADDED: [2026-11-16 Mon 14:37]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 21:34] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a5df58f7988d80848
 :END:
 
 Now that the fields live in =Fields.hs=, replace the per-field lookups in
@@ -208,3 +338,87 @@ many) and keep each byte-identical unless the card records an improvement
 with a test. =CommandsBefore= stays a plain list-of-strings field (C22
 decides its fate). Build, run the suite, commit; record the final line
 counts and the error-text comparison.
+
+** Result 2026-11-16 (claude-C12)
+:PROPERTIES:
+:ID: org:01a1e7c8-c53a-775a-9a15-ed450b62a5b9
+:ADDED: [2026-11-16 Mon 21:34]
+:END:
+Commits 01e68ab (tests first) and 69359cb (the rewrite).
+
+Error texts listed before editing (=KEY= is the field, =T= is
+=describeType=, =V= is =describeValue=):
+1. =Stack args must be a YAML mapping=
+2. =Unknown keys in stack-args: K (did you mean S?), ...= (=Validate.hs=)
+3. =StackName is required in stack-args= (absent, null or not a string)
+4. =invalid type for KEY: expected a mapping, got T= (Tags, Parameters)
+5. =invalid type: V, expected a string= (a map value)
+6. =invalid type for Capabilities: expected a sequence, got T=
+7. =invalid Capabilities entry: expected a string, got T=
+8. =unrecognized Capability value: X (expected CAPABILITY_IAM,
+   CAPABILITY_NAMED_IAM, or CAPABILITY_AUTO_EXPAND)=
+9. =invalid type for OnFailure: expected a string, got T=
+10. =unrecognized OnFailure value: X (expected DO_NOTHING, ROLLBACK, or
+    DELETE)=
+11. =invalid type for KEY: expected a sequence, got T= (the four lists)
+12. =invalid type in KEY[i]: expected a string, got V=
+13. =invalid type for KEY: expected an integer, got float `n`=
+14. =invalid type for KEY: expected an integer, got T=
+
+The existing tests check most of these with =isInfixOf= only, which cannot
+show byte identity. So commit 01e68ab first added
+=test/Test/StackArgsFieldsTest.hs= (group "StackArgsFields") against the
+moved but unchanged code. It pins the exact text of every case above,
+the first-error-wins order across all nine checked fields, null and
+absent fields, a =StackPolicy: null= kept as =Just Null=, the lenient
+string and boolean fields, and a full conversion. It passed on the old
+code and passes unchanged on the new, so every text is byte-identical. No
+message changed, so there are no improvements to list.
+
+The rewrite: =valueToStackArgs= runs one =FieldParser= (=ReaderT (KeyMap
+Value) (Either Text)=) over the mapping. Three field combinators own the
+lookup and null handling: =optionalField= (absent or null is =Nothing=,
+anything else must parse), =lenientField= (a non-matching value reads as
+absent) and =rawField= (=StackPolicy=, null kept). Per-type value parsers
+(=strList=, =strMap=, =int=, =onFailure=, =capabilities=) share one
+=typeError= for the "invalid type for KEY" texts. The do-block keeps the
+error order; the lenient fields come after the checked ones and cannot
+fail. =CommandsBefore= stays a plain =strList= field. The exported getters
+=getStrListValidated=, =getStrMapValidated= and =getInt= keep their
+signatures and run the same combinators; =getStr= stays for the loader;
+=getBool=, =parseOnFailure= and =parseCapabilities= are gone (no user
+outside =Fields.hs=, never re-exported by the loader).
+
+Final =wc -l=: =StackArgsLoader.hs= 323, =StackArgs/Credentials.hs= 190,
+=StackArgs/Fields.hs= 265, =StackArgs/Validate.hs= 95,
+=StackArgsBootstrap.hs= 262, =test/Test/StackArgsFieldsTest.hs= 198.
+
+=StackArgsLoaderTest.hs=, =StackArgsBootstrapTest.hs= (since task 1),
+=Phase14FixTest.hs= and =Runner.hs= are unchanged on the branch since
+4e722e8 (=git diff --stat= empty). Full suite: 2139 tests pass, zero
+warnings, and the pre-commit hook passed on each commit.
+
+** Review 2026-11-16 (review)
+:PROPERTIES:
+:ID: org:01a1e7c9-f5fb-77d8-aa18-38af7588e459
+:ADDED: [2026-11-16 Mon 21:35]
+:END:
+Verdict: fc5c44c land, cfb9ec0 land, 01e68ab land, 69359cb land. 0 defects.
+- Moves: removed and added lines of fc5c44c and cfb9ec0 compared with
+  imports, blanks and sorting ignored; only module headers, export-list
+  headings and doc-comment wording differ, no code line changed.
+- Error texts: StackArgsFieldsTest (13 cases) passes at 01e68ab (before the
+  rewrite) and at the tip, and the whole StackArgs pattern (103 tests)
+  passes at the tip; build has no warnings.
+- Read of the old and new =valueToStackArgs=: same check order (unknown keys,
+  StackName, Tags, Parameters, Capabilities, OnFailure, lists, integer);
+  null and absent both read as Nothing; non-string StackName and wrong-type
+  lenient fields still read as absent; StackPolicy keeps null; nested
+  map-value and list-element errors keep their texts and ordering
+  (=KM.toList= order unchanged); CommandsBefore is still a plain string list.
+  Not pinned by a test but equal by reading: a nested non-string value inside
+  Tags/Parameters combined with a later bad field.
+- Re-exports: the export list of StackArgsLoader is identical to 4e722e8;
+  getBool, parseOnFailure and parseCapabilities were never exported.
+- Sizes: Loader 323, Credentials 190, Fields 265, Validate 95; no logic
+  shared between Fields and Validate.

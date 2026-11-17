@@ -133,3 +133,4 @@
 2026-11-16 20:00 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C36 landed (missing Template path is an error); C6 hang lead recorded
 2026-11-16 21:12 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C33 landed (render builds its AWS environment lazily, shared with get-import)
 2026-11-16 21:17 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C33 closed; C38 landed (mergeParams dedup); handoff written
+2026-11-16 21:35 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C12 landed (StackArgsLoader split, C17 backstop wiring tested)
