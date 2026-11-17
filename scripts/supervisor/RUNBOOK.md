@@ -276,6 +276,13 @@ iidy-hs decisions:
   TypeScript version (`~/src/iidy-js`) and a discussion with Tavis before
   any code. The remote-template redesign (C15) likewise starts with an
   options write-up for Tavis.
+- Parity authority (Tavis, 2026-11-16): Rust parity is the default; where
+  Rust and the TypeScript original disagree, the choice is Tavis's. His
+  answers for the first batch are in
+  `notes/C23/report--decisions-vs-originals.org`: YAML list layout stays as
+  it is (get-import flush like Rust after C25, the other emitters indented
+  like TypeScript); C17 and C29 follow TypeScript; `render` gets an AWS
+  environment built lazily, as get-import does; C15 and C16 per their cards.
 - Claude sub-agents for the 2026-11-16 batch (Tavis): Opus and Sonnet
   sub-agents work the cards, no Codex panes; brief template in
   `scripts/supervisor/CARD-BRIEF.md`.

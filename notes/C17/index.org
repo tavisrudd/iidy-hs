@@ -114,7 +114,15 @@ with the final env, would be needed: describe it and ask Tavis); the fix
 needs a change outside the allowed paths; it would refuse a stack-args file
 that works today without computed credential fields; or the choice between
 keeping AWS imports in stack-args and dropping them to match Rust comes up
-(that is Tavis's call, with keeping them as the recommendation).
+(decided: keep them; see below).
+
+Decision (Tavis, 2026-11-16): follow the TypeScript original: AWS imports
+stay allowed in stack-args, and =Profile=, =Region= and =AssumeRoleARN=
+must be plain values (or environment maps), never computed by a tag; a
+computed credential field is refused with a clear error. TypeScript:
+=~/src/iidy-js/src/cfn/loadStackArgs.ts= lines 91-118; see
+[[file:../C23/report--decisions-vs-originals.org][decisions vs originals]]
+item 5.
 
 * TODO Compare with Rust and choose the fix
 :PROPERTIES:

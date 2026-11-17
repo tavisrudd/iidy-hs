@@ -72,8 +72,14 @@ Out of scope: =render= and every other command's format type and reader
 order; docs (=docs/= is owned by other cards); the output of the supported
 formats.
 
-Proposed decision (for Tavis to confirm before the card is assigned; it is
-a user-visible choice): keep rejecting at the command line, which fails
+Decision (Tavis, 2026-11-16): follow the TypeScript original: reject at
+parse time and accept exactly =yaml= and =json= (lower case; =yml= and
+other spellings are rejected, as TypeScript and Rust both do). See
+[[file:../C23/report--decisions-vs-originals.org][decisions vs originals]]
+item 7. The rest of this paragraph stands, minus the =yml= and
+case-insensitive spellings, which are now fixed rather than recorded.
+
+Proposed decision (as written before Tavis's decision): keep rejecting at the command line, which fails
 earlier and reads better than Rust's late check, and make the type say so:
 a get-import-only format type with two constructors (JSON, YAML) so the
 unreachable =RenderCfnYaml= branch disappears from =emitDoc= and a caller
@@ -93,7 +99,7 @@ Done when:
   =render= still accepts all three formats (its tests untouched and green).
 - [ ] Tests: the parser rejects =yaml-cloudformation= and a bogus value for
   get-import with exit code 1 and the expected message; accepts =yaml=,
-  =json= (and the spelling decision made for =yml= and case); =render
+  =json=, and rejects =yml=, =YAML= and =Json=; =render
   --format yaml-cloudformation= still parses. The existing get-import
   parser tests pass with only the type name changed.
 - [ ] =DIVERGENCES.md= has one entry for the differences in the Decision
@@ -101,7 +107,7 @@ Done when:
   and the tests pin the Rust text and the post-load timing.
 - [ ] Build warning-free, full suite green, commits name C29.
 
-Stop and record if: Tavis has not confirmed the decision above; making the
+Stop and record if: making the
 type get-import-only needs changes to =render= or any other command; or the
 work needs a change outside the allowed paths.
 
