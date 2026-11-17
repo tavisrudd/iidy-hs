@@ -514,7 +514,7 @@ readRawField(ast, environment, field):
 *Acceptance Criteria:*
 
 - The import environment is built at the first AWS import (=ssm:=, =ssm-path:=, =cfn:=, =s3:=), from the CLI settings merged over the literal raw fields; a file without AWS imports never builds it.
-- Each of Profile, Region and AssumeRoleARN not set on the command line must be a plain string or an environment map of plain strings, read from mappings whose keys are all plain strings and contain the key once. Otherwise the AWS import is refused before any AWS call, naming the field and the option that sets it (iidy-js =loadStackArgs.ts= behaves the same way; Rust has no AWS imports in stack-args, see =DIVERGENCES.md=).
+- Each of Profile, Region and AssumeRoleARN not set on the command line must be a plain string or an environment map of plain strings, read from mappings whose keys are all plain strings and contain the key once. Otherwise the AWS import is refused before any AWS call, naming the field and the option that sets it. iidy-js (=loadStackArgs.ts=) refuses a computed credential field in every stack-args file; iidy-hs refuses only when the file performs an AWS import, since no AWS environment is built otherwise. Rust has no AWS imports in stack-args (see =DIVERGENCES.md=).
 - A failure to build the import environment is reported with its cause.
 - After loading, the settings the imports ran with must equal the final merged settings; any difference refuses the load.
 - The environment factory is a parameter, so tests pass a mock.
