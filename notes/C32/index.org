@@ -1,0 +1,72 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C32
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   C26 2026-11-16: unresolved tags in plain imported documents print the normalised tag (!$include as !$, !$string as !$toYamlString, one-element sequence args unwrapped, mapping fields reordered); exact Rust output needs AstPreprocessingTag to keep the source spelling (Parser.hs, Ast.hs)
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e6f2-1a65-77fc-a0bf-5be36756fa87
+:ADDED: [2026-11-16 Mon 17:39]
+:END:
+#+title: C32 — Keep the written !$ tag name and argument in the AST for unresolved-tag output
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e6f2-1a65-77fc-a0bf-5be2e6926569
+:ADDED: [2026-11-16 Mon 17:39]
+:END:
+
+[[file:../C26/index.org][C26]] made plain imported documents keep their
+unresolved =!$= tags, as Rust does, by rebuilding each tag from the typed
+=AstPreprocessingTag= node (=preprocessingTagParts= in
+=src/Iidy/Yaml/Ast.hs=). The typed node does not keep how the tag was
+written, so three spellings differ from Rust (recorded in
+=DIVERGENCES.md=): aliases print under their canonical name (=!$include x=
+as =!$ x=, =!$string x= as =!$toYamlString x=), a one-element sequence
+argument to a single-argument tag loses its sequence (=!$not [true]= as
+=!$not true=), and mapping fields print in a fixed order. Matching Rust
+needs the parser (=src/Iidy/Yaml/Parser.hs=) to keep the written tag name
+and argument on the node. Depends on C26 landing.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e6f2-1a65-77fc-a0bf-5be15d928de6
+:ADDED: [2026-11-16 Mon 17:39]
+:END:
+
+Allowed paths: =src/Iidy/Yaml/Parser.hs=, =src/Iidy/Yaml/Ast.hs=, the
+modules that construct or match =AstPreprocessingTag= only as far as the new
+field requires, their test modules, =test-fixtures/get-import/=,
+=DIVERGENCES.md=, =notes/C32/=.
+
+Out of scope: resolution semantics of any tag; the sequence indentation of
+tag arguments (waits on Tavis's indentation decision); key order of
+imported mappings (C28).
+
+Done when:
+- [ ] =AstPreprocessingTag= keeps the written tag name and the raw argument
+  node, and unresolved-tag output uses them.
+- [ ] Tests, recorded failing first, show the three spellings printed as
+  Rust prints them (expected bytes from the Rust binary).
+- [ ] The three entries are removed from =DIVERGENCES.md=.
+- [ ] Every other test passes unchanged; build warning-free; commits name
+  C32.
+
+Stop and record if: the new field forces changes to resolution code beyond
+pattern-match updates, or the parse of any tag changes.
+
+* TODO Keep the written !$ tag name and argument in the AST for unresolved-tag output
+:PROPERTIES:
+:ID: org:01a1e6f2-1a65-77fc-a0bf-5be08817ea58
+:ADDED: [2026-11-16 Mon 17:39]
+:END:
+
+Reproduce the three spellings with both binaries and record the outputs.
+Add the written name and argument to the node in the parser, use them in
+=preprocessingTagParts=, add the failing tests first, then remove the
+=DIVERGENCES.md= entries.
