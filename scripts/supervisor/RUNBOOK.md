@@ -201,9 +201,17 @@ is committed.
 
 ## Cleanup
 
-At card close: review the worker's `Cache artifacts` list in `scratch.org`,
-make sure its temporary directories are gone, and remove `scratch.org` if it
-holds nothing a later reader needs. Remove a Codex worker's worktree only
+Never `rm` directly (Tavis, 2026-11-16: "be more careful w rm"). Read a
+file before discarding it, keep what a later reader needs in the card, and
+move the rest with `mv` into
+`~/src/iidy-hs/.supervisor/trash/<YYYY-MM-DD>/<card>/`, which Tavis empties.
+This covers `scratch.org`, worker temp directories and files from an
+aborted replay.
+
+At card close: read the worker's `scratch.org` and its `Cache artifacts`
+list, check that its temporary directories are gone (move any left over to
+the trash directory), and move `scratch.org` there once its content is in
+the card or holds nothing a later reader needs. Remove a Codex worker's worktree only
 when the worker is retired.
 
 ## Decisions from Tavis

@@ -173,10 +173,13 @@ gate, report `question` rather than choosing.
   `mktemp -d ~/src/iidy-hs/.supervisor/tmp/<worker>.XXXXXX`, never in `/tmp` or a
   shared location. Record each one in your card's `scratch.org` under a
   `Cache artifacts` heading as you go.
-- When you report a task `ready`, delete the temporary directories you made
-  for it: write their literal absolute paths, one per line, to a list file,
-  check it, then run `xargs -d '\n' -a LISTFILE rm --one-file-system -r --`.
-  Never `rm` a path built from a variable or glob.
+- When you report a task `ready`, clear the temporary directories you made
+  for it without deleting anything: `mkdir -p
+  ~/src/iidy-hs/.supervisor/trash/<YYYY-MM-DD>/<worker>` and `mv` each
+  directory there by its literal absolute path. Never run `rm` (Tavis empties
+  the trash), and never on a path built from a variable or glob. Put any
+  temporary file inside your own `mktemp` directory, not loose in
+  `.supervisor/tmp/`.
 - Never delete shared cache, other workers' files, worktrees or branches.
 
 ## Hard limits
