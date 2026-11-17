@@ -62,7 +62,7 @@ and, when the text could be read as YAML, the same document in source order.
 -}
 data ParsedDoc = ParsedDoc
     { pdValue :: !Value
-    , pdOrdered :: !(Maybe OValue)
+    , pdOrdered :: Maybe OValue -- lazy: see 'idOrdered'
     }
     deriving stock (Show, Eq)
 
