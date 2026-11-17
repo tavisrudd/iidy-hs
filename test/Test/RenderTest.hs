@@ -5,18 +5,27 @@ sequences indented under their key, unlike @serde_yaml@).
 -}
 module Test.RenderTest (renderTests) where
 
+import Control.Exception (finally)
+import Data.ByteString qualified as BS
+import Data.ByteString.Char8 qualified as BC
 import Data.IORef (newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as T
-import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (testCase, (@?=))
+import Data.Text.Encoding qualified as TE
+import GHC.IO.Handle (hDuplicate, hDuplicateTo)
+import System.IO (IOMode (..), hClose, hFlush, openFile, stderr)
+import System.IO.Temp (withSystemTempDirectory)
+import Test.Tasty (DependencyType (..), TestTree, dependentTestGroup, testGroup)
+import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
 import Amazonka qualified
 
 import Iidy.Cli (RenderArgs (..), RenderFormat (..))
 import Iidy.Render (runRenderWith)
 import Iidy.Types (YamlSpec (..))
-import Test.MockAws (MockAws (..), countingEnv, newMockAws, noCredentials)
+import Iidy.Yaml.Imports.Loaders.LazyEnv (lazyAwsDispatcher)
+import Iidy.Yaml.Imports.Types (ImportError (..), RemoteImports (..), importPolicy, rootBase)
+import Test.MockAws (MockAws (..), MockMatch (..), MockResponse (..), countingEnv, mockRespond, newMockAws, noCredentials)
 import Test.Shared (collectRawOutput, docFixture, listFixture, nestedSeqFixture, preprocTagsImporterFixture, testGlobalOpts)
 
 -- | Render a fixture to stdout as JSON, returning exit code and raw output.
@@ -57,12 +66,25 @@ renderWithEnv remote mkEnv path = do
     rc <- runRenderWith (countingEnv builds mkEnv) emit (renderArgs RenderJson path) (testGlobalOpts remote)
     RunResult rc <$> readOut <*> readIORef builds
 
+-- | Run an action with stderr redirected to a file, returning what it wrote.
+captureStderr :: IO a -> IO (a, Text)
+captureStderr act = withSystemTempDirectory "iidy-render-stderr" $ \dir -> do
+    let path = dir <> "/stderr.txt"
+    saved <- hDuplicate stderr
+    h <- openFile path WriteMode
+    hDuplicateTo h stderr
+    r <- act `finally` (hFlush stderr >> hDuplicateTo saved stderr >> hClose h >> hClose saved)
+    out <- TE.decodeUtf8 <$> BS.readFile path
+    pure (r, out)
+
 renderFixture :: Text -> Text
 renderFixture name = "test-fixtures/render/" <> name
 
 renderTests :: [TestTree]
 renderTests =
     [ testGroup "AWS environment" awsEnvTests
+    , -- stderr is process-wide: its captures must not overlap
+      dependentTestGroup "AWS environment, stderr" AllFinish stderrTests
     , testGroup "output bytes" outputTests
     ]
 
@@ -92,6 +114,14 @@ awsEnvTests =
     , testCase "ssm: import without credentials exits 1 with no stdout" $ do
         r <- renderWithEnv True noCredentials (renderFixture "ssm.yaml")
         r @?= RunResult 1 [] 1
+    , testCase "a failed env build is remembered: a second AWS import does not rerun the provider" $ do
+        builds <- newIORef (0 :: Int)
+        loader <- lazyAwsDispatcher (countingEnv builds noCredentials) (importPolicy AllowRemoteImports)
+        r1 <- loader "ssm:/app/one" (rootBase ".")
+        r2 <- loader "ssm:/app/two" (rootBase ".")
+        let failed = either (\(ImportError e) -> "AWS credentials not available" `T.isInfixOf` e) (const False)
+        (failed r1, failed r2) @?= (True, True)
+        readIORef builds >>= (@?= 1)
     , testCase "s3: import with remote imports blocked never builds the env" $ do
         r <- renderWithEnv False noCredentials (renderFixture "s3.yaml")
         rrExitCode r @?= 1
@@ -102,6 +132,26 @@ awsEnvTests =
     localOnly r = do
         rrExitCode r @?= 0
         rrEnvBuilds r @?= 0
+
+stderrTests :: [TestTree]
+stderrTests =
+    [ testCase "ssm: import without credentials names the missing credentials on stderr" $ do
+        (r, err) <- captureStderr (renderWithEnv True noCredentials (renderFixture "ssm.yaml"))
+        rrExitCode r @?= 1
+        assertBool ("stderr: " <> T.unpack err) ("AWS credentials not available" `T.isInfixOf` err)
+    , testCase "an AWS import from an untrusted requester chain is refused without a build" $ do
+        -- The local template may read s3: (one build); the s3 document is not
+        -- a trusted source, so its own ssm: import is refused by the gate.
+        mock <- newMockAws
+        mockRespond mock (OnObject "GetObject" "tmpl" "doc.yaml") (MockResponse 200 (BC.pack "$imports:\n  p: ssm:/app/db-host\nv: !$ p\n"))
+        (r, err) <- captureStderr (renderWithEnv True (pure (mockEnv mock)) (renderFixture "s3-chain.yaml"))
+        rrExitCode r @?= 1
+        rrOutput r @?= []
+        assertBool ("stderr: " <> T.unpack err) ("not a trusted source" `T.isInfixOf` err)
+        rrEnvBuilds r @?= 1
+        served <- readIORef (mockRequests mock)
+        filter ((== "ssm") . takeWhile (/= '.')) served @?= []
+    ]
 
 outputTests :: [TestTree]
 outputTests =

@@ -1,0 +1,3 @@
+$imports:
+  doc: s3://tmpl/doc.yaml
+out: !$ doc
