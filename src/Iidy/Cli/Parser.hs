@@ -765,7 +765,7 @@ getImportArgsParser =
         <*> option
             getImportFormatReader
             ( long "format"
-                <> value RenderYaml
+                <> value GetImportYaml
                 <> metavar "FORMAT"
                 <> help "Output format: yaml|json (default: yaml)"
             )
@@ -887,11 +887,11 @@ renderFormatReader = eitherReader $ \s -> case map toLower s of
                 <> s
                 <> ". Valid formats: json, yaml, yaml-cloudformation"
 
-getImportFormatReader :: ReadM RenderFormat
-getImportFormatReader = eitherReader $ \s -> case map toLower s of
-    "json" -> Right RenderJson
-    "yaml" -> Right RenderYaml
-    "yml" -> Right RenderYaml
+-- | Exactly @yaml@ and @json@, lower case (the TypeScript and Rust originals).
+getImportFormatReader :: ReadM GetImportFormat
+getImportFormatReader = eitherReader $ \s -> case s of
+    "json" -> Right GetImportJson
+    "yaml" -> Right GetImportYaml
     _ ->
         Left $
             "Unknown output format: "

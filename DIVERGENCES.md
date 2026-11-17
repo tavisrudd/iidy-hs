@@ -233,3 +233,17 @@ naming the field and the option that sets it. Unlike iidy-js, a file
 without AWS imports may still compute these fields; they take effect for
 the deployment itself. A failure to build the import environment is
 reported with its cause.
+
+## get-import --format: Rejected at Parse Time
+
+**Cause**: deliberate; follows iidy-js (TypeScript), which checks the format
+at parse time, rather than Rust's late check.
+
+`get-import --format` accepts exactly `yaml` and `json`, lower case. Anything
+else, including `yaml-cloudformation`, `yml`, `YAML` and `Json`, is a command
+line usage error (`error: option --format: Unknown output format: X. Valid
+formats: json, yaml`, then the usage text, exit code 1) before the import is
+loaded. Rust takes any string, loads the import and applies the query first,
+then prints `Unsupported format: 'X'. Use 'yaml' or 'json'.` on stderr and
+exits 1 (`src/cfn/get_import.rs`). `render --format` is unchanged and still
+accepts `yaml-cloudformation`.

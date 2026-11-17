@@ -13,7 +13,7 @@ import Test.Tasty.HUnit (testCase, (@?=))
 import Amazonka qualified
 import Amazonka.Auth.Exception qualified as AuthEx
 
-import Iidy.Cli (GetImportArgs (..), RenderFormat (..))
+import Iidy.Cli (GetImportArgs (..), GetImportFormat (..))
 import Iidy.GetImport (runGetImportWith)
 import Iidy.Yaml.Imports.Types (ImportType (..), RemoteImports (..), needsAwsEnv)
 import Test.MockAws (MockAws (..), newMockAws)
@@ -44,7 +44,7 @@ data RunResult = RunResult
     deriving (Show, Eq)
 
 jsonArgs :: Text -> GetImportArgs
-jsonArgs loc = GetImportArgs{giaImport = loc, giaFormat = RenderJson, giaQuery = Nothing}
+jsonArgs loc = GetImportArgs{giaImport = loc, giaFormat = GetImportJson, giaQuery = Nothing}
 
 -- | Run get-import with the given args, counting env builds and collecting raw output.
 runArgs :: Bool -> IO Amazonka.Env -> GetImportArgs -> IO RunResult
@@ -60,7 +60,7 @@ runWith :: Bool -> IO Amazonka.Env -> Text -> IO RunResult
 runWith remote mkEnv loc = runArgs remote mkEnv (jsonArgs loc)
 
 -- | Run get-import on a local file with an explicit format and query.
-runFormat :: RenderFormat -> Maybe Text -> Text -> IO RunResult
+runFormat :: GetImportFormat -> Maybe Text -> Text -> IO RunResult
 runFormat fmt query loc =
     runArgs False noCredentials GetImportArgs{giaImport = loc, giaFormat = fmt, giaQuery = query}
 
@@ -167,18 +167,18 @@ needsAwsEnvTable = do
 outputTests :: [TestTree]
 outputTests =
     [ testCase "field query: a gives 1" $
-        runFormat RenderYaml (Just "a") docFixture >>= (@?= RunResult 0 ["1\n"] 0)
+        runFormat GetImportYaml (Just "a") docFixture >>= (@?= RunResult 0 ["1\n"] 0)
     , testCase "nested query: b.c gives x" $
-        runFormat RenderYaml (Just "b.c") docFixture >>= (@?= RunResult 0 ["x\n"] 0)
+        runFormat GetImportYaml (Just "b.c") docFixture >>= (@?= RunResult 0 ["x\n"] 0)
     , testCase "indexing query: l[1] gives y" $
-        runFormat RenderYaml (Just "l[1]") listFixture >>= (@?= RunResult 0 ["y\n"] 0)
+        runFormat GetImportYaml (Just "l[1]") listFixture >>= (@?= RunResult 0 ["y\n"] 0)
     , testCase "invalid query exits 1 with no stdout" $
-        runFormat RenderYaml (Just "a[") docFixture >>= (@?= RunResult 1 [] 0)
+        runFormat GetImportYaml (Just "a[") docFixture >>= (@?= RunResult 1 [] 0)
     , testCase "yaml output ends with exactly one newline" $
-        runFormat RenderYaml Nothing docFixture
+        runFormat GetImportYaml Nothing docFixture
             >>= (@?= RunResult 0 ["a: 1\nb:\n  c: x\n  d: {}\n"] 0)
     , testCase "json output is pretty-printed like serde_json" $
-        runFormat RenderJson Nothing docFixture
+        runFormat GetImportJson Nothing docFixture
             >>= ( @?=
                     RunResult
                         0
@@ -186,7 +186,7 @@ outputTests =
                         0
                 )
     , testCase "json arrays are pretty-printed one element per line" $
-        runFormat RenderJson Nothing listFixture
+        runFormat GetImportJson Nothing listFixture
             >>= (@?= RunResult 0 ["{\n  \"l\": [\n    \"x\",\n    \"y\"\n  ]\n}\n"] 0)
     ]
 
@@ -227,7 +227,7 @@ nestedSeqRustYaml =
 sequenceLayoutTests :: [TestTree]
 sequenceLayoutTests =
     [ testCase "yaml: dashes sit at the parent key's indent" $
-        runFormat RenderYaml Nothing nestedSeqFixture
+        runFormat GetImportYaml Nothing nestedSeqFixture
             >>= (@?= RunResult 0 [nestedSeqRustYaml] 0)
     ]
 
@@ -250,7 +250,7 @@ preprocTagsRustYaml =
 preprocTagTests :: [TestTree]
 preprocTagTests =
     [ testCase "yaml: scalar and mapping tag arguments are kept" $
-        runFormat RenderYaml Nothing preprocTagsFixture
+        runFormat GetImportYaml Nothing preprocTagsFixture
             >>= (@?= RunResult 0 [preprocTagsRustYaml] 0)
     ]
 
@@ -269,17 +269,17 @@ keyOrderTests =
     , testCase "yaml: a .json surrogate-pair escape prints the character" $
         yamlOf surrogateJsonFixture ["e: \128512", "a: 1"]
     , testCase "json: output stays sorted" $
-        runFormat RenderJson Nothing orderedYamlFixture
+        runFormat GetImportJson Nothing orderedYamlFixture
             >>= (@?= RunResult 0 ["{\n  \"a\": 2,\n  \"z\": [\n    1\n  ]\n}\n"] 0)
     , testCase "query: a result stays sorted" $
-        runFormat RenderYaml (Just "@") orderedNestedFixture
+        runFormat GetImportYaml (Just "@") orderedNestedFixture
             >>= (@?= RunResult 0 [T.unlines ["k:", "  a: 2", "  z: 1", "m: x"]] 0)
     , testCase "query: a sub-document stays sorted" $
-        runFormat RenderYaml (Just "k") orderedNestedFixture
+        runFormat GetImportYaml (Just "k") orderedNestedFixture
             >>= (@?= RunResult 0 [T.unlines ["a: 2", "z: 1"]] 0)
     , testCase "yaml: an env: scalar is unchanged" $
-        runFormat RenderYaml Nothing "env:IIDY_C28_UNSET_VAR:fallback"
+        runFormat GetImportYaml Nothing "env:IIDY_C28_UNSET_VAR:fallback"
             >>= (@?= RunResult 0 ["fallback\n"] 0)
     ]
   where
-    yamlOf loc ls = runFormat RenderYaml Nothing loc >>= (@?= RunResult 0 [T.unlines ls] 0)
+    yamlOf loc ls = runFormat GetImportYaml Nothing loc >>= (@?= RunResult 0 [T.unlines ls] 0)

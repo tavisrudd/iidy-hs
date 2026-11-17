@@ -38,6 +38,7 @@ module Iidy.Cli (
     -- * Format enums
     TemplateFormat (..),
     TemplateStageArg (..),
+    GetImportFormat (..),
     RenderFormat (..),
     ParamType (..),
     ParamFormat (..),
@@ -141,8 +142,14 @@ data TemplateFormat = FormatJson | FormatYaml | FormatOriginal
 data TemplateStageArg = StageOriginal | StageProcessed
     deriving stock (Show, Eq, Ord)
 
--- | Output format for render and get-import commands
+-- | Output format for the render command
 data RenderFormat = RenderJson | RenderYaml | RenderCfnYaml
+    deriving stock (Show, Eq, Ord)
+
+{- | Output format for get-import: exactly @yaml@ and @json@ (no CloudFormation
+YAML flavour, unlike 'RenderFormat').
+-}
+data GetImportFormat = GetImportJson | GetImportYaml
     deriving stock (Show, Eq, Ord)
 
 -- | SSM parameter type
@@ -304,7 +311,7 @@ data RenderArgs = RenderArgs
 
 data GetImportArgs = GetImportArgs
     { giaImport :: !Text
-    , giaFormat :: !RenderFormat
+    , giaFormat :: !GetImportFormat
     , giaQuery :: !(Maybe Text)
     }
     deriving stock (Show, Eq)

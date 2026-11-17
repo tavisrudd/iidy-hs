@@ -1,11 +1,14 @@
 module Test.CliParserTest (cliParserTests) where
 
-import Options.Applicative (ParserResult (..), execParserPure, prefs, showHelpOnEmpty)
+import Data.List (isInfixOf)
+import Data.Maybe (isJust)
+import Options.Applicative (ParserResult (..), execParserPure, prefs, renderFailure, showHelpOnEmpty)
+import System.Exit (ExitCode (..))
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
 import Data.Text (Text)
-import Iidy.Cli (AwsOpts (..), Cli (..), Commands (..), DeleteArgs (..), DescribeArgs (..), GetImportArgs (..), GlobalOpts (..), RenderArgs (..), RenderFormat (..), importPolicyFromOpts)
+import Iidy.Cli (AwsOpts (..), Cli (..), Commands (..), DeleteArgs (..), DescribeArgs (..), GetImportArgs (..), GetImportFormat (..), GlobalOpts (..), RenderArgs (..), RenderFormat (..), importPolicyFromOpts)
 import Iidy.Cli.Parser (cliParserInfo)
 import Iidy.Types (ColorChoice (..), Theme (..), YamlSpec (..))
 import Iidy.Yaml.Imports.Types (ImportPolicy (..), isTrustedBase, trustedSourceText)
@@ -123,18 +126,31 @@ cliParserTests =
         case parseCli ["get-import", "some-import", "--format", "json"] of
             Left e -> assertFailure e
             Right cli -> case cliCommand cli of
-                CmdGetImport args -> giaFormat args @?= RenderJson
+                CmdGetImport args -> giaFormat args @?= GetImportJson
                 _otherCmd -> assertFailure "Expected CmdGetImport"
     , testCase "get-import --format yaml (default)" $ do
         case parseCli ["get-import", "some-import"] of
             Left e -> assertFailure e
             Right cli -> case cliCommand cli of
-                CmdGetImport args -> giaFormat args @?= RenderYaml
+                CmdGetImport args -> giaFormat args @?= GetImportYaml
                 _otherCmd -> assertFailure "Expected CmdGetImport"
     , testCase "get-import --format yaml-cloudformation is rejected" $ do
         case parseCli ["get-import", "some-import", "--format", "yaml-cloudformation"] of
             Left _ -> pure ()
             Right _ -> assertFailure "Expected parse failure for yaml-cloudformation in get-import"
+    , testCase "get-import --format bogus is a usage error naming the valid formats, exit 1" $
+        case rejection ["get-import", "some-import", "--format", "bogus"] of
+            Nothing -> assertFailure "Expected parse failure for bogus"
+            Just (msg, code) -> do
+                code @?= ExitFailure 1
+                assertBool msg ("Unknown output format: bogus. Valid formats: json, yaml" `isInfixOf` msg)
+    , testCase "get-import --format yaml-cloudformation is a usage error, exit 1" $
+        fmap snd (rejection ["get-import", "some-import", "--format", "yaml-cloudformation"])
+            @?= Just (ExitFailure 1)
+    , testCase "get-import --format accepts exactly lower-case yaml and json" $
+        mapM_
+            (\f -> assertBool f (isJust (rejection ["get-import", "some-import", "--format", f])))
+            ["yml", "YAML", "Json", "JSON", "Yaml"]
     , testCase "--trust-import-source is absent by default" $ do
         case parseCli ["render", "t.yaml"] of
             Left e -> assertFailure e
@@ -157,5 +173,9 @@ cliParserTests =
             ["s3://bucket", "ftp://host/", "templates/", "https:///"]
     ]
   where
+    rejection :: [String] -> Maybe (String, ExitCode)
+    rejection args = case execParserPure (prefs showHelpOnEmpty) cliParserInfo args of
+        Failure f -> let (msg, code) = renderFailure f "iidy" in Just (msg, code)
+        _other -> Nothing
     trustedPrefixes :: Cli -> [Text]
     trustedPrefixes = map trustedSourceText . goTrustedSources . cliGlobalOpts

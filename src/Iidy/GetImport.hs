@@ -25,7 +25,7 @@ import Amazonka.Auth.Exception qualified as AuthEx
 
 import Iidy.Aws.Config (createAwsEnvFromSettings)
 import Iidy.Aws.CredentialSource (AwsSettings)
-import Iidy.Cli (GetImportArgs (..), GlobalOpts (..), RenderFormat (..), importPolicyFromOpts)
+import Iidy.Cli (GetImportArgs (..), GetImportFormat (..), GlobalOpts (..), importPolicyFromOpts)
 import Iidy.Errors.JMESPath (formatJMESPathQueryError)
 import Iidy.JsonPretty (prettyJsonText)
 import Iidy.Output.Types (OutputData (..))
@@ -124,9 +124,8 @@ emitDoc emit gopts args importData =
     -- Exhaustive match, no wildcard
     emitFormat fmt ordered sorted = do
         case fmt of
-            RenderJson -> emit (OdRawOutput (prettyJsonText sorted <> "\n"))
-            RenderYaml -> emit (OdRawOutput (yamlWithNewline ordered))
-            RenderCfnYaml -> emit (OdRawOutput (yamlWithNewline ordered))
+            GetImportJson -> emit (OdRawOutput (prettyJsonText sorted <> "\n"))
+            GetImportYaml -> emit (OdRawOutput (yamlWithNewline ordered))
         pure 0
 
 -- | YAML text ending in exactly one newline (serde_yaml::to_string).
