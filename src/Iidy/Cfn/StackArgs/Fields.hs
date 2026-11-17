@@ -1,5 +1,5 @@
 {- | Conversion of a preprocessed stack-args value to 'StackArgs', with the
-typed field getters and their error texts (matching Rust/serde style).
+field parser and its error texts (matching Rust/serde style).
 -}
 module Iidy.Cfn.StackArgs.Fields (
     valueToStackArgs,
@@ -7,19 +7,17 @@ module Iidy.Cfn.StackArgs.Fields (
     getStrListValidated,
     getStrMapValidated,
     getInt,
-    getBool,
-    describeType,
-    describeValue,
-    parseOnFailure,
     parseOnFailureText,
-    parseCapabilities,
     parseCapabilityText,
 ) where
 
 import Control.Monad (zipWithM)
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.Reader (ReaderT, ask, asks, runReaderT)
 import Data.Aeson (Value (..))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
+import Data.Foldable (toList)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Scientific (isInteger)
@@ -35,62 +33,116 @@ import Iidy.Cfn.Types (Capability (..), OnFailure (..), StackArgs (..))
 
 -- | Convert a JSON Value (from YAML) to StackArgs
 valueToStackArgs :: Value -> Either Text StackArgs
-valueToStackArgs (Object obj) = do
-    validateNoUnknownKeys obj
-    stackName <- case getStr obj "StackName" of
-        Just name -> Right name
-        Nothing -> Left "StackName is required in stack-args"
-    tags <- getStrMapValidated obj "Tags"
-    params <- getStrMapValidated obj "Parameters"
-    caps <- parseCapabilities obj
-    onFail <- parseOnFailure obj
-    notifArns <- getStrListValidated obj "NotificationARNs"
-    resourceTypes <- getStrListValidated obj "ResourceTypes"
-    usePrevParams <- getStrListValidated obj "UsePreviousParameterValues"
-    commandsBefore <- getStrListValidated obj "CommandsBefore"
-    timeoutMins <- getInt obj "TimeoutInMinutes"
+valueToStackArgs (Object obj) = runReaderT stackArgsFields obj
+valueToStackArgs _ = Left "Stack args must be a YAML mapping"
+
+{- | The stack-args fields. Errors are checked in this order and the first
+one wins: unknown keys, StackName, Tags, Parameters, Capabilities,
+OnFailure, the string lists, TimeoutInMinutes.
+-}
+stackArgsFields :: FieldParser StackArgs
+stackArgsFields = do
+    ask >>= lift . validateNoUnknownKeys
+    stackName <- lenientField "StackName" asString >>= lift . maybe (Left "StackName is required in stack-args") Right
+    tags <- optionalField "Tags" strMap
+    params <- optionalField "Parameters" strMap
+    caps <- optionalField "Capabilities" capabilities
+    onFail <- optionalField "OnFailure" onFailure
+    notifArns <- optionalField "NotificationARNs" strList
+    resourceTypes <- optionalField "ResourceTypes" strList
+    usePrevParams <- optionalField "UsePreviousParameterValues" strList
+    commandsBefore <- optionalField "CommandsBefore" strList
+    timeoutMins <- optionalField "TimeoutInMinutes" int
+    template <- lenientField "Template" asString
+    approvedLocation <- lenientField "ApprovedTemplateLocation" asString
+    region <- lenientField "Region" asString
+    profile <- lenientField "Profile" asString
+    assumeRoleArn <- lenientField "AssumeRoleARN" asString
+    serviceRoleArn <- lenientField "ServiceRoleARN" asString
+    roleArn <- lenientField "RoleARN" asString
+    disableRollback <- lenientField "DisableRollback" asBool
+    terminationProtection <- lenientField "EnableTerminationProtection" asBool
+    stackPolicy <- rawField "StackPolicy"
+    usePrevTemplate <- lenientField "UsePreviousTemplate" asBool
     pure
         StackArgs
             { saStackName = stackName
-            , saTemplate = getStr obj "Template"
-            , saApprovedTemplateLocation = getStr obj "ApprovedTemplateLocation"
-            , saRegion = getStr obj "Region"
-            , saProfile = getStr obj "Profile"
+            , saTemplate = template
+            , saApprovedTemplateLocation = approvedLocation
+            , saRegion = region
+            , saProfile = profile
             , saCapabilities = caps
             , saTags = tags
             , saParameters = params
             , saNotificationArns = notifArns
-            , saAssumeRoleArn = getStr obj "AssumeRoleARN"
-            , saServiceRoleArn = getStr obj "ServiceRoleARN"
-            , saRoleArn = getStr obj "RoleARN"
+            , saAssumeRoleArn = assumeRoleArn
+            , saServiceRoleArn = serviceRoleArn
+            , saRoleArn = roleArn
             , saTimeoutInMinutes = timeoutMins
             , saOnFailure = onFail
-            , saDisableRollback = getBool obj "DisableRollback"
-            , saEnableTerminationProtection = getBool obj "EnableTerminationProtection"
-            , saStackPolicy = KM.lookup (Key.fromText "StackPolicy") obj
+            , saDisableRollback = disableRollback
+            , saEnableTerminationProtection = terminationProtection
+            , saStackPolicy = stackPolicy
             , saResourceTypes = resourceTypes
-            , saUsePreviousTemplate = getBool obj "UsePreviousTemplate"
+            , saUsePreviousTemplate = usePrevTemplate
             , saUsePreviousParameterValues = usePrevParams
             , saCommandsBefore = commandsBefore
             }
-valueToStackArgs _ = Left "Stack args must be a YAML mapping"
 
-getStr :: KM.KeyMap Value -> Text -> Maybe Text
-getStr obj key = case KM.lookup (Key.fromText key) obj of
-    Just (String s) -> Just s
+------------------------------------------------------------------------
+-- Field parser
+------------------------------------------------------------------------
+
+-- | Reads the fields of one stack-args mapping; the first error wins.
+type FieldParser = ReaderT (KM.KeyMap Value) (Either Text)
+
+{- | Parses a present, non-null field value; the first argument is the key,
+for messages.
+-}
+type ValueParser a = Text -> Value -> Either Text a
+
+-- | A field's value as written, null included.
+rawField :: Text -> FieldParser (Maybe Value)
+rawField key = asks (lookupField key)
+
+lookupField :: Text -> KM.KeyMap Value -> Maybe Value
+lookupField key = KM.lookup (Key.fromText key)
+
+-- | An optional field: absent or null is 'Nothing', anything else must parse.
+optionalField :: Text -> ValueParser a -> FieldParser (Maybe a)
+optionalField key parse =
+    rawField key >>= \case
+        Nothing -> pure Nothing
+        Just Null -> pure Nothing
+        Just v -> lift (Just <$> parse key v)
+
+-- | A lenient field: a value that does not match reads as absent.
+lenientField :: Text -> (Value -> Maybe a) -> FieldParser (Maybe a)
+lenientField key match = (>>= match) <$> rawField key
+
+asString :: Value -> Maybe Text
+asString = \case
+    String s -> Just s
     _other -> Nothing
 
-{- | Extract a string list, validating that all elements are strings.
-Returns an error if any element has a non-string type (matching Rust/serde behavior).
--}
-getStrListValidated :: KM.KeyMap Value -> Text -> Either Text (Maybe [Text])
-getStrListValidated obj key = case KM.lookup (Key.fromText key) obj of
-    Just (Array arr) -> do
-        texts <- zipWithM validateElem [0 :: Int ..] (foldr (:) [] arr)
-        pure (Just texts)
-    Just Null -> Right Nothing
-    Nothing -> Right Nothing
-    Just v -> Left $ "invalid type for " <> key <> ": expected a sequence, got " <> describeType v
+asBool :: Value -> Maybe Bool
+asBool = \case
+    Bool b -> Just b
+    _nonBool -> Nothing
+
+-- | The error for a field value of the wrong type.
+typeError :: Text -> Text -> Value -> Either Text a
+typeError key expected v = Left ("invalid type for " <> key <> ": expected " <> expected <> ", got " <> describeType v)
+
+------------------------------------------------------------------------
+-- Value parsers
+------------------------------------------------------------------------
+
+-- | A sequence of strings (matching Rust/serde behavior).
+strList :: ValueParser [Text]
+strList key = \case
+    Array arr -> zipWithM validateElem [0 :: Int ..] (toList arr)
+    v -> typeError key "a sequence" v
   where
     validateElem _ (String t) = Right t
     validateElem i v =
@@ -102,20 +154,65 @@ getStrListValidated obj key = case KM.lookup (Key.fromText key) obj of
                 <> "]: expected a string, got "
                 <> describeValue v
 
-{- | Extract a string map, validating that all values are strings.
-Returns an error if any value has a non-string type (matching Rust/serde behavior).
--}
-getStrMapValidated :: KM.KeyMap Value -> Text -> Either Text (Maybe (Map Text Text))
-getStrMapValidated obj key = case KM.lookup (Key.fromText key) obj of
-    Just (Object m) -> do
-        pairs <- mapM validatePair (KM.toList m)
-        pure (Just (Map.fromList pairs))
-    Just Null -> Right Nothing
-    Nothing -> Right Nothing
-    Just v -> Left ("invalid type for " <> key <> ": expected a mapping, got " <> describeType v)
+-- | A mapping of strings to strings (matching Rust/serde behavior).
+strMap :: ValueParser (Map Text Text)
+strMap key = \case
+    Object m -> Map.fromList <$> mapM validatePair (KM.toList m)
+    v -> typeError key "a mapping" v
   where
     validatePair (k, String t) = Right (Key.toText k, t)
     validatePair (_, v) = Left ("invalid type: " <> describeValue v <> ", expected a string")
+
+-- | An integer, rejecting other numbers (detected with 'isInteger').
+int :: ValueParser Int
+int key = \case
+    Number n
+        | isInteger n -> Right (round n)
+        | otherwise ->
+            Left $
+                "invalid type for "
+                    <> key
+                    <> ": expected an integer, got float `"
+                    <> T.pack (show n)
+                    <> "`"
+    v -> typeError key "an integer" v
+
+onFailure :: ValueParser OnFailure
+onFailure key = \case
+    String s -> parseOnFailureText s
+    v -> typeError key "a string" v
+
+capabilities :: ValueParser [Capability]
+capabilities key = \case
+    Array arr -> mapM entry (toList arr)
+    v -> typeError key "a sequence" v
+  where
+    entry (String s) = parseCapabilityText s
+    entry v = Left $ "invalid " <> key <> " entry: expected a string, got " <> describeType v
+
+------------------------------------------------------------------------
+-- Single-field getters
+------------------------------------------------------------------------
+
+-- | A string field; any other value reads as absent.
+getStr :: KM.KeyMap Value -> Text -> Maybe Text
+getStr obj key = lookupField key obj >>= asString
+
+-- | An optional string-list field (see 'strList').
+getStrListValidated :: KM.KeyMap Value -> Text -> Either Text (Maybe [Text])
+getStrListValidated obj key = runReaderT (optionalField key strList) obj
+
+-- | An optional string-map field (see 'strMap').
+getStrMapValidated :: KM.KeyMap Value -> Text -> Either Text (Maybe (Map Text Text))
+getStrMapValidated obj key = runReaderT (optionalField key strMap) obj
+
+-- | An optional integer field (see 'int').
+getInt :: KM.KeyMap Value -> Text -> Either Text (Maybe Int)
+getInt obj key = runReaderT (optionalField key int) obj
+
+------------------------------------------------------------------------
+-- Value descriptions
+------------------------------------------------------------------------
 
 -- | Describe a JSON value type for error messages (matching Rust/serde style).
 describeType :: Value -> Text
@@ -139,34 +236,6 @@ describeValue (Object _) = "a mapping"
 describeValue Null = "null"
 describeValue (String s) = "string `" <> s <> "`"
 
-{- | Extract an integer value, rejecting non-integer numbers.
-Uses Data.Scientific.isInteger to detect floats.
--}
-getInt :: KM.KeyMap Value -> Text -> Either Text (Maybe Int)
-getInt obj key = case KM.lookup (Key.fromText key) obj of
-    Just (Number n)
-        | isInteger n -> Right $ Just (round n)
-        | otherwise ->
-            Left $
-                "invalid type for "
-                    <> key
-                    <> ": expected an integer, got float `"
-                    <> T.pack (show n)
-                    <> "`"
-    Just Null -> Right Nothing
-    Nothing -> Right Nothing
-    Just v ->
-        Left $
-            "invalid type for "
-                <> key
-                <> ": expected an integer, got "
-                <> describeType v
-
-getBool :: KM.KeyMap Value -> Text -> Maybe Bool
-getBool obj key = case KM.lookup (Key.fromText key) obj of
-    Just (Bool b) -> Just b
-    _nonBool -> Nothing
-
 ------------------------------------------------------------------------
 -- OnFailure / Capability parsing
 ------------------------------------------------------------------------
@@ -183,14 +252,6 @@ parseOnFailureText t = case T.toUpper t of
                 <> t
                 <> " (expected DO_NOTHING, ROLLBACK, or DELETE)"
 
--- | Extract and parse OnFailure from a KeyMap.
-parseOnFailure :: KM.KeyMap Value -> Either Text (Maybe OnFailure)
-parseOnFailure obj = case KM.lookup (Key.fromText "OnFailure") obj of
-    Just (String s) -> Just <$> parseOnFailureText s
-    Just Null -> Right Nothing
-    Nothing -> Right Nothing
-    Just v -> Left $ "invalid type for OnFailure: expected a string, got " <> describeType v
-
 -- | Parse a single Capability value from text.
 parseCapabilityText :: Text -> Either Text Capability
 parseCapabilityText t = case T.toUpper t of
@@ -202,17 +263,3 @@ parseCapabilityText t = case T.toUpper t of
             "unrecognized Capability value: "
                 <> t
                 <> " (expected CAPABILITY_IAM, CAPABILITY_NAMED_IAM, or CAPABILITY_AUTO_EXPAND)"
-
--- | Extract and parse Capabilities list from a KeyMap.
-parseCapabilities :: KM.KeyMap Value -> Either Text (Maybe [Capability])
-parseCapabilities obj = case KM.lookup (Key.fromText "Capabilities") obj of
-    Just (Array arr) -> do
-        caps <- mapM parseOneCapEntry (foldr (:) [] arr)
-        pure (Just caps)
-    Just Null -> Right Nothing
-    Nothing -> Right Nothing
-    Just v -> Left $ "invalid type for Capabilities: expected a sequence, got " <> describeType v
-  where
-    parseOneCapEntry :: Value -> Either Text Capability
-    parseOneCapEntry (String s) = parseCapabilityText s
-    parseOneCapEntry v = Left $ "invalid Capabilities entry: expected a string, got " <> describeType v
