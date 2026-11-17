@@ -2,6 +2,10 @@ module Iidy.Yaml.Emitter (
     SeqStyle (..),
     emitYaml,
     emitYamlWith,
+
+    -- * Quoting shared with other YAML writers
+    isNonPrintable,
+    doubleQuote,
 ) where
 
 import Data.Char (isDigit, ord)
@@ -159,6 +163,8 @@ isNonPrintable c =
         || c == '\x2028'
         || c == '\x2029'
         || c == '\xfeff'
+        || c == '\xfffe'
+        || c == '\xffff'
 
 -- | A double-quoted scalar with YAML escapes (see 'escapeDoubleQuotes').
 doubleQuote :: Text -> Text
@@ -256,7 +262,7 @@ emitMappingInline st indent kvs =
 
 emitMapKey :: Text -> Text
 emitMapKey k
-    | T.any isNonPrintable k = doubleQuote k
+    | T.any (\c -> isNonPrintable c || c == '\n') k = doubleQuote k
     | needsQuotes k = quoteString k
     | otherwise = k
 

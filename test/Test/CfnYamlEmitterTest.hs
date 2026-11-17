@@ -290,4 +290,21 @@ cfnYamlEmitterTests =
                     Right _ -> assertFailure "expected parse error"
             ]
         ]
+    , testGroup
+        "non-printable characters (shared escaping with Iidy.Yaml.Emitter)"
+        [ testCase "value with DEL is double-quoted" $
+            quoteYamlString "a\DELb" @?= "\"a\\x7Fb\""
+        , testCase "value with U+0085 is double-quoted" $
+            quoteYamlString "a\x85\&b" @?= "\"a\\Nb\""
+        , testCase "value with U+FEFF is double-quoted" $
+            quoteYamlString "a\xfeff\&b" @?= "\"a\\uFEFFb\""
+        , testCase "value with U+0001 uses the emitter's upper-case spelling" $
+            quoteYamlString "a\SOH" @?= "\"a\\x01\""
+        , testCase "value with ESC uses the short escape" $
+            quoteYamlString "\ESC[0m" @?= "\"\\e[0m\""
+        , testCase "key with a control character is double-quoted" $
+            emitCfnYaml False (obj [("k\ESCy", Bool True)]) @?= "\"k\\ey\": true\n"
+        , testCase "key with a line break is double-quoted" $
+            emitCfnYaml False (obj [("a\nb", Bool True)]) @?= "\"a\\nb\": true\n"
+        ]
     ]

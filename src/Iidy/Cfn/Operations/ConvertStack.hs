@@ -38,7 +38,6 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Text.IO qualified as TIO
 import Data.Vector qualified as V
-import Numeric (showHex)
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
@@ -54,6 +53,7 @@ import Amazonka.SSM.PutParameter qualified as PP
 import Amazonka.SSM.Types.ParameterType qualified as SSMPT
 
 import Iidy.Cfn.Context (CfnContext (..))
+import Iidy.Yaml.Emitter (doubleQuote, isNonPrintable)
 import Iidy.Yaml.Parser (parseYaml)
 import Iidy.Yaml.Resolution.Resolver (astToValueRaw)
 
@@ -245,6 +245,7 @@ Fn::Sub, Fn::Join contain colons that need quoting.
 -}
 quoteYamlKey :: Text -> Text
 quoteYamlKey k
+    | T.any (\c -> c == '\n' || isNonPrintable c) k = doubleQuote k
     | needsKeyQuoting k = "'" <> T.replace "'" "''" k <> "'"
     | otherwise = k
   where
@@ -333,26 +334,13 @@ Uses single-quoting for all other special cases.
 quoteYamlString :: Text -> Text
 quoteYamlString s
     | T.null s = "''"
-    | hasControlChars s = "\"" <> escapeForDoubleQuote s <> "\""
+    | hasControlChars s = doubleQuote s
     | needsQuoting s = "'" <> T.replace "'" "''" s <> "'"
     | otherwise = s
   where
-    hasControlChars = T.any (< ' ')
-
-    escapeForDoubleQuote = T.concatMap $ \c -> case c of
-        '\n' -> "\\n"
-        '\r' -> "\\r"
-        '\t' -> "\\t"
-        '\\' -> "\\\\"
-        '"' -> "\\\""
-        _
-            | c < ' ' -> "\\x" <> T.pack (padHex (fromEnum c))
-            | otherwise -> T.singleton c
-
-    -- \| Zero-pad a hex string to at least 2 digits, as required by YAML spec.
-    -- E.g. 0x01 => "01", 0x0f => "0f", 0x10 => "10".
-    padHex :: Int -> String
-    padHex n = let h = showHex n "" in if length h < 2 then '0' : h else h
+    -- Newline and tab keep their double-quoted form here; every other
+    -- non-printable character is escaped by the emitter's shared path.
+    hasControlChars = T.any (\c -> c == '\n' || c == '\t' || isNonPrintable c)
 
     needsQuoting t =
         T.any (`elem` (":{}&*?|>!%@`#,[]\"" :: String)) t

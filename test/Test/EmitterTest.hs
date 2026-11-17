@@ -91,6 +91,13 @@ nonPrintableTests =
                     emitYaml (OObject [("!Sub", OString "x\ay")]) @?= "!Sub \"x\\ay\""
                , testCase "multi-line string with a control character" $
                     emitYaml (OString "a\nb\SOH") @?= "\"a\\nb\\x01\""
+               , testCase "non-BMP and accented characters stay literal" $ do
+                    emitYaml (OString "a\x1F600\&b") @?= "a\x1F600\&b"
+                    emitYaml (OString "caf\xe9") @?= "caf\xe9"
+                    roundTrip (OString "a\x1F600\&b \xe9")
+               , testCase "mapping key with a line break is double-quoted" $ do
+                    emitYaml (OObject [("a\nb", OString "v")]) @?= "\"a\\nb\": v"
+                    roundTrip (OObject [("a\nb", OString "v")])
                , testCase "SeqFlush round trip" $
                     roundTripWith SeqFlush (OObject [("a", OArray [OString "\ESC[0m"])])
                ]
@@ -126,5 +133,7 @@ cases =
     , ("U+2028", "a\x2028\&b", "\"a\\Lb\"")
     , ("U+2029", "a\x2029\&b", "\"a\\Pb\"")
     , ("BOM U+FEFF", "a\xfeff\&b", "\"a\\uFEFFb\"")
+    , ("U+FFFE", "a\xfffe\&b", "\"a\\uFFFEb\"")
+    , ("U+FFFF", "a\xffff\&b", "\"a\\uFFFFb\"")
     , ("with double quote and backslash", "q\"\\\ESC", "\"q\\\"\\\\\\e\"")
     ]
