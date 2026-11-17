@@ -99,7 +99,7 @@ preprocessYamlWith trusted yaml11Compat loader ast baseLocation =
 process :: Importer -> YamlAst -> Text -> Bool -> IO (Either PreprocessError PreprocessResult)
 process importer ast baseLocation yaml11Compat = do
     case pushImport baseLocation emptyStack of
-        Left err -> pure $ Left $ PeCycleError err
+        Left err -> pure $ Left $ pushErrorToPreprocess err
         Right stack' -> do
             -- Phase 1: Load imports and build environment
             result <- loadImportsAndDefs importer ast (rootBase baseLocation) Map.empty Map.empty emptyManifest stack'
@@ -126,6 +126,12 @@ process importer ast baseLocation yaml11Compat = do
                                         { prValue = final
                                         , prImportRecords = manifest
                                         }
+
+-- | A refused import: a cycle, or one of the import limits.
+pushErrorToPreprocess :: PushError -> PreprocessError
+pushErrorToPreprocess = \case
+    ImportCycle msg -> PeCycleError msg
+    ImportLimit msg -> PeImportError (ImportError msg)
 
 ------------------------------------------------------------------------
 -- Phase 1: Load imports and definitions
@@ -203,7 +209,7 @@ processImports importer env tmplDefs manifest stack ((keyAst, locAst) : rest) ba
         Right resolvedLoc -> do
             -- Cycle detection: push import location onto stack
             case pushImport resolvedLoc stack of
-                Left cycleErr -> pure $ Left $ PeCycleError cycleErr
+                Left pushErr -> pure $ Left $ pushErrorToPreprocess pushErr
                 Right stack' -> do
                     result <- imLoad importer resolvedLoc base
                     case result of

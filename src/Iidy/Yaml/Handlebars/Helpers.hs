@@ -25,6 +25,7 @@ import Data.Text.Encoding qualified as TE
 import Data.Vector qualified as V
 import Data.Word (Word8)
 
+import Iidy.Constants (helperMaxOutputChars)
 import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.OValue (fromValue)
 
@@ -149,8 +150,12 @@ splitWords = filter (not . T.null) . go
 
 helperReplace :: HelperFn
 helperReplace = \case
-    [String s, String search, String replacement] ->
-        Right $ String $ T.replace search replacement s
+    [String s, String search, String replacement]
+        | not (T.null search)
+        , let size = T.length s + T.count search s * (T.length replacement - T.length search)
+        , size > helperMaxOutputChars ->
+            Left $ outputLimitError "replace" size
+        | otherwise -> Right $ String $ T.replace search replacement s
     [_, _, _] -> Left "replace requires string parameters"
     _wrongArity -> Left "replace requires three parameters: string, search, replacement"
 
@@ -183,10 +188,22 @@ helperPad = \case
   where
     doPad s target pc
         | T.length s >= target = Right (String s)
-        | otherwise =
-            let padCount = target - T.length s
-                padding = T.replicate padCount pc
-             in Right (String (s <> padding))
+        | padCount > maxPadCount =
+            Left $ outputLimitError "pad" (T.length s + padCount * T.length pc)
+        | otherwise = Right (String (s <> T.replicate padCount pc))
+      where
+        padCount = target - T.length s
+        -- divide rather than multiply, so a huge width cannot overflow
+        maxPadCount = (helperMaxOutputChars - T.length s) `div` max 1 (T.length pc)
+
+-- | The error for a helper whose result would pass 'helperMaxOutputChars'.
+outputLimitError :: Text -> Int -> Text
+outputLimitError name size =
+    name
+        <> " would produce "
+        <> T.pack (show size)
+        <> " characters, over the helper output limit of "
+        <> T.pack (show helperMaxOutputChars)
 
 helperConcat :: HelperFn
 helperConcat args = do

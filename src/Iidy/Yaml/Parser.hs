@@ -14,8 +14,10 @@ import Data.Scientific (Scientific)
 import Data.Scientific qualified as Sci
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Unsafe (lengthWord8)
 import Data.YAML qualified as Y
 import Data.YAML.Event (ScalarStyle (..), Tag, tagToText)
+import Iidy.Constants (yamlMaxAliasNodes, yamlMaxExpandedBytes)
 import Iidy.Yaml.Ast
 import Iidy.Yaml.DuplicateKeys (KeyId, firstDuplicate, mappingKeyId, scalarKeyId, sequenceKeyId)
 import Iidy.Yaml.Location (Position (..), zeroPosition)
@@ -67,38 +69,68 @@ parsing never forces it).
 data Node = Node
     { nodeAst :: YamlAst
     , nodeKey :: Maybe KeyId
+    , nodeCount :: !Int
+    {- ^ nodes in this subtree with every alias expanded (shared subtrees
+    are measured once and reused, so this is cheap to compute)
+    -}
+    , nodeBytes :: !Int
+    -- ^ UTF-8 bytes of scalar text in this subtree with every alias expanded
     }
 
 yamlLoader :: Bool -> Text -> Y.Loader Identity Node
 yamlLoader rejectDuplicates uri =
     Y.Loader
         { Y.yScalar = \tag style text pos ->
-            pure $
-                (\ast -> Node ast (Just (scalarKeyId (isResolved tag style) text)))
-                    <$> resolveScalar uri pos tag style text
+            let bytes = lengthWord8 text
+             in pure $
+                    checkExpansion uri pos 1 bytes
+                        *> ( (\ast -> Node ast (Just (scalarKeyId (isResolved tag style) text)) 1 bytes)
+                                <$> resolveScalar uri pos tag style text
+                           )
         , Y.ySequence = \tag nodes pos ->
             pure $
                 let items = map nodeAst nodes
                     startP = convertPos pos
                     endP = childrenEndPos startP (map astMeta items)
                     meta = SrcMeta uri startP endP
-                 in (`Node` sequenceKeyId (map nodeKey nodes)) <$> applyTag meta tag (AstSequence items meta)
+                    (count, bytes) = totals nodes
+                 in checkExpansion uri pos count bytes
+                        *> ((\n -> Node n (sequenceKeyId (map nodeKey nodes)) count bytes) <$> applyTag meta tag (AstSequence items meta))
         , Y.yMapping = \tag nodes pos ->
             pure $
                 let kvs = [(nodeAst k, nodeAst v) | (k, v) <- nodes]
                     startP = convertPos pos
                     endP = childrenEndPos startP (map (astMeta . snd) kvs)
                     meta = SrcMeta uri startP endP
-                 in case firstDuplicate [(nodeAst k, nodeKey k) | (k, _) <- nodes] of
-                        Just (dup, msg)
-                            | rejectDuplicates -> Left (unconvertPos (smStart (astMeta dup)), msg)
-                        _noDuplicate -> (`Node` mappingKeyId [(nodeKey k, nodeKey v) | (k, v) <- nodes]) <$> applyTag meta tag (AstMapping kvs meta)
+                    (count, bytes) = totals (concat [[k, v] | (k, v) <- nodes])
+                 in checkExpansion uri pos count bytes
+                        *> case firstDuplicate [(nodeAst k, nodeKey k) | (k, _) <- nodes] of
+                            Just (dup, msg)
+                                | rejectDuplicates -> Left (unconvertPos (smStart (astMeta dup)), msg)
+                            _noDuplicate -> (\n -> Node n (mappingKeyId [(nodeKey k, nodeKey v) | (k, v) <- nodes]) count bytes) <$> applyTag meta tag (AstMapping kvs meta)
         , Y.yAlias = \_ _ node _ -> pure $ Right node
         , Y.yAnchor = \_ node _ -> pure $ Right node
         }
   where
     -- An untagged plain scalar resolves to a number, boolean or null.
     isResolved tag style = style == Plain && isNothing (tagToText tag)
+
+-- | The node count (this node included) and scalar bytes of children.
+totals :: [Node] -> (Int, Int)
+totals nodes = (1 + sum (map nodeCount nodes), sum (map nodeBytes nodes))
+
+{- | Reject a document whose alias-expanded size passes 'yamlMaxAliasNodes'
+or 'yamlMaxExpandedBytes'. Every child has already passed this check, so the
+sums stay far below overflow, and an alias bomb is refused at the first
+level that crosses a limit, before anything is expanded.
+-}
+checkExpansion :: Text -> Y.Pos -> Int -> Int -> Either (Y.Pos, String) ()
+checkExpansion uri pos count bytes
+    | count > yamlMaxAliasNodes =
+        Left (pos, "YAML alias expansion exceeds " <> show yamlMaxAliasNodes <> " nodes in " <> T.unpack uri)
+    | bytes > yamlMaxExpandedBytes =
+        Left (pos, "YAML alias expansion exceeds " <> show yamlMaxExpandedBytes <> " bytes of text in " <> T.unpack uri)
+    | otherwise = Right ()
 
 ------------------------------------------------------------------------
 -- Scalar resolution (Core schema)

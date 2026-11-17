@@ -51,6 +51,7 @@ import Test.RendererOutputTest (rendererOutputTests)
 import Test.RendererTest (rendererTests)
 import Test.RequestBuilderTest (requestBuilderTests)
 import Test.ResolverTest (resolverTests)
+import Test.ResourceLimitsTest (resourceLimitsTests)
 import Test.S3ObjectsTest (s3ObjectsTests)
 import Test.SecurityControlsTest (securityControlsTests)
 import Test.SpecConformanceTest (specConformanceTests)
@@ -141,4 +142,5 @@ main = do
             , testGroup "S3Objects" s3ObjectsTests
             , testGroup "SpecConformance" conformanceTests
             , testGroup "Engine" engineTests
+            , resourceLimitsTests
             ]

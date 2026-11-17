@@ -436,3 +436,25 @@ where iidy-hs differs from iidy-js, Rust, or both.
   read every error as "not approved" and uploaded.
 - **Pending upload ACL**: `bucket-owner-full-control`, as iidy-js and Rust;
   the approve writes carry none, as iidy-js.
+
+## Resource Limits on Untrusted Input
+
+Rust bounds none of the following (`src/yaml/` has no depth, alias or helper
+size constant; only the circular-import check at `engine.rs:82`). iidy-hs
+refuses the input with an error naming the limit, its value and what hit it.
+The values are named constants in `Iidy.Constants`.
+
+- **YAML alias expansion**: at most 250000 nodes per document after every
+  alias is expanded (scalars, sequences and mappings count one each), and at
+  most 50 MiB of scalar text after expansion. Counted in the parser as the
+  document loads, so a bomb is refused before anything is expanded.
+- **Import depth**: at most 32 nested imports on one chain, the root
+  document excluded ("import depth 33 exceeds 32: a.yaml -> b.yaml ...").
+- **Import count**: at most 1000 imports resolved in one run, the root
+  document excluded.
+- **Handlebars helper output**: no single helper result over 1048576
+  characters. `pad` and `replace` are the helpers that can amplify their
+  input; both are checked before the result is built.
+- **HTTP import total time**: 60 seconds from request to the end of the
+  body, on top of the existing 30 second wait for the response headers and
+  the 10 MB body cap.

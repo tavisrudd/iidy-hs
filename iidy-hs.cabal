@@ -251,6 +251,7 @@ test-suite iidy-hs-test
     Test.ImportFixtures
     Test.HttpGuardTest
     Test.FakeHttp
+    Test.ResourceLimitsTest
     Test.ExfiltrationTest
     Test.CustomTemplateTrustTest
     Test.ParamsClientTest

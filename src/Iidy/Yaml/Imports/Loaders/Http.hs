@@ -1,6 +1,7 @@
 -- | HTTP/HTTPS import loader: fetch content from HTTP or HTTPS URLs.
 module Iidy.Yaml.Imports.Loaders.Http (
     loadHttpImport,
+    loadHttpImportWithin,
     urlPath,
 ) where
 
@@ -26,8 +27,9 @@ import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Simple (parseRequest, setRequestResponseTimeout)
 import Network.HTTP.Types.Status (statusCode)
 import System.FilePath (takeExtension)
+import System.Timeout (timeout)
 
-import Iidy.Constants (httpMaxResponseBytes, httpTimeoutSeconds)
+import Iidy.Constants (httpMaxResponseBytes, httpTimeoutSeconds, httpTotalTimeoutSeconds)
 import Iidy.Yaml.Imports.ContentParsing (ParsedDoc (..), parseByExtensionStrict)
 import Iidy.Yaml.Imports.Loaders.HttpGuard (GuardRefusal (..), HttpGuard, HttpSeam, guardManagerSettings)
 import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..))
@@ -41,6 +43,12 @@ newtype HttpSizeLimitExceeded = HttpSizeLimitExceeded Int
     deriving stock (Show)
 
 instance Exception HttpSizeLimitExceeded
+
+-- | Thrown when the whole fetch passes 'httpTotalTimeoutSeconds'.
+data HttpTotalTimeExceeded = HttpTotalTimeExceeded
+    deriving stock (Show)
+
+instance Exception HttpTotalTimeExceeded
 
 ------------------------------------------------------------------------
 -- Entry point
@@ -57,7 +65,14 @@ Every hop, redirects included, passes the 'HttpGuard' (see
 'HttpSeam'. @HTTP_PROXY@ / @HTTPS_PROXY@ are honoured.
 -}
 loadHttpImport :: HttpSeam -> HttpGuard -> Text -> IO (Either ImportError ImportData)
-loadHttpImport seam guard location = do
+loadHttpImport = loadHttpImportWithin (httpTotalTimeoutSeconds * 1000000)
+
+{- | 'loadHttpImport' with the total time for the fetch, from request to the
+end of the body, given in microseconds (the limit is 'httpTotalTimeoutSeconds';
+tests pass a short one).
+-}
+loadHttpImportWithin :: Int -> HttpSeam -> HttpGuard -> Text -> IO (Either ImportError ImportData)
+loadHttpImportWithin totalMicros seam guard location = do
     -- Fresh manager per call; fine for a CLI tool with a handful of HTTP imports.
     mgr <- newManager =<< guardManagerSettings seam guard tlsManagerSettings
     let mkError :: Text -> IO (Either ImportError ImportData)
@@ -67,7 +82,8 @@ loadHttpImport seam guard location = do
                     ImportError $
                         "HTTP fetch error for " <> location <> ": " <> msg
     ( do
-            (status, body) <- fetchHttpStreaming mgr location
+            fetched <- timeout totalMicros (fetchHttpStreaming mgr location)
+            (status, body) <- maybe (throwIO HttpTotalTimeExceeded) pure fetched
             if status >= 200 && status < 300
                 then case TE.decodeUtf8' body of
                     Left ex ->
@@ -97,6 +113,8 @@ loadHttpImport seam guard location = do
         )
         `catches` [ Handler $ \(e :: HttpException) -> mkError (httpExceptionText e)
                   , Handler $ \(e :: HttpSizeLimitExceeded) -> mkError (T.pack (show e))
+                  , Handler $ \HttpTotalTimeExceeded ->
+                        mkError ("total time limit of " <> T.pack (show (totalMicros `div` 1000000)) <> " seconds exceeded")
                   , Handler $ \(GuardRefusal why) -> mkError ("refused: " <> why)
                   ]
 
