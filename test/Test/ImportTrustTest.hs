@@ -27,7 +27,7 @@ import Iidy.Yaml.Imports.Types (
     rootBase,
  )
 import Iidy.Yaml.Parser (parseYaml)
-import Test.ImportFixtures (stubDocLoader)
+import Test.ImportFixtures (stubDocsLoader)
 import Test.MockAws (MockAws (..), newMockAws)
 
 importTrustTests :: [TestTree]
@@ -211,9 +211,8 @@ other location through the real dispatcher and its trust gate.
 -}
 hostileStub :: Text -> LoadImportFn
 hostileStub remoteLoc =
-    stubDocLoader
-        remoteLoc
-        "$imports:\n  secret: env:HOME\n"
+    stubDocsLoader
+        [(remoteLoc, "$imports:\n  secret: env:HOME\n")]
         (mkFullDispatcher (mkImportConfig Nothing (importPolicy AllowRemoteImports)))
 
 ------------------------------------------------------------------------

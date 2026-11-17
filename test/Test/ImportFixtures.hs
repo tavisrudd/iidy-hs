@@ -3,13 +3,16 @@ remote document from a stub, preprocess a template given as text, and
 build an import policy from real command-line flags.
 -}
 module Test.ImportFixtures (
-    stubDocLoader,
+    stubDocsLoader,
+    unknownLoader,
+    recordingLoader,
     preprocessText,
     flagPolicy,
     fileLoader,
 ) where
 
 import Data.ByteString.Lazy qualified as BL
+import Data.IORef (IORef, modifyIORef)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -24,18 +27,26 @@ import Iidy.Yaml.Imports.Loaders.File (loadFileImport)
 import Iidy.Yaml.Imports.Types (ImportBase (..), ImportData (..), ImportError (..), ImportPolicy, ImportType (..))
 import Iidy.Yaml.Parser (parseYaml)
 
-{- | Serve the YAML document @raw@ at @docLoc@, as the matching remote
-loader would (the document's location becomes the base of its own
-imports); send every other location to @fallback@, normally the real
-dispatcher.
+{- | Serve YAML documents by location, as the matching loader would (each
+document's location becomes the base of its own imports); send every
+other location to @fallback@, normally the real dispatcher or
+'unknownLoader'.
 -}
-stubDocLoader :: Text -> Text -> LoadImportFn -> LoadImportFn
-stubDocLoader docLoc raw fallback loc base
-    | loc == docLoc = pure $ case parseYamlContent raw of
+stubDocsLoader :: [(Text, Text)] -> LoadImportFn -> LoadImportFn
+stubDocsLoader docs fallback loc base = case lookup loc docs of
+    Nothing -> fallback loc base
+    Just raw -> pure $ case parseYamlContent raw of
         Left err -> Left (ImportError err)
         Right doc ->
-            Right ImportData{idType = ImportHttp, idLocation = docLoc, idRawData = raw, idDoc = doc, idOrdered = Nothing}
-    | otherwise = fallback loc base
+            Right ImportData{idType = ImportHttp, idLocation = loc, idRawData = raw, idDoc = doc, idOrdered = Nothing}
+
+-- | Refuse every location, naming it.
+unknownLoader :: LoadImportFn
+unknownLoader loc _base = pure (Left (ImportError ("Unknown: " <> loc)))
+
+-- | Record every requested location (most recent first), then delegate.
+recordingLoader :: IORef [Text] -> LoadImportFn -> LoadImportFn
+recordingLoader callsRef inner loc base = modifyIORef callsRef (loc :) >> inner loc base
 
 -- | Parse @source@ as a template at @baseLoc@ and preprocess it.
 preprocessText :: LoadImportFn -> Text -> Text -> IO (Either PreprocessError PreprocessResult)

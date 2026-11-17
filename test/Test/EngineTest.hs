@@ -5,24 +5,20 @@ module Test.EngineTest (engineTests) where
 import Data.Aeson (Value (..))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
-import Data.IORef (IORef, modifyIORef, newIORef, readIORef)
+import Data.IORef (modifyIORef, newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
-import Data.ByteString.Lazy qualified as BL
-import Data.Text.Encoding qualified as TE
-
 import Iidy.Yaml.Ast
 import Iidy.Yaml.Engine (LoadImportFn, PreprocessError (..), PreprocessResult (..), preprocessYaml)
-import Iidy.Yaml.Imports.ContentParsing (parseYamlContent)
 import Iidy.Yaml.Imports.Manifest (getRecords)
 import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportRecord (..), ImportType (..))
 import Iidy.Yaml.Location (zeroPosition)
 import Iidy.Yaml.OValue (toValue)
-import Iidy.Yaml.Parser (parseYaml)
 import Iidy.Yaml.Resolution.Resolver (ResolveError (..), ResolveErrorKind (..))
+import Test.ImportFixtures (preprocessText, recordingLoader, stubDocsLoader, unknownLoader)
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -404,20 +400,6 @@ runParentImporting :: [(Text, Text)] -> IO ([Text], Either PreprocessError Prepr
 runParentImporting docs = do
     callsRef <- newIORef []
     let parent = "$defs:\n  secret: s3cr3t\n$imports:\n  c: child.yaml\nout: \"{{c.value}}\"\n"
-    case parseYaml (BL.fromStrict (TE.encodeUtf8 parent)) "parent.yaml" of
-        Left err -> assertFailure ("parent did not parse: " <> show err)
-        Right ast -> do
-            result <- preprocessYaml (textDocLoader callsRef docs) ast "parent.yaml"
-            calls <- readIORef callsRef
-            pure (calls, result)
-
--- | Serve YAML documents by location, recording every requested location.
-textDocLoader :: IORef [Text] -> [(Text, Text)] -> LoadImportFn
-textDocLoader callsRef docs loc _base = do
-    modifyIORef callsRef (loc :)
-    pure $ case lookup loc docs of
-        Nothing -> Left (ImportError ("Unknown: " <> loc))
-        Just raw -> case parseYamlContent raw of
-            Left err -> Left (ImportError err)
-            Right doc ->
-                Right ImportData{idType = ImportFile, idLocation = loc, idRawData = raw, idDoc = doc, idOrdered = Nothing}
+    result <- preprocessText (recordingLoader callsRef (stubDocsLoader docs unknownLoader)) "parent.yaml" parent
+    calls <- readIORef callsRef
+    pure (calls, result)

@@ -18,7 +18,7 @@ import Iidy.Yaml.Engine (PreprocessError (..), PreprocessResult (..))
 import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
 import Iidy.Yaml.Imports.Types (ImportData, ImportError (..), ImportPolicy, RemoteImports (..), importPolicy, rootBase)
 import Iidy.Yaml.OValue (toValue)
-import Test.ImportFixtures (flagPolicy, preprocessText, stubDocLoader)
+import Test.ImportFixtures (flagPolicy, preprocessText, stubDocsLoader)
 import Test.MockAws (MockAws (..), newMockAws)
 
 awsImportGateTests :: [TestTree]
@@ -153,7 +153,7 @@ engineCases =
         policy <- flagPolicy ["https://t.example.com/"]
         mock <- newMockAws
         let dispatcher = mkFullDispatcher (mkImportConfig (Just (mockEnv mock)) policy)
-            loader = stubDocLoader evilDoc evilSource (stubDocLoader remoteDoc remoteSource dispatcher)
+            loader = stubDocsLoader [(evilDoc, evilSource), (remoteDoc, remoteSource)] dispatcher
             root = "$imports:\n  u: \"" <> evilDoc <> "\"\nout: \"{{u.v}}\"\n"
         result <- preprocessText loader "local.yaml" root
         case result of
@@ -172,5 +172,5 @@ engineCases =
     renderWith policy = do
         mock <- newMockAws
         let dispatcher = mkFullDispatcher (mkImportConfig (Just (mockEnv mock)) policy)
-        result <- preprocessText (stubDocLoader remoteDoc remoteSource dispatcher) "local.yaml" rootSource
+        result <- preprocessText (stubDocsLoader [(remoteDoc, remoteSource)] dispatcher) "local.yaml" rootSource
         pure (mock, result)
