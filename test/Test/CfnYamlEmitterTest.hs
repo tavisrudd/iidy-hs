@@ -298,8 +298,8 @@ cfnYamlEmitterTests =
             quoteYamlString "a\x85\&b" @?= "\"a\\Nb\""
         , testCase "value with U+FEFF is double-quoted" $
             quoteYamlString "a\xfeff\&b" @?= "\"a\\uFEFFb\""
-        , testCase "value with U+0001 uses the emitter's upper-case spelling" $
-            quoteYamlString "a\SOH" @?= "\"a\\x01\""
+        , testCase "value with U+001F uses the emitter's upper-case spelling" $
+            quoteYamlString "a\US" @?= "\"a\\x1F\""
         , testCase "value with ESC uses the short escape" $
             quoteYamlString "\ESC[0m" @?= "\"\\e[0m\""
         , testCase "key with a control character is double-quoted" $
