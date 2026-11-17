@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C35
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: WAITING
 :MODE:     CONTRACT
 :ORIGIN:   C28 review 2026-11-16: the emitter prints 1.0 as 1, 1e5 as 100000 and 'a\tb\x01' as a quoted raw tab while dropping \x01; Rust prints 1.0, 100000.0 and "a\tb\x01"
 :CREATED_BY: opus-5.5-medium
@@ -10,8 +10,21 @@
 :ID: org:01a1e700-105d-7600-affb-617edd580164
 :ADDED: [2026-11-16 Mon 17:55]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 18:14]--[2026-11-16 Mon 18:14] => 0:00
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 18:13]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 18:14]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:afd6964c57e6bf6e9
+- Clock-out [2026-11-16 Mon 18:14]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:afd6964c57e6bf6e9
+- Card state STARTED → WAITING [2026-11-16 Mon 18:15]
+  Note: Parked: floats need a number-representation change in the parser (1.0 vs 1, .inf/.nan); Rust's targets differ by command (get-import serde_yaml vs render emitter); findings under the card's question; needs rescoping and a decision
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -71,3 +84,52 @@ fix needs the parser to keep the original number text.
 Record the Rust and iidy-hs output for each case in the gate with local
 files only. Add the failing emitter tests, then fix the float and string
 rendering in the emitter's one scalar path.
+
+** Question for supervisor
+:PROPERTIES:
+:ID: org:01a1e712-28f3-74ba-8ff4-7ab7be0ec1b9
+:ADDED: [2026-11-16 Mon 18:14]
+:END:
+Recorded 2026-11-16 by claude-C35. No code changed. Two blockers.
+
+1. Floats need the parser. =Scientific= cannot tell =1.0= from =1=:
+   =Iidy.Yaml.Parser.parseFloat= builds =Sci.fromFloatDigits 1.0=, which is
+   the same value (coefficient 1, exponent 0) as =fromInteger 1=. Same in
+   =Imports/ContentParsing.hs= (=NumDecimal=). The emitter alone cannot print
+   =1.0=. That is the card's stop rule (parser must keep float-ness). Also
+   =parseFloat= feeds =.inf=/=.nan= through =fromFloatDigits=, which cannot
+   represent them, so =.inf=, =-.inf=, =.nan= need a new representation too.
+
+2. The card's Rust outputs belong to =get-import= (serde_yaml) only.
+   =render= (Rust iidy-js-compatible emitter) differs. Recorded from
+   =~/src/iidy/target/debug/iidy= on a local file:
+
+| input        | get-import (serde_yaml) | render                    |
+|--------------+-------------------------+---------------------------|
+| 1.0          | 1.0                     | 1                         |
+| 1e5          | 100000.0                | 100000                    |
+| 1.5e300      | 1.5e300                 | 1 followed by 300 digits  |
+| -0.0         | -0.0                    | -0                        |
+| .inf         | .inf                    | .inf                      |
+| -.inf        | -.inf                   | -inf                      |
+| .nan         | .nan                    | .nan                      |
+| 1e15         | 1000000000000000.0      | 1000000000000000          |
+| 1e16         | 1e16                    | 10000000000000000         |
+| 1.5e-7       | 1.5e-7                  | 0.00000015                |
+| "a\tb\x01"   | "a\tb\x01"              | 'a<TAB>b\x01' (raw tab, literal backslash-x01, single quotes) |
+| "\x7f"       | "\x7F"                  | \x7f (plain)              |
+| "\u0085"     | "\N"                    | \u0085 (plain)            |
+| U+2028       | 'U+2028' + 2 spaces     | 'U+2028'                  |
+| "\x1b[0m"    | "\e[0m"                 | \x1b[0m (plain)           |
+
+So render already prints =1= for =1.0= (iidy-hs matches); only get-import
+(=SeqFlush=) prints =1.0=. The control-character escapes also differ by
+command (get-import uses YAML escapes =\N=, =\e=, =\0=, =\b=, =\f=, =\v=,
+=\a=, =﻿=; render emits odd unquoted/single-quoted text with literal
+backslash escapes). The emitter has one scalar path shared by both.
+
+Decisions needed: (a) allow a parser/number-representation change (outside the
+allowed paths) so get-import can print =1.0=, and how to represent =.inf=;
+(b) whether the control-character fix targets get-import only (keyed on
+=SeqFlush= or a new style parameter) and whether render's odd output should
+also be copied. Not run: iidy-hs itself (no build made yet).
