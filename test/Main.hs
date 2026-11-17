@@ -52,6 +52,7 @@ import Test.S3ObjectsTest (s3ObjectsTests)
 import Test.SecurityControlsTest (securityControlsTests)
 import Test.SpecConformanceTest (specConformanceTests)
 import Test.StackArgsBootstrapTest (stackArgsBootstrapTests)
+import Test.StackArgsFieldsTest (stackArgsFieldsTests)
 import Test.StackArgsLoaderTest (stackArgsLoaderTests)
 import Test.StackOpsConverterTest (stackOpsConverterTests)
 import Test.TemplateApprovalTest (templateApprovalTests)
@@ -81,6 +82,7 @@ main = do
             , testGroup "ErrorFixtures" errorTests
             , testGroup "StackArgsLoader" stackArgsLoaderTests
             , testGroup "StackArgsBootstrap" stackArgsBootstrapTests
+            , testGroup "StackArgsFields" stackArgsFieldsTests
             , testGroup "ConvertStack" convertStackTests
             , testGroup "TemplateHash" templateHashTests
             , testGroup "CliParser" cliParserTests

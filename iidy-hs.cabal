@@ -200,6 +200,7 @@ test-suite iidy-hs-test
     Test.FixtureTest
     Test.ErrorFixtureTest
     Test.StackArgsBootstrapTest
+    Test.StackArgsFieldsTest
     Test.StackArgsLoaderTest
     Test.ConvertStackTest
     Test.TemplateHashTest
