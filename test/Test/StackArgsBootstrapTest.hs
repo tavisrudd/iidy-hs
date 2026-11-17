@@ -12,7 +12,13 @@ import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
 import Iidy.Aws.CredentialSource (AwsSettings (..))
-import Iidy.Cfn.StackArgsBootstrap (importSettingsMismatch, loadStackArgsBootstrapped)
+import Iidy.Cfn.StackArgsBootstrap (
+    checkImportSettings,
+    importSettingsMismatch,
+    loadAndCheckWith,
+    loadRecordingImportSettings,
+    loadStackArgsBootstrapped,
+ )
 import Iidy.Cfn.StackArgsLoader (CredentialField (..), LoadedStackArgs (..), RawField (..), readRawField)
 import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..))
 import Iidy.Yaml.Imports.Types (RemoteImports (..), importPolicy)
@@ -88,6 +94,28 @@ stackArgsBootstrapTests =
     , testCase "backstop: a Region set only after preprocessing is refused" $ do
         err <- expectJust (importSettingsMismatch "f.yaml" literalSettings{awsRegion = Nothing} literalSettings)
         mapM_ (assertMentions err) ["Region", "not set", "eu-west-1", "--region"]
+    , testCase "seam: the load records the settings an ssm: import ran with" $ do
+        (result, recorded) <- loadRecording "literal-ssm.yaml"
+        _ <- expectRight result
+        recorded @?= Just literalSettings
+    , testCase "seam: a load with no AWS import records no settings" $ do
+        (result, recorded) <- loadRecording "computed-region-no-aws.yaml"
+        _ <- expectRight result
+        recorded @?= Nothing
+    , testCase "seam: import settings that differ from the final ones refuse the load" $ do
+        -- The plain-only check keeps a real load's recorded and final
+        -- settings equal, so stand in for an import that ran elsewhere.
+        mock <- newMockAws
+        (factory, _) <- recordingEnvFactory mock
+        let elsewhere = literalSettings{awsProfile = Just "import-profile"}
+            tampered argsfile env op cli policy = do
+                (result, _) <- loadRecordingImportSettings factory argsfile env op cli policy
+                pure (result, Just elsewhere)
+        result <- loadAndCheckWith tampered (fixturePath "literal-ssm.yaml") "dev" OpCreateStack noAwsSettings (importPolicy AllowRemoteImports)
+        err <- expectLeft result
+        Just err @?= importSettingsMismatch (T.pack (fixturePath "literal-ssm.yaml")) elsewhere literalSettings
+    , testCase "seam: the comparison passes a failed load through" $
+        checkImportSettings "f.yaml" (Just literalSettings) (Left "parse failed") @?= Left "parse failed"
     , testCase "a factory failure with an ssm: import reports its cause" $ do
         result <-
             loadStackArgsBootstrapped
@@ -120,6 +148,13 @@ loadWithMock cliAws fixture = do
     (factory, askedFor) <- recordingEnvFactory mock
     result <- loadStackArgsBootstrapped factory (fixturePath fixture) "dev" OpCreateStack cliAws (importPolicy AllowRemoteImports)
     BootstrapRun result <$> askedFor <*> readIORef (mockRequests mock)
+
+-- | Load a fixture through the recording step alone, with a mock factory.
+loadRecording :: FilePath -> IO (Either Text LoadedStackArgs, Maybe AwsSettings)
+loadRecording fixture = do
+    mock <- newMockAws
+    (factory, _) <- recordingEnvFactory mock
+    loadRecordingImportSettings factory (fixturePath fixture) "dev" OpCreateStack noAwsSettings (importPolicy AllowRemoteImports)
 
 fixturePath :: FilePath -> FilePath
 fixturePath name = "test-fixtures/stack-args-bootstrap/" <> name

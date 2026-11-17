@@ -16,6 +16,10 @@ module Iidy.Cfn.StackArgsBootstrap (
     loadStackArgsBootstrapped,
 
     -- * Internal (exported for testing)
+    RecordingLoad,
+    loadAndCheckWith,
+    loadRecordingImportSettings,
+    checkImportSettings,
     importSettingsMismatch,
 ) where
 
@@ -51,6 +55,9 @@ import Iidy.Yaml.Imports.Types (ImportError (..), ImportPolicy, importNeedsAwsEn
 factory at the first AWS import. Production passes
 'Iidy.Aws.Config.createAwsEnvFromSettings'; tests pass a mock factory and
 inspect the settings it was asked for.
+
+It is exactly 'loadRecordingImportSettings' followed by
+'checkImportSettings', composed by 'loadAndCheckWith'.
 -}
 loadStackArgsBootstrapped ::
     -- | AWS env factory
@@ -64,24 +71,63 @@ loadStackArgsBootstrapped ::
     AwsSettings ->
     ImportPolicy ->
     IO (Either Text LoadedStackArgs)
-loadStackArgsBootstrapped mkEnv argsfile environment operation cliAws policy = do
+loadStackArgsBootstrapped mkEnv = loadAndCheckWith (loadRecordingImportSettings mkEnv)
+
+{- | A load that also returns the settings its AWS imports ran with, as
+'loadRecordingImportSettings' does.
+-}
+type RecordingLoad =
+    -- | argsfile path
+    FilePath ->
+    -- | environment name
+    Text ->
+    CfnOperation ->
+    -- | CLI-provided AWS settings
+    AwsSettings ->
+    ImportPolicy ->
+    IO (Either Text LoadedStackArgs, Maybe AwsSettings)
+
+-- | Run a recording load, then compare with 'checkImportSettings'.
+loadAndCheckWith ::
+    RecordingLoad ->
+    FilePath ->
+    Text ->
+    CfnOperation ->
+    AwsSettings ->
+    ImportPolicy ->
+    IO (Either Text LoadedStackArgs)
+loadAndCheckWith load argsfile environment operation cliAws policy = do
+    (loaded, importSettings) <- load argsfile environment operation cliAws policy
+    pure (checkImportSettings (T.pack argsfile) importSettings loaded)
+
+{- | Load a stack-args file with 'bootstrapLoader', returning the result and
+the settings the import environment was built with ('Nothing' when no AWS
+import built one).
+-}
+loadRecordingImportSettings :: (AwsSettings -> IO Amazonka.Env) -> RecordingLoad
+loadRecordingImportSettings mkEnv argsfile environment operation cliAws policy = do
     ranWith <- newIORef Nothing
     loaded <-
         loadStackArgsWith
             policy
-            (bootstrapLoader ranWith mkEnv argsfileText environment cliAws policy)
+            (bootstrapLoader ranWith mkEnv (T.pack argsfile) environment cliAws policy)
             argsfile
             environment
             operation
             cliAws
     importSettings <- readIORef ranWith
-    pure $ do
-        result <- loaded
-        case importSettings >>= \settings -> importSettingsMismatch argsfileText settings (lsaMergedAws result) of
-            Just err -> Left err
-            Nothing -> Right result
-  where
-    argsfileText = T.pack argsfile
+    pure (loaded, importSettings)
+
+{- | The backstop: refuse a successful load whose final merged settings
+differ from the settings its AWS imports ran with (first argument after the
+argsfile path); pass anything else through.
+-}
+checkImportSettings :: Text -> Maybe AwsSettings -> Either Text LoadedStackArgs -> Either Text LoadedStackArgs
+checkImportSettings argsfile importSettings loaded = do
+    result <- loaded
+    case importSettings >>= \settings -> importSettingsMismatch argsfile settings (lsaMergedAws result) of
+        Just err -> Left err
+        Nothing -> Right result
 
 {- | The refusal when the AWS imports ran with settings (first argument)
 that differ from the final merged settings (second argument), or 'Nothing'
