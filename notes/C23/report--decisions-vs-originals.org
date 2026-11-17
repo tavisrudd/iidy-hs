@@ -1,0 +1,257 @@
+#+title: Open decisions checked against the Rust and TypeScript originals
+
+Research for the supervisor, 2026-11-16. No code was changed. Sources:
+=~/src/iidy= (Rust port, binary =target/debug/iidy=), =~/src/iidy-js=
+(TypeScript original; no =node_modules=, so it was read, not run), and
+=~/src/iidy-hs= (binary from =cabal list-bin iidy-hs=, possibly slightly
+stale). Line numbers refer to those checkouts. Verdicts: SETTLED (Rust and
+TypeScript agree, or Rust follows clear TypeScript intent), SETTLED-BY-TS
+(Rust diverged from clear TypeScript intent), OPEN (originals disagree or are
+silent).
+
+* Summary table
+
+| Decision          | Rust        | TS          | Verdict | Answer           |
+|-------------------+-------------+-------------+---------+------------------|
+| 1 escape order    | source      | source (a)  | SETTLED | source order     |
+| 2 seq indent      | flush       | indented    | BY-TS   | keep indented    |
+| 2 toYaml newline  | kept (b)    | kept        | BY-TS   | keep pipe        |
+| 2 toYamlString nl | stripped    | kept        | OPEN    | keep strip       |
+| 3 C18 ctrl chars  | raw         | raw         | OPEN    | escape (card)    |
+| 4 C20 limits      | none (c)    | none        | OPEN    | add card caps    |
+| 5 C17 AWS imports | impossible  | raw keys    | BY-TS   | allow, fail shut |
+| 6 C19 error text  | Error{code} | message     | OPEN    | code: message    |
+| 7 C29 --format    | late check  | parse time  | BY-TS   | parse, yaml/json |
+| 8 C15 questions   | see 8       | see 8       | 1-2 set | 3-6 OPEN         |
+| 8 C16 questions   | see 8       | see 8       | 6 set   | 2 and 5 OPEN     |
+| 9 C7 render env   | none        | eager       | BY-TS   | yes, lazy        |
+
+(a) JavaScript hoists integer-like keys (="2"=, ="10"=) to the front.
+(b) The helper keeps the newline; Rust's =render= emitter then drops it.
+(c) Imported YAML parsed through =serde_yaml_ng= inherits its depth and
+alias-repetition limits; the root template parser (tree-sitter) has none.
+"BY-TS" is SETTLED-BY-TS. "pipe" is the YAML =|= block indicator. "fail
+shut" means fail closed.
+
+* 1. =!$escape= key order
+
+- Rust: =resolve_escape= (=src/yaml/resolution/resolver.rs:1843=) and
+  =ast_to_value_without_preprocessing= (=:596-617=) build a
+  =serde_yaml::Mapping=, which keeps insertion order. Run: =out: !$escape
+  {zeta, alpha, mid, "10", "2"}= renders in that order.
+- TypeScript: =visit$escape= returns =node.data= unchanged
+  (=src/preprocess/visitor.ts:178-180=), a plain object from js-yaml, dumped
+  with =sortKeys= off (=src/yaml.ts:234-236=). Order is source order, except
+  that integer-like keys come first in ascending numeric order (a JavaScript
+  object property rule, not a design choice).
+- iidy-hs: sorted (='10'=, ='2'=, =alpha=, =mid=, =zeta=), through
+  =astToValueRaw= into an aeson =Value=.
+- Verdict SETTLED: source order. Do not copy the JavaScript integer-key
+  hoisting.
+
+* 2. YAML emitters that indent sequences
+
+All TypeScript YAML output goes through js-yaml 3.14.1 =safeDump=
+(=src/yaml.ts:234-236=, or =jsyaml.dump= directly for =param=). With its
+default =noArrayIndent: false= it indents a sequence under a mapping key
+(=key:\n  - x=), the same shape as Rust's =render= emitter
+(=serialize_yaml_iidy_js_compatible=, written to match iidy-js). Rust's other
+callers use =serde_yaml::to_string= (flush dashes) for convenience, not to
+match anything.
+
+- =!$toYamlString=: TypeScript =yaml.dump= (=visitor.ts:323-328=); Rust
+  =resolver.rs:1781-1789=.
+- handlebars =toYaml=: TypeScript =yaml.dump= (=preprocess/index.ts:42=);
+  Rust =helpers/serialization.rs:56=.
+- rendered template text: TypeScript =yaml.dump=
+  (=cfn/loadCFNTemplate.ts:46=); Rust =cfn/template_loader.rs:135-143=.
+- =param= YAML: TypeScript =jsyaml.dump= (=params/index.ts:178-273=); Rust
+  =params/mod.rs:234=.
+- =get-import= YAML: TypeScript =yaml.dump= (=getImport.ts:20-21=); Rust
+  =cfn/get_import.rs:56=.
+
+- Verdict SETTLED-BY-TS for the four callers: keep them indented, which is
+  what iidy-hs does now. Note the last row: TypeScript =get-import= is
+  indented too, so C25's switch of =get-import= to flush dashes follows Rust
+  against TypeScript; worth a second look by whoever owns C25.
+- Handlebars =toYaml= trailing newline: the helper returns a string ending
+  in a newline in all three (TypeScript =yaml.dump=; Rust
+  =serde_yaml::to_string=, =serialization.rs:56-59=, no trim). The =|-= seen
+  in Rust comes from its =render= emitter, which picks =|-= for any
+  multi-line string whose lines are all under 20 characters
+  (=src/yaml/emitter.rs:419-431=) and so drops the final newline. Run:
+  =x: |\n  short\n  lines\n= renders as =x: |-= in Rust while =--format
+  json= shows ="short\nlines\n"=, so the Rust YAML output changes the data.
+  js-yaml emits =|= for a single trailing newline. Verdict SETTLED-BY-TS:
+  iidy-hs's =|= is right; do not copy the Rust heuristic.
+- =!$toYamlString= trailing newline (side finding): TypeScript keeps it and
+  its test pins it (=src/tests/test-yaml-preprocessing.ts:525-527=, expects
+  ='a: 1\n'=). Rust strips it on purpose (=resolver.rs:1785-1786=, "to match
+  expected format"); iidy-hs strips too. OPEN; recommend keeping Rust's
+  strip (it is a value change, not formatting) and recording the difference
+  from TypeScript in =DIVERGENCES.md=.
+
+* 3. C18 control characters in terminal output
+
+- TypeScript: no filtering anywhere. Stack event reasons are written raw
+  (=src/cfn/displayStackEvent.ts:28=, then =process.stdout.write=), output
+  values raw (=src/cfn/summarizeStackContents.ts:49=), errors as
+  =error.message= through winston (=src/cli/utils.ts:30-35=,
+  =src/logger.ts:32=).
+- Rust: no filtering. Event reasons
+  (=src/output/renderers/interactive.rs:1101-1115=) and output values
+  (=:1456=) are printed raw; the only =\uNNNN= escaping is inside
+  YAML double-quoted scalars (=src/yaml/emitter.rs:475=).
+- Verdict OPEN: both originals print raw text, so filtering is a deliberate
+  divergence (the card says so). Recommend adopting the proposed scheme
+  (=\uNNNN= for C0, DEL, C1, U+2028/9 and bidi controls; raw template output
+  exempt).
+
+* 4. C20 resource limits
+
+- Rust:
+  - Aliases: the tree-sitter parser deep-clones the anchored AST on each
+    alias (=src/yaml/parsing/parser.rs:599-616=), no count. Run: a 5-level
+    block-style alias file (10 per level) renders 1.5 MB in 0.2 s, 93 MB
+    peak, no error. (Flow-style anchors such as =&a [x, x]= render as
+    =null= in Rust, a separate parser bug.)
+  - Imports: only the circular check (=src/yaml/engine.rs:82=); no depth
+    or count limit.
+  - Imported YAML content parsed with =serde_yaml::from_str=
+    (=src/yaml/imports/loaders/utils.rs:15=, =:28=) inherits that crate's
+    nesting limit of 128 and its alias "repetition limit exceeded" check
+    (seen in =serde_yaml= 0.9.34 =de.rs:112=, =error.rs:224=; the
+    =serde_yaml_ng= fork used by Rust is assumed to keep them). The root
+    template does not go through it.
+  - Handlebars =pad= (=src/yaml/handlebars/helpers/string_manip.rs:162=):
+    no width cap.
+  - HTTP: =reqwest::Client::new()= (=src/yaml/imports/loaders/mod.rs:69=),
+    =text()= with no timeout and no size cap (=loaders/http.rs:17=).
+- TypeScript:
+  - js-yaml 3.14.1 keeps aliases as shared references at load, but every
+    dump uses =noRefs: true= (=src/yaml.ts:236=, =:245-247=), which expands
+    them in the output; js-yaml 3 has no alias-count option.
+  - Imports: =loadImports= recurses with no cycle check and no depth limit
+    (=src/preprocess/index.ts:471-528=, recursion at =:524-527=).
+  - HTTP: =request.get(location)= with no timeout or size option
+    (=src/preprocess/index.ts:382=).
+  - Handlebars: stock helpers plus =handlebars-helpers= =string= group; no
+    limits.
+- Verdict OPEN: neither original limits anything except Rust's cycle check
+  and the incidental =serde_yaml= limits on imported content. Recommend the
+  card's proposed caps, recorded as a divergence.
+
+* 5. C17 AWS imports in stack-args
+
+TypeScript allows them and builds AWS access from the raw fields first:
+=_loadStackArgs= (=src/cfn/loadStackArgs.ts:67-181=).
+- =:91-110=: "chicken-and-egg situation between use of imports for profile
+  or region and the call to configureAWS. We need to enforce that they be
+  plain strings with no pre-processor magic." For =Profile=,
+  =AssumeRoleARN= and =Region=: a mapping is an environment map indexed by
+  =--environment= (error =environment "X" not found in Profile map= if
+  absent); any other non-string fails with "The Profile setting in
+  stack-args.yaml must be a plain string or an environment map of
+  strings." A tagged value (=!$ ...=) loads as a js-yaml tag object, so it
+  takes the mapping branch and fails too.
+- =:111-118=: CLI =--region=, =--profile=, =--assume-role-arn= override the
+  file values (=_.merge=), then =configureAWS= runs, "before the call to
+  transform as $imports might make AWS api calls".
+- =:169=: =transform= (imports included) runs under that configuration.
+- =configureAWS= (=src/configureAWS.ts:86-101=) resolves credentials eagerly
+  and sets the region globally.
+
+Rust cannot run AWS imports there (card C17 cites
+=src/cfn/stack_args.rs:181-262=, =src/yaml/engine.rs:578=). Verdict
+SETTLED-BY-TS: keep AWS imports in stack-args; build the environment from
+the raw =Profile=, =Region=, =AssumeRoleARN= (plain string or environment
+map) merged under CLI overrides; fail closed with an error when any of the
+three is computed by a tag. That matches the card's default decision and
+replaces iidy-hs's silent ambient fallback with TypeScript's error.
+
+* 6. C19 AWS service error wording
+
+- TypeScript: =logger.error(error.message)= (=src/cli/utils.ts:33=), format
+  =<level> <message>= (=src/logger.ts:32=). aws-sdk v2 puts only the
+  service message in =message=; the code is not printed. No request headers.
+- Rust: errors are matched by keyword into fixed sentences (expired
+  credentials, access denied, invalid token, network) in
+  =src/output/aws_conversion.rs:554-657= and =src/aws/mod.rs:35-71=;
+  otherwise =AWS error - <last error in chain>=
+  (=aws_conversion.rs:660=, =aws/mod.rs:68=). Run against a local fake
+  CloudFormation endpoint (=AWS_ENDPOINT_URL=, fake keys, error code
+  =SomeServiceError=): =ERROR: AWS error - Error { code:
+  "SomeServiceError", message: "Something went wrong here" }=. A missing
+  stack is special-cased (=aws_conversion.rs:515-517=: "The stack X is
+  absent").
+- iidy-hs prints =<code>: <message>=. Caution: the iidy-hs binary ignored
+  =AWS_ENDPOINT_URL= in the same probe and reached real AWS with the fake
+  keys (reply =InvalidClientTokenId=); do not probe iidy-hs that way.
+- Neither original prints request headers or tokens, so the redaction
+  itself is settled by parity. Verdict OPEN on wording: the originals
+  disagree. Recommend keeping =<code>: <message>= as proposed; it carries
+  the TypeScript message plus the code Rust shows, without Rust's debug
+  struct syntax.
+
+* 7. C29 =get-import --format=
+
+- TypeScript: yargs option with =choices: ['yaml', 'json']=, default
+  =yaml=, =.strict()= (=src/main.ts:355-371=). Rejected at parse time,
+  before the import loads, case-sensitive, no =yml=. =getImportMain=
+  treats anything not ='yaml'= as JSON (=src/getImport.ts:20-24=).
+  =render= has the same two choices (=main.ts:339-343=).
+- Rust: =format: String= (=src/cli.rs:576= area), checked after loading:
+  "Unsupported format: 'X'. Use 'yaml' or 'json'." (=src/cfn/get_import.rs:72=).
+- Verdict SETTLED-BY-TS: reject at the command line (the card's proposal),
+  but accept exactly =yaml= and =json=; drop =yml= and case-insensitive
+  spellings, which both originals reject.
+
+* 8. C15 and C16 questions
+
+C15 ([[file:../C15/report--remote-template-options.org][report]]):
+1. Isolation scope: SETTLED; Rust (=engine.rs:409=) and TypeScript
+   (=index.ts:478=, =visitor.ts:581-605=) isolate all imported documents.
+2. Custom templates: SETTLED-BY-TS, isolate all (=visitor.ts:190-203=,
+   =:797-805=); Rust keeps parent variables, so Tavis may still choose
+   "untrusted only" to limit the Rust-parity break.
+3. Blocking AWS imports from untrusted documents: OPEN; both originals allow
+   them.
+4. HTTP address filter: OPEN; neither original filters.
+5. =--trust-import-source=: OPEN; no such option in either.
+6. Documents loaded via =ssm:=/=cfn:= as untrusted: OPEN; no trust model in
+   either.
+
+C16 ([[file:../C16/report--approval-ts-review.org][report]]):
+1. Enforcement: SETTLED-BY-TS, option A (deploy from the approved object
+   URL, =src/cfn/stackArgsToX.ts:33-35=).
+2. Hash: OPEN; TypeScript MD5, Rust SHA256 on purpose (=633c9e8=).
+   Recommend SHA256.
+3. =TemplateURL= form: SETTLED-BY-TS, presigned (=loadCFNTemplate= and
+   =src/cfn/maybeSignS3HttpUrl.ts:39-49=); a regional host is a safe
+   improvement on its us-east-1 default.
+4. Empty-diff review: SETTLED-BY-TS, prompt and write on yes
+   (=approval/index.ts:115-144=).
+5. Lint with approval on: OPEN; TypeScript skips it only because lint
+   (=ef75a35=) was added beside the swap. Recommend linting the local
+   body.
+6. URL =Template= with approval: SETTLED-BY-TS, refuse
+   (=approvedTemplateVersionLocation.ts:25=), with a clearer message.
+7. estimate-cost: SETTLED-BY-TS, included; it uses the same
+   =stackArgsToCreateStackInput= (=src/cfn/estimateStackCost.ts:9-11=).
+8. Request-side gaps: SETTLED-BY-TS on behaviour (ACL, lint, 1 MB,
+   presign as TypeScript does); in C16 or separate cards is a scheduling
+   choice.
+
+* 9. C7: AWS environment for =render=
+
+- TypeScript: =renderMain= calls =configureAWS(argv)= first
+  (=src/render.ts:31=), and a stack-args file is rendered through
+  =_loadStackArgs= (=:70-72=), which configures AWS from the file as in item
+  5. =get-import= does the same (=src/getImport.ts:10=). =configureAWS=
+  resolves credentials eagerly (=configureAWS.ts:62-73=), so TypeScript
+  =render= needs credentials even for a template with no AWS imports.
+- Rust: =render.rs:31-33= calls =preprocess_yaml= with no AWS config.
+- Verdict SETTLED-BY-TS: give =render= an AWS environment from the global
+  options, built lazily as Rust's =get-import= does (C7), so local-only
+  templates keep working without credentials; a stack-args file rendered
+  by =render= should use the stack-args AWS rules from item 5.

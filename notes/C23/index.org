@@ -130,3 +130,5 @@ branches for supervised workers, builds through =guarded-build=, and the
 runtime directory =~/.cache/iidy-hs/=. Runtime directories created:
 =~/.cache/iidy-hs/{supervisor,tmp,worktrees}= with an empty
 =mailbox.log=.
+
+Decisions checked against the originals: [[file:report--decisions-vs-originals.org][report]]
