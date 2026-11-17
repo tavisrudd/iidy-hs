@@ -7,6 +7,8 @@ module Iidy.Cfn.S3Objects (
     HeadResult (..),
     headObject,
     bucketRegion,
+    presignGetObject,
+    presignExpiry,
     s3ObjectExists,
     ObjectAcl (..),
     uploadToS3,
@@ -20,6 +22,7 @@ import Data.ByteString qualified as BS
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
+import Data.Time (UTCTime)
 import Network.HTTP.Types.Status (statusCode)
 
 import Amazonka qualified
@@ -105,6 +108,21 @@ bucketRegion awsEnv bucket = do
     pure $ case result of
         Left ex -> Left (T.pack (show ex))
         Right resp -> Right (S3.constraintRegion resp.locationConstraint)
+
+{- | How long a presigned URL stays valid: 900 seconds, the aws-sdk v2
+@getSignedUrl@ default iidy-js relied on.
+-}
+presignExpiry :: Amazonka.Seconds
+presignExpiry = 900
+
+{- | A presigned HTTPS @GetObject@ URL for an object, signed with the env's
+current credentials for the env's region at the given time. Makes no HTTP
+call.
+-}
+presignGetObject :: Amazonka.Env -> UTCTime -> Text -> Text -> IO Text
+presignGetObject awsEnv signingTime bucket key = do
+    let req = GO.newGetObject (S3.BucketName bucket) (S3.ObjectKey key)
+    TE.decodeUtf8Lenient <$> Amazonka.presignURL awsEnv signingTime presignExpiry req
 
 -- | Upload content to S3 with the given ACL.
 uploadToS3 :: Amazonka.Env -> ObjectAcl -> Text -> Text -> Text -> IO (Either Text ())
