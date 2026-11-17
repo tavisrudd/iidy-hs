@@ -218,6 +218,8 @@ test-suite iidy-hs-test
     Test.GetImportTest
     Test.RenderTest
     Test.MockAws
+    Test.MockAwsTest
+    Test.MockCfnContext
     Test.ErrorIdTest
     Test.ErrorClassificationTest
     Test.ResolverTest

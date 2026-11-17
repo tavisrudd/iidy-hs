@@ -31,6 +31,7 @@ import Test.IntegrationTest (integrationTests)
 import Test.JMESPathTest (jmespathTests)
 import Test.JsonRendererTest (jsonRendererTests)
 import Test.JsonSchemaTest (jsonSchemaTests)
+import Test.MockAwsTest (mockAwsTests)
 import Test.OValueTest (oValueTests)
 import Test.ParamsClientTest (paramsClientTests)
 import Test.ParserTest (parserTests)
@@ -94,6 +95,7 @@ main = do
             , testGroup "ImportLoaders" importLoaderTests
             , testGroup "AwsLoaders" awsLoaderTests
             , testGroup "GetImport" getImportTests
+            , testGroup "MockAws" mockAwsTests
             , testGroup "Explain" explainTests
             , testGroup "Demo" demoTests
             , testGroup "Render" renderTests
