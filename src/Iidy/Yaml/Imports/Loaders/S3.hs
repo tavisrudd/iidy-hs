@@ -22,7 +22,7 @@ import Amazonka.S3.GetObject qualified as GO
 import Data.Conduit (ConduitT, await)
 
 import Iidy.Constants (httpMaxResponseBytes)
-import Iidy.Yaml.Imports.ContentParsing (parseByExtensionStrict)
+import Iidy.Yaml.Imports.ContentParsing (ParsedDoc (..), parseByExtensionStrict)
 import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..))
 
 ------------------------------------------------------------------------
@@ -58,13 +58,14 @@ loadS3Import awsEnv location = do
                                 ext = T.unpack (extractExtension keyText)
                              in case parseByExtensionStrict ext content bs of
                                     Left err -> pure (Left err)
-                                    Right doc ->
+                                    Right (ParsedDoc doc ordered) ->
                                         pure $
                                             Right $
                                                 ImportData
                                                     { idType = ImportS3
                                                     , idLocation = location
                                                     , idRawData = content
+                                                    , idOrdered = ordered
                                                     , idDoc = doc
                                                     }
                 )

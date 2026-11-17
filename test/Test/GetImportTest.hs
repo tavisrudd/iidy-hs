@@ -17,7 +17,7 @@ import Iidy.Cli (GetImportArgs (..), RenderFormat (..))
 import Iidy.GetImport (needsAwsEnv, runGetImportWith)
 import Iidy.Yaml.Imports.Types (ImportType (..), RemoteImports (..))
 import Test.MockAws (MockAws (..), newMockAws)
-import Test.Shared (collectRawOutput, docFixture, listFixture, nestedSeqFixture, preprocTagsFixture, testGlobalOpts)
+import Test.Shared (collectRawOutput, docFixture, listFixture, nestedSeqFixture, orderedJsonFixture, orderedNestedFixture, orderedYamlFixture, preprocTagsFixture, testGlobalOpts)
 
 getImportTests :: [TestTree]
 getImportTests =
@@ -27,6 +27,7 @@ getImportTests =
     , testGroup "query and output layout" outputTests
     , testGroup "serde_yaml sequence layout" sequenceLayoutTests
     , testGroup "unresolved tags in plain documents" preprocTagTests
+    , testGroup "document key order" keyOrderTests
     , testCase "needsAwsEnv classifies every import type" needsAwsEnvTable
     ]
 
@@ -252,3 +253,31 @@ preprocTagTests =
         runFormat RenderYaml Nothing preprocTagsFixture
             >>= (@?= RunResult 0 [preprocTagsRustYaml] 0)
     ]
+
+------------------------------------------------------------------------
+-- Document key order (Rust keeps it for unqueried YAML output only)
+------------------------------------------------------------------------
+
+keyOrderTests :: [TestTree]
+keyOrderTests =
+    [ testCase "yaml: top-level keys keep document order" $
+        yamlOf orderedYamlFixture ["z:", "- 1", "a: 2"]
+    , testCase "yaml: nested keys keep document order" $
+        yamlOf orderedNestedFixture ["k:", "  z: 1", "  a: 2", "m: x"]
+    , testCase "yaml: a .json file keeps its key order" $
+        yamlOf orderedJsonFixture ["z: 1", "a:", "  y: 1", "  b: 2"]
+    , testCase "json: output stays sorted" $
+        runFormat RenderJson Nothing orderedYamlFixture
+            >>= (@?= RunResult 0 ["{\n  \"a\": 2,\n  \"z\": [\n    1\n  ]\n}\n"] 0)
+    , testCase "query: a result stays sorted" $
+        runFormat RenderYaml (Just "@") orderedNestedFixture
+            >>= (@?= RunResult 0 [T.unlines ["k:", "  a: 2", "  z: 1", "m: x"]] 0)
+    , testCase "query: a sub-document stays sorted" $
+        runFormat RenderYaml (Just "k") orderedNestedFixture
+            >>= (@?= RunResult 0 [T.unlines ["a: 2", "z: 1"]] 0)
+    , testCase "yaml: an env: scalar is unchanged" $
+        runFormat RenderYaml Nothing "env:IIDY_C28_UNSET_VAR:fallback"
+            >>= (@?= RunResult 0 ["fallback\n"] 0)
+    ]
+  where
+    yamlOf loc ls = runFormat RenderYaml Nothing loc >>= (@?= RunResult 0 [T.unlines ls] 0)

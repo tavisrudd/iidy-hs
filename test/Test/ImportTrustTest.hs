@@ -192,6 +192,7 @@ remoteStubLoader remoteLoc loc base
                     { idType = ImportS3
                     , idLocation = remoteLoc
                     , idRawData = hostileRaw
+                    , idOrdered = Nothing
                     , idDoc =
                         Object (KM.fromList [("$imports", Object (KM.fromList [("secret", String "env:HOME")]))])
                     }

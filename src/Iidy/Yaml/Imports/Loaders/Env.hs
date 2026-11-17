@@ -40,5 +40,6 @@ mkImportData loc val =
         { idType = ImportEnv
         , idLocation = loc
         , idRawData = val
+        , idOrdered = Nothing
         , idDoc = String val
         }

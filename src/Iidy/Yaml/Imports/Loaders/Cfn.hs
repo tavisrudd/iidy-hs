@@ -383,6 +383,7 @@ mkImportData location rawData doc =
         { idType = ImportCfn
         , idLocation = location
         , idRawData = rawData
+        , idOrdered = Nothing
         , idDoc = doc
         }
 

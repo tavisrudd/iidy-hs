@@ -2,6 +2,7 @@ module Iidy.Yaml.Resolution.Resolver (
     resolveAst,
     astToValueRaw,
     astToValueKeepingTags,
+    astToOValueKeepingTags,
     mergeOObjects,
     traversePathO,
     ResolveError (..),
@@ -919,7 +920,11 @@ becoming the string @!$escaped@. Used for plain imported documents, which Rust
 loads without resolving their tags.
 -}
 astToValueKeepingTags :: YamlAst -> Value
-astToValueKeepingTags = toValue . rawToOValue KeepPreprocTags
+astToValueKeepingTags = toValue . astToOValueKeepingTags
+
+-- | 'astToValueKeepingTags' with mapping keys in source order.
+astToOValueKeepingTags :: YamlAst -> OValue
+astToOValueKeepingTags = rawToOValue KeepPreprocTags
 
 -- | What 'rawToOValue' does with a preprocessing tag.
 data PreprocTagMode = EscapePreprocTags | KeepPreprocTags

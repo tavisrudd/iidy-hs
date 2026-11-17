@@ -12,6 +12,9 @@ module Test.Shared (
     testGlobalOpts,
     collectRawOutput,
     docFixture,
+    orderedYamlFixture,
+    orderedNestedFixture,
+    orderedJsonFixture,
     nestedSeqFixture,
     preprocTagsFixture,
     preprocTagsImporterFixture,
@@ -575,3 +578,15 @@ preprocTagsFixture = "test-fixtures/get-import/preproc-tags.yaml"
 -- | render fixture: imports plain documents with tag arguments of every shape (scalar, mapping, sequence), so the tags must survive the import.
 preprocTagsImporterFixture :: Text
 preprocTagsImporterFixture = "test-fixtures/get-import/preproc-tags-importer.yaml"
+
+-- | Top-level keys @z@, @a@ (C28).
+orderedYamlFixture :: Text
+orderedYamlFixture = "test-fixtures/get-import/ordered.yaml"
+
+-- | A nested mapping with keys @z@, @a@ (C28).
+orderedNestedFixture :: Text
+orderedNestedFixture = "test-fixtures/get-import/ordered-nested.yaml"
+
+-- | A @.json@ file with unsorted keys (C28).
+orderedJsonFixture :: Text
+orderedJsonFixture = "test-fixtures/get-import/ordered.json"

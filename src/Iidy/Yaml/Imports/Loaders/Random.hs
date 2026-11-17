@@ -39,6 +39,7 @@ mkResult loc val =
         { idType = ImportRandom
         , idLocation = loc
         , idRawData = val
+        , idOrdered = Nothing
         , idDoc = String val
         }
 

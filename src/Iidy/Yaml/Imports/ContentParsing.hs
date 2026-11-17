@@ -18,7 +18,9 @@ module Iidy.Yaml.Imports.ContentParsing (
     parseByFormatSuffixLenient,
 
     -- * Core parsers (exposed for testing)
+    ParsedDoc (..),
     parseYamlContent,
+    parseYamlOrdered,
     parseJsonContent,
 ) where
 
@@ -32,8 +34,9 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 
 import Iidy.Yaml.Imports.Types (ImportError (..))
+import Iidy.Yaml.OValue (OValue, toValue)
 import Iidy.Yaml.Parser (parseYaml)
-import Iidy.Yaml.Resolution.Resolver (astToValueKeepingTags)
+import Iidy.Yaml.Resolution.Resolver (astToOValueKeepingTags)
 
 ------------------------------------------------------------------------
 -- Core parsers
@@ -43,10 +46,39 @@ import Iidy.Yaml.Resolution.Resolver (astToValueKeepingTags)
 Returns @Left errorMessage@ on parse failure.
 -}
 parseYamlContent :: Text -> Either Text Value
-parseYamlContent content =
+parseYamlContent = fmap toValue . parseYamlOrdered
+
+{- | Parse YAML text to an 'OValue' that keeps mapping keys in source order
+(a duplicate key keeps its first position and takes the last value).
+-}
+parseYamlOrdered :: Text -> Either Text OValue
+parseYamlOrdered content =
     case parseYaml (BL.fromStrict (TE.encodeUtf8 content)) "<import>" of
-        Right ast -> Right (astToValueKeepingTags ast)
+        Right ast -> Right (astToOValueKeepingTags ast)
         Left err -> Left (T.pack (show err))
+
+{- | A parsed import document: the aeson value (sorted keys) the engine uses,
+and, when the text could be read as YAML, the same document in source order.
+-}
+data ParsedDoc = ParsedDoc
+    { pdValue :: !Value
+    , pdOrdered :: !(Maybe OValue)
+    }
+    deriving stock (Show, Eq)
+
+-- | A YAML document: both views come from the one parse.
+yamlDoc :: OValue -> ParsedDoc
+yamlDoc o = ParsedDoc (toValue o) (Just o)
+
+{- | A JSON document. The value stays the aeson parse (numbers and duplicate
+keys as before); the ordered view reads the same text as YAML, as Rust does.
+-}
+jsonDoc :: Text -> Value -> ParsedDoc
+jsonDoc content v = ParsedDoc v (either (const Nothing) Just (parseYamlOrdered content))
+
+-- | A document with no key order to keep (scalars, lenient fallbacks).
+plainDoc :: Value -> ParsedDoc
+plainDoc v = ParsedDoc v Nothing
 
 {- | Parse JSON raw bytes to a 'Value'.
 Returns @Left errorMessage@ on parse failure.
@@ -62,17 +94,17 @@ parseJsonContent rawBytes =
 ------------------------------------------------------------------------
 
 -- | Parse content by file extension, returning 'ImportError' on parse failure.
-parseByExtensionStrict :: String -> Text -> BS.ByteString -> Either ImportError Value
+parseByExtensionStrict :: String -> Text -> BS.ByteString -> Either ImportError ParsedDoc
 parseByExtensionStrict ext content rawBytes
     | ext `elem` [".yaml", ".yml"] =
-        case parseYamlContent content of
-            Right v -> Right v
+        case parseYamlOrdered content of
+            Right o -> Right (yamlDoc o)
             Left err -> Left $ ImportError $ "Failed to parse YAML: " <> err
     | ext == ".json" =
         case parseJsonContent rawBytes of
-            Right v -> Right v
+            Right v -> Right (jsonDoc content v)
             Left err -> Left $ ImportError $ "Failed to parse JSON: " <> err
-    | otherwise = Right (String content)
+    | otherwise = Right (plainDoc (String content))
 
 ------------------------------------------------------------------------
 -- Format-suffix-dispatched variants
@@ -82,19 +114,19 @@ parseByExtensionStrict ext content rawBytes
 returning 'ImportError' on parse failure.
 Used by Ssm loader.
 -}
-parseByFormatSuffix :: Maybe Text -> Text -> Either ImportError Value
-parseByFormatSuffix Nothing val = Right (String val)
+parseByFormatSuffix :: Maybe Text -> Text -> Either ImportError ParsedDoc
+parseByFormatSuffix Nothing val = Right (plainDoc (String val))
 parseByFormatSuffix (Just "json") val =
     case parseJsonContent (TE.encodeUtf8 val) of
-        Right v -> Right v
+        Right v -> Right (jsonDoc val v)
         Left err -> Left $ ImportError $ "Invalid JSON in SSM parameter: " <> err
 parseByFormatSuffix (Just "yaml") val =
-    case parseYamlContent val of
-        Right v -> Right v
+    case parseYamlOrdered val of
+        Right o -> Right (yamlDoc o)
         Left err -> Left $ ImportError $ "Invalid YAML in SSM parameter: " <> err
 parseByFormatSuffix (Just _) val =
     -- Unknown format suffix, treat as no format
-    Right (String val)
+    Right (plainDoc (String val))
 
 {- | Parse content by format suffix, falling back to @String@ on parse failure.
 Used by SsmPath loader.

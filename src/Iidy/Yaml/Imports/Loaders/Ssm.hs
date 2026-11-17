@@ -35,7 +35,7 @@ import Amazonka.SSM.GetParameter qualified as GP
 import Amazonka.SSM.GetParametersByPath qualified as GBP
 import Amazonka.SSM.Types.Parameter qualified as SSMP
 
-import Iidy.Yaml.Imports.ContentParsing (parseByFormatSuffix, parseByFormatSuffixLenient)
+import Iidy.Yaml.Imports.ContentParsing (ParsedDoc (..), parseByFormatSuffix, parseByFormatSuffixLenient)
 import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..))
 
 ------------------------------------------------------------------------
@@ -61,13 +61,14 @@ loadSsmImport awsEnv location = do
                 Right val ->
                     case parseByFormatSuffix formatSuffix val of
                         Left err -> pure (Left err)
-                        Right doc ->
+                        Right (ParsedDoc doc ordered) ->
                             pure $
                                 Right $
                                     ImportData
                                         { idType = ImportSsm
                                         , idLocation = location
                                         , idRawData = val
+                                        , idOrdered = ordered
                                         , idDoc = doc
                                         }
 
@@ -100,6 +101,7 @@ loadSsmPathImport awsEnv location = do
                                     { idType = ImportSsmPath
                                     , idLocation = location
                                     , idRawData = rawData
+                                    , idOrdered = Nothing
                                     , idDoc = obj
                                     }
 

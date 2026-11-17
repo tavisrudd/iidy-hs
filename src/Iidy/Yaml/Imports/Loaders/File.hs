@@ -16,7 +16,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Word (Word8)
-import Iidy.Yaml.Imports.ContentParsing (parseByExtensionStrict)
+import Iidy.Yaml.Imports.ContentParsing (ParsedDoc (..), parseByExtensionStrict)
 import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..))
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import System.FilePath (takeDirectory, takeExtension, (</>))
@@ -43,13 +43,14 @@ loadFileImport location baseLocation = do
                 let ext = takeExtension fullPath
                  in case parseByExtensionStrict ext content bs of
                         Left err -> pure (Left err)
-                        Right doc ->
+                        Right (ParsedDoc doc ordered) ->
                             pure $
                                 Right $
                                     ImportData
                                         { idType = ImportFile
                                         , idLocation = T.pack fullPath
                                         , idRawData = content
+                                        , idOrdered = ordered
                                         , idDoc = doc
                                         }
 
@@ -123,6 +124,7 @@ mkFilehashData resolvedPath hashData base64 =
         { idType = if base64 then ImportFilehashBase64 else ImportFilehash
         , idLocation = T.pack resolvedPath
         , idRawData = hashData
+        , idOrdered = Nothing
         , idDoc = String hashData
         }
 

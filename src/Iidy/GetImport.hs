@@ -14,8 +14,7 @@ module Iidy.GetImport (
 ) where
 
 import Control.Exception (Handler (..), IOException, catches)
-import Data.Aeson qualified as Aeson
-import Data.Bifunctor (first)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
@@ -41,7 +40,7 @@ import Iidy.Yaml.Imports.Types (
     parseImportType,
  )
 import Iidy.Yaml.JMESPath (applyJmesPath)
-import Iidy.Yaml.OValue (fromValue)
+import Iidy.Yaml.OValue (OValue, fromValue)
 
 ------------------------------------------------------------------------
 -- Public API
@@ -125,24 +124,31 @@ reportImportError err = do
 {- | Apply the optional @--query@ to the loaded document, then emit it in the
 requested format (Rust @get_import.rs:45-64@). An invalid query prints the
 error on stderr, writes nothing to stdout and returns 1.
+
+Rust prints an unqueried YAML document in source key order and sorts the
+others (JSON output and query results go through @serde_json@), so only that
+case reads 'idOrdered'.
 -}
 emitDoc :: (OutputData -> IO ()) -> GlobalOpts -> GetImportArgs -> ImportData -> IO Int
 emitDoc emit gopts args importData =
-    case maybe (Right doc) (\q -> first (q,) (applyJmesPath q doc)) (giaQuery args) of
-        Left (query, err) -> do
-            formatted <- formatJMESPathQueryError (goColor gopts) query err
-            TIO.hPutStr stderr formatted
-            pure 1
-        Right queried -> do
-            -- Exhaustive match, no wildcard
-            case giaFormat args of
-                RenderJson -> emit (OdRawOutput (prettyJsonText queried <> "\n"))
-                RenderYaml -> emit (OdRawOutput (yamlWithNewline queried))
-                RenderCfnYaml -> emit (OdRawOutput (yamlWithNewline queried))
-            pure 0
+    case giaQuery args of
+        Nothing -> emitFormat (giaFormat args) (fromMaybe (fromValue doc) (idOrdered importData)) doc
+        Just q -> case applyJmesPath q doc of
+            Left err -> do
+                formatted <- formatJMESPathQueryError (goColor gopts) q err
+                TIO.hPutStr stderr formatted
+                pure 1
+            Right queried -> emitFormat (giaFormat args) (fromValue queried) queried
   where
     doc = idDoc importData
+    -- Exhaustive match, no wildcard
+    emitFormat fmt ordered sorted = do
+        case fmt of
+            RenderJson -> emit (OdRawOutput (prettyJsonText sorted <> "\n"))
+            RenderYaml -> emit (OdRawOutput (yamlWithNewline ordered))
+            RenderCfnYaml -> emit (OdRawOutput (yamlWithNewline ordered))
+        pure 0
 
 -- | YAML text ending in exactly one newline (serde_yaml::to_string).
-yamlWithNewline :: Aeson.Value -> Text
-yamlWithNewline v = T.dropWhileEnd (== '\n') (emitYamlWith SeqFlush (fromValue v)) <> "\n"
+yamlWithNewline :: OValue -> Text
+yamlWithNewline v = T.dropWhileEnd (== '\n') (emitYamlWith SeqFlush v) <> "\n"

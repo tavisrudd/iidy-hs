@@ -35,6 +35,7 @@ alwaysSucceedLoader _loc _base =
                 { idType = ImportFile
                 , idLocation = "mock"
                 , idRawData = "value"
+                , idOrdered = Nothing
                 , idDoc = String "value"
                 }
 
@@ -141,6 +142,7 @@ engineTests =
                                         { idType = ImportFile
                                         , idLocation = "outer.yaml"
                                         , idRawData = "$imports:\n  nested: inner.yaml\nvalue: from-outer"
+                                        , idOrdered = Nothing
                                         , idDoc =
                                             Object $
                                                 KM.fromList
@@ -160,6 +162,7 @@ engineTests =
                                         { idType = ImportFile
                                         , idLocation = "inner.yaml"
                                         , idRawData = "hello"
+                                        , idOrdered = Nothing
                                         , idDoc = String "hello"
                                         }
                         other ->
@@ -196,6 +199,7 @@ engineTests =
                                     { idType = ImportFile
                                     , idLocation = "with-defs.yaml"
                                     , idRawData = "$defs:\n  greeting: hello\nresult: \"{{greeting}}\""
+                                    , idOrdered = Nothing
                                     , idDoc =
                                         Object $
                                             KM.fromList
@@ -244,6 +248,7 @@ engineTests =
                                     { idType = ImportFile
                                     , idLocation = "plain.yaml"
                                     , idRawData = "key: value"
+                                    , idOrdered = Nothing
                                     , idDoc =
                                         Object $
                                             KM.fromList

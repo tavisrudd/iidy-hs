@@ -26,7 +26,7 @@ import Network.HTTP.Types.Status (statusCode)
 import System.FilePath (takeExtension)
 
 import Iidy.Constants (httpMaxResponseBytes, httpTimeoutSeconds)
-import Iidy.Yaml.Imports.ContentParsing (parseByExtensionStrict)
+import Iidy.Yaml.Imports.ContentParsing (ParsedDoc (..), parseByExtensionStrict)
 import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..))
 
 ------------------------------------------------------------------------
@@ -73,13 +73,14 @@ loadHttpImport location = do
                         let ext = takeExtension (T.unpack (urlPath location))
                          in case parseByExtensionStrict ext content body of
                                 Left err -> pure (Left err)
-                                Right doc ->
+                                Right (ParsedDoc doc ordered) ->
                                     pure $
                                         Right $
                                             ImportData
                                                 { idType = ImportHttp
                                                 , idLocation = location
                                                 , idRawData = content
+                                                , idOrdered = ordered
                                                 , idDoc = doc
                                                 }
                 else

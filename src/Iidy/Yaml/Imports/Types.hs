@@ -13,6 +13,8 @@ import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Text (Text)
 import Data.Text qualified as T
 
+import Iidy.Yaml.OValue (OValue)
+
 ------------------------------------------------------------------------
 -- Types
 ------------------------------------------------------------------------
@@ -36,6 +38,11 @@ data ImportData = ImportData
     , idLocation :: !Text
     , idRawData :: !Text
     , idDoc :: !Value
+    , idOrdered :: !(Maybe OValue)
+    {- ^ The document with mapping keys in source order, when the loader parsed
+    it from YAML or JSON text. Only unqueried YAML output of get-import reads
+    it; 'Nothing' means use 'idDoc'.
+    -}
     }
     deriving stock (Show, Eq)
 

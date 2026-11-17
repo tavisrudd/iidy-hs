@@ -75,6 +75,7 @@ runGit location prog args = do
                             { idType = ImportGit
                             , idLocation = location
                             , idRawData = value
+                            , idOrdered = Nothing
                             , idDoc = String value
                             }
         Right (ExitFailure code, _stdout, stderr) ->
