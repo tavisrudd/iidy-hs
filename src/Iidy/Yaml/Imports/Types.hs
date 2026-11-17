@@ -5,11 +5,22 @@ module Iidy.Yaml.Imports.Types (
     ImportLoader (..),
     ImportError (..),
     RemoteImports (..),
+    ImportPolicy (..),
+    importPolicy,
+    TrustedSource,
+    trustedSourceText,
+    TrustedSources,
+    noTrustedSources,
+    mkTrustedSources,
+    trustedSourceList,
+    parseTrustedSource,
+    isTrustedBase,
     parseImportType,
 ) where
 
 import Data.Aeson (Value)
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
+import Data.List qualified as List
 import Data.Text (Text)
 import Data.Text qualified as T
 
@@ -61,6 +72,19 @@ newtype ImportError = ImportError Text
 -- | Whether remote (HTTP\/S3) imports are permitted.
 data RemoteImports = AllowRemoteImports | BlockRemoteImports
     deriving stock (Show, Eq)
+
+{- | What imports a run permits: whether remote (HTTP\/S3) imports are
+allowed at all, and which remote locations are trusted like local files.
+-}
+data ImportPolicy = ImportPolicy
+    { ipRemoteImports :: !RemoteImports
+    , ipTrustedSources :: !TrustedSources
+    }
+    deriving stock (Show, Eq)
+
+-- | A policy with no trusted sources.
+importPolicy :: RemoteImports -> ImportPolicy
+importPolicy ri = ImportPolicy{ipRemoteImports = ri, ipTrustedSources = noTrustedSources}
 
 class ImportLoader m where
     loadImport :: Text -> Text -> m (Either ImportError ImportData)
@@ -160,3 +184,77 @@ isLocalOnly = \case
     ImportFilehash -> True
     ImportFilehashBase64 -> True
     _remoteType -> False
+
+------------------------------------------------------------------------
+-- Trusted sources
+------------------------------------------------------------------------
+
+-- | A remote location prefix validated by 'parseTrustedSource'.
+newtype TrustedSource = TrustedSource Text
+    deriving stock (Show, Eq)
+
+trustedSourceText :: TrustedSource -> Text
+trustedSourceText (TrustedSource t) = t
+
+-- | The remote prefixes whose documents are trusted like local files.
+newtype TrustedSources = TrustedSources [TrustedSource]
+    deriving stock (Show, Eq)
+
+noTrustedSources :: TrustedSources
+noTrustedSources = TrustedSources []
+
+mkTrustedSources :: [TrustedSource] -> TrustedSources
+mkTrustedSources = TrustedSources
+
+trustedSourceList :: TrustedSources -> [TrustedSource]
+trustedSourceList (TrustedSources ts) = ts
+
+{- | Validate a trusted-source prefix. It must start with a remote scheme
+(@s3://@, @s3:@, @http://@, @https://@, @ssm:@, @ssm-path:@ or @cfn:@,
+lower case), end in @/@, name a bucket or host for the S3 and HTTP forms,
+and contain no @.@ or @..@ path segment. Matching is a literal,
+case-sensitive text prefix, so @s3:b/@ and @s3://b/@ are listed
+separately.
+-}
+parseTrustedSource :: Text -> Either Text TrustedSource
+parseTrustedSource p
+    | not (any (`T.isPrefixOf` p) remoteSchemes) =
+        bad ("must start with one of " <> T.intercalate ", " remoteSchemes)
+    | not ("/" `T.isSuffixOf` p) = bad "must end in /"
+    | not namesAuthority = bad "must name a bucket or host"
+    | any isDotSegment (T.splitOn "/" p) = bad "must not contain . or .. path segments"
+    | otherwise = Right (TrustedSource p)
+  where
+    bad :: Text -> Either Text TrustedSource
+    bad why = Left ("invalid trusted import source '" <> p <> "': " <> why)
+    namesAuthority :: Bool
+    namesAuthority = case List.find (`T.isPrefixOf` p) authoritySchemes of
+        Just scheme -> not (T.null (T.takeWhile (/= '/') (T.drop (T.length scheme) p)))
+        Nothing -> True
+
+-- | Schemes a trusted-source prefix may use. Longer spellings come first.
+remoteSchemes :: [Text]
+remoteSchemes = authoritySchemes <> ["ssm-path:", "ssm:", "cfn:"]
+
+-- | Schemes whose prefix must name a bucket or host before the first @/@.
+authoritySchemes :: [Text]
+authoritySchemes = ["s3://", "http://", "https://", "s3:"]
+
+{- | A path segment that may climb out of the prefix: @.@ or @..@, also
+when percent-encoded.
+-}
+isDotSegment :: Text -> Bool
+isDotSegment seg = T.replace "%2e" "." (T.toLower seg) `elem` [".", ".."]
+
+{- | The one trust decision: a document's base is trusted when it is a
+local file ('isLocalBase') or lies under a listed trusted-source prefix.
+A location under a prefix whose remainder has a @.@ or @..@ segment is
+not trusted, since it may resolve outside the prefix.
+-}
+isTrustedBase :: TrustedSources -> Text -> Bool
+isTrustedBase (TrustedSources ts) loc = isLocalBase loc || any under ts
+  where
+    under :: TrustedSource -> Bool
+    under (TrustedSource p) = case T.stripPrefix p loc of
+        Just rest -> not (any isDotSegment (T.splitOn "/" rest))
+        Nothing -> False

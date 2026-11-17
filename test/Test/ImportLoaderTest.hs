@@ -13,16 +13,16 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
 import Iidy.Yaml.Imports.ContentParsing (ParsedDoc (..), parseByExtensionStrict)
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
+import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig, mkFullDispatcher, mkImportConfig)
 import Iidy.Yaml.Imports.Loaders.Env (loadEnvImport)
 import Iidy.Yaml.Imports.Loaders.Git (loadGitImport)
 import Iidy.Yaml.Imports.Loaders.Http (urlPath)
 import Iidy.Yaml.Imports.Loaders.Random (loadRandomImport)
-import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..), RemoteImports (..))
+import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..), RemoteImports (..), importPolicy)
 import Iidy.Yaml.OValue (toValue)
 
 defaultImportCfg :: ImportConfig
-defaultImportCfg = ImportConfig Nothing AllowRemoteImports
+defaultImportCfg = mkImportConfig Nothing (importPolicy AllowRemoteImports)
 
 importLoaderTests :: [TestTree]
 importLoaderTests =

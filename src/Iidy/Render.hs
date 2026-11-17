@@ -11,7 +11,7 @@ import Data.Text.IO qualified as TIO
 import System.Directory (doesFileExist)
 import System.IO (stderr)
 
-import Iidy.Cli (GlobalOpts (..), RenderArgs (..), RenderFormat (..))
+import Iidy.Cli (GlobalOpts (..), RenderArgs (..), RenderFormat (..), importPolicyFromOpts)
 import Iidy.Errors.JMESPath (formatJMESPathQueryError)
 import Iidy.JsonPretty (prettyJsonText)
 import Iidy.Output.Types (OutputData (..))
@@ -26,8 +26,7 @@ import Iidy.Yaml.Engine (
     preprocessYaml11,
  )
 import Iidy.Yaml.Errors.Conversion (formatParseErrorEnhanced, formatPreprocessErrorEnhanced)
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig, mkFullDispatcher, mkImportConfig)
 import Iidy.Yaml.JMESPath (JMESPathError, applyJmesPath)
 import Iidy.Yaml.Location (Position)
 import Iidy.Yaml.OValue (OValue, fromValue, toValue)
@@ -54,11 +53,7 @@ runRender :: (OutputData -> IO ()) -> RenderArgs -> GlobalOpts -> IO Int
 runRender emit args gopts = do
     (content, baseLocation) <- readTemplate args
     let source = TE.decodeUtf8 (BL.toStrict content)
-        importCfg =
-            ImportConfig
-                { icAwsEnv = Nothing
-                , icRemoteImports = if goRemoteImports gopts then AllowRemoteImports else BlockRemoteImports
-                }
+        importCfg = mkImportConfig Nothing (importPolicyFromOpts gopts)
     result <- runExceptT $ do
         ast <- ExceptT . pure $ parseStep content baseLocation
         val <- ExceptT $ preprocessStep source importCfg ast

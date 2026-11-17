@@ -234,6 +234,7 @@ test-suite iidy-hs-test
     Test.TimingTest
     Test.SecurityControlsTest
     Test.ImportTrustTest
+    Test.TrustedSourceTest
     Test.ParamsClientTest
     Test.TemplateLoaderTest
     Test.GlobalConfigTest

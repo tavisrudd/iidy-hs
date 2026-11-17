@@ -7,6 +7,7 @@ module Iidy.Cfn.Context (
     CfnContext (..),
     createContext,
     createContextFromEnv,
+    cfnImportConfig,
     ctxElapsedSeconds,
     ctxDeriveToken,
     ctxGetUsedTokens,
@@ -38,7 +39,8 @@ import Iidy.Cfn.Status (StackStatus (..))
 import Iidy.Cfn.Status qualified as Status
 import Iidy.Cfn.Types (CfnOperation)
 import Iidy.Output.Types (OutputData)
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig, mkImportConfig)
+import Iidy.Yaml.Imports.Types (ImportPolicy)
 
 ------------------------------------------------------------------------
 -- Context type
@@ -53,7 +55,7 @@ data CfnContext = CfnContext
     , cfnUsedTokens :: !(IORef [TokenInfo])
     , cfnOperation :: !CfnOperation
     , cfnEnvironment :: !Text
-    , cfnRemoteImports :: !RemoteImports
+    , cfnImportPolicy :: !ImportPolicy
     , cfnEmit :: !(OutputData -> IO ())
     }
 
@@ -68,7 +70,7 @@ createContext ::
     TimeProvider ->
     TokenInfo ->
     Text ->
-    RemoteImports ->
+    ImportPolicy ->
     (OutputData -> IO ()) ->
     IO CfnContext
 createContext settings operation tp token env ri emit = do
@@ -85,7 +87,7 @@ createContextFromEnv ::
     TimeProvider ->
     TokenInfo ->
     Text ->
-    RemoteImports ->
+    ImportPolicy ->
     (OutputData -> IO ()) ->
     IO CfnContext
 createContextFromEnv awsEnv credStack operation tp token env ri emit = do
@@ -101,13 +103,17 @@ createContextFromEnv awsEnv credStack operation tp token env ri emit = do
             , cfnUsedTokens = tokenRef
             , cfnOperation = operation
             , cfnEnvironment = env
-            , cfnRemoteImports = ri
+            , cfnImportPolicy = ri
             , cfnEmit = emit
             }
 
 ------------------------------------------------------------------------
 -- Operations
 ------------------------------------------------------------------------
+
+-- | The import configuration for template and argsfile loading in this context.
+cfnImportConfig :: CfnContext -> ImportConfig
+cfnImportConfig ctx = mkImportConfig (Just (cfnEnv ctx)) (cfnImportPolicy ctx)
 
 -- | Get elapsed seconds since operation start
 ctxElapsedSeconds :: CfnContext -> IO Int

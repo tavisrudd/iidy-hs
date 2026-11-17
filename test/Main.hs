@@ -57,6 +57,7 @@ import Test.TemplateLoaderTest (templateLoaderTests)
 import Test.TerminalTest (terminalTests)
 import Test.ThemeVariantTest (themeVariantTests)
 import Test.TimingTest (timingTests)
+import Test.TrustedSourceTest (trustedSourceTests)
 import Test.WatchStackTest (watchStackTests)
 
 main :: IO ()
@@ -113,6 +114,7 @@ main = do
             , testGroup "Timing" timingTests
             , testGroup "SecurityControls" securityControlsTests
             , testGroup "ImportTrust" importTrustTests
+            , testGroup "TrustedSource" trustedSourceTests
             , testGroup "ParamsClient" paramsClientTests
             , testGroup "TemplateLoader" templateLoaderTests
             , testGroup "GlobalConfig" globalConfigTests

@@ -17,11 +17,10 @@ import Control.Monad.Trans.Resource (runResourceT)
 import Amazonka qualified
 import Amazonka.CloudFormation.EstimateTemplateCost qualified as ETC
 
-import Iidy.Cfn.Context (CfnContext (..))
+import Iidy.Cfn.Context (CfnContext (..), cfnImportConfig)
 import Iidy.Cfn.TemplateLoader (TemplateResult (..), loadCfnTemplate)
 import Iidy.Cfn.Types (StackArgs (..))
 import Iidy.Output.Types
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
 
 ------------------------------------------------------------------------
 -- Estimate cost operation
@@ -41,7 +40,7 @@ estimateCost ctx args argsfilePath = do
     let emit = cfnEmit ctx
         env = cfnEnvironment ctx
     -- Step 1: Load the template
-    tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (ImportConfig (Just (cfnEnv ctx)) (cfnRemoteImports ctx))
+    tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env (cfnImportConfig ctx)
     case tmplEither of
         Left err -> pure (Left err)
         Right tmplResult -> do

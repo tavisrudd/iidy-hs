@@ -11,12 +11,12 @@ import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
+import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig, mkFullDispatcher, mkImportConfig)
 import Iidy.Yaml.Imports.Loaders.File (loadFilehashImport)
-import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..), RemoteImports (..))
+import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..), RemoteImports (..), importPolicy)
 
 defaultImportCfg :: ImportConfig
-defaultImportCfg = ImportConfig Nothing AllowRemoteImports
+defaultImportCfg = mkImportConfig Nothing (importPolicy AllowRemoteImports)
 
 filehashTests :: [TestTree]
 filehashTests =

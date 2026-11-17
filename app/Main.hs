@@ -48,7 +48,7 @@ import Iidy.Output.Types (OutputData (..))
 import Iidy.Params.Client (GetByPathResult (..), paramGet, paramGetByPath, paramGetHistory, paramSet)
 import Iidy.Params.Review (paramReview)
 import Iidy.Render (runRender)
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+import Iidy.Yaml.Imports.Types (RemoteImports (..), importPolicy)
 
 {- | POSIX _exit(2) — terminates immediately without cleanup.
 Used for signal handlers to avoid GHC's backtrace on exitWith.
@@ -117,10 +117,10 @@ runCommand cli = case cliCommand cli of
     CmdExecChangeset args -> do
         let stackName = fromMaybe "" (ecsStackName args)
             env = goEnvironment (cliGlobalOpts cli)
-            remoteImports = if goRemoteImports (cliGlobalOpts cli) then AllowRemoteImports else BlockRemoteImports
+            policy = importPolicyFromOpts (cliGlobalOpts cli)
         dispatch <- mkOutputDispatch (cliGlobalOpts cli)
         let emit = renderOutput dispatch
-        ctx <- createSimpleContext cli OpExecuteChangeset env remoteImports emit
+        ctx <- createSimpleContext cli OpExecuteChangeset env policy emit
         -- Emit CommandMetadata before operation
         meta <- constructCommandMetadata ctx (cliToAwsSettings cli) Nothing env Nothing
         emit (OdCommandMetadata meta)
@@ -139,14 +139,14 @@ runCommand cli = case cliCommand cli of
         let env = goEnvironment (cliGlobalOpts cli)
         dispatch <- mkOutputDispatch (cliGlobalOpts cli)
         let emit = renderOutput dispatch
-        ctx <- createSimpleContext cli OpDescribeStack env BlockRemoteImports emit
+        ctx <- createSimpleContext cli OpDescribeStack env (importPolicy BlockRemoteImports) emit
         result <- describeStack ctx (daStackname args) (daEvents args) env emit
         case result of
             Left err -> dieTxt err
             Right () -> pure ()
     CmdWatchStack args -> do
         dispatch <- mkOutputDispatch (cliGlobalOpts cli)
-        ctx <- createSimpleContext cli OpWatchStack "" BlockRemoteImports (renderOutput dispatch)
+        ctx <- createSimpleContext cli OpWatchStack "" (importPolicy BlockRemoteImports) (renderOutput dispatch)
         result <-
             watchStack ctx (waStackname args) (waInactivityTimeout args) (renderOutput dispatch)
                 `finally` cleanupOutputDispatch dispatch
@@ -155,7 +155,7 @@ runCommand cli = case cliCommand cli of
             Right rc -> exitCode rc
     CmdDescribeStackDrift args -> do
         dispatch <- mkOutputDispatch (cliGlobalOpts cli)
-        ctx <- createSimpleContext cli OpDescribeStackDrift "" BlockRemoteImports (renderOutput dispatch)
+        ctx <- createSimpleContext cli OpDescribeStackDrift "" (importPolicy BlockRemoteImports) (renderOutput dispatch)
         result <- describeStackDrift ctx (drfStackname args) (drfDriftCache args) (renderOutput dispatch)
         case result of
             Left err -> dieTxt err
@@ -164,7 +164,7 @@ runCommand cli = case cliCommand cli of
         let env = goEnvironment (cliGlobalOpts cli)
         dispatch <- mkOutputDispatch (cliGlobalOpts cli)
         let emit = renderOutput dispatch
-        ctx <- createSimpleContext cli OpDeleteStack env BlockRemoteImports emit
+        ctx <- createSimpleContext cli OpDeleteStack env (importPolicy BlockRemoteImports) emit
         -- Emit CommandMetadata before operation
         meta <- constructCommandMetadata ctx (cliToAwsSettings cli) Nothing env Nothing
         emit (OdCommandMetadata meta)
@@ -181,14 +181,14 @@ runCommand cli = case cliCommand cli of
     CmdGetStackTemplate args -> do
         dispatch <- mkOutputDispatch (cliGlobalOpts cli)
         let emit = renderOutput dispatch
-        ctx <- createSimpleContext cli OpGetStackTemplate "" BlockRemoteImports emit
+        ctx <- createSimpleContext cli OpGetStackTemplate "" (importPolicy BlockRemoteImports) emit
         result <- getStackTemplate ctx (gtaStackname args)
         case result of
             Left err -> dieTxt err
             Right tpl -> emit (OdRawOutput (tpl <> "\n"))
     CmdListStacks args -> do
         dispatch <- mkOutputDispatch (cliGlobalOpts cli)
-        ctx <- createSimpleContext cli OpListStacks "" BlockRemoteImports (renderOutput dispatch)
+        ctx <- createSimpleContext cli OpListStacks "" (importPolicy BlockRemoteImports) (renderOutput dispatch)
         let tagFilters = if null (laTagFilter args) then Nothing else Just (laTagFilter args)
             hasQuery = case laQuery args of Just _ -> True; Nothing -> False
         result <- listStacks ctx tagFilters (laTags args) hasQuery
@@ -249,7 +249,7 @@ runCommand cli = case cliCommand cli of
         ApprovalReview args -> do
             dispatch <- mkOutputDispatch (cliGlobalOpts cli)
             let emit = renderOutput dispatch
-                ri = if goRemoteImports (cliGlobalOpts cli) then AllowRemoteImports else BlockRemoteImports
+                ri = importPolicyFromOpts (cliGlobalOpts cli)
             ctx <- createSimpleContext cli OpTemplateApprovalReview "" ri emit
             result <- templateApprovalReview ctx (arvUrl args) (arvContext args)
             case result of
@@ -259,13 +259,13 @@ runCommand cli = case cliCommand cli of
         dispatch <- mkOutputDispatch (cliGlobalOpts cli)
         runGetImport (renderOutput dispatch) args (cliGlobalOpts cli) (cliToAwsSettings cli) >>= exitCode
     CmdDemo args ->
-        let ri = if goRemoteImports (cliGlobalOpts cli) then AllowRemoteImports else BlockRemoteImports
+        let ri = importPolicyFromOpts (cliGlobalOpts cli)
          in runDemo (daDemoscript args) (daTimescaling args) (daMaskSecrets args) ri >>= exitCode
     CmdLintTemplate args ->
         runCfnWithArgs cli OpLintTemplate (ltaArgsfile args) Nothing $
             \ctx input -> lintTemplate ctx (siArgs input) (siArgsFile input) >>= handleEither
     CmdConvertStackToIidy args -> do
-        ctx <- createSimpleContext cli OpConvertStackToIidy "" BlockRemoteImports (\_ -> pure ())
+        ctx <- createSimpleContext cli OpConvertStackToIidy "" (importPolicy BlockRemoteImports) (\_ -> pure ())
         result <-
             convertStackToIidy
                 ctx

@@ -6,6 +6,7 @@ Uses 'parseImportType' as a security gate to enforce the trust model
 module Iidy.Yaml.Imports.Loaders.Dispatch (
     mkFullDispatcher,
     ImportConfig (..),
+    mkImportConfig,
 ) where
 
 import Amazonka qualified
@@ -22,6 +23,7 @@ import Iidy.Yaml.Imports.Loaders.Ssm (loadSsmImport, loadSsmPathImport)
 import Iidy.Yaml.Imports.Types (
     ImportData,
     ImportError (..),
+    ImportPolicy (..),
     ImportType (..),
     RemoteImports (..),
     parseImportType,
@@ -31,11 +33,15 @@ import Iidy.Yaml.Imports.Types (
 -- Configuration
 ------------------------------------------------------------------------
 
--- | Configuration for the import dispatcher.
+-- | Configuration for the import dispatcher. Build it with 'mkImportConfig'.
 data ImportConfig = ImportConfig
     { icAwsEnv :: !(Maybe Amazonka.Env)
-    , icRemoteImports :: !RemoteImports
+    , icPolicy :: !ImportPolicy
     }
+
+-- | The one 'ImportConfig' constructor; fields added later get defaults here.
+mkImportConfig :: Maybe Amazonka.Env -> ImportPolicy -> ImportConfig
+mkImportConfig mEnv policy = ImportConfig{icAwsEnv = mEnv, icPolicy = policy}
 
 ------------------------------------------------------------------------
 -- Full dispatcher
@@ -46,7 +52,7 @@ First classifies the import via 'parseImportType' (enforcing the security
 model: remote base templates cannot load local-only import types), then
 dispatches to the appropriate loader.
 When AWS env is 'Nothing', AWS import types return an error.
-When 'icRemoteImports' is 'BlockRemoteImports', HTTP and S3 imports
+When the policy's 'ipRemoteImports' is 'BlockRemoteImports', HTTP and S3 imports
 are rejected.
 -}
 mkFullDispatcher :: ImportConfig -> LoadImportFn
@@ -94,7 +100,7 @@ withRemote ::
     ImportConfig ->
     IO (Either ImportError ImportData) ->
     IO (Either ImportError ImportData)
-withRemote cfg action = case icRemoteImports cfg of
+withRemote cfg action = case ipRemoteImports (icPolicy cfg) of
     AllowRemoteImports -> action
     BlockRemoteImports ->
         pure $

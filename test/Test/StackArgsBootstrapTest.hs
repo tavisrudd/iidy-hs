@@ -15,7 +15,7 @@ import Iidy.Aws.CredentialSource (AwsSettings (..))
 import Iidy.Cfn.StackArgsBootstrap (importSettingsMismatch, loadStackArgsBootstrapped)
 import Iidy.Cfn.StackArgsLoader (CredentialField (..), LoadedStackArgs (..), RawField (..), readRawField)
 import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..))
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+import Iidy.Yaml.Imports.Types (RemoteImports (..), importPolicy)
 import Iidy.Yaml.Parser (parseYaml)
 import Test.MockAws (MockAws (..), newMockAws, recordingEnvFactory)
 import Test.Shared (noAwsSettings)
@@ -96,7 +96,7 @@ stackArgsBootstrapTests =
                 "dev"
                 OpCreateStack
                 noAwsSettings
-                AllowRemoteImports
+                (importPolicy AllowRemoteImports)
         err <- expectLeft result
         assertBool ("reports the cause: " <> T.unpack err) ("mock: no such profile literal-profile" `T.isInfixOf` err)
         assertBool ("names the import: " <> T.unpack err) ("ssm:/app/db-host" `T.isInfixOf` err)
@@ -118,7 +118,7 @@ loadWithMock :: AwsSettings -> FilePath -> IO BootstrapRun
 loadWithMock cliAws fixture = do
     mock <- newMockAws
     (factory, askedFor) <- recordingEnvFactory mock
-    result <- loadStackArgsBootstrapped factory (fixturePath fixture) "dev" OpCreateStack cliAws AllowRemoteImports
+    result <- loadStackArgsBootstrapped factory (fixturePath fixture) "dev" OpCreateStack cliAws (importPolicy AllowRemoteImports)
     BootstrapRun result <$> askedFor <*> readIORef (mockRequests mock)
 
 fixturePath :: FilePath -> FilePath

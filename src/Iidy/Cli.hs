@@ -45,12 +45,14 @@ module Iidy.Cli (
 
     -- * CLI conversion helpers
     cliToAwsSettings,
+    importPolicyFromOpts,
     detectShellType,
 ) where
 
 import Data.Text (Text)
 import Iidy.Aws.CredentialSource (AwsSettings (..))
 import Iidy.Types (ColorChoice, OutputMode, Theme, YamlSpec)
+import Iidy.Yaml.Imports.Types (ImportPolicy (..), RemoteImports (..), noTrustedSources)
 
 ------------------------------------------------------------------------
 -- Top-level CLI types
@@ -344,6 +346,14 @@ cliToAwsSettings cli =
         { awsProfile = aoProfile (cliAwsOpts cli)
         , awsRegion = aoRegion (cliAwsOpts cli)
         , awsAssumeRoleArn = aoAssumeRoleArn (cliAwsOpts cli)
+        }
+
+-- | The import policy the global options select (the one place it is built).
+importPolicyFromOpts :: GlobalOpts -> ImportPolicy
+importPolicyFromOpts gopts =
+    ImportPolicy
+        { ipRemoteImports = if goRemoteImports gopts then AllowRemoteImports else BlockRemoteImports
+        , ipTrustedSources = noTrustedSources
         }
 
 {- | Detect shell type from a shell name string.

@@ -23,11 +23,11 @@ import Iidy.Cfn.GlobalConfig (applyGlobalConfiguration)
 import Iidy.Cfn.StackArgsBootstrap (loadStackArgsBootstrapped)
 import Iidy.Cfn.StackArgsLoader (LoadedStackArgs (..))
 import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), StackInput (..))
-import Iidy.Cli (AwsOpts (..), Cli (..), GlobalOpts (..), cliToAwsSettings)
+import Iidy.Cli (AwsOpts (..), Cli (..), GlobalOpts (..), cliToAwsSettings, importPolicyFromOpts)
 import Iidy.Errors (dieTxt)
 import Iidy.Output.Manager (cleanupOutputDispatch, mkOutputDispatch, renderOutput)
 import Iidy.Output.Types (OutputData (..))
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+import Iidy.Yaml.Imports.Types (ImportPolicy)
 
 {- | Run a CFN operation that requires loading stack args from an argsfile.
 Creates an output dispatch, builds CfnContext with all session-scoped fields,
@@ -47,7 +47,7 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
     let env = goEnvironment (cliGlobalOpts cli)
         cliAws = cliToAwsSettings cli
         argsfilePath = T.unpack argsfile
-        remoteImports = if goRemoteImports (cliGlobalOpts cli) then AllowRemoteImports else BlockRemoteImports
+        policy = importPolicyFromOpts (cliGlobalOpts cli)
 
     dispatch <- mkOutputDispatch (cliGlobalOpts cli)
     let emit = renderOutput dispatch
@@ -61,7 +61,7 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
             env
             operation
             cliAws
-            remoteImports
+            policy
     case result of
         Left err -> dieTxt err
         Right (LoadedStackArgs sa mergedAws detectionCtx) -> do
@@ -74,7 +74,7 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
                     Nothing -> sa''
             token <- generateTokenFromMaybe (aoClientRequestToken (cliAwsOpts cli))
             let tp = timeProviderForOperation operation
-            ctx <- createContextFromEnv awsEnv credStack operation tp token env remoteImports emit
+            ctx <- createContextFromEnv awsEnv credStack operation tp token env policy emit
             let input = StackInput{siArgs = sa', siArgsFile = Just argsfilePath}
 
             -- Emit CommandMetadata for write operations (not lint/estimate-cost)
@@ -96,7 +96,7 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
             exitCode rc
 
 -- | Create a simple CfnContext for operations that don't load stack args
-createSimpleContext :: Cli -> CfnOperation -> Text -> RemoteImports -> (OutputData -> IO ()) -> IO CfnContext
+createSimpleContext :: Cli -> CfnOperation -> Text -> ImportPolicy -> (OutputData -> IO ()) -> IO CfnContext
 createSimpleContext cli operation env ri emit = do
     let cliAws = cliToAwsSettings cli
     token <- generateTokenFromMaybe (aoClientRequestToken (cliAwsOpts cli))

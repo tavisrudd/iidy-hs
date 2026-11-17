@@ -19,15 +19,15 @@ import Iidy.Cfn.TemplateLoader (
     loadCfnTemplate,
     templateMaxBytes,
  )
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig, mkImportConfig)
+import Iidy.Yaml.Imports.Types (RemoteImports (..), importPolicy)
 
 ------------------------------------------------------------------------
 -- Helpers (shared config)
 ------------------------------------------------------------------------
 
 defaultImportCfg :: ImportConfig
-defaultImportCfg = ImportConfig Nothing AllowRemoteImports
+defaultImportCfg = mkImportConfig Nothing (importPolicy AllowRemoteImports)
 
 ------------------------------------------------------------------------
 -- Test groups

@@ -13,8 +13,8 @@ import Iidy.Yaml.CustomResources.Params (
     ParamDef (..),
     validateParams,
  )
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
-import Iidy.Yaml.Imports.Types (ImportError (..), ImportType (..), RemoteImports (..), parseImportType)
+import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig, mkFullDispatcher, mkImportConfig)
+import Iidy.Yaml.Imports.Types (ImportError (..), ImportType (..), RemoteImports (..), importPolicy, parseImportType)
 import Iidy.Yaml.OValue (OValue (..))
 
 securityControlsTests :: [TestTree]
@@ -63,7 +63,7 @@ parseImportTypeTests =
 
 -- | ImportConfig with remote imports blocked (simulates --no-remote-imports).
 blockedCfg :: ImportConfig
-blockedCfg = ImportConfig Nothing BlockRemoteImports
+blockedCfg = mkImportConfig Nothing (importPolicy BlockRemoteImports)
 
 noRemoteImportsTests :: [TestTree]
 noRemoteImportsTests =

@@ -25,7 +25,7 @@ import Iidy.Demo (
     substituteIidyCommand,
     unpackFiles,
  )
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+import Iidy.Yaml.Imports.Types (RemoteImports (..), importPolicy)
 
 demoTests :: [TestTree]
 demoTests =
@@ -158,7 +158,7 @@ runScript :: Bool -> (FilePath -> Text) -> (FilePath -> Int -> IO a) -> IO a
 runScript mask mkScript check = withSystemTempDirectory "iidy-demo-run" $ \dir -> do
     let path = dir </> "script.yaml"
     TIO.writeFile path (mkScript dir)
-    rc <- runDemo (T.pack path) 0 mask BlockRemoteImports
+    rc <- runDemo (T.pack path) 0 mask (importPolicy BlockRemoteImports)
     check dir rc
 
 markerExists :: FilePath -> IO Bool
@@ -223,7 +223,7 @@ runTests =
         withSystemTempDirectory "iidy-demo-run" $ \dir -> do
             let path = dir </> "script.yaml"
             TIO.writeFile path "demo:\n  - \"exit 3\"\n"
-            r <- try (runDemo (T.pack path) 0 False BlockRemoteImports)
+            r <- try (runDemo (T.pack path) 0 False (importPolicy BlockRemoteImports))
             case r of
                 Left (e :: IOException) -> ioeGetErrorString e @?= "command failed: exit 3"
                 Right rc -> assertFailure ("expected an exception, got exit " <> show rc)

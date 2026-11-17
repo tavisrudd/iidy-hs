@@ -17,11 +17,10 @@ module Iidy.Cfn.ApprovedTemplate (
 import Data.Text (Text)
 import Data.Text qualified as T
 
-import Iidy.Cfn.Context (CfnContext (..))
+import Iidy.Cfn.Context (CfnContext (..), cfnImportConfig)
 import Iidy.Cfn.TemplateHash (generateVersionedLocation)
 import Iidy.Cfn.TemplateLoader (TemplateResult (..), approvalTemplateLimit, isTemplateUrl, loadCfnTemplateWithLimit)
 import Iidy.Cfn.Types (StackArgs (..))
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
 
 -- | The approved object for a template, and the rendered body it hashes.
 data ApprovedTemplate = ApprovedTemplate
@@ -72,7 +71,7 @@ approvedTemplateFor ctx sa argsfilePath = case saApprovedTemplateLocation sa of
                         (Just spec)
                         argsfilePath
                         (cfnEnvironment ctx)
-                        (ImportConfig (Just (cfnEnv ctx)) (cfnRemoteImports ctx))
+                        (cfnImportConfig ctx)
                 pure $ do
                     tmpl <- loaded
                     body <- maybe (Left "Failed to load template body") Right (trTemplateBody tmpl)

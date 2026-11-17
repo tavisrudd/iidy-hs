@@ -45,8 +45,8 @@ import Iidy.Cfn.Types (CfnOperation)
 import Iidy.GetImport (needsAwsEnv)
 import Iidy.Yaml.Ast (YamlAst)
 import Iidy.Yaml.Engine (LoadImportFn)
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
-import Iidy.Yaml.Imports.Types (ImportError (..), RemoteImports, parseImportType)
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
+import Iidy.Yaml.Imports.Types (ImportError (..), ImportPolicy (..), RemoteImports, parseImportType)
 
 {- | Load a stack-args file, building the import environment with the given
 factory at the first AWS import. Production passes
@@ -63,13 +63,13 @@ loadStackArgsBootstrapped ::
     CfnOperation ->
     -- | CLI-provided AWS settings
     AwsSettings ->
-    RemoteImports ->
+    ImportPolicy ->
     IO (Either Text LoadedStackArgs)
-loadStackArgsBootstrapped mkEnv argsfile environment operation cliAws remoteImports = do
+loadStackArgsBootstrapped mkEnv argsfile environment operation cliAws policy = do
     ranWith <- newIORef Nothing
     loaded <-
         loadStackArgsWith
-            (bootstrapLoader ranWith mkEnv argsfileText environment cliAws remoteImports)
+            (bootstrapLoader ranWith mkEnv argsfileText environment cliAws policy)
             argsfile
             environment
             operation
@@ -121,13 +121,13 @@ bootstrapLoader ::
     -- | environment name
     Text ->
     AwsSettings ->
-    RemoteImports ->
+    ImportPolicy ->
     YamlAst ->
     IO LoadImportFn
-bootstrapLoader ranWith mkEnv argsfile environment cliAws remoteImports ast = do
+bootstrapLoader ranWith mkEnv argsfile environment cliAws policy ast = do
     outcome <- newIORef Nothing
     let importSettings = mergeAwsSettings cliAws (extractRawAwsFromAst ast environment)
-        dispatcher mEnv = mkFullDispatcher ImportConfig{icAwsEnv = mEnv, icRemoteImports = remoteImports}
+        dispatcher mEnv = mkFullDispatcher (mkImportConfig mEnv policy)
         notPlain =
             [ (field, why)
             | field <- credentialFields
@@ -149,7 +149,7 @@ bootstrapLoader ranWith mkEnv argsfile environment cliAws remoteImports ast = do
                     writeIORef outcome (Just result)
                     pure result
     pure $ \location baseLocation ->
-        if isAwsImport remoteImports location baseLocation
+        if isAwsImport (ipRemoteImports policy) location baseLocation
             then do
                 envResult <- awsEnvFor location
                 case envResult of

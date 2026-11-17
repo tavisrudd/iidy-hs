@@ -70,8 +70,8 @@ import Iidy.Yaml.Engine (
     PreprocessResult (..),
     preprocessYaml11,
  )
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
+import Iidy.Yaml.Imports.Types (ImportPolicy)
 import Iidy.Yaml.OValue (toValue)
 import Iidy.Yaml.Parser (ParseError (..), parseYaml)
 
@@ -109,14 +109,14 @@ loadStackArgs ::
     CfnOperation ->
     -- | CLI-provided AWS settings
     AwsSettings ->
-    -- | whether HTTP/S3 imports are allowed
-    RemoteImports ->
+    -- | import policy (remote imports, trusted sources)
+    ImportPolicy ->
     -- | optional AWS env for imports
     Maybe Amazonka.Env ->
     IO (Either Text LoadedStackArgs)
-loadStackArgs argsfile environment operation cliAws remoteImports mAwsEnv =
+loadStackArgs argsfile environment operation cliAws policy mAwsEnv =
     loadStackArgsWith
-        (\_ast -> pure (mkFullDispatcher ImportConfig{icAwsEnv = mAwsEnv, icRemoteImports = remoteImports}))
+        (\_ast -> pure (mkFullDispatcher (mkImportConfig mAwsEnv policy)))
         argsfile
         environment
         operation

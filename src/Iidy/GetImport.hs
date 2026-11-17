@@ -26,15 +26,16 @@ import Amazonka.Auth.Exception qualified as AuthEx
 
 import Iidy.Aws.Config (createAwsEnvFromSettings)
 import Iidy.Aws.CredentialSource (AwsSettings)
-import Iidy.Cli (GetImportArgs (..), GlobalOpts (..), RenderFormat (..))
+import Iidy.Cli (GetImportArgs (..), GlobalOpts (..), RenderFormat (..), importPolicyFromOpts)
 import Iidy.Errors.JMESPath (formatJMESPathQueryError)
 import Iidy.JsonPretty (prettyJsonText)
 import Iidy.Output.Types (OutputData (..))
 import Iidy.Yaml.Emitter (SeqStyle (..), emitYamlWith)
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
 import Iidy.Yaml.Imports.Types (
     ImportData (..),
     ImportError (..),
+    ImportPolicy (..),
     ImportType (..),
     RemoteImports (..),
     parseImportType,
@@ -62,8 +63,8 @@ runGetImportWith :: IO Amazonka.Env -> (OutputData -> IO ()) -> GetImportArgs ->
 runGetImportWith mkEnv emit args gopts = do
     let location = giaImport args
         baseLocation = "."
-        remoteImports = if goRemoteImports gopts then AllowRemoteImports else BlockRemoteImports
-        wantsEnv = either (const False) (needsAwsEnv remoteImports) (parseImportType location baseLocation)
+        policy = importPolicyFromOpts gopts
+        wantsEnv = either (const False) (needsAwsEnv (ipRemoteImports policy)) (parseImportType location baseLocation)
 
     envResult <-
         if wantsEnv
@@ -73,7 +74,7 @@ runGetImportWith mkEnv emit args gopts = do
     case envResult of
         Left err -> reportImportError err
         Right mEnv -> do
-            let importCfg = ImportConfig{icAwsEnv = mEnv, icRemoteImports = remoteImports}
+            let importCfg = mkImportConfig mEnv policy
             result <- mkFullDispatcher importCfg location baseLocation
             case result of
                 Left (ImportError err) -> reportImportError err

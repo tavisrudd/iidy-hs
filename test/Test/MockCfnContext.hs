@@ -20,7 +20,7 @@ import Iidy.Aws.Timing (mockTimeProvider)
 import Iidy.Cfn.Context (CfnContext, createContextFromEnv)
 import Iidy.Cfn.Types (CfnOperation)
 import Iidy.Output.Types (OutputData)
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+import Iidy.Yaml.Imports.Types (RemoteImports (..), importPolicy)
 import Test.MockAws (MockAws (..))
 
 -- | A context over a mock env and the outputs it has emitted.
@@ -50,7 +50,7 @@ newMockCfnContext mock operation environment = do
             (mockTimeProvider mockCfnTime)
             token
             environment
-            BlockRemoteImports
+            (importPolicy BlockRemoteImports)
             emit
     pure MockCfn{mcContext = ctx, mcOutputs = outputs}
 

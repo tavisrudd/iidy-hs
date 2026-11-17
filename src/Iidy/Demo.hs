@@ -49,8 +49,8 @@ import Text.Regex.TDFA ((=~))
 import Iidy.Types (ColorChoice (..))
 import Iidy.Yaml.Engine (PreprocessResult (..), preprocessYaml11)
 import Iidy.Yaml.Errors.Conversion (formatParseErrorEnhanced, formatPreprocessErrorEnhanced)
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
-import Iidy.Yaml.Imports.Types (RemoteImports (..))
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
+import Iidy.Yaml.Imports.Types (ImportPolicy (..), RemoteImports (..))
 import Iidy.Yaml.OValue (toValue)
 import Iidy.Yaml.Parser (ParseError (..), parseYaml)
 
@@ -71,8 +71,8 @@ data DemoCommand
 ------------------------------------------------------------------------
 
 -- | Run a demo script. Returns exit code.
-runDemo :: Text -> Double -> Bool -> RemoteImports -> IO Int
-runDemo scriptPath timescaling maskSecrets remoteImports = do
+runDemo :: Text -> Double -> Bool -> ImportPolicy -> IO Int
+runDemo scriptPath timescaling maskSecrets policy = do
     let fp = T.unpack scriptPath
     content <- BL.readFile fp
     let baseLocation = scriptPath
@@ -84,7 +84,7 @@ runDemo scriptPath timescaling maskSecrets remoteImports = do
             TIO.hPutStr stderr formatted
             pure 1
         Right ast -> do
-            let importCfg = ImportConfig{icAwsEnv = Nothing, icRemoteImports = remoteImports}
+            let importCfg = mkImportConfig Nothing policy
             result <- preprocessYaml11 (mkFullDispatcher importCfg) ast baseLocation
             case result of
                 Left err -> do
@@ -99,7 +99,7 @@ runDemo scriptPath timescaling maskSecrets remoteImports = do
                             TIO.hPutStrLn stderr $ "Failed to parse demo script: " <> err
                             pure 1
                         Right (files, commands) ->
-                            runWithTmpDir files commands timescaling maskSecrets remoteImports
+                            runWithTmpDir files commands timescaling maskSecrets (ipRemoteImports policy)
 
 runWithTmpDir :: Map Text Text -> [DemoCommand] -> Double -> Bool -> RemoteImports -> IO Int
 runWithTmpDir files commands timescaling maskSecrets remoteImports = do

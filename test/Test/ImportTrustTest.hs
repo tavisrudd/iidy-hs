@@ -18,12 +18,13 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 import Iidy.Yaml.Engine (LoadImportFn, PreprocessError (..), preprocessYaml)
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
 import Iidy.Yaml.Imports.Types (
     ImportData (..),
     ImportError (..),
     ImportType (..),
     RemoteImports (..),
+    importPolicy,
     parseImportType,
  )
 import Iidy.Yaml.Parser (parseYaml)
@@ -143,7 +144,7 @@ localMatrix =
 dispatcherMatrix :: [TestTree]
 dispatcherMatrix =
     [ testCase (caseName base loc) $
-        mkFullDispatcher (ImportConfig Nothing AllowRemoteImports) loc base
+        mkFullDispatcher (mkImportConfig Nothing (importPolicy AllowRemoteImports)) loc base
             >>= assertRejected
     | base <- untrustedBases
     , loc <- localOnlyImports
@@ -196,7 +197,7 @@ remoteStubLoader remoteLoc loc base
                     , idDoc =
                         Object (KM.fromList [("$imports", Object (KM.fromList [("secret", String "env:HOME")]))])
                     }
-    | otherwise = mkFullDispatcher (ImportConfig Nothing AllowRemoteImports) loc base
+    | otherwise = mkFullDispatcher (mkImportConfig Nothing (importPolicy AllowRemoteImports)) loc base
   where
     hostileRaw :: Text
     hostileRaw = "$imports:\n  secret: env:HOME\n"

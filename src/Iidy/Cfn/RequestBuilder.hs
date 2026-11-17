@@ -38,10 +38,9 @@ import Amazonka.CloudFormation.Types.Parameter qualified as Param
 import Amazonka.CloudFormation.UpdateStack qualified as US
 
 import Iidy.Aws.ClientReqToken (TokenInfo (..))
-import Iidy.Cfn.Context (CfnContext (..), ctxDeriveToken)
+import Iidy.Cfn.Context (CfnContext (..), cfnImportConfig, ctxDeriveToken)
 import Iidy.Cfn.TemplateLoader (TemplateResult (..), loadCfnTemplate)
 import Iidy.Cfn.Types (Capability (..), OnFailure (..), StackArgs (..))
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
 
 ------------------------------------------------------------------------
 -- Request builders
@@ -61,7 +60,7 @@ buildCreateStackRequest ::
 buildCreateStackRequest ctx args usePrimary argsfilePath = do
     let sName = saStackName args
         env = cfnEnvironment ctx
-        importCfg = ImportConfig{icAwsEnv = Just (cfnEnv ctx), icRemoteImports = cfnRemoteImports ctx}
+        importCfg = cfnImportConfig ctx
     token <-
         if usePrimary
             then pure (cfnPrimaryToken ctx)
@@ -102,7 +101,7 @@ buildUpdateStackRequest ::
 buildUpdateStackRequest ctx args usePrimary argsfilePath = do
     let sName = saStackName args
         env = cfnEnvironment ctx
-        importCfg = ImportConfig{icAwsEnv = Just (cfnEnv ctx), icRemoteImports = cfnRemoteImports ctx}
+        importCfg = cfnImportConfig ctx
     token <-
         if usePrimary
             then pure (cfnPrimaryToken ctx)
@@ -154,7 +153,7 @@ buildCreateChangeSetRequest ::
 buildCreateChangeSetRequest ctx args csName csType argsfilePath = do
     let sName = saStackName args
         env = cfnEnvironment ctx
-        importCfg = ImportConfig{icAwsEnv = Just (cfnEnv ctx), icRemoteImports = cfnRemoteImports ctx}
+        importCfg = cfnImportConfig ctx
     token <- ctxDeriveToken ctx "create-changeset"
     tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env importCfg
     case tmplEither of
