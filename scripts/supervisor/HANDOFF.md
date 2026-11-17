@@ -69,5 +69,6 @@ convert-stack keeps its own when-to-quote policy.
 
 ## Still open for Tavis (supervisor's recommendation)
 
-1. C19: a `ServiceError` with no message prints the code alone
-   (`InternalFailure`, not `InternalFailure: `): keep (landed that way).
+Nothing open. Settled 2026-11-17: AWS service errors print as
+`AWS <service> error <code>[: <message>] (HTTP <status>, request ID <id>)`
+so a bare `InternalFailure` no longer reads like an iidy bug.

@@ -26,7 +26,7 @@ import Iidy.Yaml.Imports.Types (ImportError (..))
 import Network.HTTP.Client (HttpException (..), HttpExceptionContent (..), parseRequest_, requestHeaders)
 import Network.HTTP.Client qualified as Client
 import Network.HTTP.Client.Internal qualified as Client (Response (..), ResponseClose (..))
-import Network.HTTP.Types (Status (..), http11, status400)
+import Network.HTTP.Types (Status (..), http11, status400, status500)
 import Test.MockAws (mockAccessKey, mockSecretKey, mockSessionToken, newRefusingMockAws)
 
 awsErrorTests :: [TestTree]
@@ -96,6 +96,9 @@ formatAwsErrorTests =
     [ testCase "ServiceError leaves out its response headers" $ do
         let err = Amazonka.ServiceError (AT.ServiceError' "SSM" status400 [("X-Secret", "hdr-secret")] (Amazonka.ErrorCode "Oops") Nothing Nothing)
         assertBool "no header value" (not ("hdr-secret" `T.isInfixOf` formatAwsError err))
+    , testCase "ServiceError names the service, status and request ID" $ do
+        let err = Amazonka.ServiceError (AT.ServiceError' "CloudFormation" status500 [] (Amazonka.ErrorCode "InternalFailure") Nothing (Just (AT.RequestId "req-123")))
+        formatAwsError err @?= "AWS CloudFormation error InternalFailure (HTTP 500, request ID req-123)"
     , testCase "TransportError carries the host, not the request" $ do
         let msg = formatAwsError (Amazonka.TransportError (signedRequest ConnectionTimeout))
         assertClean "ssm.us-east-1.amazonaws.com" msg

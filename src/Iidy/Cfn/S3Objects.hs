@@ -48,16 +48,6 @@ data HeadResult
       ObjectHeadFailed !Text
     deriving stock (Show, Eq)
 
-{- | An S3 failure as message text. A 'Amazonka.ServiceError' keeps its HTTP
-status, because a body-less reply (HEAD) has no error document and its code
-is only the status phrase; anything else is just 'formatAwsError'.
--}
-formatS3Error :: Amazonka.Error -> Text
-formatS3Error = \case
-    err@(Amazonka.ServiceError se) ->
-        "HTTP " <> T.pack (show (statusCode se.status)) <> ": " <> formatAwsError err
-    err -> formatAwsError err
-
 -- | Send @HeadObject@ for an object and classify the outcome.
 headObject :: Amazonka.Env -> Text -> Text -> IO HeadResult
 headObject awsEnv bucket key = do
@@ -68,7 +58,7 @@ headObject awsEnv bucket key = do
         Left (Amazonka.ServiceError se)
             | statusCode se.status == 404 -> ObjectMissing
             | statusCode se.status == 403 -> ObjectAccessDenied
-        Left ex -> ObjectHeadFailed (formatS3Error ex)
+        Left ex -> ObjectHeadFailed (formatAwsError ex)
 
 {- | Whether an object exists: 'True' when present, 'False' when missing
 (404), and an error naming the object for access denied (403) or any other
@@ -118,7 +108,7 @@ bucketRegion awsEnv bucket = do
     let req = GBL.newGetBucketLocation (S3.BucketName bucket)
     result <- try @Amazonka.Error $ runResourceT $ Amazonka.send awsEnv req
     pure $ case result of
-        Left ex -> Left (formatS3Error ex)
+        Left ex -> Left (formatAwsError ex)
         Right resp -> Right (S3.constraintRegion resp.locationConstraint)
 
 {- | How long a presigned URL stays valid: 900 seconds, the aws-sdk v2

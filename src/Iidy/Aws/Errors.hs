@@ -8,7 +8,12 @@
 query string (a presigned URL's signature) and the proxy. Nothing that
 reaches a terminal or a log may use it; format the exception here instead.
 
-* 'Amazonka.ServiceError': @\<code\>: \<message\>@ (the code alone when there is no message).
+* 'Amazonka.ServiceError':
+  @AWS \<service\> error \<code\>: \<message\> (HTTP \<status\>, request ID \<id\>)@.
+  The service name says the failure came from AWS, not iidy (a bare
+  @InternalFailure@ reads like an iidy bug); the request ID is what AWS
+  Support asks for. The message part is left out when AWS sent none, the
+  request ID when there is none. Response headers are never printed.
 * 'Amazonka.TransportError': the request host and what went wrong, never
   the request.
 * 'Amazonka.SerializeError': the service and the parse failure, never the
@@ -37,7 +42,10 @@ formatAwsError :: Amazonka.Error -> Text
 formatAwsError = \case
     Amazonka.ServiceError se ->
         let Amazonka.ErrorCode code = se.code
-         in maybe code (\m -> code <> ": " <> Amazonka.fromErrorMessage m) se.message
+            body = maybe code (\m -> code <> ": " <> Amazonka.fromErrorMessage m) se.message
+            status = "HTTP " <> T.pack (show (statusCode se.status))
+            context = maybe status (\r -> status <> ", request ID " <> AmazonkaData.toText r) se.requestId
+         in "AWS " <> AmazonkaData.toText se.abbrev <> " error " <> body <> " (" <> context <> ")"
     Amazonka.TransportError he -> formatHttpException he
     Amazonka.SerializeError se ->
         AmazonkaData.toText se.abbrev <> ": could not parse the response (" <> T.pack se.message <> ")"

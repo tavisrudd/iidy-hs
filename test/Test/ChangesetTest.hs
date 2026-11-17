@@ -108,10 +108,10 @@ changesetTests =
         "formatAwsError"
         [ testCase "extracts code and message from ServiceError" $
             formatAwsError (mkServiceError "ValidationError" "Stack does not exist")
-                @?= "ValidationError: Stack does not exist"
+                @?= "AWS CloudFormation error ValidationError: Stack does not exist (HTTP 400)"
         , testCase "handles ServiceError with no message" $
             formatAwsError (mkServiceErrorNoMsg "InternalFailure")
-                @?= "InternalFailure"
+                @?= "AWS CloudFormation error InternalFailure (HTTP 400)"
         , testCase "describes a non-ServiceError" $ do
             let err = formatAwsError (mkSerializeError "parse failure")
             assertBool "should contain error info" (T.length err > 0)
