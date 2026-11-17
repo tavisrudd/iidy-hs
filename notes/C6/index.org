@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C6
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: WAITING
 :MODE:     CONTRACT
 :ORIGIN:   Discovered 2026-11-16 during the C1 closeout commit: the pre-commit test run hung for 8+ minutes
 :CREATED_BY: opus-5.5-medium
@@ -41,6 +41,10 @@ CLOCK: [2026-11-16 Mon 20:02]--[2026-11-16 Mon 20:40] => 0:38
 - Clock-out [2026-11-16 Mon 20:40]
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:abf3ea522a00a8554
+- Card state STARTED → WAITING [2026-11-16 Mon 21:12]
+  Note: Second budget: reproduced 3 hangs in ~1150 loaded TemplateLoader group runs; threads blocked on a shared thunk, masked; suspect GHC RTS; question for Tavis: standalone reproducer (a), mitigation (b) or park (c)
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C6 — Find and fix the intermittent hang in the test suite
 #+date: 2026-11-16
