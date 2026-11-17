@@ -16,7 +16,7 @@ import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 import Iidy.Yaml.Engine (PreprocessError (..), PreprocessResult (..))
 import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
-import Iidy.Yaml.Imports.Types (ImportData, ImportError (..), ImportPolicy, RemoteImports (..), importPolicy, rootBase)
+import Iidy.Yaml.Imports.Types (ImportData, ImportError (..), ImportPolicy, RemoteImports (..), childBase, importNeedsAwsEnv, importPolicy, rootBase)
 import Iidy.Yaml.OValue (toValue)
 import Test.ImportFixtures (flagPolicy, preprocessText, stubDocsLoader)
 import Test.MockAws (MockAws (..), newMockAws)
@@ -27,6 +27,7 @@ awsImportGateTests =
     , testGroup "trusted base may import AWS-backed types" (allowedMatrix trustedPrefixes trustedBases)
     , testGroup "base outside the trusted prefixes is refused" refusedMatrix
     , testGroup "remote document importing ssm: through the engine" engineCases
+    , testCase "importNeedsAwsEnv follows the gate" importNeedsAwsEnvCases
     ]
 
 ------------------------------------------------------------------------
@@ -174,3 +175,25 @@ engineCases =
         let dispatcher = mkFullDispatcher (mkImportConfig (Just (mockEnv mock)) policy)
         result <- preprocessText (stubDocsLoader [(remoteDoc, remoteSource)] dispatcher) "local.yaml" rootSource
         pure (mock, result)
+
+------------------------------------------------------------------------
+-- Building the AWS environment on demand
+------------------------------------------------------------------------
+
+{- | An import needs the AWS environment only when the gate allows it and
+its type needs one, so a refused import never builds the environment.
+-}
+importNeedsAwsEnvCases :: IO ()
+importNeedsAwsEnvCases = do
+    trusted <- flagPolicy ["https://t.example.com/"]
+    let allow = importPolicy AllowRemoteImports
+        block = importPolicy BlockRemoteImports
+        local = rootBase "stack-args.yaml"
+        laundered = childBase (childBase local "https://evil.example/u.yaml") "https://t.example.com/r.yaml"
+    importNeedsAwsEnv allow "ssm:/app/db-host" local @?= True
+    importNeedsAwsEnv allow "s3://bucket/a.yaml" local @?= True
+    importNeedsAwsEnv block "s3://bucket/a.yaml" local @?= False
+    importNeedsAwsEnv allow "env:HOME" local @?= False
+    importNeedsAwsEnv allow "ssm:/app/db-host" (rootBase "https://evil.example/u.yaml") @?= False
+    importNeedsAwsEnv trusted "ssm:/app/db-host" (childBase local "https://t.example.com/r.yaml") @?= True
+    importNeedsAwsEnv trusted "ssm:/app/db-host" laundered @?= False

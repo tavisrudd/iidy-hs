@@ -45,7 +45,7 @@ import Iidy.Cfn.Types (CfnOperation)
 import Iidy.Yaml.Ast (YamlAst)
 import Iidy.Yaml.Engine (LoadImportFn)
 import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
-import Iidy.Yaml.Imports.Types (ImportBase, ImportError (..), ImportPolicy (..), checkImport, needsAwsEnv)
+import Iidy.Yaml.Imports.Types (ImportError (..), ImportPolicy, importNeedsAwsEnv)
 
 {- | Load a stack-args file, building the import environment with the given
 factory at the first AWS import. Production passes
@@ -148,24 +148,13 @@ bootstrapLoader ranWith mkEnv argsfile environment cliAws policy ast = do
                     writeIORef outcome (Just result)
                     pure result
     pure $ \location baseLocation ->
-        if isAwsImport policy location baseLocation
+        if importNeedsAwsEnv policy location baseLocation
             then do
                 envResult <- awsEnvFor location
                 case envResult of
                     Left err -> pure (Left (ImportError err))
                     Right env -> dispatcher (Just env) location baseLocation
             else dispatcher Nothing location baseLocation
-
-{- | Whether loading this import location makes AWS calls ('needsAwsEnv').
-An import the dispatcher's gate ('checkImport') refuses makes none, so the
-user sees the trust error rather than an AWS environment error.
--}
-isAwsImport :: ImportPolicy -> Text -> ImportBase -> Bool
-isAwsImport policy location baseLocation =
-    either
-        (const False)
-        (needsAwsEnv (ipRemoteImports policy))
-        (checkImport (ipTrustedSources policy) location baseLocation)
 
 -- | Run the factory, turning a synchronous failure into a message with its cause.
 buildImportEnv :: (AwsSettings -> IO Amazonka.Env) -> Text -> Text -> AwsSettings -> IO (Either Text Amazonka.Env)

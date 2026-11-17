@@ -22,6 +22,7 @@ module Iidy.Yaml.Imports.Types (
     isAwsBacked,
     needsAwsEnv,
     checkImport,
+    importNeedsAwsEnv,
     parseImportType,
 ) where
 
@@ -172,6 +173,18 @@ checkImport trusted location base = do
                )
             <> " is not a trusted source (to allow it, pass --trust-import-source"
             <> " with a prefix of that location)"
+
+{- | Whether loading this import makes AWS calls: it passes the gate
+('checkImport') and its type 'needsAwsEnv'. An import the gate refuses
+makes none, so callers that build an AWS environment on demand report the
+gate's error rather than an environment error.
+-}
+importNeedsAwsEnv :: ImportPolicy -> Text -> ImportBase -> Bool
+importNeedsAwsEnv policy location base =
+    either
+        (const False)
+        (needsAwsEnv (ipRemoteImports policy))
+        (checkImport (ipTrustedSources policy) location base)
 
 {- | Parse an import type prefix from a location string.
 Returns @Right ("", loc)@ for plain file paths (no colon or relative/absolute paths).

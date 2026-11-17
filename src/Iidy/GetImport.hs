@@ -34,9 +34,7 @@ import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
 import Iidy.Yaml.Imports.Types (
     ImportData (..),
     ImportError (..),
-    ImportPolicy (..),
-    needsAwsEnv,
-    parseImportType,
+    importNeedsAwsEnv,
     rootBase,
  )
 import Iidy.Yaml.JMESPath (applyJmesPath)
@@ -55,15 +53,15 @@ runGetImport emit args gopts awsSettings =
     runGetImportWith (fst <$> createAwsEnvFromSettings awsSettings) emit args gopts
 
 {- | Run the get-import command with an explicit AWS environment provider.
-The provider runs at most once, and only when 'needsAwsEnv' holds for the
+The provider runs at most once, and only when 'importNeedsAwsEnv' holds for the
 location. Tests pass a mock environment here.
 -}
 runGetImportWith :: IO Amazonka.Env -> (OutputData -> IO ()) -> GetImportArgs -> GlobalOpts -> IO Int
 runGetImportWith mkEnv emit args gopts = do
     let location = giaImport args
-        baseLocation = "."
+        base = rootBase "."
         policy = importPolicyFromOpts gopts
-        wantsEnv = either (const False) (needsAwsEnv (ipRemoteImports policy)) (parseImportType location baseLocation)
+        wantsEnv = importNeedsAwsEnv policy location base
 
     envResult <-
         if wantsEnv
@@ -74,7 +72,7 @@ runGetImportWith mkEnv emit args gopts = do
         Left err -> reportImportError err
         Right mEnv -> do
             let importCfg = mkImportConfig mEnv policy
-            result <- mkFullDispatcher importCfg location (rootBase baseLocation)
+            result <- mkFullDispatcher importCfg location base
             case result of
                 Left (ImportError err) -> reportImportError err
                 Right importData -> emitDoc emit gopts args importData
