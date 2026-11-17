@@ -223,15 +223,16 @@ loadStackArgsWith policy mkLoader argsfile environment operation cliAws =
 -- CommandsBefore
 ------------------------------------------------------------------------
 
-{- | Refuse a stack-args file with @CommandsBefore@ for the operations that
+{- | Refuse a stack-args file with a non-empty @CommandsBefore@ for the operations that
 would run it in Rust (@should_process_commands_before@,
 @src/cfn/stack_args.rs:483-490@) and iidy-js (@loadStackArgs.ts:137-166@).
 iidy-hs never runs the commands (see DIVERGENCES.md), so going ahead would
-skip them silently. Other operations accept the field and ignore it.
+skip them silently. An empty list runs nothing in the originals and loads.
+Other operations accept the field and ignore it.
 -}
 refuseCommandsBefore :: (Monad m) => Text -> CfnOperation -> StackArgs -> ExceptT Text m ()
 refuseCommandsBefore argsfile operation sa = case saCommandsBefore sa of
-    Just _
+    Just (_ : _)
         | runsCommandsBefore operation ->
             throwE $
                 "CommandsBefore in "

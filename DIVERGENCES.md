@@ -564,7 +564,9 @@ iidy-hs never runs the commands. For those four commands a stack-args file
 that sets `CommandsBefore` is refused before any stack operation, with an
 error naming the file, the field and the command, so a pre-deploy step (a
 build, a check, an upload) is never skipped silently. Every other command,
-and `render`, accepts the file; the field is parsed and ignored.
+and `render`, accepts the file; the field is parsed and ignored. An empty
+list (`CommandsBefore: []`) runs nothing in the originals and loads for every
+command.
 
 ## `--debug`: Accepted, No Effect
 

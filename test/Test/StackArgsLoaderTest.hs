@@ -463,7 +463,15 @@ commandsBeforeTests =
             assertNoMarker dir
     | op <- [OpCreateStack, OpUpdateStack, OpCreateChangeset, OpCreateOrUpdate]
     ]
-        <> [ testCase "CommandsBefore is accepted and not run for delete-stack" $
+        <> [ testCase "an empty CommandsBefore list loads for create-stack" $
+                withSystemTempDirectory "iidy-commands-before" $ \dir -> do
+                    let argsfile = dir </> "stack-args.yaml"
+                    writeFile argsfile "StackName: test-stack\nTemplate: template.yaml\nRegion: us-east-1\nCommandsBefore: []\n"
+                    result <- loadStackArgs argsfile "dev" OpCreateStack noAwsSettings (importPolicy AllowRemoteImports) Nothing
+                    case result of
+                        Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
+                        Right (LoadedStackArgs sa _aws _ctx) -> saCommandsBefore sa @?= Just []
+           , testCase "CommandsBefore is accepted and not run for delete-stack" $
                 withCommandsBeforeCopy $ \dir argsfile -> do
                     result <- loadStackArgs argsfile "dev" OpDeleteStack noAwsSettings (importPolicy AllowRemoteImports) Nothing
                     case result of

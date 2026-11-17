@@ -641,7 +641,7 @@ loadStackArgs(argsfilePath, environment, operation, cliAws, remoteImports, mAwsE
        cdcStackArgsAssumeRoleArn = argsfileAws.assumeRoleArn
      }
   11. stackArgs = valueToStackArgs(withEnvValues)  -- validates unknown keys, parses fields
-  12. if stackArgs.commandsBefore is set and operation in
+  12. if stackArgs.commandsBefore is a non-empty list and operation in
         {create-stack, update-stack, create-changeset, create-or-update}:
         error("CommandsBefore in <argsfile> is not supported: ...")  -- never run; see DIVERGENCES.md
   13. return (stackArgs, mergedAws, detectionCtx)
