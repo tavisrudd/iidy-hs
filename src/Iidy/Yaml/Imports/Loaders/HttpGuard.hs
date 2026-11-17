@@ -144,7 +144,8 @@ instance Exception GuardRefusal
 
 {- | Loopback, link-local (including the AWS metadata address
 @169.254.169.254@), unspecified (@0.0.0.0/8@, @::@) and the AWS IPv6
-metadata address @fd00:ec2::254@, plus the IPv4 forms embedded in IPv6
+link-service range @fd00:ec2::/32@ (instance metadata @fd00:ec2::254@,
+the EKS Pod Identity Agent @fd00:ec2::23@), plus the IPv4 forms embedded in IPv6
 (IPv4-mapped, IPv4-compatible and NAT64 @64:ff9b::/96@). Unix sockets are
 refused too.
 -}
@@ -161,7 +162,7 @@ blockedV6 :: (Word16, Word16, Word16, Word16, Word16, Word16, Word16, Word16) ->
 blockedV6 (w0, w1, w2, w3, w4, w5, w6, w7)
     | all (== 0) [w0, w1, w2, w3, w4, w5, w6] && w7 <= 1 = True -- :: and ::1
     | w0 .&. 0xffc0 == 0xfe80 = True -- fe80::/10 link-local
-    | (w0, w1, w2, w3, w4, w5, w6, w7) == (0xfd00, 0x0ec2, 0, 0, 0, 0, 0, 0x0254) = True
+    | (w0, w1) == (0xfd00, 0x0ec2) = True -- fd00:ec2::/32 AWS link services
     | all (== 0) [w0, w1, w2, w3, w4] && (w5 == 0xffff || w5 == 0) = embedded -- mapped / compatible
     | (w0, w1) == (0x0064, 0xff9b) && all (== 0) [w2, w3, w4, w5] = embedded -- NAT64
     | otherwise = False
