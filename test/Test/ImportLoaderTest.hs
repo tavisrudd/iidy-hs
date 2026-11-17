@@ -1,6 +1,7 @@
 module Test.ImportLoaderTest (importLoaderTests) where
 
 import Data.Aeson (Value (..))
+import Data.Aeson qualified as Aeson
 import Data.Char (isDigit)
 import Data.Maybe (isJust)
 import Data.Text qualified as T
@@ -238,4 +239,6 @@ jsonOrderedTests =
         testCase ("idOrdered agrees with idDoc: " <> name) $
             case parseByExtensionStrict ".json" txt (TE.encodeUtf8 txt) of
                 Left err -> assertBool (show err) False
-                Right pd -> fmap toValue (pdOrdered pd) @?= Just (pdValue pd)
+                Right pd -> do
+                    fmap toValue (pdOrdered pd) @?= Just (pdValue pd)
+                    Aeson.eitherDecodeStrict (TE.encodeUtf8 txt) @?= Right (pdValue pd)

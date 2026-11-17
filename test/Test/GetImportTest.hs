@@ -17,7 +17,7 @@ import Iidy.Cli (GetImportArgs (..), RenderFormat (..))
 import Iidy.GetImport (needsAwsEnv, runGetImportWith)
 import Iidy.Yaml.Imports.Types (ImportType (..), RemoteImports (..))
 import Test.MockAws (MockAws (..), newMockAws)
-import Test.Shared (collectRawOutput, docFixture, listFixture, nestedSeqFixture, orderedJsonFixture, orderedNestedFixture, orderedYamlFixture, preprocTagsFixture, testGlobalOpts)
+import Test.Shared (collectRawOutput, docFixture, listFixture, nestedSeqFixture, orderedJsonFixture, orderedNestedFixture, orderedYamlFixture, preprocTagsFixture, surrogateJsonFixture, testGlobalOpts)
 
 getImportTests :: [TestTree]
 getImportTests =
@@ -266,6 +266,8 @@ keyOrderTests =
         yamlOf orderedNestedFixture ["k:", "  z: 1", "  a: 2", "m: x"]
     , testCase "yaml: a .json file keeps its key order" $
         yamlOf orderedJsonFixture ["z: 1", "a:", "  y: 1", "  b: 2"]
+    , testCase "yaml: a .json surrogate-pair escape prints the character" $
+        yamlOf surrogateJsonFixture ["e: \128512", "a: 1"]
     , testCase "json: output stays sorted" $
         runFormat RenderJson Nothing orderedYamlFixture
             >>= (@?= RunResult 0 ["{\n  \"a\": 2,\n  \"z\": [\n    1\n  ]\n}\n"] 0)

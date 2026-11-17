@@ -26,6 +26,9 @@ module Iidy.Yaml.Imports.ContentParsing (
 
 import Data.Aeson (Value (..))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Decoding.ByteString (bsToTokens)
+import Data.Aeson.Decoding.Tokens qualified as Tk
+import Data.Aeson.Key qualified as Key
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as BL
 import Data.Either (fromRight)
@@ -34,7 +37,7 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 
 import Iidy.Yaml.Imports.Types (ImportError (..))
-import Iidy.Yaml.OValue (OValue, toValue)
+import Iidy.Yaml.OValue (OValue (..), toValue)
 import Iidy.Yaml.Parser (parseYaml)
 import Iidy.Yaml.Resolution.Resolver (astToOValueKeepingTags)
 
@@ -66,15 +69,59 @@ data ParsedDoc = ParsedDoc
     }
     deriving stock (Show, Eq)
 
--- | A YAML document: both views come from the one parse.
+-- | A document whose ordered view the value is derived from (one parse).
 yamlDoc :: OValue -> ParsedDoc
 yamlDoc o = ParsedDoc (toValue o) (Just o)
 
-{- | A JSON document. The value stays the aeson parse (numbers and duplicate
-keys as before); the ordered view reads the same text as YAML, as Rust does.
+{- | Read JSON bytes straight from aeson's token stream into an 'OValue' with
+keys in source order (a duplicate key keeps its first position and takes the
+last value). 'Nothing' on malformed input. aeson decodes the escapes, so
+surrogate pairs come out right; the 'Value' is 'toValue' of the result, so
+the text is parsed once.
 -}
-jsonDoc :: Text -> Value -> ParsedDoc
-jsonDoc content v = ParsedDoc v (either (const Nothing) Just (parseYamlOrdered content))
+jsonToOValue :: BS.ByteString -> Maybe OValue
+jsonToOValue bytes = case value (bsToTokens bytes) of
+    Right (v, rest) | BS.all isJsonSpace rest -> Just v
+    _ -> Nothing
+  where
+    isJsonSpace w = w `elem` [0x20, 0x09, 0x0a, 0x0d]
+    value :: Tk.Tokens k String -> Either String (OValue, k)
+    value = \case
+        Tk.TkLit l k -> Right (lit l, k)
+        Tk.TkText t k -> Right (OString t, k)
+        Tk.TkNumber n k -> Right (ONumber (num n), k)
+        Tk.TkArrayOpen a -> array [] a
+        Tk.TkRecordOpen r -> record [] r
+        Tk.TkErr e -> Left e
+    lit = \case
+        Tk.LitNull -> ONull
+        Tk.LitTrue -> OBool True
+        Tk.LitFalse -> OBool False
+    num = \case
+        Tk.NumInteger i -> fromInteger i
+        Tk.NumDecimal s -> s
+        Tk.NumScientific s -> s
+    array acc = \case
+        Tk.TkItem ts -> value ts >>= \(v, rest) -> array (v : acc) rest
+        Tk.TkArrayEnd k -> Right (OArray (reverse acc), k)
+        Tk.TkArrayErr e -> Left e
+    record acc = \case
+        Tk.TkPair key ts ->
+            value ts >>= \(v, rest) -> record (setKey (Key.toText key) v acc) rest
+        Tk.TkRecordEnd k -> Right (OObject (reverse acc), k)
+        Tk.TkRecordErr e -> Left e
+    -- acc is reversed; a repeated key is replaced in place
+    setKey k v acc
+        | any ((== k) . fst) acc = [(k', if k' == k then v else v') | (k', v') <- acc]
+        | otherwise = (k, v) : acc
+
+{- | Parse JSON bytes once. A malformed document takes the error text from
+'parseJsonContent', so messages stay those of aeson's @eitherDecode@.
+-}
+parseJsonDoc :: BS.ByteString -> Either Text ParsedDoc
+parseJsonDoc bytes = case jsonToOValue bytes of
+    Just o -> Right (yamlDoc o)
+    Nothing -> plainDoc <$> parseJsonContent bytes
 
 -- | A document with no key order to keep (scalars, lenient fallbacks).
 plainDoc :: Value -> ParsedDoc
@@ -101,8 +148,8 @@ parseByExtensionStrict ext content rawBytes
             Right o -> Right (yamlDoc o)
             Left err -> Left $ ImportError $ "Failed to parse YAML: " <> err
     | ext == ".json" =
-        case parseJsonContent rawBytes of
-            Right v -> Right (jsonDoc content v)
+        case parseJsonDoc rawBytes of
+            Right d -> Right d
             Left err -> Left $ ImportError $ "Failed to parse JSON: " <> err
     | otherwise = Right (plainDoc (String content))
 
@@ -117,8 +164,8 @@ Used by Ssm loader.
 parseByFormatSuffix :: Maybe Text -> Text -> Either ImportError ParsedDoc
 parseByFormatSuffix Nothing val = Right (plainDoc (String val))
 parseByFormatSuffix (Just "json") val =
-    case parseJsonContent (TE.encodeUtf8 val) of
-        Right v -> Right (jsonDoc val v)
+    case parseJsonDoc (TE.encodeUtf8 val) of
+        Right d -> Right d
         Left err -> Left $ ImportError $ "Invalid JSON in SSM parameter: " <> err
 parseByFormatSuffix (Just "yaml") val =
     case parseYamlOrdered val of

@@ -15,6 +15,7 @@ module Test.Shared (
     orderedYamlFixture,
     orderedNestedFixture,
     orderedJsonFixture,
+    surrogateJsonFixture,
     nestedSeqFixture,
     preprocTagsFixture,
     preprocTagsImporterFixture,
@@ -590,3 +591,7 @@ orderedNestedFixture = "test-fixtures/get-import/ordered-nested.yaml"
 -- | A @.json@ file with unsorted keys (C28).
 orderedJsonFixture :: Text
 orderedJsonFixture = "test-fixtures/get-import/ordered.json"
+
+-- | A @.json@ file whose value is a surrogate-pair escape (C28).
+surrogateJsonFixture :: Text
+surrogateJsonFixture = "test-fixtures/get-import/surrogate.json"

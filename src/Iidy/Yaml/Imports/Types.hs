@@ -41,8 +41,8 @@ data ImportData = ImportData
     , idOrdered :: Maybe OValue
     {- ^ The document with mapping keys in source order, when the loader parsed
     it from YAML or JSON text. Only unqueried YAML output of get-import reads
-    it; 'Nothing' means use 'idDoc'. Deliberately lazy (no bang): a JSON
-    import computes it by a second parse, which must run only when read.
+    it; 'Nothing' means use 'idDoc'. Lazy, so an unqueried
+    import pays nothing for it unless it is read.
     -}
     }
     deriving stock (Show, Eq)
