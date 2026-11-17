@@ -4,7 +4,7 @@
 * Overview
 The template approval workflow provides a structured, auditable mechanism for gating CloudFormation template changes through human review before they are used in stack deployments. Templates are hashed by content, staged in S3 as =.pending= objects, reviewed via a diff-and-confirm step, and promoted to approved locations that the CloudFormation service role may read.
 
-This workflow separates the concerns of template authorship and deployment authority: developers upload candidates; reviewers (or automation) approve them; the approval state lives entirely in S3 and is enforced through IAM policy rather than any application-level gate.
+This workflow separates the concerns of template authorship and deployment authority: developers upload candidates; reviewers (or automation) approve them; the approval state lives entirely in S3. iidy-hs enforces it at deploy time (see US-10-006): with =ApprovedTemplateLocation= set, the deploy commands refuse a template with no approved object and send CloudFormation a presigned URL for the approved object instead of the local body, so IAM policy (including a =cloudformation:TemplateUrl= condition) can enforce it too.
 
 The workflow is accessed via two subcommands of =template-approval=:
 
@@ -22,22 +22,24 @@ The approval workflow is divided into two logical operations:
 Key data requirements:
 
 - =ApprovedTemplateLocation= in the argsfile must be a valid =s3://bucket/path= URL.
-- =Template= in the argsfile must be a locally-resolvable path (file, =render:= prefix, or inline). S3/HTTP URLs are not supported for the approval request flow.
-- The template max inline size is 51,199 bytes.
+- =Template= in the argsfile must be a locally-resolvable path (file, =render:= prefix, or inline). An S3 or HTTP(S) URL, or no =Template=, is refused before any load or AWS call, by the request and by every deploy command.
+- On the approval path (request and deploy) the rendered template may be up to 999,999 bytes, counted in UTF-8 bytes; the error for a larger one does not suggest uploading to S3. Templates sent as a body keep the 51,199-byte limit.
 
 *CLI arguments:*
 
 - =template-approval request <argsfile>=: ARGSFILE positional + =--no-lint-template= flag
 - =template-approval review <url>=: URL positional + =--context LINES= (default 500)
 
-*S3 operations used*: =HeadObject= (existence check), =PutObject= (upload), =GetObject= (download), =DeleteObject= (cleanup pending).
+*S3 operations used*: =GetBucketLocation= (bucket region), =HeadObject= (existence check), =PutObject= (upload), =GetObject= (download), =DeleteObject= (cleanup pending).
+
+*Bucket region*: every S3 call of the request, the review and the deploy check goes to the bucket's own region, found with =GetBucketLocation= sent to us-east-1 (an empty answer means us-east-1, =EU= means eu-west-1). If that call fails for any reason (no =s3:GetBucketLocation=, no route to us-east-1, another partition, a bucket of another account), the stack's region is used, and a later =HeadObject= failure says "(bucket region lookup failed: <error>; used the stack's region)". A wrong region fails closed: S3 answers with a redirect or an error, never as approved. The review therefore needs no =--region=.
 
 *Output events emitted* (in order per flow):
 
 - Request: =ApprovalRequestResult=
 - Review: =ApprovalStatus=, =TemplateDiff=, =ApprovalResult=
 
-*ACL*: =bucket-owner-full-control= is the intended ACL for cross-account safety. The current implementation calls =PutObject= without an explicit ACL field (known gap; see Testing Requirements).
+*ACL*: the pending upload carries =bucket-owner-full-control= for cross-account safety, as iidy-js; the approve writes (approved and =latest=) carry no ACL, as iidy-js.
 
 *Key S3 key naming convention:*
 
@@ -47,7 +49,7 @@ Key data requirements:
 <baseKey>/latest                      -- pointer to current approved content
 #+end_example
 
-Where =baseKey= is derived from the =ApprovedTemplateLocation= field with trailing slashes normalized, and =ext= is the file extension of the =Template= field (e.g. =.yaml=). The =latest= key lives at the parent directory level of the hash-named objects.
+Where =baseKey= is derived from the =ApprovedTemplateLocation= field with trailing slashes normalized, and =ext= is the file extension of the =Template= field (e.g. =.yaml=). The =latest= key lives at the parent directory level of the hash-named objects. A bucket-only location (=s3://bucket= or =s3://bucket/=) puts the objects at the bucket root (=<sha256hex><ext>=, =latest=). All of these keys are built in one module, =src/Iidy/Cfn/ApprovedTemplate.hs=.
 
 *Diff algorithm*: =generateDiff contextLines old new= computes an LCS-based (Longest Common Subsequence) unified diff:
 
@@ -134,9 +136,9 @@ This is ORDER-SENSITIVE (not set-theoretic). The =--context= flag controls how m
                                        empty        non-empty
                                          /             \
                               +---------+--+    +------+---------+
-                              | Auto-      |    | Prompt user    |
-                              | approve    |    +------+---------+
-                              | (exit 0)   |      /         \
+                              | Prompt     |    | Prompt user    |
+                              | user (same |    +------+---------+
+                              | as right)  |      /         \
                               +------------+  approve     reject
                                               /             \
                                     +--------+--+    +------+------+
@@ -156,39 +158,38 @@ This is ORDER-SENSITIVE (not set-theoretic). The =--context= flag controls how m
 *Acceptance Criteria:*
 
 - =template-approval request <argsfile>= is the invocation form.
-- The argsfile must contain both =ApprovedTemplateLocation= (an =s3://bucket/path= base URL) and =Template= (a locally-resolvable file path or =render:= path). If either field is absent, the command exits with a descriptive error before contacting AWS.
+- The argsfile must contain both =ApprovedTemplateLocation= (an =s3://bucket/path= or =s3://bucket= base URL) and =Template= (a locally-resolvable file path or =render:= path). If either field is absent, or =Template= is a URL, the command exits with a descriptive error before contacting AWS.
 - The template is loaded via the full preprocessing pipeline (including =render:= prefix YAML engine pass, import resolution, and Handlebars interpolation).
 - Template loading failure (file not found, YAML parse error, import resolution error) is returned as an error immediately; no S3 calls are made.
 - A SHA256 hash of the fully-processed UTF-8 template content is computed.
 - The approved S3 key is derived as =<baseKey>/<hash><ext>= (no =.pending= suffix). If the base location is invalid (no bucket, no key), an error is returned.
 - If an object already exists at the approved key (verified by =HeadObject=), the command exits 0 and emits =ApprovalRequestResult= with =alreadyApproved = True=. No upload is performed. =nextSteps= contains ="Template has already been approved"=.
-- If no approved object exists, the template is uploaded to the =.pending= key (=approvedKey <> ".pending"=) via =PutObject=. On upload failure the command returns an error ="Failed to upload pending template: <awsError>"=.
+- A =HeadObject= answer other than 200 or 404 fails the command: 403 with "Access denied (403) checking s3://B/K: the current credentials cannot read the template approval bucket (S3 also answers 403 for a missing object when s3:ListBucket is not granted)", anything else with "Failed to check s3://B/K in region R: <error>".
+- If no approved object exists, the template is uploaded to the =.pending= key (=approvedKey <> ".pending"=) via =PutObject= with the =bucket-owner-full-control= ACL. On upload failure the command returns an error ="Failed to upload pending template: <awsError>"=.
 - On successful upload, =ApprovalRequestResult= is emitted with:
   - =templateLocation= = ="s3://<bucket>/<approvedKey>"= (content-addressed, no =.pending=)
   - =pendingLocation= = ="s3://<bucket>/<approvedKey>.pending"=
   - =alreadyApproved= = =False=
   - =nextSteps= = =["Review with: iidy template-approval review " <> pendingLoc]=
 - The command returns exit code 0 on success (both already-approved and newly uploaded paths). Non-zero exit on validation or upload failure.
-- When =--no-lint-template= is absent (default), the template is validated via the =ValidateTemplate= API before upload; on failure, exit 1 with =TemplateValidation= output. When =--no-lint-template= is present, validation is skipped.
+- When =--no-lint-template= is absent (default), the rendered template is validated via the =ValidateTemplate= API after the =HeadObject= check (only when not yet approved) and before upload; on validation errors, or a =ValidateTemplate= access or network error, exit 1 with =TemplateValidation= output and no upload. A rendered template over 51,199 UTF-8 bytes is not sent; the =TemplateValidation= output carries a warning instead and the upload proceeds. When =--no-lint-template= is present, validation is skipped. The default therefore needs =cloudformation:ValidateTemplate=.
 
 *Logic Flow:*
 
 #+begin_example
-validate saApprovedTemplateLocation present
-  → absent: Left "ApprovedTemplateLocation is required in stack-args.yaml"
-validate saTemplate present
-  → absent: Left "Template is required in stack-args.yaml"
-loadCfnTemplate saTemplate argsfilePath env
-  → trTemplateBody == Nothing: Left "Failed to load template body"
-  → Just body:
-      generateVersionedLocation baseLocation body templatePath
-        → Left err: return Left err
-        → Right (bucket, approvedKey):
-            s3ObjectExists awsEnv bucket approvedKey
-              → True:  emit OdApprovalRequestResult (alreadyApproved=True)
-                       return Right 0
-              → False:
-                  uploadToS3 awsEnv bucket (approvedKey <> ".pending") body
+approvedTemplateFor ctx stackArgs argsfilePath
+  → Right Nothing (no location): Left "ApprovedTemplateLocation is required in stack-args.yaml"
+  → Left err (no Template, URL Template, load or size error): return Left err
+  → Right (Just (bucket, approvedKey, body)):
+      s3 <- approvalS3Env awsEnv bucket          -- bucket's region
+      approvalObjectExists s3 bucket approvedKey
+        → Left err: return Left err             -- 403 or other failure
+        → True:  emit OdApprovalRequestResult (alreadyApproved=True)
+                 return Right 0
+        → False:
+            if lint: validateTemplateBody body; emit OdTemplateValidation
+                     errors → return Right 1
+            uploadToS3 s3 BucketOwnerFullControl bucket (approvedKey <> ".pending") body
                     → Left err: return Left ("Failed to upload pending template: " <> err)
                     → Right ():
                         emit OdApprovalRequestResult (alreadyApproved=False)
@@ -199,21 +200,21 @@ loadCfnTemplate saTemplate argsfilePath env
 
 - Trailing slashes on =ApprovedTemplateLocation= are normalized by =generateVersionedLocation=: ="s3://bucket/templates/"= and ="s3://bucket/templates"= both produce ="templates/<hash>.yaml"= as the key.
 - The =Template= field may be a bare filename (e.g. ="cfn-template.yaml"=), resolved relative to the argsfile directory. It may also be a =render:= prefixed path, an =s3://= URL, or an =https://= URL. The extension used in the hash key is taken from the =Template= field value, not from the content type of the loaded body.
-- If =Template= is an S3 or HTTP URL, the template loader returns no body; this is treated as a load failure. Templates must be locally resolvable for approval requests.
+- If =Template= is an S3 or HTTP(S) URL, it is refused before anything is loaded: "Template must be a local file when ApprovedTemplateLocation is set, not a URL (<Template>): template approval hashes the rendered local template". A missing =Template= gets "Template is required in stack-args.yaml when ApprovedTemplateLocation is set: template approval hashes the rendered local template".
 - Parameter changes that do not affect the template body (e.g., changing a =Parameters= value in the argsfile) do not change the hash; the same approved object applies. This is intentional: approval gates template content, not parameter values.
 
 *Error Scenarios:*
 
 - Missing =ApprovedTemplateLocation=: error ="ApprovedTemplateLocation is required in stack-args.yaml"=, exit 1.
-- Missing =Template= field: error ="Template is required in stack-args.yaml"=, exit 1.
+- Missing =Template= field: the error above, exit 1.
 - Template file not found or unreadable: load error returned, exit 1.
 - Invalid =ApprovedTemplateLocation= format (no bucket or no key): S3 URL parse error, exit 1.
-- S3 =HeadObject= access denied (no =s3:GetObject= on approved key): treated as object-absent; upload proceeds. This means a developer without read access to the approved prefix will always attempt to upload, even if the template is already approved.
+- S3 =HeadObject= access denied: the command fails with the access-denied message; nothing is uploaded (as iidy-js, which rethrows anything but =NotFound=).
 - S3 =PutObject= failure (no permission, bucket does not exist, etc.): error ="Failed to upload pending template: <awsErr>"=, exit 1.
 
 *Complexity Notes:*
 
-The request function accepts: a CFN context, the parsed stack args, the lint flag, the argsfile path (for template resolution), the environment (for preprocessing), and an output emitter. The =lintTmpl= flag is wired in the CLI but no =ValidateTemplate= call is made. A future implementation would call =ValidateTemplate= when lint is enabled and emit =TemplateValidation= output with errors and warnings.
+The request function accepts: a CFN context, the parsed stack args, the lint flag, and the argsfile path (for template resolution). The lint flag selects the =ValidateTemplate= call described above (=validateTemplateBody=, shared with =lint-template=).
 
 *Estimated complexity*: Low. The function is straight-line IO with no loops and a single AWS read + optional write.
 
@@ -226,7 +227,7 @@ The request function accepts: a CFN context, the parsed stack args, the lint fla
 
 - =template-approval review <url>= is the invocation form. =<url>= must be a valid =s3://= URL ending with =.pending=; any other format is rejected before AWS calls.
 - The pending S3 key is derived from the URL by parsing the bucket and key.
-- The approved key is derived by stripping the =.pending= suffix (8 characters) from the pending key.
+- The approved key is derived by stripping the =.pending= suffix from the pending key (=approvedKeyFromPending=).
 - The =latest= key is derived from the approved key's parent directory: =<parentDir>/latest=. If there is no parent directory, =latestKey = "latest"=.
 - =ApprovalStatus= is emitted before any download, containing:
   - =pendingExists=: whether =HeadObject= on the pending key succeeds
@@ -243,8 +244,7 @@ The request function accepts: a CFN context, the parsed stack args, the lint fla
     - =contextLines=: the =--context= argument (default 500)
     - =hasChanges=: whether =diffOutput= is non-empty
   - Emit =TemplateDiff=.
-  - If =hasChanges = False= (pending content is identical to latest): auto-approve without prompting. Emit =ApprovalResult= with =approved = True=, =cleanupCompleted = False=. Return exit 0.
-  - If =hasChanges = True=: prompt ="Would you like to approve these changes?"=.
+  - Prompt ="Would you like to approve these changes?"=, whether or not =hasChanges= (as iidy-js; an identical pending template is not approved without the reviewer).
     - If confirmed:
       - Upload pending content to approved key.
       - Upload pending content to latest key.
@@ -260,10 +260,11 @@ The request function accepts: a CFN context, the parsed stack args, the lint fla
 #+begin_example
 parseS3Url url
   → Left err: return Left err
-validate T.isSuffixOf ".pending" pendingKey
-  → False: return Left "URL must end with .pending suffix"
-s3ObjectExists awsEnv bucket pendingKey → pendingExists
-s3ObjectExists awsEnv bucket approvedKey → alreadyApproved
+approvedKeyFromPending pendingKey
+  → Left: return Left "URL must end with .pending suffix"
+s3 <- approvalS3Env awsEnv bucket          -- bucket's region
+approvalObjectExists s3 bucket pendingKey  → pendingExists   (403/other: Left)
+approvalObjectExists s3 bucket approvedKey → alreadyApproved (403/other: Left)
 emit OdApprovalStatus { pendingExists, alreadyApproved, ... }
 if not pendingExists:
   return Left ("Pending template not found at " <> url)
@@ -274,9 +275,6 @@ downloadFromS3 awsEnv bucket latestKey  → latest  (default "")
 let diffOutput = generateDiff latest pending
     hasChanges = not (T.null diffOutput)
 emit OdTemplateDiff { diffOutput, contextLines, hasChanges }
-if not hasChanges:
-  emit OdApprovalResult { approved=True, cleanupCompleted=False }
-  return Right 0
 requestConfirmation "Would you like to approve these changes?"
   → True:
       uploadToS3 awsEnv bucket approvedKey pending
@@ -302,13 +300,14 @@ requestConfirmation "Would you like to approve these changes?"
 - URL does not start with =s3://=: error ="Invalid S3 URL (must start with s3://): <url>"=, exit 1.
 - URL does not end with =.pending=: error ="URL must end with .pending suffix"=, exit 1.
 - Pending object not found: error ="Pending template not found at <url>"=, exit 1.
-- =HeadObject= or =GetObject= AWS error: exception propagated to top-level handler, exit 1.
+- =HeadObject= 403 or other error on the pending or approved key: the access-denied or "Failed to check ... in region R" message, exit 1, before any download.
+- =GetObject= error on the pending object: "Failed to download pending template: <error>", exit 1.
 - User rejects the approval: =OdApprovalResult { arApproved = False }= emitted, exit 1 (not 130; rejection is a normal operational outcome, not a cancellation).
 - =PutObject= or =DeleteObject= failure during promotion: exception propagated, exit 1. Pending object may remain; re-running the review command is safe.
 
 *Complexity Notes:*
 
-The review function accepts: a CFN context, the S3 URL of the pending template, the context lines count, and an output emitter.
+The review function accepts: a CFN context, the S3 URL of the pending template, and the context lines count. =templateApprovalReviewWith= takes the prompt as its first argument (=Text -> IO ConfirmResult=, the type of =requestConfirmation=); =templateApprovalReview= is it applied to =requestConfirmation=. Tests pass a stub.
 
 The confirmation prompt format matches all other confirmation prompts in the system: blank line + ="? "= + bold bright red on TTY + message + =" (y/N) "=. Non-TTY: plain text without ANSI codes.
 
@@ -323,7 +322,7 @@ The confirmation prompt format matches all other confirmation prompts in the sys
 
 - After computing the content hash and deriving the approved S3 key, a =HeadObject= check determines whether an approved object already exists at that key.
 - If the approved object exists: emit =OdApprovalRequestResult= with =arrAlreadyApproved = True= and return exit code 0. No =PutObject= call is made.
-- If the approved object does not exist (including if =HeadObject= returns an access- denied error, which is mapped to =False=): proceed with uploading the pending object.
+- If the approved object does not exist (=HeadObject= 404): proceed with uploading the pending object. An access-denied (403) or other =HeadObject= error fails the command with no upload.
 - The output emitted in the already-approved case must include:
   - =arrTemplateLocation= = the full =s3://bucket/approvedKey= URL
   - =arrPendingLocation= = the same URL (since no pending was created)
@@ -374,21 +373,23 @@ This story describes behavior that falls out of US-10-001 and US-10-002 without 
 
 *Acceptance Criteria:*
 
-- The workflow is designed around three IAM permission profiles. iidy-hs itself enforces no application-level role check; enforcement is entirely through S3 IAM policies on the bucket hosting the approved template locations.
+- The workflow is designed around three IAM permission profiles. iidy-hs refuses to deploy an unapproved template (US-10-006) and deploys the approved object by URL; the separation of roles itself is enforced by S3 IAM policies on the bucket hosting the approved template locations.
 - *Developer* (template authors):
   - Needs =s3:PutObject= on =<prefix>/*.pending= keys only.
-  - Does not need =s3:GetObject= on approved keys (though missing it causes the idempotency check to fail silently; see US-10-003 edge cases).
+  - Needs =s3:GetObject= (for =HeadObject=) on approved keys: a 403 there fails the request. Without =s3:ListBucket=, S3 answers 403 also for a missing approved key, so grant =s3:ListBucket= on the bucket or prefix.
   - Must NOT have =s3:PutObject= on non-pending keys (would allow self-approval).
 - *Reviewer* (approval authority):
   - Needs =s3:GetObject= on all keys (pending and approved) to download and diff.
   - Needs =s3:PutObject= on non-pending keys to write approved and latest objects.
   - Needs =s3:DeleteObject= on pending keys to clean up after approval.
   - May have =s3:HeadObject= on all keys for existence checks.
+- *Deploying principal* (the credentials iidy-hs deploys with): needs =s3:GetObject= on approved keys, for the =HeadObject= check and because the presigned URL is signed with these credentials; =s3:GetBucketLocation= on the bucket is optional (the stack's region is used without it).
 - *CloudFormation service role* (deployment authority):
   - Needs =s3:GetObject= on approved keys only (not =.pending= keys).
   - Should NOT have access to =.pending= keys (prevents deploying unreviewed content).
   - Typically attached to the CFN stack via =ServiceRoleArn= in stack-args.yaml.
-- *Cross-account safety*: The =PutObject= call in =uploadToS3= is intended to use =bucket-owner-full-control= ACL to ensure the bucket owner retains control when developer and reviewer are in different AWS accounts. The current implementation does not set an explicit ACL (this is a known gap). In same-account setups this is not an issue.
+- *Cross-account safety*: the pending =PutObject= carries the =bucket-owner-full-control= ACL so the bucket owner retains control when developer and reviewer are in different AWS accounts.
+- *Overwrite*: the deploy checks the approved object and then sends its URL; an object overwritten at an approved key in between is what CloudFormation fetches, as in iidy-js. Deny =s3:PutObject= on approved keys to everyone but reviewers.
 
 *Logic Flow:*
 
@@ -411,7 +412,7 @@ CloudFormation service role policy:
 
 *Edge Cases:*
 
-- In the request flow, the =HeadObject= existence check on the approved key will fail with access denied for developers who lack =s3:GetObject=. The exception is caught and mapped to =False=. The developer then proceeds to upload the pending object. This is tolerable but means idempotency checks do not work correctly for developers in cross-account setups.
+- In the request flow, the =HeadObject= existence check on the approved key fails with access denied for developers who lack =s3:GetObject=; the request fails with a message saying so and uploads nothing.
 - The =latest= key is not under the =*.pending= restriction and must be writable by the reviewer. It is read by reviewers (as the "previous approved" baseline for diffs) but should not be accessible to CloudFormation service roles directly; stack deployments should reference the exact content-addressed key, not =latest=.
 
 *Error Scenarios:*
@@ -421,7 +422,7 @@ CloudFormation service role policy:
 
 *Complexity Notes:*
 
-iidy-hs participates in this security model by structuring S3 key names to make IAM prefix conditions straightforward (=*.pending= for pending, no suffix for approved). The application does not independently verify IAM policies or reject operations that would violate the model; that enforcement belongs at the IAM layer.
+iidy-hs participates in this security model by structuring S3 key names to make IAM prefix conditions straightforward (=*.pending= for pending, no suffix for approved), by refusing unapproved templates at deploy time, and by deploying from the approved object's URL so a =cloudformation:TemplateUrl= condition can apply. It does not verify IAM policies itself.
 
 *Estimated complexity*: N/A (security model documentation; no application logic beyond the key naming convention already implemented).
 
@@ -494,6 +495,31 @@ The hash computation requires a cryptographic SHA256 implementation over UTF-8-e
 
 --------------
 
+** US-10-006: Deploy only approved templates
+*As a* Platform Engineer, *I want* the deploy commands to use the approved object, *so that* a template that was not reviewed cannot be deployed through iidy-hs and IAM can require the approved location.
+
+*Acceptance Criteria:*
+
+- Applies to =create-stack=, =update-stack= (direct and =--changeset=), =create-changeset=, =create-or-update= (all four paths) and =estimate-cost=, when =ApprovedTemplateLocation= is set (and not cleared by =/iidy/disable-template-approval=). All of them get their template from =resolveDeployTemplate= (=src/Iidy/Cfn/ApprovedTemplate.hs=).
+- The template is rendered and hashed as in the request (same function, so the same key), with the 999,999-byte limit. A URL or missing =Template= is refused as in the request.
+- =HeadObject= on the approved key, in the bucket's region:
+  - 200: the request carries =TemplateURL= = a presigned HTTPS =GetObject= URL for the approved object (signed with the deploying credentials for the bucket's region, =X-Amz-Expires=900=, the aws-sdk v2 default iidy-js relied on) and no =TemplateBody=.
+  - 404: refused before any call that changes a stack (=update-stack --changeset= and =create-or-update= send =DescribeStacks= first, as iidy-js):
+    #+begin_example
+    Template version has not been approved or the current IAM principal does not have permission to access it. Run:
+      iidy-hs --region <stack region> --environment <env> [--profile <profile>] template-approval request <argsfile>
+    to begin the approval process.
+    #+end_example
+    =--profile= appears when the credentials come from =--profile= or the stack-args =Profile=. The options come before the command, where the CLI parser takes global options.
+  - 403 and other failures: the request's access-denied and "Failed to check ... in region R" messages.
+- With no =ApprovedTemplateLocation=, the local template is loaded and sent as before, and no S3 call is made.
+
+*Edge Cases:*
+
+- Any change to the render (another =--environment=, a changed import value, CRLF line endings) changes the hash, so the deploy is refused as not approved: it fails closed. The suggested command carries the region and environment so the request renders the same template.
+- A bucket name with dots gets a path-style URL (=https://s3.<region>.amazonaws.com/<bucket>/<key>?...=); iidy-js sends path-style URLs for every bucket.
+- =exec-changeset= sends no template and checks nothing, as iidy-js.
+
 * Testing Requirements
 ** Unit Tests (pure functions)
 - Hash computation with known inputs: verify the 64-character lowercase hex output matches an independently computed SHA256. At minimum: empty string, single character, and a realistic YAML template fragment.
@@ -518,6 +544,8 @@ The hash computation requires a cryptographic SHA256 implementation over UTF-8-e
   - Multiple non-adjacent changes — verify ="---"= separator between hunks.
 
 ** Integration Tests (via mock AWS)
+- Deploy builders, create-or-update, =update-stack --changeset= and estimate-cost with approval on: approved (presigned URL, no body), not approved (full refusal text, no mutating call), access denied, other failure naming the region, URL and missing =Template=, approval off (body, no S3 call); a bucket in another region than the stack; the 999,999 / 1,000,000-byte boundary; the suggested command parses.
+- Bucket region: =GetBucketLocation= answered as empty, us-east-1, eu-west-1, =EU= and denied (fallback, and the note in later failures).
 - Request flow with mock AWS:
   - Both =ApprovedTemplateLocation= and =Template= present; =HeadObject= returns absent; upload succeeds — verify =ApprovalRequestResult= emitted with =alreadyApproved = False= and correct pending URL.
   - Same setup but =HeadObject= returns present — verify =alreadyApproved = True= and no upload attempted.
@@ -528,7 +556,7 @@ The hash computation requires a cryptographic SHA256 implementation over UTF-8-e
   - Pending exists, already approved — verify exit 0 with no diff or upload.
   - Pending does not exist — verify error ="Pending template not found at ..."=.
   - Non-=.pending= URL — verify error ="URL must end with .pending suffix"=.
-  - No changes between pending and latest — verify auto-approve without confirmation.
+  - No changes between pending and latest — verify the prompt is still asked; yes writes approved and =latest= and deletes pending, no writes nothing.
   - User declines confirmation — verify exit 1 and =ApprovalResult { approved = False }=.
 - Emission sequence for review (changes present, user approves): verify order is =ApprovalStatus=, =TemplateDiff=, =ApprovalResult=.
 - Emission sequence for request (new upload): verify =ApprovalRequestResult= is emitted exactly once.
@@ -539,8 +567,6 @@ The hash computation requires a cryptographic SHA256 implementation over UTF-8-e
 - JSON renderer produces valid JSON for all four approval output types.
 
 ** Known Gaps (not yet tested or implemented)
-- The =--no-lint-template= path: no =ValidateTemplate= call is made; =TemplateValidation= output is never emitted. Tests for this path are deferred until lint integration is added.
-- =bucket-owner-full-control= ACL on =PutObject=: not set in the current implementation. A test that verifies ACL header presence would require mock inspection of the raw =PutObject= request.
 - Partial-failure handling during promotion (approved upload succeeds, latest upload fails): not tested; the current implementation discards upload errors during promotion.
 - Context-line trimming in diff output: implemented via =buildHunks= which uses =contextLines= to control context window around changes. Tests should verify hunk boundaries and ="---"= separators.
 

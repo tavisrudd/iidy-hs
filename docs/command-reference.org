@@ -335,14 +335,28 @@ The template approval workflow gates production deployments on explicit review. 
 *** How it works
 1. The stack-args.yaml includes an =ApprovedTemplateLocation= field pointing to an S3 prefix (e.g., =s3://my-org-approvals/templates/my-app/=).
 2. A developer runs =template-approval request=. iidy preprocesses the template through the full pipeline (imports, variables, tags, handlebars), computes a SHA256 hash of the processed output, and uploads it to ={prefix}/{hash}.pending= in S3.
-3. A reviewer runs =template-approval review <s3-url>=. iidy fetches the pending template and the most recently approved version, shows a colored diff, and prompts for approval.
-4. On approval, iidy copies the pending template to the approved key (removing =.pending=) and updates a =latest= reference.
-5. At deploy time, iidy re-processes the template, re-hashes it, and checks whether a matching approved object exists. If it does, the deployment proceeds. If not, it fails.
+3. A reviewer runs =template-approval review <s3-url>=. iidy fetches the pending template and the most recently approved version (=latest=), shows a colored diff, and prompts for approval. It prompts even when the diff is empty.
+4. On approval, iidy copies the pending template to the approved key (removing =.pending=), writes it to =latest= in the same directory, and deletes the pending object.
+5. At deploy time (=create-stack=, =update-stack= with or without =--changeset=, =create-changeset=, =create-or-update= and =estimate-cost=), iidy re-processes the template, re-hashes it, and checks with =HeadObject= that the approved object exists. If it does, iidy sends CloudFormation a presigned HTTPS URL for that object (=TemplateURL=, valid for 15 minutes) instead of the local template body. If it does not, the command fails before any call that changes a stack, and prints the command that starts the approval:
+
+#+begin_example
+Template version has not been approved or the current IAM principal does not have permission to access it. Run:
+  iidy-hs --region us-east-1 --environment prod --profile ops template-approval request stack-args.yaml
+to begin the approval process.
+#+end_example
+
+   The region is the stack's, the environment is =--environment=, and =--profile= appears when the credentials come from =--profile= or the stack-args =Profile=. Run the request with the same region and environment as the deploy: the rendered template, and so its hash, depends on them.
+
+With =ApprovedTemplateLocation= set, =Template= must name a local file (or =render:= file): an =s3://= or =https://= =Template=, or no =Template= at all, is refused by =template-approval request= and by every deploy command. Templates on this path may be up to 999999 bytes after rendering, instead of the 51199-byte limit for templates sent as a body. Setting the SSM parameter =/iidy/disable-template-approval= to =true= turns approval off for the stack-args that read it.
+
+The approval bucket's region is found with =GetBucketLocation= (sent to us-east-1, which answers for any bucket), so one bucket can serve stacks in every region and =template-approval review= needs no =--region=. If that call fails for any reason (no =s3:GetBucketLocation= permission, no route to the us-east-1 endpoint, another partition, a bucket owned by another account), iidy uses the stack's region instead, and a later S3 failure says that the lookup failed. A wrong region fails closed: S3 answers with a redirect or an error, never as approved.
+
+Template hashes are SHA256; templates approved with the original iidy (MD5 keys) are not found and must be approved again.
 
 Because the hash is computed on the fully-processed template, any change to the source -- including changes to imported files or resolved variables -- produces a different hash and requires a new approval. Conversely, once a template is approved, parameter-only changes to stack-args.yaml do not require re-approval because the template itself has not changed.
 
 *** Security model
-The enforcement mechanism is IAM, not application logic. In protected environments (production accounts/regions), the CloudFormation service role's IAM policy restricts =cloudformation:CreateStack=, =cloudformation:UpdateStack=, =cloudformation:DeleteStack=, =cloudformation:CreateChangeSet=, and other mutation operations to templates sourced from the approved S3 location. A template that has not been approved and copied to that location simply cannot be deployed -- CloudFormation will reject the API call regardless of what tooling is used.
+iidy refuses to deploy a template that has not been approved, and deploys the approved object itself by URL, so an IAM condition on =cloudformation:TemplateUrl= can be enforced. The stronger gate is IAM. In protected environments (production accounts/regions), the CloudFormation service role's IAM policy restricts =cloudformation:CreateStack=, =cloudformation:UpdateStack=, =cloudformation:DeleteStack=, =cloudformation:CreateChangeSet=, and other mutation operations to templates sourced from the approved S3 location. A template that has not been approved and copied to that location simply cannot be deployed -- CloudFormation will reject the API call regardless of what tooling is used.
 
 The actual security gate is the IAM policy on the deploy role. Once those roles and permissions are in place, iidy's =template-approval= commands make the workflow around them seamless: developers submit with one command, reviewers see a clear diff and approve with one command, and deploys just work if the template is approved.
 
@@ -350,12 +364,16 @@ The S3 bucket permissions complete the picture:
 
 - *Developers* need =s3:PutObject= on =.pending= keys to submit requests, but should NOT have =s3:PutObject= on the approved (non-pending) keys. This prevents self-approval.
 - *Reviewers* need =s3:GetObject= to read pending and approved templates, and =s3:PutObject= plus =s3:DeleteObject= to approve (copy to approved key, delete pending).
-- *CloudFormation service role* in production needs =s3:GetObject= on the approved keys only.
+- *The deploying principal* (the credentials iidy runs with) needs =s3:GetObject= on the approved keys: iidy checks the object with =HeadObject= and signs the URL with these credentials. Without =s3:ListBucket=, S3 answers =HeadObject= on a missing object with 403 instead of 404, so iidy reports access denied for a template that is simply not approved; the message says so. =s3:GetBucketLocation= on the bucket is optional (see above).
+- *CloudFormation* fetches the template through the presigned URL, so the URL works only while the deploying principal can read the object.
+- Deny =s3:PutObject= on approved keys to everyone but reviewers: an object overwritten at an approved key after the check is what gets deployed.
 
 For cross-account deployments, the =bucket-owner-full-control= ACL is set on uploads so the bucket owner retains control regardless of which account uploads.
 
 * template-approval request
-Submits a template approval request. iidy preprocesses the template, computes its hash, and uploads it to the pending location in S3. If the template is already approved (same hash), the command reports this and exits without uploading.
+Submits a template approval request. iidy preprocesses the template, computes its hash, and uploads it to the pending location in S3 with the =bucket-owner-full-control= ACL. If the template is already approved (same hash), the command reports this and exits without uploading. A =HeadObject= error other than "not found" (for example access denied) fails the command.
+
+Unless =--no-lint-template= is given, the rendered template is validated with CloudFormation =ValidateTemplate= before the upload, which needs =cloudformation:ValidateTemplate=. Validation errors, and a =ValidateTemplate= access or network error, exit 1 without uploading. A rendered template over 51199 bytes is not sent for validation; a warning says it will be validated on deploy.
 
 #+begin_example
 iidy template-approval request <argsfile> [options] [global options]
@@ -372,7 +390,7 @@ iidy template-approval request stack-args.yaml --no-lint-template
 #+end_example
 
 * template-approval review
-Opens a pending template approval request and displays the diff for review. The reviewer accepts or rejects the request interactively. The =--context= option controls how many lines of diff context are shown.
+Opens a pending template approval request and displays the diff against =latest= for review. The reviewer accepts or rejects the request interactively, even when the diff is empty. On yes, iidy writes the approved and =latest= objects and deletes the pending one; on no, it writes nothing and exits 1. The =--context= option controls how many lines of diff context are shown.
 
 #+begin_example
 iidy template-approval review <url> [options] [global options]

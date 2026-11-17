@@ -121,7 +121,8 @@ parse error). See `notes/jmespath-subset.md` for full details.
 
 The following behaviors require live AWS and are verified by code review only:
 - Stack creation/update/deletion actual API behavior
-- S3 upload/download for template approval
+- S3 upload/download for template approval against real buckets (the
+  request, review and deploy checks are tested against mock S3)
 - SSM parameter read/write operations
 - Real terminal spinner animation timing
 - Live polling loop behavior with real CloudFormation events
@@ -367,3 +368,71 @@ configuration, and an AWS import refused by the gate or by
 `--no-remote-imports` never builds the environment. A credential, region or
 STS failure is reported as an import error on that import. A stack-args file
 rendered by `render` is not covered here.
+
+## Template Approval
+
+**Cause**: card C16. The approval workflow follows iidy-js (TypeScript), the
+original, where Rust and iidy-hs had drifted from it; the entries below say
+where iidy-hs differs from iidy-js, Rust, or both.
+
+- **Deploy-time enforcement** (differs from Rust; follows iidy-js). With
+  `ApprovedTemplateLocation` set, create-stack, update-stack (direct and
+  `--changeset`), create-changeset, create-or-update and estimate-cost check
+  the approved object with `HeadObject` and send a presigned `TemplateURL`
+  for it (15 minutes) instead of the local body; a missing object is refused
+  before any call that changes a stack. Rust sends the local body and checks
+  nothing. iidy-js estimate-cost sends the URL without checking; iidy-hs
+  refuses first.
+- **Refusal text**. The suggested command is `iidy-hs --region R
+  --environment E [--profile P] template-approval request <argsfile>`;
+  iidy-js prints `iidy --region R [--profile P] template-approval request
+  <argsfile>` without `--environment`, although the hash depends on the
+  environment's render.
+- **Review prompts on an empty diff** (differs from Rust; follows iidy-js).
+  Rust and earlier iidy-hs reported "approved" without writing anything.
+- **SHA256 keys** (differs from iidy-js; same as Rust). iidy-js names
+  approved objects by the MD5 of the template, so templates approved with
+  iidy-js are not found and must be approved again.
+- **Request lint uses CloudFormation `ValidateTemplate`** (same as Rust;
+  differs from iidy-js, which lints locally with laundry-cfn,
+  `lint.ts:11-16`, and passes `Parameters` under
+  `--lint-using-parameters`). The request therefore needs
+  `cloudformation:ValidateTemplate` by default, and a `ValidateTemplate`
+  access or network error also fails it. A body over 51199 UTF-8 bytes is
+  skipped with a warning.
+- **Bucket region** (differs from both). Every S3 call of the request,
+  review and deploy check goes to the bucket's own region from
+  `GetBucketLocation` (sent to us-east-1). If that call fails for any
+  reason, the stack's region is used and a later S3 failure names the
+  failed lookup. Tavis chose this option with the fallback "if the call is
+  denied"; the supervisor accepted falling back on any failure, since every
+  wrong-region result fails closed and the wider fallback keeps setups
+  that cannot reach us-east-1 (regional VPC endpoints, other partitions,
+  cross-account buckets). iidy-js uses us-east-1 for the review and the
+  signed URL and the stack's region for the request; Rust uses the stack's
+  region for the request and `--region` or us-east-1 for the review.
+- **Presigned URL host**. amazonka signs on the regional host
+  (`https://<bucket>.s3.<region>.amazonaws.com/...`, path style for dotted
+  bucket names); iidy-js signs `https://s3.amazonaws.com/<bucket>/<key>`.
+- **Size limit on the approval path**: 999999 bytes after rendering,
+  counted in UTF-8 bytes, so 999999 is accepted and 1000000 refused.
+  iidy-js counts UTF-16 units and refuses at `length >= 999999`
+  (`loadCFNTemplate.ts:48`). Templates sent as a body keep the 51199-byte
+  limit.
+- **`latest` at the bucket root**. With a bucket-only
+  `ApprovedTemplateLocation` (`s3://bucket` or `s3://bucket/`), iidy-hs
+  writes `latest`; iidy-js writes `/latest` (`${bucketDir}/latest`,
+  `approval/index.ts:85`, `104`). Both put the hashed object at the root.
+- **Refusals with approval on**. A `Template` that is an `s3://` or
+  `https://` URL, or no `Template`, is refused with its own message
+  ("Template must be a local file when ApprovedTemplateLocation is set,
+  not a URL (...)", "Template is required in stack-args.yaml when
+  ApprovedTemplateLocation is set: ..."). iidy-js fails with "Unable to
+  determine versioned template location" (`https://`, none) or "Use
+  https:// S3 path-based urls ..." (`s3://`).
+- **`HeadObject` errors other than 404** fail the request and review (as
+  iidy-js, which rethrows); a 403 message notes that S3 also answers 403
+  for a missing object when `s3:ListBucket` is not granted. Earlier iidy-hs
+  read every error as "not approved" and uploaded.
+- **Pending upload ACL**: `bucket-owner-full-control`, as iidy-js and Rust;
+  the approve writes carry none, as iidy-js.

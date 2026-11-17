@@ -456,8 +456,8 @@ formatRows(wrapWidth, rows):
 *** template-approval request
 - Command: =iidy template-approval request <ARGSFILE> [options]=
 - =<ARGSFILE>= (positional, required): path to stack-args.yaml. Must include =ApprovedTemplateLocation= pointing to an S3 prefix.
-- =--no-lint-template= (flag, default: lint enabled): skip pre-submission linting.
-- Preprocesses the full template, computes SHA256 hash, uploads to ={prefix}/{hash}.pending=.
+- =--no-lint-template= (flag, default: lint enabled): skip pre-submission validation (CloudFormation =ValidateTemplate= on the rendered template).
+- Preprocesses the full template, computes SHA256 hash, uploads to ={prefix}/{hash}.pending= with the =bucket-owner-full-control= ACL.
 - If a matching approved object already exists: reports already-approved, exits 0 without uploading.
 - Exit 0 on successful submission. Exit 1 on linting failure or S3 error.
 
@@ -467,14 +467,13 @@ formatRows(wrapWidth, rows):
 - =--context <LINES>= (default: 500): lines of diff context to show. Note: the parser default is 500; the command-reference doc shows 100. The parser source (500) is authoritative.
 - Fetches pending template and most-recently-approved version.
 - Shows colored unified diff.
-- Prompts for approval; exit 130 on decline.
-- On approval: copies pending to approved key, updates =latest= reference, deletes =.pending=.
-- Uploads use =bucket-owner-full-control= ACL for cross-account compatibility.
+- Prompts for approval, even when the diff is empty; exit 1 on decline (a review decision, not a cancellation; see =12-cross-cutting.org=).
+- On approval: copies pending to approved key, updates =latest= reference, deletes =.pending=. These writes carry no ACL; the pending upload carries =bucket-owner-full-control=.
 
 *Security Model:*
 
-- Enforcement is IAM-based, not application-based. The CloudFormation service role in production restricts mutation operations to templates sourced from the approved S3 location.
-- iidy does not enforce the security boundary; it makes the workflow ergonomic.
+- With =ApprovedTemplateLocation= set, the deploy commands refuse a template with no approved object and send the approved object's presigned URL instead of the local body (see =10-template-approval.org=, US-10-006).
+- IAM is the stronger gate: the CloudFormation service role in production can restrict mutation operations to templates sourced from the approved S3 location, which now works with iidy's deploys.
 
 --------------
 

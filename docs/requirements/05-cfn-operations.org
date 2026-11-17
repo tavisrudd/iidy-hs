@@ -51,9 +51,11 @@ loadTemplate(spec, argsfilePath, env, importCfg):
 | Boundary    | Limit        | Action on exceed                           |
 |-------------+--------------+--------------------------------------------|
 | Inline body | 51199 bytes  | Error with descriptive message             |
-| S3 upload   | 999999 bytes | Error (reserved for future S3 auto-upload) |
+| Approval    | 999999 bytes | Error, with no S3 upload advice            |
 
-Templates exceeding 51199 bytes cannot be passed inline; the user must upload to S3 and provide an S3 URL. The =render:= prefix triggers full YAML preprocessing (resolving =$imports=, =$defs=, handlebars interpolation, custom tags) before passing to CFN.
+Templates exceeding 51199 bytes cannot be passed inline; the user must upload to S3 and provide an S3 URL. With =ApprovedTemplateLocation= set, the template is deployed from the approved S3 object, so it may be up to 999999 bytes (see "Template approval at deploy time"). The =render:= prefix triggers full YAML preprocessing (resolving =$imports=, =$defs=, handlebars interpolation, custom tags) before passing to CFN.
+
+*Template approval at deploy time:* create-stack, update-stack (direct and =--changeset=), create-changeset, create-or-update and estimate-cost get their template from =resolveDeployTemplate=. With =ApprovedTemplateLocation= unset it is the loading above. With it set, the template must be local, it is rendered and hashed as =template-approval request= does, and the approved object is checked with =HeadObject= in the bucket's region: if present, the request carries a presigned =TemplateURL= for it (15 minutes) and no =templateBody=; if absent, the command fails before any call that changes a stack and suggests the =template-approval request= command with the deploy's region, environment and profile. See =10-template-approval.org= (US-10-006).
 
 --------------
 
@@ -62,7 +64,7 @@ Each write operation builds its API request from a =StackArgs= record and the CF
 
 | Field                      | Source                                           |
 |----------------------------+--------------------------------------------------|
-| templateBody / templateURL | Template loading result                          |
+| templateBody / templateURL | Template loading result, or the approved URL     |
 | capabilities               | =StackArgs.capabilities= mapped to CFN enums     |
 | parameters                 | =StackArgs.parameters= map -> CFN Parameter list |
 | tags                       | =StackArgs.tags= map -> CFN Tag list             |
@@ -955,7 +957,7 @@ All used tokens (primary and derived) are tracked and included in the =OdCommand
 *Acceptance Criteria:*
 
 - Load the template via the standard template loading pipeline.
-- If the template body exceeds 51199 bytes: emit a =TemplateValidation= with a warning message (="Template exceeds 51200 bytes; skipping CFN validation"=), no errors. Return exit code 0.
+- If the template body exceeds 51199 bytes (UTF-8): emit a =TemplateValidation= with a warning message (="Template exceeds 51200 bytes; skipping CFN validation"=), no errors. Return exit code 0.
 - If the template body is within limits: call =ValidateTemplate= API.
   - On success: emit =TemplateValidation= with no errors, no warnings. Return exit code 0.
   - On API error: emit =TemplateValidation= with the error message. Return exit code 1.
