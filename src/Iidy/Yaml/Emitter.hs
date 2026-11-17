@@ -4,12 +4,13 @@ module Iidy.Yaml.Emitter (
     emitYamlWith,
 ) where
 
-import Data.Char (isDigit)
+import Data.Char (isDigit, ord)
 import Data.Scientific (Scientific)
 import Data.Scientific qualified as Sci
 import Data.Text (Text)
 import Data.Text qualified as T
 import Iidy.Yaml.OValue
+import Numeric (showHex)
 
 ------------------------------------------------------------------------
 -- Public API
@@ -61,20 +62,20 @@ emitNumber n = case Sci.floatingOrInteger n of
     Left (d :: Double) -> T.pack (show d)
     Right (i :: Integer) -> T.pack (show i)
 
-emitString :: Text -> Text
-emitString s
-    | T.any (== '\n') s = emitMultilineString s
+{- | The one path for a string scalar. A string with a non-printable
+character is double-quoted with escapes (neither a block nor a single-quoted
+scalar can hold one); otherwise multi-line strings are block scalars indented
+by the given column, and the rest are plain or quoted as 'needsQuotes' says.
+-}
+emitStringAt :: Int -> Text -> Text
+emitStringAt indent s
+    | T.any isNonPrintable s = doubleQuote s
+    | T.any (== '\n') s = emitMultilineStringIndented indent s
     | needsQuotes s = quoteString s
     | otherwise = s
 
-emitMultilineString :: Text -> Text
-emitMultilineString s =
-    let lns = T.splitOn "\n" s
-        hasTrailingNewline = T.isSuffixOf "\n" s
-        header = if hasTrailingNewline then "|" else "|-"
-        bodyLines = if hasTrailingNewline then safeInit lns else lns
-        indented = map (\l -> if T.null l then "" else "  " <> l) bodyLines
-     in header <> "\n" <> T.intercalate "\n" indented
+emitString :: Text -> Text
+emitString = emitStringAt 2
 
 needsQuotes :: Text -> Bool
 needsQuotes s
@@ -141,20 +142,59 @@ isPlainSafeFirst c = c `notElem` ("-?:,[]{}#&*!|>'\"%@`" :: [Char])
 quoteString :: Text -> Text
 quoteString s
     | not (T.any (== '\'') s) = "'" <> escapeSingleQuotes s <> "'"
-    | not (T.any (== '"') s) = "\"" <> escapeDoubleQuotes s <> "\""
-    | otherwise = "\"" <> escapeDoubleQuotes s <> "\""
+    | otherwise = doubleQuote s
 
 escapeSingleQuotes :: Text -> Text
 escapeSingleQuotes = T.replace "'" "''"
 
+{- | Whether a character cannot appear literally in a YAML scalar (other
+than a literal tab or line feed): C0 controls, DEL, C1 controls (including
+NEL), the line and paragraph separators and the byte order mark.
+-}
+isNonPrintable :: Char -> Bool
+isNonPrintable c =
+    (c < ' ' && c /= '\t' && c /= '\n')
+        || c == '\DEL'
+        || (c >= '\x80' && c <= '\x9f')
+        || c == '\x2028'
+        || c == '\x2029'
+        || c == '\xfeff'
+
+-- | A double-quoted scalar with YAML escapes (see 'escapeDoubleQuotes').
+doubleQuote :: Text -> Text
+doubleQuote s = "\"" <> escapeDoubleQuotes s <> "\""
+
+{- | Escapes inside a double-quoted scalar: the short YAML escapes where one
+exists (@\\0 \\a \\b \\t \\n \\v \\f \\r \\e \\N \\L \\P@), otherwise @\\xHH@
+(code points up to U+00FF) or @\\uHHHH@, with upper-case hex digits as
+serde_yaml prints them. Printable characters pass through.
+-}
 escapeDoubleQuotes :: Text -> Text
 escapeDoubleQuotes = T.concatMap $ \case
     '"' -> "\\\""
     '\\' -> "\\\\"
     '\n' -> "\\n"
-    '\r' -> "\\r"
     '\t' -> "\\t"
-    c -> T.singleton c
+    '\NUL' -> "\\0"
+    '\a' -> "\\a"
+    '\b' -> "\\b"
+    '\v' -> "\\v"
+    '\f' -> "\\f"
+    '\r' -> "\\r"
+    '\ESC' -> "\\e"
+    '\x85' -> "\\N"
+    '\x2028' -> "\\L"
+    '\x2029' -> "\\P"
+    c
+        | isNonPrintable c ->
+            let n = ord c
+             in if n < 0x100 then "\\x" <> hexPad 2 n else "\\u" <> hexPad 4 n
+        | otherwise -> T.singleton c
+
+hexPad :: Int -> Int -> Text
+hexPad width n =
+    let digits = T.toUpper (T.pack (showHex n ""))
+     in T.replicate (width - T.length digits) "0" <> digits
 
 ------------------------------------------------------------------------
 -- Arrays
@@ -175,7 +215,7 @@ emitArrayInline st indent items =
         emitRest val = indentStr <> "- " <> emitArrayValue st (indent + 2) val
      in case items of
             [] -> "[]"
-            (first : rest) -> emitFirst first <> "\n" <> T.intercalate "\n" (map emitRest rest)
+            (first : rest) -> T.intercalate "\n" (emitFirst first : map emitRest rest)
 
 emitArrayValue :: SeqStyle -> Int -> OValue -> Text
 emitArrayValue st indent = \case
@@ -186,10 +226,7 @@ emitArrayValue st indent = \case
     OArray items
         | null items -> "[]"
         | otherwise -> emitArrayInline st indent items
-    OString s
-        | T.any (== '\n') s -> emitMultilineStringIndented indent s
-        | needsQuotes s -> quoteString s
-        | otherwise -> s
+    OString s -> emitStringAt indent s
     other -> emitValue st indent False other
 
 ------------------------------------------------------------------------
@@ -215,10 +252,11 @@ emitMappingInline st indent kvs =
             indentStr <> emitMapKey k <> ":" <> emitMapValue st (indent + 2) v
      in case kvs of
             [] -> "{}"
-            (first : rest) -> emitFirst first <> "\n" <> T.intercalate "\n" (map emitRest rest)
+            (first : rest) -> T.intercalate "\n" (emitFirst first : map emitRest rest)
 
 emitMapKey :: Text -> Text
 emitMapKey k
+    | T.any isNonPrintable k = doubleQuote k
     | needsQuotes k = quoteString k
     | otherwise = k
 
@@ -228,10 +266,7 @@ emitMapValue st indent = \case
     OBool True -> " true"
     OBool False -> " false"
     ONumber n -> " " <> emitNumber n
-    OString s
-        | T.any (== '\n') s -> " " <> emitMultilineStringIndented indent s
-        | needsQuotes s -> " " <> quoteString s
-        | otherwise -> " " <> s
+    OString s -> " " <> emitStringAt indent s
     OArray items
         | null items -> " []"
         | otherwise -> emitArray st (seqIndent st indent) items
@@ -288,10 +323,7 @@ emitTaggedKvs st indent kvs = case kvs of
 
 emitTagArgument :: SeqStyle -> Int -> OValue -> Text
 emitTagArgument st indent = \case
-    OString s
-        | T.any (== '\n') s -> " " <> emitMultilineStringIndented indent s
-        | needsQuotes s -> " " <> quoteString s
-        | otherwise -> " " <> s
+    OString s -> " " <> emitStringAt indent s
     ONumber n -> " " <> emitNumber n
     OBool b -> " " <> if b then "true" else "false"
     ONull -> " null"
