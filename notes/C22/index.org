@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C22
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
 :CREATED_BY: opus-5.5-medium
@@ -11,11 +11,31 @@
 :ADDED: [2026-11-16 Mon 15:54]
 :DEPENDS_ON: C15
 :END:
+:CLOCK:
+CLOCK: [2026-11-17 Tue 14:36]--[2026-11-17 Tue 14:45] => 0:09
+CLOCK: [2026-11-17 Tue 14:53]--[2026-11-17 Tue 14:55] => 0:02
+:END:
 :LOGBOOK:
 - DEPENDS_ON (none) → C15 [2026-11-16 Mon 15:54]
   Agent: opus-5.5-medium
   Session-ID: f2c5724c-c18a-470a-95c4-5c03105ef675
 - Card state TODO → STARTED [2026-11-17 Tue 14:35]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
+- Clock-in [2026-11-17 Tue 14:36]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a787ebb0db67e50d3
+- Clock-out [2026-11-17 Tue 14:45]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a787ebb0db67e50d3
+- Clock-in [2026-11-17 Tue 14:53]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a787ebb0db67e50d3
+- Clock-out [2026-11-17 Tue 14:55]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a787ebb0db67e50d3
+- Card state STARTED → DONE [2026-11-17 Tue 14:55]
+  Note: Landed 9804b0b..5858131 (security doc links fixed, CommandsBefore refused for the four deploy operations when non-empty, --debug documented as no effect, hardening notes folded into SECURITY.org; C21's lines still owed, listed in the card); reviewed by the Opus review worker, re-review clean
   Agent: opus-5.5-medium
   Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
 :END:
@@ -115,22 +135,22 @@ Decisions (Tavis, 2026-11-16):
 
 Done when:
 - [X] Tavis's answers to the two questions are recorded in the card (above).
-- [ ] No file under =docs/= or =README.md= names =docs/SECURITY.md= or a
+- [X] No file under =docs/= or =README.md= names =docs/SECURITY.md= or a
   root =SECURITY.md=, and =docs/SECURITY.org= is the only security
   document (a =grep -rn 'SECURITY\.md'= over =docs/= and =README.md= shows
   only the upstream GitHub link, if that link was kept).
-- [ ] =CommandsBefore= is refused and =--debug= is documented as having no
+- [X] =CommandsBefore= is refused and =--debug= is documented as having no
   effect, with
   tests (for =CommandsBefore=: a stack-args file with it, loaded for
   =create-stack=, =update-stack=, =create-changeset= and =create-or-update=,
   returns the new error and runs nothing; the same file loaded for
   =render= or =delete-stack= is accepted, as Rust and TypeScript do), and
   the docs and =DIVERGENCES.md= say what happens.
-- [ ] =docs/SECURITY.org= says =random:= is not cryptographically secure;
+- [X] =docs/SECURITY.org= says =random:= is not cryptographically secure;
   =/iidy/disable-template-approval= is documented once, either by C16's
   docs task or here; each other hardening card that has landed by then has
   its line folded in (or the card lists which are still open).
-- [ ] Build warning-free, full suite green, each commit names C22.
+- [X] Build warning-free, full suite green, each commit names C22.
 
 Stop and record if: the refusal needs a change outside the allowed paths; a doc claim
 cannot be checked against the code in under a few minutes (list it in the
@@ -175,10 +195,15 @@ for the reasoning:
    note only if Tavis wants the help to change (it would then differ from
    Rust).
 
-* TODO Correct the stale file names and cross-references
+* DONE Correct the stale file names and cross-references
 :PROPERTIES:
 :ID: org:01a1e692-143c-70db-935c-e1c2c8c805c2
 :ADDED: [2026-11-16 Mon 15:54]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 14:45] \\
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a787ebb0db67e50d3
 :END:
 
 No decision needed; do this first. Run =grep -rn 'SECURITY\.md' docs/
@@ -192,6 +217,43 @@ mention the security model or =--no-remote-imports= against
 =docs/SECURITY.org= and the code (=src/Iidy/Yaml/Imports/Types.hs=,
 =Loaders/Dispatch.hs=); fix or list what differs. No code changes.
 
+** Result (worker claude-C22)
+:PROPERTIES:
+:ID: org:01a1eb78-b97a-73d8-9bdb-8252602bb0eb
+:ADDED: [2026-11-17 Tue 14:45]
+:END:
+Commit =7051f2b= on =claude/C22=.
+
+Duplication search: the security document has one owner,
+=docs/SECURITY.org=; no other file restates it.
+
+- =docs/requirements/02-yaml-preprocessing.org= line 1159 and
+  =docs/requirements/03-import-system.org= line 868 now link
+  [[file:../SECURITY.org][docs/SECURITY.org]] as =file:../SECURITY.org=.
+  The 02 line also said "path sandboxing", which =docs/SECURITY.org= does
+  not describe (local imports are not sandboxed); it now says "import trust
+  model, restrictions and threat model".
+- =docs/requirements/00-overview.org= line 29 links
+  =github.com/tavisrudd/iidy/blob/main/docs/SECURITY.md=: the Rust rewrite's
+  repository (=~/src/iidy= has =origin git@github.com:tavisrudd/iidy.git=
+  and =docs/SECURITY.md=), a different repository. Kept.
+- =grep -rn 'SECURITY\.md' docs/ README.md= now shows only that link.
+- Security claims in the requirements checked against the code:
+  =01-cli-interface.org= lines 31-32 (=--no-remote-imports= blocks HTTP and
+  S3 only; stored as =goRemoteImports :: Bool= in =Cli.hs:76=, mapped to
+  =RemoteImports= at =Cli.hs:364=; =--trust-import-source= rules),
+  =03-import-system.org= lines 50-80 (the four gates match
+  =Loaders/Dispatch.hs= =withRemote=, =withAwsEnv=, =checkImport=,
+  =httpGuardFor=; error text "Remote imports are disabled
+  (--no-remote-imports)" at =Dispatch.hs:142=), 449, 501, 566, 650, 705-768,
+  855-856, and =04-custom-resources.org= line 81. All match; nothing to fix.
+- Not fixed (outside this task's named lines, listed for a follow-up): the
+  requirements files still name their sibling documents with =.md=
+  (=02-yaml-preprocessing.md=, =docs/import-types.md=,
+  =docs/command-reference.md=, =docs/dev/aws-configuration.md= and others
+  in 00, 01, 02, 03, 05, 06, 07, 08 and 11), although every one is now
+  =.org=.
+
 * DONE Ask Tavis the CommandsBefore and --debug questions and record the answers
 :PROPERTIES:
 :ID: org:01a1e692-143c-70db-935c-e1c326f89cfd
@@ -202,10 +264,15 @@ Answered 2026-11-16, see the decisions in Scope and gate: =CommandsBefore=
 option (a), =--debug= option (a). The follow-up card for running
 =CommandsBefore= is C40 (created with =c new= from this decision).
 
-* TODO Reject CommandsBefore for the operations that would run it
+* DONE Reject CommandsBefore for the operations that would run it
 :PROPERTIES:
 :ID: org:01a1e7bd-0c9c-775f-8fbb-3a464018ba4e
 :ADDED: [2026-11-16 Mon 21:21]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 14:45] \\
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a787ebb0db67e50d3
 :END:
 
 The loader knows the operation
@@ -223,10 +290,64 @@ uses it is refused for those operations), the comment template in
 iidy-hs), and add the =DIVERGENCES.md= entry with the Rust and TypeScript
 references. Land after C12 if that card is not yet done.
 
-* TODO Document that --debug has no effect
+** Result (worker claude-C22)
+:PROPERTIES:
+:ID: org:01a1eb78-b97a-73d8-9bdb-825168e0d7c1
+:ADDED: [2026-11-17 Tue 14:45]
+:END:
+Commit =74b0560= on =claude/C22=.
+
+Duplication search: the operation list has no existing owner in iidy-hs
+(=grep -rn CommandsBefore src/= finds only the field parser
+=StackArgs/Fields.hs:54=, the key list =StackArgs/Validate.hs:49=, the
+type =Types.hs:110= and the init template). The check is one function,
+=refuseCommandsBefore=, with =runsCommandsBefore= (Rust
+=should_process_commands_before=, =stack_args.rs:483-490=), in
+=src/Iidy/Cfn/StackArgsLoader.hs=, called once after =valueToStackArgs=.
+=loadStackArgsBootstrapped= (the CLI path) goes through
+=loadStackArgsWith=, so it is covered. Tests reuse =noAwsSettings=,
+=collectRawOutput=, =testGlobalOpts= (=Test.Shared=) and =noCredentials=
+(=Test.MockAws=); one new fixture,
+=test-fixtures/test-stack-args-commands-before.yaml=, whose command
+=touch commands-before-ran.marker= would leave a marker if anything ran it.
+Each test loads a copy in a fresh temporary directory and checks that no
+marker appears there or in the current directory.
+
+Failing run first (tests and fixture added, loader unchanged), =-p
+CommandsBefore=:
+
+#+begin_example
+CommandsBefore is refused for create-stack:              FAIL
+  expected CommandsBefore to be refused
+CommandsBefore is refused for update-stack:              FAIL
+CommandsBefore is refused for create-changeset:          FAIL
+CommandsBefore is refused for create-or-update:          FAIL
+CommandsBefore is accepted and not run for delete-stack: OK
+a stack-args file with CommandsBefore renders:           OK
+4 out of 6 tests failed (0.01s)
+#+end_example
+
+After the check, =-p StackArgsLoader=: all 62 pass. The error reads
+"CommandsBefore in <argsfile> is not supported: iidy-hs does not run these
+commands for <command>. Remove CommandsBefore from the file, or run the
+commands yourself before running iidy-hs."
+
+Docs: =docs/getting-started.org= (table row plus a paragraph after the
+table), the =InitStackArgs.hs= template comment (two comment lines added
+under the Rust comment, which stays), the loader pseudocode in
+=docs/requirements/01-cli-interface.org= (new step 12), and a self-contained
+=DIVERGENCES.md= section "CommandsBefore: Refused, Never Run" with the Rust
+and iidy-js references.
+
+* DONE Document that --debug has no effect
 :PROPERTIES:
 :ID: org:01a1e7bd-0c9c-775f-8fbb-3a45475bbb34
 :ADDED: [2026-11-16 Mon 21:21]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 14:45] \\
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a787ebb0db67e50d3
 :END:
 
 Per Tavis's decision (option (a)): change the =--debug= rows
@@ -237,10 +358,30 @@ accepted and has no effect, as in the Rust CLI, which only reads
 TypeScript behaviour. =test/Test/CliParserTest.hs= line 77 already tests
 that the flag parses; leave it. The help text stays as it is.
 
-* TODO Fold in the security notes from the other hardening cards
+** Result (worker claude-C22)
+:PROPERTIES:
+:ID: org:01a1eb78-b97a-73d8-9bdb-82504008ef4f
+:ADDED: [2026-11-17 Tue 14:45]
+:END:
+Commit =b05fd72= on =claude/C22=. =docs/command-reference.org= row 19 now
+says "Accepted and has no effect (as in Rust iidy; see below)", with a
+paragraph after the options note; =docs/requirements/01-cli-interface.org=
+line 33 says the same with the Rust (=cli.rs:100-107=, =RUST_LOG=) and
+iidy-js (=cli/utils.ts:22-25=) references; =DIVERGENCES.md= has a
+self-contained section "=--debug=: Accepted, No Effect" marked as shared
+with Rust and naming the iidy-js behaviour. Checked: nothing in =src/= or
+=app/= reads =goDebug= (only its field at =Cli.hs:74=); Rust reads
+=cli.debug= nowhere. Help text and =CliParserTest= unchanged.
+
+* DONE Fold in the security notes from the other hardening cards
 :PROPERTIES:
 :ID: org:01a1e7bd-0c9c-775f-8fbb-3a4403bf62ef
 :ADDED: [2026-11-16 Mon 21:21]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 14:45] \\
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a787ebb0db67e50d3
 :END:
 
 Start only when C16 (its docs task), C18, C19, C20 and C21 are each done
@@ -257,3 +398,145 @@ unpinned digests accepted, the https-to-http refusal, convert-stack
 overwrite behaviour (C21). Remove any "Remaining Risks" line a landed card
 made false. List in the card which cards were not yet done and what is
 still owed.
+
+** Result (worker claude-C22)
+:PROPERTIES:
+:ID: org:01a1eb78-b979-7296-87b9-2689b94911ec
+:ADDED: [2026-11-17 Tue 14:45]
+:END:
+Commit =71da61f= on =claude/C22=. Supervisor's call (2026-11-17): go ahead
+without C21 and fold in the landed cards' lines. Added to
+=docs/SECURITY.org=:
+- =random:= is =System.Random= (=randomRIO=, =Loaders/Random.hs:10=) and not
+  cryptographically secure: a note column in the "Remote-Allowed Import
+  Types" table and a paragraph under it.
+- New section "Resource Limits" (C20): a table of the seven limits with
+  their values and =Iidy.Constants= names (alias nodes 250000, expanded
+  text 50 MiB, import depth 32, imports per run 1000, helper output 1048576
+  characters, HTTP total time 60 s, HTTP body 10 MiB), checked against
+  =src/Iidy/Constants.hs=, =Yaml/Parser.hs:129= and =Imports/Manifest.hs:67-74=;
+  item 6 "Resource Exhaustion" under "What This Protects Against".
+- New section "Other Security Notes" with:
+  - "Error Messages and Credentials" (C19), with the format the supervisor
+    gave (=AWS <service> error <code>[: <message>] (HTTP <status>, request
+    ID <id>)=, no request or response headers), checked against the header
+    of =src/Iidy/Aws/Errors.hs=.
+  - "Control Characters in Terminal Output" (C18), from C18's result and
+    its =DIVERGENCES.md= entry, including the exemptions and the
+    =dieTxt= gap.
+  - "Switching Off Template Approval": =/iidy/disable-template-approval=.
+    C16 mentions it once in =docs/command-reference.org= line 355 (approval
+    is off for stack-args that read it) but not the permission risk, so the
+    security note is here: anyone with =ssm:PutParameter= on =/iidy/*= can
+    switch approval off; checked against =GlobalConfig.hs:105-114= and
+    =applyGlobalConfiguration= (an SSM read error is a warning and
+    returns the stack-args unchanged, so approval stays on).
+  - "=CommandsBefore= Is Never Run" (this card).
+- "Remaining Risks": no line was made false by C16, C18, C19 or C20, so
+  none removed.
+
+Still owed by C21 (TODO, not landed), for a later fold-in:
+- the "pool.ntp.org on every write operation" line (NTP egress and its
+  bound; none under =--no-remote-imports= once C21 lands);
+- plaintext =http:= imports accepted for every requester (parity with Rust
+  and iidy-js) and the computed-but-unchecked =irSha256Digest= (unpinned
+  digests), both as accepted risks;
+- the https-to-http redirect refusal, and whether the recorded import
+  location names the final URL;
+- the =convert-stack-to-iidy= overwrite refusal without =--force=.
+
+Branch check: =git rebase main= (already up to date at =30e0c50=), then the
+full suite once on tip =71da61f= through =guarded-build= with
+=-Wall -Wcompat -Werror= and =--timeout=60s=: all 2336 tests pass, no
+warnings, no timeout or hang.
+
+** Review 2026-11-17
+:PROPERTIES:
+:ID: org:01a1eb7f-beaa-7371-9ad7-d89ce99a5c57
+:ADDED: [2026-11-17 Tue 14:53]
+:END:
+Reviewer: review worker (Claude). Branch =claude/C22= at 71da61f, base
+30e0c50.
+
+Verdicts: 7051f2b land; 74b0560 land; b05fd72 land; 71da61f land.
+
+Checks done:
+- Regression: with =src/Iidy/Cfn/StackArgsLoader.hs= reverted to 30e0c50,
+  =-p CommandsBefore= gives 4 of 6 failing (the four refusal tests); the
+  delete-stack and render tests pass, as intended. Restored.
+- Coverage: every stack-args command goes through =runCfnWithArgs=
+  (=Cfn/Runner.hs:58=) -> =loadStackArgsBootstrapped= -> =loadStackArgsWith=,
+  the only caller of =valueToStackArgs=; there is no second loader entry
+  point. =app/Main.hs:81-99= passes =OpCreateStack=, =OpUpdateStack= (also
+  for =update-stack --changeset=), =OpCreateOrUpdate= (also with
+  =--changeset=) and =OpCreateChangeset=; =exec-changeset= loads no
+  stack-args. The operation list equals Rust =should_process_commands_before=
+  (=stack_args.rs:483-490=) and iidy-js (=loadStackArgs.ts:139=).
+- Order: the refusal runs at the end of the load, after preprocessing
+  (argsfile imports, including =ssm:=/=cfn:=/HTTP, have already run, as in
+  Rust, which also preprocesses before running the commands) and before
+  =createAwsEnv=, =applyGlobalConfiguration= and any CloudFormation call.
+  No shell is ever started on any path.
+- =docs/SECURITY.org=: the seven limits and constant names equal
+  =src/Iidy/Constants.hs= (250000, 50 MiB, 32, 1000, 1048576, 60 s, 10 MiB;
+  30 s header wait =httpTimeoutSeconds=). The AWS error format equals the
+  =Iidy/Aws/Errors.hs= header and =formatAwsError= (=:46-47=). The template
+  approval note matches =GlobalConfig.hs:105-114= (case-insensitive =true=,
+  clears =ApprovedTemplateLocation=, stderr line) and =:70-79= (an
+  =Amazonka.Error= is a warning and the stack-args pass unchanged, so
+  approval stays on).
+- =DIVERGENCES.md=: two separate sections. CommandsBefore claims match Rust
+  =stack_args.rs:277-313= (drop branch =:310-314=) and iidy-js
+  =runCommandSet.ts= (=/bin/bash=, =cwd=, non-zero exit throws). =--debug=
+  claims match Rust =cli.rs:100-107=, =main.rs:265= (=env_logger=) and
+  iidy-js =cli/utils.ts:22-25=, =main.ts:470=.
+- Gate grep: =grep -rn 'SECURITY\.md' docs/ README.md= shows only the
+  upstream link in =00-overview.org:29=.
+
+Defects:
+1. Low. =StackArgsLoader.hs= =refuseCommandsBefore= matches =Just _=, so
+   =CommandsBefore: []= is refused for the four commands with "iidy-hs does
+   not run these commands", although there is nothing to run and Rust and
+   iidy-js load such a file without effect. Not recorded in
+   =DIVERGENCES.md=. Fix: match =Just (_ : _)= and add a test for the empty
+   list, or record the stricter behaviour.
+
+Note (no action): the refusal comes after the argsfile's imports have run,
+so an argsfile's =ssm:=, =cfn:= or HTTP imports still execute before the
+error. That matches Rust's order and executes nothing beyond what any other
+load does; it does not affect the card's gate.
+
+** Fix round 1 (worker claude-C22)
+:PROPERTIES:
+:ID: org:01a1eb81-b3d0-753c-95ae-4b90eb54de52
+:ADDED: [2026-11-17 Tue 14:55]
+:END:
+Defect 1 fixed in =5858131= (branch rebased onto main after C30 landed;
+the earlier commits are now =9804b0b=, =6a8a54d=, =99f171b=, =6cb89a7=).
+=refuseCommandsBefore= matches =Just (_ : _)=. Failing first: the new test
+"an empty CommandsBefore list loads for create-stack" failed on the old
+match with the refusal error; with the fix =-p StackArgsLoader= passes
+(63 tests). Wording: the loader pseudocode in =01-cli-interface.org= now
+says "a non-empty list", and the =DIVERGENCES.md= section adds that an
+empty list loads for every command. The rebase conflicted in
+=DIVERGENCES.md= only (C30's sections and this card's were both appended at
+the end); both kept.
+Full suite once on tip =5858131= through =guarded-build= with =-Werror=
+and =--timeout=60s=: all tests pass, no warnings, no hang.
+
+*** Re-review 2026-11-17
+:PROPERTIES:
+:ID: org:01a1eb82-5580-706c-8133-f669b39b1c23
+:ADDED: [2026-11-17 Tue 14:55]
+:END:
+Rebased branch (9804b0b, 6a8a54d, 99f171b, 6cb89a7) plus fix 5858131, on
+main. Verdict: land; defect 1 is fixed, no new defect.
+- 5858131: =refuseCommandsBefore= now matches =Just (_ : _)=. With it
+  reverted to =Just _=, =-p CommandsBefore= fails only the new test "an
+  empty CommandsBefore list loads for create-stack"; the four refusal tests
+  still pass. Restored. =DIVERGENCES.md= and the loader pseudocode in
+  =01-cli-interface.org= now say an empty list loads.
+- =DIVERGENCES.md=: =git diff main..claude/C22= is one hunk adding only the
+  "CommandsBefore: Refused, Never Run" and "=--debug=: Accepted, No Effect"
+  sections after C30's "Demo: Masking Is Not Streamed"; all four C30
+  sections are intact and nothing is removed.
