@@ -175,7 +175,13 @@ is committed.
    single-commit `--no-commit` pick leaves no `CHERRY_PICK_HEAD`: commit
    with `git commit -C <SHA>` instead. Stop at the first
    failure (`git cherry-pick --abort`) and never run the close steps after
-   a failed pick.
+   a failed pick. A single-commit `--no-commit` pick cannot be aborted that
+   way: unstage and restore only the pick's code paths, leaving workers'
+   notes. `rerere` is enabled and its cache in `.git/rr-cache` is shared by
+   every worktree: an aborted conflict can be recorded as a "resolution"
+   that keeps main's side and is replayed silently in a worker's rebase.
+   After aborting, delete the newest `rr-cache` entry for that file, and
+   have the worker rebase and resolve the conflict on its branch.
 3. Close the card on main, in this order: the worker's clock closed (check
    for an open `CLOCK:` line first: sub-agents report "clocked out" when
    they have not; resume the sub-agent to run `c clock-out`, since
