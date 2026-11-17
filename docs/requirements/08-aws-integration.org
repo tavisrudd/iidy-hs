@@ -477,24 +477,23 @@ resolveEnvMapField(obj, key, env):
     absent    -> pass through
     other     -> ERROR "must be a string or an environment map"
 
--- PRE-PREPROCESSING BOOTSTRAP (extractRawAwsFromAst):
-resolveRawField(name, pairs, environment):
-  case lookupField(name, pairs) of
-    Nothing         -> Nothing
-    AstNull         -> Nothing
-    AstPlainString  -> Just text
-    AstMapping(map) -> lookupTextField(environment, map)  -- Nothing if key absent (SILENT)
-    other           -> Nothing
+-- RAW READING BEFORE AWS IMPORTS (readRawField):
+readRawField(ast, environment, field):
+  if ast is not a mapping                     -> Computed
+  case plainKeyLookup(field, ast.pairs) of     -- any non-plain key, or key twice -> Computed
+    absent or AstNull -> Absent
+    AstPlainString    -> Literal text
+    AstMapping(map)   -> case plainKeyLookup(environment, map) of
+                           non-plain key, duplicate, or absent -> Computed
+                           entry -> Literal if AstPlainString, else Computed
+    other (tag, template, ...) -> Computed
 #+end_src
 
-*Important*: The two-pass system has different error semantics for missing environment keys:
-
-- Bootstrap pass (pre-preprocessing): missing key returns =Nothing= (silent fallthrough)
-- Full pass (post-preprocessing): missing key returns an error
+*Important*: before an AWS import runs, a =Computed= field that the command line does not set refuses the import. Full loading (post-preprocessing) reports a missing environment key as an error.
 
 *Edge Cases:*
 
-- Environment map with uppercase keys vs. lowercase active environment name: key lookup is case-sensitive; mismatches result in error (full pass) or =Nothing= (bootstrap).
+- Environment map with uppercase keys vs. lowercase active environment name: key lookup is case-sensitive; a mismatch is an error in full loading and refuses an AWS import that would depend on it.
 - Nested environment maps are not supported; values must be plain strings.
 - Stack-args =Profile: no-profile= (plain string): treated as the profile named ="no-profile"=, not as suppression; only the CLI =--profile=no-profile= flag suppresses.
 - Environment map with a key matching ="no-profile"= is valid and would set the profile to the string ="no-profile"=.
@@ -503,49 +502,44 @@ resolveRawField(name, pairs, environment):
 
 - YAML parse error in the environment map (non-string value): reported as a stack-args validation error before any AWS configuration is attempted.
 - Environment map key absent for the active environment in full pass: error ="environment '<env>' not found in <key> map"=.
-- Environment map key absent in bootstrap pass: silent =Nothing=, falls through to CLI or env var sources.
+- Environment map key absent before an AWS import: the import is refused unless the command line sets the field.
 
 *Complexity Notes:* Medium. Requires YAML union type parsing (string | object). The =(<|>)= merge pattern is simple but the environment map resolution adds a layer of indirection that must be exercised in tests with multiple environments.
 
 --------------
 
 ** US-08-009: Bootstrap AWS environment for stack-args preprocessing
-*As a* Developer using SSM/CFN/S3 imports in stack-args.yaml, *I want to* iidy to automatically create a bootstrap AWS environment before preprocessing begins, *so that* import resolution can access AWS services even before the full stack-args are loaded.
+*As a* Developer using SSM/CFN/S3 imports in stack-args.yaml, *I want to* iidy to build the AWS environment for those imports from the Profile, Region and AssumeRoleARN written in the file, *so that* import resolution runs under the same account and region the stack-args finally name.
 
 *Acceptance Criteria:*
 
-- Before preprocessing stack-args.yaml, a first pass extracts raw AWS settings (Profile, Region, AssumeRoleARN) directly from the YAML AST without running the preprocessing pipeline.
-- These raw settings are merged with CLI settings to create a bootstrap AWS environment.
-- The bootstrap environment is passed to the preprocessor to enable SSM, CFN, and S3 import types.
-- If the first pass fails to parse the YAML, empty settings are returned (the full loading pass will report the error properly).
+- The import environment is built at the first AWS import (=ssm:=, =ssm-path:=, =cfn:=, =s3:=), from the CLI settings merged over the literal raw fields; a file without AWS imports never builds it.
+- Each of Profile, Region and AssumeRoleARN not set on the command line must be a plain string or an environment map of plain strings, read from mappings whose keys are all plain strings and contain the key once. Otherwise the AWS import is refused before any AWS call, naming the field and the option that sets it (iidy-js =loadStackArgs.ts= behaves the same way; Rust has no AWS imports in stack-args, see =DIVERGENCES.md=).
+- A failure to build the import environment is reported with its cause.
+- After loading, the settings the imports ran with must equal the final merged settings; any difference refuses the load.
+- The environment factory is a parameter, so tests pass a mock.
 
 *Logic Flow:*
 
 #+begin_src pseudocode
-extractRawAwsFromFile(argsfilePath, environment):
-  content = readFile(argsfilePath)
-  ast = parseYaml(content)
-  if parse fails: return AwsSettings(Nothing, Nothing, Nothing)
-  return extractRawAwsFromAst(ast, environment)
+onAwsImport(location):                 -- first AWS import only; later ones reuse the result
+  for field in [Profile, AssumeRoleARN, Region]:
+    if cliAws.field is unset and readRawField(ast, environment, field) is Computed:
+      REFUSE "<why>, so the AWS import <location> would run with <field> <value> ...
+              set <field> literally or pass --<option> on the command line"
+  importAws = mergeAwsSettings(cliAws, extractRawAwsFromAst(ast, environment))
+  importEnv = envFactory(importAws)       -- exception -> error naming import, settings, cause
 
-extractRawAwsFromAst(ast, environment):
-  -- For each of Profile, Region, AssumeRoleARN:
-  --   Look up the key in the top-level mapping
-  --   If AstPlainString or AstTemplatedString: return Just text
-  --   If AstMapping (env map): lookup environment key in sub-mapping
-  --     Found: return Just text
-  --     Not found: return Nothing   (NOTE: silent, unlike post-preprocessing)
-  --   If AstNull or absent: return Nothing
-  profile      = resolveRawField("Profile", ast.pairs, environment)
-  region       = resolveRawField("Region", ast.pairs, environment)
-  assumeRoleArn = resolveRawField("AssumeRoleARN", ast.pairs, environment)
-  return AwsSettings(profile, region, assumeRoleArn)
+afterLoad(loaded):
+  if importEnv was built and importAws /= loaded.mergedAws:
+    REFUSE "the AWS imports ran with <field> <a>, but the final <field> is <b> ..." 
 #+end_src
 
 *Edge Cases:*
 
-- Environment map with missing key in bootstrap pass: returns =Nothing= (silent fallthrough), unlike the full pass which returns an error.
-- Unparseable YAML in bootstrap pass: returns empty settings, defers error to full loading.
+- A tag, a handlebars template, a duplicated key or a templated or tagged key (which preprocessing could turn into the field's name) makes the field not literal.
+- An environment-map entry that is a tag is named in the refusal (=Profile (environment entry 'prod') is a preprocessing tag=).
+- Unparseable YAML: full loading reports the parse error; no import runs.
 
 --------------
 
@@ -611,10 +605,11 @@ applyGlobalConfiguration(awsEnv, stackArgs):
   - =/iidy/disable-template-approval= clears approved template location when "true".
   - AWS errors produce warning but return original StackArgs.
   - Empty parameter list passes through unchanged.
-- Tests for bootstrap AWS extraction (=extractRawAwsFromFile=) verify:
-  - Plain string and environment map resolution.
-  - Missing env key returns Nothing (not error).
-  - Parse failure returns empty settings.
+- Tests for the stack-args import environment (=Test.StackArgsBootstrapTest=, mock factory) verify:
+  - Literal fields with an =ssm:= import load, and the factory sees those literals.
+  - Computed, templated, duplicated or non-plain-keyed fields refuse the import before any AWS call.
+  - A CLI option for the field lifts the refusal; a file without AWS imports loads as before.
+  - A factory failure reports its cause; the import-versus-final comparison refuses on any difference.
 - All AWS tests use mock fixtures; no real AWS calls are permitted in the test suite.
 - The error message for missing region is tested for exact string content.
 

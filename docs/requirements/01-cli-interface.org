@@ -595,21 +595,25 @@ formatRows(wrapWidth, rows):
 
 *Stack-Args Loading Pipeline (pseudocode):*
 
-The loading pipeline is a multi-step process that requires a bootstrap AWS environment for imports before the full stack-args can be loaded:
+Stack-args imports may call AWS (=ssm:=, =ssm-path:=, =cfn:=, =s3:=), so the loader builds the AWS environment for them from the credential fields as written in the file, at the first AWS import (=loadStackArgsBootstrapped= in =Iidy.Cfn.StackArgsBootstrap=):
 
 #+begin_src pseudocode
 loadStackArgsFullPipeline(argsfilePath, environment, operation, cliAws, remoteImports):
-  -- PASS 1: Bootstrap AWS for imports
-  rawAws = extractRawAwsFromFile(argsfilePath, environment)
-    -- Parses YAML without preprocessing
-    -- Resolves env maps for Profile/Region/AssumeRoleARN from raw AST
-    -- On missing env key: returns Nothing (silent fallthrough)
-    -- On parse failure: returns empty settings
-  bootstrapAws = mergeAwsSettings(cliAws, rawAws)
-  bootstrapEnv = createAwsEnv(bootstrapAws)  -- may be Nothing if no AWS needed
-
-  -- PASS 2: Full loading with preprocessing
-  return loadStackArgs(argsfilePath, environment, operation, cliAws, remoteImports, bootstrapEnv)
+  ast = parseYaml(readFile(argsfilePath))
+  -- Import loader: non-AWS imports load as usual. At the first AWS import:
+  --   for each of Profile, AssumeRoleARN, Region not set on the command line:
+  --     readRawField(ast, environment, field) must be absent or literal
+  --     (a plain string, or the environment's plain-string map entry, in
+  --     mappings with only plain-string keys and the key once);
+  --     otherwise REFUSE the import (no AWS call), naming the field and
+  --     the option that sets it
+  --   importAws = mergeAwsSettings(cliAws, literal raw fields)
+  --   importEnv = envFactory(importAws)   -- failure reported with its cause
+  --   later AWS imports reuse importEnv
+  loaded = full loading with that import loader (steps below)
+  -- Backstop: if an import env was built, importAws must equal
+  -- loaded.mergedAws field by field, otherwise REFUSE the load
+  -- A file without AWS imports never builds importEnv and is not checked.
 
 loadStackArgs(argsfilePath, environment, operation, cliAws, remoteImports, mAwsEnv):
   1. content = readFile(argsfilePath)
@@ -723,9 +727,7 @@ validateNoUnknownKeys(keyMap):
 
 - Setting =--profile=no-profile= AND having =AWS_PROFILE= set: =AWS_PROFILE= is used (the sentinel suppresses the stack-args.yaml profile, not the env var).
 - =--assume-role-arn= performs an STS AssumeRole call at session startup and auto-refreshes credentials before expiry for long-running watch operations.
-- Environment map resolution has different error behavior in the two passes:
-  - Bootstrap pass (=extractRawAwsFromAst=): missing env key returns =Nothing= (silent)
-  - Full pass (=resolveEnvMaps=): missing env key returns an error
+- A missing environment-map key is an error in full loading (=resolveEnvMaps=). Before an AWS import it makes the field not literal, so the import is refused unless the command line sets that field.
 
 --------------
 
