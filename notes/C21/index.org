@@ -21,29 +21,69 @@
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-The C4 review found five low-severity issues, each small, grouped here:
+The C4 review ([[file:../C4/report--security-review.org][report]]) found
+seven low-severity issues. Two went to their own cards
+([[file:../C19/index.org][C19]] redacts session tokens in error messages;
+[[file:../C20/index.org][C20]] adds resource limits). The other five are
+grouped here. Re-checked 2026-11-16 against =main= (after C15, C16 tasks
+1-3 and C27), with the Rust (=~/src/iidy=) and TypeScript (=~/src/iidy-js=)
+behaviour, because every fix below that changes behaviour diverges from
+both originals unless noted:
 
-- =iidy demo= works in the fixed directory =/tmp/iidy-demo= and deletes it
-  recursively (=src/Iidy/Demo.hs= around lines 100-106); another local user
-  can pre-create it. [[id:org:01a1e68e-1585-707c-91d5-94c826e5c3c5][finding]]
-- Write operations query =pool.ntp.org= over unauthenticated SNTP
-  (=src/Iidy/Aws/Timing.hs= around lines 83-118), even with
-  =--no-remote-imports=, with no sanity bound against the system clock.
-  [[id:org:01a1e68e-1585-707c-91d5-94c76dd1eb22][finding]]
-- =convert-stack-to-iidy= overwrites local files and existing SSM
-  parameters without confirmation
-  (=src/Iidy/Cfn/Operations/ConvertStack.hs= around lines 574-631 and
-  677-703). [[id:org:01a1e68e-1585-707c-91d5-94c6e0b7579f][finding]]
-- The displayed credential source can disagree with the credentials in use
-  when =--profile= and credential environment variables are both set
-  (=src/Iidy/Aws/Config.hs= around lines 128-164 versus 44-71).
+- *Demo temporary directory.* Still open. =src/Iidy/Demo.hs= =runWithTmpDir=
+  (lines 105-111) still uses =<tmp>/iidy-demo= and =removeDirectoryRecursive=.
+  C15, C37 and C33 touched =Demo.hs= only for import flags.
+  [[id:org:01a1e68e-1585-707c-91d5-94c826e5c3c5][finding]]. Rust uses a fresh
+  =tempdir()= (=src/demo.rs:86=) and TypeScript =tmp.dirSync()=
+  (=src/demo.ts:56=), so this is a parity fix. *Owner: this card*
+  ([[file:../C30/index.org][C30]] says so in its Context and edits only the
+  sleep and print-delay lines of =Demo.hs=).
+- *NTP.* Still open. C27 (=reliableTimeProviderWith=, =reliableNowWith=,
+  =Timing.hs= lines 82-97) only made the query injectable for tests;
+  behaviour is unchanged: =queryNtp= (line 114) asks =pool.ntp.org= and
+  trusts the answer, and =timeProviderForOperation= (line 169, called from
+  =src/Iidy/Cfn/Runner.hs= lines 76 and 103) selects it for every write
+  operation regardless of =--no-remote-imports=.
+  [[id:org:01a1e68e-1585-707c-91d5-94c76dd1eb22][finding]]. Rust
+  (=src/aws/timing.rs:40-41=) and TypeScript (=src/getReliableTime.ts=) use
+  the same server, retry once and fall back to the system clock, with no
+  bound.
+- *convert-stack-to-iidy overwrite.* Still open. =ConvertStack.hs= still
+  writes =stack-policy.json=, =_original-template.*=, =cfn-template.yaml=
+  and =stack-args.yaml= with =TIO.writeFile= (lines 578-631) and
+  =moveParamsToSSM= still sets =overwrite = Just True= (line 688).
+  [[id:org:01a1e68e-1585-707c-91d5-94c6e0b7579f][finding]]. Rust
+  (=src/cfn/convert_stack_to_iidy.rs:442-493=, =:534=) and TypeScript
+  (=src/cfn/convertStackToIidy.ts:161-232=) both overwrite silently and
+  have no force flag, so any refusal is a new, user-visible divergence.
+- *Credential-source display.* Still open. =detectCredentialSources=
+  (=src/Iidy/Aws/Config.hs= lines 128-164) lists environment variables
+  before the profile; =createAwsEnv= (lines 44-71) uses the profile alone
+  when one is set through =--profile= or stack-args. Rust
+  (=src/aws/credential_source.rs:263=) has the same display order, so the
+  display matches Rust but not the credentials the Haskell code uses.
   [[id:org:01a1e68e-1584-74b8-b152-a94e929ee31f][finding]]
-- Plaintext =http:= imports are allowed and redirects are followed
-  silently; import manifest digests are computed but never shown or checked
-  (=Imports/Types.hs= around lines 75-76, =Loaders/Http.hs= around lines 56
-  and 104-114). [[id:org:01a1e68e-1584-74b8-b152-a94d23b74a2f][finding]]
+- *Plaintext http, redirects, digests.* Partly fixed by C15. Fixed: an
+  HTTP import requested by an untrusted document cannot reach loopback,
+  link-local or metadata addresses on the first request or any redirect hop,
+  and a request under a trusted prefix may only be redirected to trusted
+  locations (=src/Iidy/Yaml/Imports/Loaders/HttpGuard.hs=, commit
+  =1fd9e64=, documented in =docs/SECURITY.org=
+  "HTTP Address Filter" and "Redirects From a Trusted Source"). Still open:
+  =http:= locations are accepted for every requester; an https-to-http
+  redirect is followed; the loader's recorded location is the original URL
+  (=Loaders/Http.hs= =idLocation = location=); and
+  =irSha256Digest= (=Imports/Types.hs= line 73, set in
+  =src/Iidy/Yaml/Engine.hs= line 235) is computed but never shown or
+  checked. [[id:org:01a1e68e-1584-74b8-b152-a94d23b74a2f][finding]]. Rust
+  (reqwest defaults) and TypeScript both allow =http:= and follow redirects.
+  =docs/SECURITY.org= "Remaining risks" already says local or trusted
+  requesters' redirects are not filtered.
 
-Each item should be checked against Rust before changing behaviour.
+Only this card edits =Demo.hs= (the temp dir), =Timing.hs=,
+=ConvertStack.hs=, =Aws/Config.hs= and the HTTP loader files named below;
+doc lines for what lands here are handed to [[file:../C22/index.org][C22]]
+(see its last task) so that =docs/SECURITY.org= has one editor.
 
 * Scope and gate
 :PROPERTIES:
@@ -51,12 +91,76 @@ Each item should be checked against Rust before changing behaviour.
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-Allowed paths: the files named above, =test/=, =test-fixtures/=,
-=notes/C21/=.
+Allowed paths: =src/Iidy/Demo.hs=, =src/Iidy/Aws/Timing.hs=,
+=src/Iidy/Aws/Config.hs=, =src/Iidy/Cfn/Operations/ConvertStack.hs=,
+=src/Iidy/Yaml/Imports/Loaders/HttpGuard.hs=,
+=src/Iidy/Yaml/Imports/Loaders/Http.hs=, =src/Iidy/Cfn/Runner.hs= (only the
+two =timeProviderForOperation= call sites), =src/Iidy/Cli*= and
+=src/Iidy/Cli/Help.hs= (only if task 5 adds a flag, after Tavis answers),
+=iidy-hs.cabal= (only for a new test module), =test/Test/DemoTest.hs=,
+=test/Test/TimingTest.hs=, =test/Test/ConvertStackTest.hs=,
+=test/Test/HttpGuardTest.hs=, =test/Test/FakeHttp.hs=, a new
+credential-display test module with its entry in =test/Main.hs=,
+=test-fixtures/=, =DIVERGENCES.md=, =notes/C21/=.
 
-Gate: each item is fixed with a test, or explicitly declined with a reason
-recorded under its task (for example where Rust parity matters more); build
-warning-free, tests pass; committed with C21.
+Out of scope: session-token redaction (C19); resource limits (C20); the
+sleep rounding, explain and masking differences in =Demo.hs= (C30, which
+edits only those lines); the address filter and trust rules of C15;
+=docs/SECURITY.org= (one editor: C22 folds in the lines this card records);
+what =reliableTimeProvider= does when NTP works (server, retries, timeout);
+digest pinning syntax (declined below unless Tavis asks).
+
+Done when:
+- [ ] =runWithTmpDir= uses a fresh private directory (mode 0700, created
+  atomically) and removes only that directory; a test shows two concurrent
+  =runDemo= calls use different directories, and the sequential-group
+  workaround in =test/Test/DemoTest.hs= (the comment above
+  =dependentTestGroup "runDemo"=) is removed or reduced in the same commit.
+- [ ] An NTP answer more than five minutes from the system clock is
+  treated as a failed query (so the existing retry and system-time fallback
+  apply); stub-driven tests cover an answer inside the bound, one far in
+  the future and one far in the past; =--no-remote-imports= skips the NTP
+  query (system time is used); =DIVERGENCES.md= records both, with the Rust
+  and TypeScript references above. No new flag or environment variable
+  unless Tavis chose one (see Stop rule).
+- [ ] The displayed credential source for =--profile= or a stack-args
+  =Profile= lists the profile first and no environment-variable source, a
+  test with fake keys and no network shows the displayed source and the
+  credentials amazonka resolves agree, and the Rust difference (if Rust's
+  SDK really prefers environment variables over an explicit profile) is
+  recorded in the card and =DIVERGENCES.md=.
+- [ ] A redirect from an =https:= URL to an =http:= URL is refused for every
+  requester, with tests; the recorded import location names the URL the
+  content came from, or the card records why that needs more than the
+  guard (see the task); the plaintext-=http:= and unpinned-digest
+  risks are recorded in the card as accepted (parity with Rust and
+  TypeScript) with the lines for =docs/SECURITY.org= ready for C22.
+- [ ] =convert-stack-to-iidy=: per Tavis's answer to the question in the
+  Stop rule (implemented with tests, or declined with the reason recorded
+  under task 5).
+- [ ] Build warning-free, full suite green, each commit names C21.
+
+Stop and record if: a fix needs a change outside the allowed paths;
+reading the Rust or TypeScript source shows a behaviour this card did not
+list (record it and stop that task); the credential test cannot tell which
+credentials amazonka uses without a network call (never make one); or an
+item needs a user-visible choice, in which case put it to Tavis and do not
+implement until he answers. Questions to put, each with a recommendation:
+1. NTP: bound at five minutes and skip under =--no-remote-imports=, with no
+   new flag? Recommend yes; it changes nothing when NTP answers correctly
+   and the system clock is within five minutes, and an operator who wants no egress
+   already passes =--no-remote-imports=.
+2. =convert-stack-to-iidy=: refuse to overwrite existing output files
+   unless a new =--force= is passed (Rust and TypeScript overwrite
+   silently)? Recommend yes for files, checking all four paths before
+   writing any, and leave the SSM =overwrite = Just True= as it is: it is
+   the point of =--move-params-to-ssm=, and a check would need a
+   =GetParameter= per key. This adds a flag, so it is user-visible.
+3. Plaintext =http:=: keep accepting it (as Rust and TypeScript do and
+   =docs/SECURITY.org= implies for local development servers), refusing
+   only the https-to-http downgrade? Recommend yes. Requiring =https:=
+   would break working templates; digest pinning needs new import syntax
+   neither original has, so decline it.
 
 * TODO Demo uses a private temporary directory
 :PROPERTIES:
@@ -64,17 +168,39 @@ warning-free, tests pass; committed with C21.
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-* TODO Bound or make optional the NTP time check
+Replace the fixed =<tmp>/iidy-demo= in =runWithTmpDir=
+(=src/Iidy/Demo.hs= lines 105-111) with a fresh private directory, as Rust
+(=src/demo.rs:86=) and TypeScript (=src/demo.ts:56=) do. Use
+=System.IO.Temp.withSystemTempDirectory= (=temporary= is already a test
+dependency; add it to the library only if it is not there, and then to both
+=iidy-hs.cabal= and =flake.nix=) or =System.Posix.Temp.mkdtemp= (=unix= is
+already a dependency) and confirm the mode is 0700. First add a failing test:
+two =runDemo= calls started together each see only their own files (this
+fails today, where both use one directory). Then drop the
+=dependentTestGroup= workaround in =DemoTest.hs= (comment at line 37) if the
+tests no longer overlap. Keep every =Demo.hs= edit within =runWithTmpDir=
+and its imports so C30's sleep-delay edits merge cleanly.
+
+* TODO Bound and skip the NTP time check
 :PROPERTIES:
 :ID: org:01a1e692-1434-76c4-8beb-6bb8263ba367
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-* TODO convert-stack-to-iidy asks before overwriting
-:PROPERTIES:
-:ID: org:01a1e692-1434-76c4-8beb-6bb71823cc91
-:ADDED: [2026-11-16 Mon 15:54]
-:END:
+Do not start before Tavis has answered question 1. In
+=src/Iidy/Aws/Timing.hs= make =reliableNowWith= (line 90) reject a
+queried time that differs from =getCurrentTime= by more than five minutes
+(named constant), counting it as a failed attempt, so the retry and
+fallback logic that C27 made testable applies. Failing tests first, with
+stub queries: far future, far past, and an answer one minute off, which is
+accepted. Then make =timeProviderForOperation= (line 169) take whether
+remote imports are allowed (the import policy is =policy= at
+=Runner.hs= line 50 and =ri= at line 103) and return =systemTimeProvider=
+when they are blocked; a test shows no NTP query runs under
+=BlockRemoteImports= (a stub, never the real query). Add the
+=DIVERGENCES.md= entry (Rust =src/aws/timing.rs:40-41=, TypeScript
+=src/getReliableTime.ts=). Record the "pool.ntp.org on every write
+operation" line for C22 to put in =docs/SECURITY.org=.
 
 * TODO Credential-source display matches the credentials in use
 :PROPERTIES:
@@ -82,8 +208,64 @@ warning-free, tests pass; committed with C21.
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-* TODO Decide on plaintext http imports, redirects and digests
+Reproduce without any network call: with fake =AWS_ACCESS_KEY_ID= and
+=AWS_SECRET_ACCESS_KEY= set and a profile in a fixture credentials file
+(=configPathRelative= reads =~/.aws/credentials=; point =HOME= at a
+temporary directory in the test), build the environment with
+=createAwsEnv= (=src/Iidy/Aws/Config.hs= lines 44-71) and read the keys
+amazonka resolved (=Amazonka.withAuth= on the env, which does not send
+anything), then compare with =detectCredentialSources= (lines 128-164).
+Record the failing test, then change =detectCredentialSources= so that an
+explicit profile (CLI flag or stack-args, not =AWS_PROFILE=) lists the
+profile alone, matching =createAwsEnv=. Check Rust's SDK behaviour by
+reading =~/src/iidy/src/aws/mod.rs= (lines 117-118, =profile_name=) and
+=credential_source.rs= and record whether Rust uses the profile or the
+environment keys when both are set; if Rust uses the environment keys, stop
+and put the choice (display follows the Haskell behaviour, or the Haskell
+behaviour follows Rust) to Tavis with that evidence.
+
+* TODO Refuse an https-to-http redirect and record the final URL
 :PROPERTIES:
 :ID: org:01a1e692-1434-76c4-8beb-6bb5b5fd4e3b
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
+
+Do not start before Tavis has answered question 3. In
+=HttpGuard.hs=, =checkHop= (line 204) already runs on every hop through
+=managerModifyRequest=, and may run more than once per hop, so it must
+not depend on remembering the previous hop. =HttpGuard= already carries
+per-import data built by =httpGuardFor= (line 119), which receives the
+import's =location=: add a field for the original scheme and a rule that a
+hop with scheme =http= is refused for every requester when the original
+location is =https:=, with a message naming the requested and the hop URL.
+Use the fake =HttpSeam= and canned connections the C15 tests use
+(=test/Test/HttpGuardTest.hs=, =test/Test/FakeHttp.hs=), so no socket is
+opened. Failing tests first: a redirect https to http refused; http to
+http and https to https accepted; a direct =http:= import accepted. For
+the final URL, make =Http.hs= return the URL of the last hop as the
+import's recorded location if http-client exposes it without extra
+requests (for example the request recorded by =managerModifyRequest= on
+the last hop); if that needs a second fetch or a redirect-following rewrite, stop,
+record the finding and leave the original URL. Record the plaintext-=http:=
+and unchecked-digest findings as accepted, with the Rust and TypeScript
+behaviour, and write the =docs/SECURITY.org= lines for C22.
+
+* TODO convert-stack-to-iidy asks before overwriting
+:PROPERTIES:
+:ID: org:01a1e692-1434-76c4-8beb-6bb71823cc91
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+Do not start before Tavis has answered question 2. In =processStack=
+(=ConvertStack.hs= lines 574-631), after the output directory is created
+and before anything is written, check the four target paths; if any
+exists and the new flag is not set, return =Left= naming each existing
+file and the flag, having written nothing and sent no SSM request (the
+SSM migration at step 9 runs after the file writes today, so move the
+check before step 5). Failing tests first in =ConvertStackTest.hs=, mock AWS
+only: an existing =stack-args.yaml= is refused with nothing written; with
+the flag all four are overwritten; a clean directory is unchanged. Add the
+flag to the parser and help (parity of help text is not required: Rust has
+no such flag), =DIVERGENCES.md= and the Rust and TypeScript references.
+If Tavis declines, record that under this heading and close the task
+without code.

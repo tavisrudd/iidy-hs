@@ -27,12 +27,51 @@
 :END:
 
 The C4 review found documentation and CLI surface that describe behaviour
-the code does not have: =SECURITY.md= says relative imports from remote
-templates resolve remotely, but the code rejects them; the stack-args field
-=CommandsBefore= is parsed but never run; and the =--debug= flag does
-nothing. See [[id:org:01a1e68e-1584-74b8-b152-a94c0e6cc79e][Info: SECURITY.md and CLI surface claim behaviour the code does not have]].
-[[file:../C15/index.org][C15]] may change the remote-template model, so the
-=SECURITY.md= rewrite should follow its decision.
+the code does not have. See [[id:org:01a1e68e-1584-74b8-b152-a94c0e6cc79e][Info: SECURITY.md and CLI surface claim behaviour the code does not have]].
+Re-checked 2026-11-16 against =main= after [[file:../C15/index.org][C15]]
+(done), which rewrote the security document as =docs/SECURITY.org= (there is
+no =SECURITY.md= at the root or in =docs/= any more):
+
+*Already fixed by C15 (do not redo):* (a) the relative-import claim: the
+"Relative Imports" section of =docs/SECURITY.org= now says a bare relative
+import from a remote document is rejected, and =DIVERGENCES.md= records the
+difference from Rust and iidy-js; the trust model, =--trust-import-source=,
+the HTTP address filter and the remaining risks are all current.
+
+*Still wrong or missing:*
+- =CommandsBefore= is parsed (=src/Iidy/Cfn/StackArgsLoader.hs= line 563,
+  =saCommandsBefore= at line 587, listed in =validTopLevelKeys= at line 497)
+  and never run, with no warning. =docs/getting-started.org= line 394 says
+  "Shell commands to run before the CloudFormation operation".
+  =src/Iidy/InitStackArgs.hs= line 82 emits it in the template.
+  Rust and TypeScript run it; see the Stop rule for what exactly.
+- =--debug= is parsed (=src/Iidy/Cli/Parser.hs= line 131, =goDebug= in
+  =src/Iidy/Cli.hs= line 74) and nothing reads it; =docs/command-reference.org=
+  line 19 and =docs/requirements/01-cli-interface.org= line 33 say it logs
+  debug information to stderr.
+- Stale file names: =docs/requirements/02-yaml-preprocessing.org= line 1159
+  and =docs/requirements/03-import-system.org= line 868 point to
+  =docs/SECURITY.md=; =docs/requirements/00-overview.org= line 29 links the
+  upstream project's =docs/SECURITY.md= on GitHub (an external page: check
+  it is still the right target, and leave it if so).
+- Missing from =docs/SECURITY.org= (C4 Info items): that =random:= uses
+  =System.Random= and is not cryptographically secure, so it must not be
+  used for secrets; and that =/iidy/disable-template-approval= in SSM
+  switches template approval off for everyone with =ssm:PutParameter= on
+  =/iidy/*= (=src/Iidy/Cfn/GlobalConfig.hs= line 105; fails closed on SSM
+  errors). The second is part of the "Docs and divergences" task of
+  [[file:../C16/index.org][C16]] (its user-visible changes list names
+  =/iidy/disable-template-approval=); check what C16 wrote before adding it.
+- Lines owed by cards that have not landed: C19 (session tokens in error
+  messages), C20 (resource limits), C18 (control characters in terminal
+  output), and C21 (NTP egress on write operations, plaintext =http:= and
+  unpinned digests accepted, convert-stack overwrites). Each of those cards
+  records the lines it needs; this card's last task folds them in once they
+  are done, so that =docs/SECURITY.org= has one editor.
+
+Overlap: [[file:../C12/index.org][C12]] splits =StackArgsLoader.hs=; the
+=CommandsBefore= refusal below is an edit in the loader, so land C12 first
+or rebase onto it.
 
 * Scope and gate
 :PROPERTIES:
@@ -40,23 +79,169 @@ nothing. See [[id:org:01a1e68e-1584-74b8-b152-a94c0e6cc79e][Info: SECURITY.md an
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-Allowed paths: =SECURITY.md=, =docs/=, =README.md=, =src/Iidy/Cli*=,
-=src/Iidy/StackArgs*=, =app/Main.hs=, =test/=, =notes/C22/=.
+Allowed paths: =docs/SECURITY.org=, =docs/getting-started.org=,
+=docs/command-reference.org=, =docs/requirements/=, =README.md=,
+=DIVERGENCES.md=, =src/Iidy/Cfn/StackArgsLoader.hs= (and the modules C12
+splits out of it) for the =CommandsBefore= refusal, =src/Iidy/InitStackArgs.hs=
+(its template comment), =src/Iidy/Cli/Parser.hs= and =src/Iidy/Cli/Help.hs=
+only if Tavis chooses to change =--debug=, =test/Test/StackArgsLoaderTest.hs=,
+=test/Test/InitStackArgsTest.hs= if one exists, =test/Test/CliParserTest.hs=,
+=test-fixtures/=, =notes/C22/=.
 
-Gate: =SECURITY.md= and =docs/SECURITY.md= describe the actual model (after
-C15's decision); =CommandsBefore= and =--debug= are each either implemented
-to match Rust, with tests, or removed (or rejected with a clear message),
-with the choice recorded here; build warning-free, tests pass; committed
-with C22.
+Out of scope: implementing =CommandsBefore= execution (a separate card, if
+Tavis chooses it; see the Stop rule), implementing debug logging, changing
+any security behaviour (this card edits words, one loader check and tests),
+the approval workflow docs (C16), the lines other hardening cards own until
+they are done (last task), =docs/import-types.org= and
+=docs/custom-resource-templates.org= (C15 already made them current).
 
-* TODO Decide and fix CommandsBefore and --debug
+Done when:
+- [ ] Tavis's answers to the two questions in the Stop rule are recorded in
+  the card, before any code for either is written.
+- [ ] No file under =docs/= or =README.md= names =docs/SECURITY.md= or a
+  root =SECURITY.md=, and =docs/SECURITY.org= is the only security
+  document (a =grep -rn 'SECURITY\.md'= over =docs/= and =README.md= shows
+  only the upstream GitHub link, if that link was kept).
+- [ ] =CommandsBefore= and =--debug= are each handled as Tavis chose, with
+  tests (for =CommandsBefore=: a stack-args file with it, loaded for
+  =create-stack=, =update-stack=, =create-changeset= and =create-or-update=,
+  returns the new error and runs nothing; the same file loaded for
+  =render= or =delete-stack= is accepted, as Rust and TypeScript do), and
+  the docs and =DIVERGENCES.md= say what happens.
+- [ ] =docs/SECURITY.org= says =random:= is not cryptographically secure;
+  =/iidy/disable-template-approval= is documented once, either by C16's
+  docs task or here; each other hardening card that has landed by then has
+  its line folded in (or the card lists which are still open).
+- [ ] Build warning-free, full suite green, each commit names C22.
+
+Stop and record if: the =CommandsBefore= or =--debug= choice has not been
+answered; the refusal needs a change outside the allowed paths; a doc claim
+cannot be checked against the code in under a few minutes (list it in the
+card as unverified rather than guess). Questions to put to Tavis before
+the third and fourth tasks (the second task asks them), each with a
+recommendation:
+
+1. =CommandsBefore= (user-visible: a stack-args file that parses today stops
+   loading). What Rust and TypeScript do: both run the commands, through
+   =/bin/bash -c=, in the argsfile's directory, only for =create-stack=,
+   =update-stack=, =create-changeset= and =create-or-update=
+   (Rust =~/src/iidy/src/cfn/stack_args.rs:277-313=, =:483-490= and
+   =process_commands_before= from line 493, which expands Handlebars with
+   the =iidy= namespace, prints each command, sets =iidy_profile=,
+   =iidy_region=, =iidy_environment= and three bash helper functions, and
+   fails the load on a non-zero exit; TypeScript
+   =~/src/iidy-js/src/cfn/loadStackArgs.ts:137-166= and
+   =src/cfn/runCommandSet.ts:11-67=). For every other command they delete
+   the field. Choices: (a) reject with a clear error for the four
+   operations, run nothing; (b) implement as Rust does. Recommendation: (a)
+   now and file a separate card for (b) if Tavis wants parity. Reason: a
+   silent skip of a pre-deploy command (a build, a check, an upload) is
+   the dangerous state, and (a) removes it in one small check; (b) runs
+   shell text built from Handlebars over stack-args values, which can come
+   from imports (including remote ones allowed for local stack-args), so it
+   needs its own trust design under the C15 model before it is ported.
+2. =--debug=. What the originals do: TypeScript sets =DEBUG= and the log
+   level to =debug= (=~/src/iidy-js/src/cli/utils.ts:22-25=,
+   =src/main.ts:470=) and several =logger.debug= calls print then
+   (for example =src/cfn/stackArgsToX.ts:47-52=, =src/preprocess/index.ts:505=).
+   Rust parses it (=~/src/iidy/src/cli.rs:105-107=, help "Log debug
+   information to stderr.") and nothing reads it; its =debug_log!= macro is
+   compiled in only with the cargo feature =debug-logging= (=Cargo.toml:17=,
+   =src/debug.rs=) and =env_logger= follows =RUST_LOG= (=src/main.rs:265=).
+   So Rust already accepts and ignores it. Choices: (a) keep accepting it,
+   keep the Rust help text, and say in =docs/command-reference.org=,
+   =docs/requirements/01-cli-interface.org= and =DIVERGENCES.md= (as a
+   shared behaviour, not a divergence) that it has no effect yet; (b)
+   implement debug logging; (c) reject the flag. Recommendation: (a). It
+   is the parity answer, scripts that pass =--debug= to either original
+   keep working, and there is nothing to port. Say so in the help-text
+   note only if Tavis wants the help to change (it would then differ from
+   Rust).
+
+* TODO Correct the stale file names and cross-references
+:PROPERTIES:
+:ID: org:01a1e692-143c-70db-935c-e1c2c8c805c2
+:ADDED: [2026-11-16 Mon 15:54]
+:END:
+
+No decision needed; do this first. Run =grep -rn 'SECURITY\.md' docs/
+README.md= and fix =docs/requirements/02-yaml-preprocessing.org= line 1159
+and =docs/requirements/03-import-system.org= line 868 to
+=docs/SECURITY.org= (as a =file:= link, Org style, one line per link). Check
+the GitHub link in =docs/requirements/00-overview.org= line 29: if it
+names the upstream project's page it is a different repository and stays;
+record that. Check every other claim in the requirements files that
+mention the security model or =--no-remote-imports= against
+=docs/SECURITY.org= and the code (=src/Iidy/Yaml/Imports/Types.hs=,
+=Loaders/Dispatch.hs=); fix or list what differs. No code changes.
+
+* TODO Ask Tavis the CommandsBefore and --debug questions and record the answers
 :PROPERTIES:
 :ID: org:01a1e692-143c-70db-935c-e1c326f89cfd
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-* TODO Correct SECURITY.md after C15
+Put the two questions in the Stop rule to Tavis (through the supervisor)
+with the recommendations, and record the answers here, with the date. Do
+not write any code for the next two tasks until both are recorded. If the
+answer to question 1 is (b), stop this card's =CommandsBefore= work, file a
+card with =c new= naming the Rust references above and the trust question,
+and do the next task (the refusal) as in option (a) until the new card
+lands.
+
+* TODO Reject CommandsBefore for the operations that would run it
 :PROPERTIES:
-:ID: org:01a1e692-143c-70db-935c-e1c2c8c805c2
-:ADDED: [2026-11-16 Mon 15:54]
+:ID: org:01a1e7bd-0c9c-775f-8fbb-3a464018ba4e
+:ADDED: [2026-11-16 Mon 21:21]
 :END:
+
+Only if the answer was (a) or (b). The loader knows the operation
+(=loadStackArgsWith= has =operation=); =valueToStackArgs= does not. After
+the stack-args are converted, if =saCommandsBefore= is =Just= and the
+operation is =OpCreateStack=, =OpUpdateStack=, =OpCreateChangeset= or
+=OpCreateOrUpdate=, return =Left= naming the argsfile, the field and what to
+do (remove it, or run the commands before invoking iidy-hs). For other
+operations leave the field alone (Rust and TypeScript drop it; iidy-hs
+already never runs it). Failing tests first in =StackArgsLoaderTest.hs= for
+each of the four operations and for =OpDeleteStack= and render. Fix
+=docs/getting-started.org= line 394 (the field is accepted but a file that
+uses it is refused for those operations), the comment template in
+=InitStackArgs.hs= line 82 (keep it commented, add that it is not run by
+iidy-hs), and add the =DIVERGENCES.md= entry with the Rust and TypeScript
+references. Land after C12 if that card is not yet done.
+
+* TODO Document that --debug has no effect
+:PROPERTIES:
+:ID: org:01a1e7bd-0c9c-775f-8fbb-3a45475bbb34
+:ADDED: [2026-11-16 Mon 21:21]
+:END:
+
+Per the answer to question 2 (recommended (a)): change the =--debug= rows
+in =docs/command-reference.org= (line 19) and
+=docs/requirements/01-cli-interface.org= (line 33) to say the flag is
+accepted and has no effect, as in the Rust CLI, which only reads
+=RUST_LOG= for logging. Add a short =DIVERGENCES.md= note naming the
+TypeScript behaviour. =test/Test/CliParserTest.hs= line 77 already tests
+that the flag parses; leave it. If Tavis chose (b) or (c), write the task
+body from his answer here and split it before starting.
+
+* TODO Fold in the security notes from the other hardening cards
+:PROPERTIES:
+:ID: org:01a1e7bd-0c9c-775f-8fbb-3a4403bf62ef
+:ADDED: [2026-11-16 Mon 21:21]
+:END:
+
+Start only when C16 (its docs task), C18, C19, C20 and C21 are each done
+or Tavis has said to go ahead without them. In =docs/SECURITY.org=: add to
+the "Remote-Allowed Import Types" table note or "Remaining Risks" that
+=random:= is =System.Random= and not cryptographically secure (do not use it
+for secrets); add the =/iidy/disable-template-approval= note unless C16
+wrote it (check =grep -n disable-template-approval docs/=); then add the
+lines each finished card recorded in its notes (look under its
+=Result= heading): error messages no longer print session tokens (C19),
+the resource limits and their values (C20), control characters in terminal
+output are escaped (C18), NTP egress and its bound, plaintext =http:= and
+unpinned digests accepted, the https-to-http refusal, convert-stack
+overwrite behaviour (C21). Remove any "Remaining Risks" line a landed card
+made false. List in the card which cards were not yet done and what is
+still owed.

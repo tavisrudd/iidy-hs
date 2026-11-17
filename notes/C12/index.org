@@ -21,20 +21,52 @@
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
 
-=src/Iidy/StackArgsLoader.hs= is about 625 lines, above the project's
-guideline of roughly 300-500 lines per module. It mixes loading, pure
-validation, and a walk over an aeson =Value= to pull out fields, where direct
-field parsing would be shorter and give better errors. Left open by the
-March post-review fixes (item 4C) and the refactoring plan (phase 7); still
-true per the C2 triage ([[file:../C2/report--handoff-triage.org][report]]).
-Low priority: worth doing when the module next needs changing.
+=src/Iidy/Cfn/StackArgsLoader.hs= is about 730 lines (checked 2026-11-16),
+above the project's guideline of roughly 300-500 lines per module. It mixes
+loading, the credential-field reading added by
+[[file:../C17/index.org][C17]], pure validation, and a walk over an aeson
+=Value= to pull out fields, where direct field parsing would be shorter and
+give better errors. Left open by the March post-review fixes (item 4C) and
+the refactoring plan (phase 7); still true per the C2 triage
+([[file:../C2/report--handoff-triage.org][report]]). Low priority: worth
+doing when the module next needs changing.
 
-Update 2026-11-16 (supervisor): the path is =src/Iidy/Cfn/StackArgsLoader.hs=,
-now about 700 lines after [[file:../C17/index.org][C17]], which also added
-=src/Iidy/Cfn/StackArgsBootstrap.hs=. When splitting, add a loader-level
-seam and a test proving the C17 post-preprocessing backstop is wired in:
-the C17 re-review disabled the settings recording at
-=StackArgsBootstrap.hs:147= and every bootstrap test still passed.
+Current layout of =StackArgsLoader.hs= (line numbers 2026-11-16, re-check):
+- public API =loadStackArgs= (102) and =loadStackArgsWith= (129), which
+  parses, preprocesses, resolves environment maps, injects =$envValues=,
+  merges AWS settings and calls =valueToStackArgs=;
+- credential fields (203-330): =CredentialField=, =RawField=,
+  =readRawField=, =extractRawAwsFromAst=, =plainKeyLookup=;
+- environment maps, environment tag, =$envValues= (332-427);
+- AWS settings extraction and merging (428-468): =extractAwsSettings=,
+  =mergeAwsSettings=, =mergeSentinel= and the two sentinels;
+- unknown-key validation (469-544): =validTopLevelKeys=,
+  =validateNoUnknownKeys=, =findSuggestion=;
+- =valueToStackArgs= and the typed getters =getStr=, =getStrListValidated=,
+  =getStrMapValidated=, =getInt=, =getBool=, =describeType=,
+  =describeValue=, =parseOnFailure=, =parseCapabilities= (545-726).
+
+Its importers are =src/Iidy/Cfn/StackArgsBootstrap.hs=,
+=src/Iidy/Cfn/Runner.hs= (=LoadedStackArgs= only),
+=test/Test/StackArgsLoaderTest.hs=, =test/Test/StackArgsBootstrapTest.hs=
+and =test/Test/Phase14FixTest.hs= (=getStrMapValidated=). Keeping
+=Iidy.Cfn.StackArgsLoader= as the public module that re-exports what they
+import means none of them needs a new import.
+
+Update 2026-11-16 (supervisor), from the C17 re-review: add a loader-level
+seam and a test proving the C17 post-preprocessing backstop is wired in. The
+re-review disabled the settings recording in
+=StackArgsBootstrap.hs= (=writeIORef ranWith (Just importSettings)=, line 147
+at the time of writing) and every bootstrap test still passed, because the
+existing backstop tests call =importSettingsMismatch= directly and nothing
+checks that =loadStackArgsBootstrapped= records the settings or compares
+them. The recording is in =bootstrapLoader=; the comparison is in
+=loadStackArgsBootstrapped= (lines 67-81).
+
+Overlap: [[file:../C22/index.org][C22]] may add a refusal for =CommandsBefore=
+to the stack-args conversion (=saCommandsBefore=, set in =valueToStackArgs=).
+Run this card first, or have C22 rebase onto it, so that edit lands in the
+new fields module.
 
 * Scope and gate
 :PROPERTIES:
@@ -42,22 +74,132 @@ the C17 re-review disabled the settings recording at
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
 
-Allowed paths: =src/Iidy/StackArgsLoader.hs= and new modules split from it,
-=iidy-hs.cabal= (module lists), =test/=, =notes/C12/=.
+Allowed paths: =src/Iidy/Cfn/StackArgsLoader.hs=, new modules under
+=src/Iidy/Cfn/StackArgs/= split from it, =src/Iidy/Cfn/StackArgsBootstrap.hs=
+(only for the seam in task 1), the import lines of =src/Iidy/Cfn/Runner.hs=
+(only if a re-export is dropped), =iidy-hs.cabal= (module lists),
+=test/Test/StackArgsLoaderTest.hs=, =test/Test/StackArgsBootstrapTest.hs=,
+=test/Test/Phase14FixTest.hs= (import line), a new test module for the
+split-out pieces with its entry in =test/Main.hs=,
+=test-fixtures/stack-args-bootstrap/=, =notes/C12/=.
 
-Gate: pure validation lives in its own module; fields are parsed directly
-rather than by walking an aeson =Value=; every resulting module is under
-~500 lines; stack-args error messages are unchanged or improved (record any
-change here); build warning-free, all tests pass; committed with C12.
+Out of scope: any behaviour change (this is a refactor): the stack-args
+accepted or refused, the error texts, the order of checks, and the C17
+refusal rules; =CommandsBefore= handling (C22); the =Types.hs= definition
+of =StackArgs=; the preprocessing engine; new stack-args fields.
 
-* TODO Split validation out of StackArgsLoader
+Done when:
+- [ ] A test through =loadStackArgsBootstrapped= with the real
+  =bootstrapLoader= and the mock factory fails when the settings recording
+  is removed, and a second test fails when the post-load comparison is
+  removed. Each removal is tried by hand against the tests, and the test
+  names and failure output are recorded in the card (the C17 re-review
+  found both removals passing the suite).
+- [ ] The credential-field code, the unknown-key and getter validation, and
+  =valueToStackArgs= live in their own modules, each under about 500
+  lines; =StackArgsLoader.hs= keeps the public API, environment-map and
+  =$envValues= handling and the settings merge, also under about 500
+  lines. =wc -l= of every module involved is recorded in the card.
+- [ ] =valueToStackArgs= no longer walks an aeson =Value= with a separate
+  lookup per field: fields are parsed in one pass by a small field-parser
+  (for example an =aeson= =Parser= with =withObject= and field helpers, or
+  a few combinators over =KeyMap Value=), and the error text for each
+  existing error case is byte-identical, shown by the existing tests
+  passing unchanged. Any message that improves is listed in the card with
+  before and after, and has a test.
+- [ ] The existing =StackArgsLoaderTest=, =StackArgsBootstrapTest= and
+  =Phase14FixTest= cases pass with no expected value edited (imports may
+  change only if a re-export was dropped, and then in a separate commit
+  noted in the card).
+- [ ] Build warning-free, full suite green, each commit names C12.
+
+Stop and record if: a split needs a behaviour change to compile (for
+example the order in which unknown keys and type errors are reported
+differs); the backstop cannot be made to fail under either removal without
+changing production behaviour beyond a test-visible seam; a module still
+exceeds about 500 lines after the split and cannot be split further without
+a new concept; or C22 has landed a =CommandsBefore= edit in
+=valueToStackArgs= that conflicts (then rebase onto it, do not drop it).
+
+* TODO Make the C17 backstop observable and test that it is wired in
 :PROPERTIES:
 :ID: org:01a1e64b-9204-753d-924d-ded6819c079d
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
+
+Do this first, before moving any code, so the split is covered. In
+=StackArgsBootstrap.hs= separate the two steps the re-review found
+unguarded: (a) the load that returns both the result and the settings the
+import environment was built with (=Maybe AwsSettings=, written at the
+=writeIORef ranWith= line); (b) the comparison, which takes that value and
+the load result and returns the refusal or the result. Export the seam for
+tests only (under the existing "Internal (exported for testing)" heading).
+=loadStackArgsBootstrapped= becomes (a) then (b) with no other change.
+
+Tests (fixtures under =test-fixtures/stack-args-bootstrap/=, mock AWS only):
+1. through (a), =literal-ssm.yaml= with the mock factory records the
+   literal settings (profile =literal-profile=, region =eu-west-1=); a file
+   with no AWS import records =Nothing=. This fails if the recording line is
+   removed.
+2. through =loadStackArgsBootstrapped=, a load whose recorded import
+   settings differ from the final merged settings is refused with the
+   =importSettingsMismatch= text. If no fixture reaches this (the plain-only
+   check makes the two agree), build the difference at the seam: have the
+   test drive (b) with a result whose merged settings differ from the
+   recorded ones, and assert =loadStackArgsBootstrapped= calls (b) by
+   checking a fixture-independent property recorded in the card (for
+   example that (b) is the last step of the exported function, by
+   composing it from the same two exported pieces). Pick the least
+   artificial option and say why in the card.
+3. Mutation check, by hand: delete the recording line, run the suite, see
+   test 1 fail; restore it; delete the call to (b), see test 2 fail;
+   restore it. Record both outputs. Never commit a deleted line.
+
+* TODO Move the credential-field code into its own module
+:PROPERTIES:
+:ID: org:01a1e7bd-0c54-70f5-a90f-616146222012
+:ADDED: [2026-11-16 Mon 21:21]
+:END:
+
+Create =src/Iidy/Cfn/StackArgs/Credentials.hs= holding =CredentialField=,
+=credentialFields=, =credentialFieldKey=, =credentialFieldFlag=,
+=credentialFieldSetting=, =settingsFromFields=, =RawField=,
+=readRawField=, =plainOrComputed=, =extractRawAwsFromAst=, =KeyLookup=,
+=plainKeyLookup=, plus =extractAwsSettings=, =mergeAwsSettings=,
+=mergeSentinel= and the two sentinel constants if that keeps one concept
+per module (the settings merge is the other half of the credential rules).
+Move code verbatim; =StackArgsLoader= re-exports every name it exported
+before. Add the module to =iidy-hs.cabal=. Build, run the suite, commit.
+
+* TODO Move validation and the typed getters into their own modules
+:PROPERTIES:
+:ID: org:01a1e7bd-0c54-70f5-a90f-6160f6f20ee4
+:ADDED: [2026-11-16 Mon 21:21]
+:END:
+
+Create =src/Iidy/Cfn/StackArgs/Validate.hs= with =validTopLevelKeys=,
+=validateNoUnknownKeys=, =formatUnknownKey=, =findSuggestion= (pure, no
+=IO=), and =src/Iidy/Cfn/StackArgs/Fields.hs= with =valueToStackArgs=, the
+getters (=getStr=, =getStrListValidated=, =getStrMapValidated=, =getInt=,
+=getBool=), =describeType=, =describeValue=, =parseOnFailure=,
+=parseOnFailureText=, =parseCapabilities= and =parseCapabilityText=. Move
+verbatim; =StackArgsLoader= re-exports the names it exported before (the
+"Internal (exported for testing)" list). Build, run the suite, commit.
+Record =wc -l= for every module.
 
 * TODO Replace the Value walk with direct field parsing
 :PROPERTIES:
 :ID: org:01a1e64b-9204-753d-924d-ded53697aa6b
 :ADDED: [2026-11-16 Mon 14:37]
 :END:
+
+Now that the fields live in =Fields.hs=, replace the per-field lookups in
+=valueToStackArgs= with one field-parser. Keep the order in which errors
+are reported (unknown keys first, then =StackName=, =Tags=, =Parameters=,
+capabilities, =OnFailure=, then the lists and the integer), because the
+first error wins. Before editing, list every error text the module can
+produce (the tests in =StackArgsLoaderTest.hs= and =Phase14FixTest.hs= pin
+many) and keep each byte-identical unless the card records an improvement
+with a test. =CommandsBefore= stays a plain list-of-strings field (C22
+decides its fate). Build, run the suite, commit; record the final line
+counts and the error-text comparison.
