@@ -19,6 +19,7 @@ import Data.Text qualified as T
 
 import Iidy.Cfn.ApprovedTemplate (ApprovedTemplate (..), approvedKeyFromPending, approvedTemplateFor, latestKeyFromPending, pendingKeyFor)
 import Iidy.Cfn.Context (CfnContext (..))
+import Iidy.Cfn.Operations.LintTemplate (validateTemplateBody)
 import Iidy.Cfn.S3Objects (ObjectAcl (..), deleteFromS3, downloadFromS3, s3ObjectExists, uploadToS3)
 import Iidy.Cfn.TemplateDiff (generateDiff)
 import Iidy.Cfn.TemplateHash (parseS3Url)
@@ -39,7 +40,7 @@ templateApprovalRequest ::
     -- | argsfile
     Maybe FilePath ->
     IO (Either Text Int)
-templateApprovalRequest ctx sa _lintTmpl argsfilePath = do
+templateApprovalRequest ctx sa lintTmpl argsfilePath = do
     let emit = cfnEmit ctx
     runExceptT $ do
         -- Approved location and rendered body (refuses URL or missing Template)
@@ -64,24 +65,50 @@ templateApprovalRequest ctx sa _lintTmpl argsfilePath = do
                                 }
                 pure 0
             else do
-                -- Upload pending template with bucket-owner-full-control (as iidy-js)
-                let pendingKey = pendingKeyFor key
-                    pendingLoc = "s3://" <> bucket <> "/" <> pendingKey
-                liftExceptT (uploadToS3 (cfnEnv ctx) BucketOwnerFullControl bucket pendingKey body)
-                    `prefixError` "Failed to upload pending template: "
-                lift $
-                    emit $
-                        OdApprovalRequestResult
-                            ApprovalRequestResult
-                                { arrTemplateLocation = s3Loc
-                                , arrPendingLocation = pendingLoc
-                                , arrAlreadyApproved = False
-                                , arrNextSteps =
-                                    [ "Review with: iidy-hs template-approval review "
-                                        <> pendingLoc
-                                    ]
-                                }
-                pure 0
+                -- Lint the rendered local body before upload (Rust
+                -- template_approval_request.rs:79-89; iidy-js lints locally)
+                lintFailed <- lift $ lintFails ctx lintTmpl body
+                if lintFailed then pure 1 else uploadPending ctx bucket key body
+
+-- | Upload the pending template (with bucket-owner-full-control, as iidy-js).
+uploadPending ::
+    CfnContext ->
+    -- | S3 bucket
+    Text ->
+    -- | approved object key
+    Text ->
+    -- | rendered template body
+    Text ->
+    ExceptT Text IO Int
+uploadPending ctx bucket key body = do
+    let s3Loc = "s3://" <> bucket <> "/" <> key
+        pendingKey = pendingKeyFor key
+        pendingLoc = "s3://" <> bucket <> "/" <> pendingKey
+    liftExceptT (uploadToS3 (cfnEnv ctx) BucketOwnerFullControl bucket pendingKey body)
+        `prefixError` "Failed to upload pending template: "
+    lift $
+        cfnEmit ctx $
+            OdApprovalRequestResult
+                ApprovalRequestResult
+                    { arrTemplateLocation = s3Loc
+                    , arrPendingLocation = pendingLoc
+                    , arrAlreadyApproved = False
+                    , arrNextSteps =
+                        [ "Review with: iidy-hs template-approval review "
+                            <> pendingLoc
+                        ]
+                    }
+    pure 0
+
+{- | With lint on, validate the body and emit the result; 'True' when the
+validation found errors. With lint off, 'False' and no call.
+-}
+lintFails :: CfnContext -> Bool -> Text -> IO Bool
+lintFails _ False _ = pure False
+lintFails ctx True body = do
+    validation <- validateTemplateBody ctx body
+    cfnEmit ctx (OdTemplateValidation validation)
+    pure (not (null (tvErrors validation)))
 
 ------------------------------------------------------------------------
 -- Template Approval Review

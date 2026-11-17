@@ -1,5 +1,6 @@
 {- | Tests for @template-approval request@ and @review@ through the mock AWS
-env: S3 errors, the approval-path size limit and the pending upload.
+env: S3 errors, the approval-path size limit, the pending upload and
+the lint step.
 -}
 module Test.TemplateApprovalTest (templateApprovalTests) where
 
@@ -7,6 +8,7 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as BC
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, testGroup)
@@ -14,8 +16,9 @@ import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
 import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateApprovalReview)
 import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), emptyStackArgs)
+import Iidy.Output.Types (OutputData (..), TemplateValidation (..))
 import Test.MockAws
-import Test.MockCfnContext (MockCfn (..), newMockCfnContext)
+import Test.MockCfnContext (MockCfn (..), mockCfnOutputs, newMockCfnContext)
 
 templateApprovalTests :: [TestTree]
 templateApprovalTests =
@@ -27,7 +30,96 @@ templateApprovalTests =
         result @?= Right 0
         puts <- filter ((== Just "PutObject") . fmap callOperation . reqCall) <$> mockRequestLog mock
         map (lookup "x-amz-acl" . reqHeaders) puts @?= [Just "bucket-owner-full-control"]
+    , testGroup "request lint" lintTests
     ]
+
+lintTests :: [TestTree]
+lintTests =
+    [ testCase "lint on, valid: validates the local body, then uploads" $ do
+        mock <- newMockAws
+        mockRespond mock validateOperation (MockResponse 200 validResponse)
+        (result, outputs) <- runLint mock True simpleTemplate
+        result @?= Right 0
+        operations mock >>= (@?= ["HeadObject", "ValidateTemplate", "PutObject"])
+        validations outputs @?= [TemplateValidation True [] []]
+        validatedBodies mock >>= (@?= [True])
+    , testCase "lint on, invalid: emits the errors, exits 1, no upload" $ do
+        mock <- newMockAws
+        mockRespond mock validateOperation (MockResponse 400 validationError)
+        (result, outputs) <- runLint mock True simpleTemplate
+        result @?= Right 1
+        operations mock >>= (@?= ["HeadObject", "ValidateTemplate"])
+        case validations outputs of
+            [tv] ->
+                assertBool
+                    ("errors carry the message: " <> show (tvErrors tv))
+                    (any ("Template format error" `T.isInfixOf`) (tvErrors tv))
+            other -> assertBool ("expected one validation, got " <> show other) False
+    , testCase "lint on, over the inline limit in bytes: skipped with a warning, uploads" $
+        -- 30000 two-byte characters: under the limit in characters, over it in bytes
+        withTemplateBytes (templateHeader <> TE.encodeUtf8 (T.replicate 30000 "\233") <> "\n") $ \path -> do
+            mock <- newMockAws
+            (result, outputs) <- runLint mock True path
+            result @?= Right 0
+            operations mock >>= (@?= ["HeadObject", "PutObject"])
+            validations outputs
+                @?= [ TemplateValidation
+                        True
+                        []
+                        ["Template exceeds 51200 bytes; skipping CFN validation (will be validated on deploy)"]
+                    ]
+    , testCase "lint off: no ValidateTemplate call" $ do
+        mock <- newMockAws
+        (result, outputs) <- runLint mock False simpleTemplate
+        result @?= Right 0
+        operations mock >>= (@?= ["HeadObject", "PutObject"])
+        validations outputs @?= []
+    , testCase "lint on, already approved: no ValidateTemplate call" $ do
+        mock <- newMockAws
+        mockRespond mock (OnObject "HeadObject" "approvals" approvedKey) (mockStatus 200)
+        (result, _) <- runLint mock True simpleTemplate
+        result @?= Right 0
+        operations mock >>= (@?= ["HeadObject"])
+    ]
+
+-- | Run the request with lint on or off; the result and the outputs.
+runLint :: MockAws -> Bool -> Text -> IO (Either Text Int, [OutputData])
+runLint mock lint template = do
+    mcfn <- newMockCfnContext mock OpTemplateApprovalRequest "test"
+    result <- templateApprovalRequest (mcContext mcfn) (approvalArgs template) lint Nothing
+    outputs <- mockCfnOutputs mcfn
+    pure (result, outputs)
+
+-- | The template validations among the outputs.
+validations :: [OutputData] -> [TemplateValidation]
+validations outputs = [tv | OdTemplateValidation tv <- outputs]
+
+-- | For each ValidateTemplate call, whether it sent the fixture's body.
+validatedBodies :: MockAws -> IO [Bool]
+validatedBodies mock = do
+    logged <- mockRequestLog mock
+    pure
+        [ "TemplateBody=AWSTemplateFormatVersion" `BS.isInfixOf` reqBody r
+        | r <- logged
+        , fmap callOperation (reqCall r) == Just "ValidateTemplate"
+        ]
+
+-- | The CloudFormation ValidateTemplate operation.
+validateOperation :: MockMatch
+validateOperation = OnOperation "cloudformation" "ValidateTemplate"
+
+-- | A successful ValidateTemplate reply.
+validResponse :: BS.ByteString
+validResponse =
+    "<ValidateTemplateResponse xmlns=\"http://cloudformation.amazonaws.com/doc/2010-05-15/\">"
+        <> "<ValidateTemplateResult/><ResponseMetadata><RequestId>r</RequestId></ResponseMetadata>"
+        <> "</ValidateTemplateResponse>"
+
+-- | A ValidateTemplate error reply.
+validationError :: BS.ByteString
+validationError =
+    "<ErrorResponse><Error><Type>Sender</Type><Code>ValidationError</Code>"
+        <> "<Message>Template format error</Message></Error></ErrorResponse>"
 
 sizeLimitTests :: [TestTree]
 sizeLimitTests =
@@ -49,13 +141,21 @@ sizeLimitTests =
 (a YAML document padded with a comment).
 -}
 withSizedTemplate :: Int -> (Text -> IO a) -> IO a
-withSizedTemplate size action =
-    withSystemTempDirectory "iidy-approval-size" $ \dir -> do
-        let header = "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n# "
-            padding = BC.replicate (size - BS.length header - 1) 'x'
-            path = dir </> "big.yaml"
-        BS.writeFile path (header <> padding <> "\n")
+withSizedTemplate size =
+    withTemplateBytes
+        (templateHeader <> BC.replicate (size - BS.length templateHeader - 1) 'x' <> "\n")
+
+-- | Run an action with a local template file holding these bytes.
+withTemplateBytes :: BS.ByteString -> (Text -> IO a) -> IO a
+withTemplateBytes bytes action =
+    withSystemTempDirectory "iidy-approval-template" $ \dir -> do
+        let path = dir </> "big.yaml"
+        BS.writeFile path bytes
         action (T.pack path)
+
+-- | A minimal template ending in an open comment, for padding.
+templateHeader :: BS.ByteString
+templateHeader = "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n# "
 
 headErrorTests :: [TestTree]
 headErrorTests =
@@ -99,7 +199,11 @@ accessDenied key =
 
 -- | Run the request for the fixture template under @s3://approvals/app@.
 runRequest :: MockAws -> IO (Either Text Int)
-runRequest mock = runRequestFor mock "test-fixtures/template-loader/simple.yaml"
+runRequest mock = runRequestFor mock simpleTemplate
+
+-- | The local template fixture whose keys the tests use.
+simpleTemplate :: Text
+simpleTemplate = "test-fixtures/template-loader/simple.yaml"
 
 -- | Run the request for a template under @s3://approvals/app@.
 runRequestFor :: MockAws -> Text -> IO (Either Text Int)

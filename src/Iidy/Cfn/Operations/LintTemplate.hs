@@ -3,11 +3,14 @@
 -- | Lint (validate) a CloudFormation template via the AWS API.
 module Iidy.Cfn.Operations.LintTemplate (
     lintTemplate,
+    validateTemplateBody,
 ) where
 
 import Control.Exception (try)
+import Data.ByteString qualified as BS
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 
 import Control.Monad.Trans.Resource (runResourceT)
 
@@ -45,36 +48,41 @@ lintTemplate ctx args argsfilePath = do
         Right tmplResult -> case trTemplateBody tmplResult of
             Nothing -> pure (Left "Failed to load template body")
             Just body -> do
-                validation <-
-                    if T.length body > templateMaxBytes
-                        then
-                            -- Template too large for inline validation
-                            pure
-                                TemplateValidation
-                                    { tvEnabled = True
-                                    , tvErrors = []
-                                    , tvWarnings = ["Template exceeds 51200 bytes; skipping CFN validation (will be validated on deploy)"]
-                                    }
-                        else do
-                            let req =
-                                    VT.newValidateTemplate
-                                        { VT.templateBody = Just body
-                                        }
-                            result <- try @Amazonka.Error $ runResourceT $ Amazonka.send (cfnEnv ctx) req
-                            case result of
-                                Left e ->
-                                    pure
-                                        TemplateValidation
-                                            { tvEnabled = True
-                                            , tvErrors = ["Template validation failed: " <> T.pack (show e)]
-                                            , tvWarnings = []
-                                            }
-                                Right _resp ->
-                                    pure
-                                        TemplateValidation
-                                            { tvEnabled = True
-                                            , tvErrors = []
-                                            , tvWarnings = []
-                                            }
+                validation <- validateTemplateBody ctx body
                 emit (OdTemplateValidation validation)
                 pure $ Right $ if null (tvErrors validation) then 0 else 1
+
+{- | Validate a template body with CloudFormation @ValidateTemplate@. A body
+over the inline limit (in UTF-8 bytes) is not sent: the result carries a
+warning instead. Any AWS error, including access and network errors, is a
+validation error.
+-}
+validateTemplateBody :: CfnContext -> Text -> IO TemplateValidation
+validateTemplateBody ctx body
+    | BS.length (TE.encodeUtf8 body) > templateMaxBytes =
+        -- Template too large for inline validation
+        pure
+            TemplateValidation
+                { tvEnabled = True
+                , tvErrors = []
+                , tvWarnings = ["Template exceeds 51200 bytes; skipping CFN validation (will be validated on deploy)"]
+                }
+    | otherwise = do
+        let req =
+                VT.newValidateTemplate
+                    { VT.templateBody = Just body
+                    }
+        result <- try @Amazonka.Error $ runResourceT $ Amazonka.send (cfnEnv ctx) req
+        pure $ case result of
+            Left e ->
+                TemplateValidation
+                    { tvEnabled = True
+                    , tvErrors = ["Template validation failed: " <> T.pack (show e)]
+                    , tvWarnings = []
+                    }
+            Right _resp ->
+                TemplateValidation
+                    { tvEnabled = True
+                    , tvErrors = []
+                    , tvWarnings = []
+                    }
