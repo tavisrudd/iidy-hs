@@ -252,7 +252,7 @@ escapeTests = map $ \ev ->
                 "tag" ->
                     -- Any preprocessing tag inside !$escape → sentinel "!$escaped"
                     let dummyTag = PpNot (NotTag (AstBool True dm))
-                     in astToValueRaw (AstPreprocessingTag dummyTag dm)
+                     in astToValueRaw (AstPreprocessingTag dummyTag dm Nothing)
                 other -> error $ "unknown escape input_type: " <> T.unpack other
         fromValue result @?= fromValue (evExpected ev)
 

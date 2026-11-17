@@ -52,7 +52,7 @@ map_ pairs = AstMapping pairs m
 
 -- | Shorthand: preprocessing tag AST node.
 ppTag :: PreprocessingTag -> YamlAst
-ppTag tag = AstPreprocessingTag tag m
+ppTag tag = AstPreprocessingTag tag m Nothing
 
 -- | Build a !$ variable lookup tag (no query, no jmespath).
 varLookup :: Text -> YamlAst

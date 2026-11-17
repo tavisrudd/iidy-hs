@@ -182,7 +182,7 @@ resolveAst ctx = \case
     AstTemplatedString s meta -> resolveTemplateString ctx meta s
     AstSequence items _ -> resolveSequence ctx items
     AstMapping pairs _ -> resolveMapping ctx pairs
-    AstPreprocessingTag tag meta -> resolvePreprocessingTag ctx meta tag
+    AstPreprocessingTag tag meta _ -> resolvePreprocessingTag ctx meta tag
     AstCloudFormationTag tag meta -> resolveCfnTag ctx meta tag
     AstUnknownTag (UnknownTag name inner) _meta -> do
         val <- resolveAst ctx inner
@@ -942,9 +942,9 @@ rawToOValue mode = go
                     (\acc (k, v) -> insertO (rawKeyText k) (go v) acc)
                     []
                     pairs
-        AstPreprocessingTag tag meta -> case mode of
+        AstPreprocessingTag tag meta written -> case mode of
             EscapePreprocTags -> OString "!$escaped"
-            KeepPreprocTags -> tagged (preprocessingTagParts meta tag)
+            KeepPreprocTags -> tagged (preprocessingTagParts meta written tag)
         AstCloudFormationTag tag _ -> tagged (cfnTagParts tag)
         AstUnknownTag (UnknownTag name inner) _ -> tagged (name, inner)
         AstImportedDocument (ImportedDocumentNode _ _ content _) _ -> go content

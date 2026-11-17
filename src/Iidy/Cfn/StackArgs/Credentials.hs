@@ -119,7 +119,7 @@ plainOrComputed :: Text -> YamlAst -> RawField
 plainOrComputed subject = \case
     AstPlainString t _ -> RawLiteral t
     AstTemplatedString t _ -> computed ("the handlebars template " <> t)
-    AstPreprocessingTag _ _ -> computed "a preprocessing tag"
+    AstPreprocessingTag{} -> computed "a preprocessing tag"
     AstCloudFormationTag _ _ -> computed "a CloudFormation tag"
     AstUnknownTag _ _ -> computed "a tagged value"
     AstImportedDocument _ _ -> computed "an imported document"

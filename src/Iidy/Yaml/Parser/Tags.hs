@@ -23,7 +23,9 @@ parseErrorAt meta msg = Left (ParseError (smStart meta) msg)
 
 classifyLocalTag :: SrcMeta -> Text -> YamlAst -> Parse YamlAst
 classifyLocalTag meta tagName value
-    | isPreprocessingTagName tagName = parsePreprocessingTag meta tagName value
+    | isPreprocessingTagName tagName = do
+        tag <- parsePreprocessingTag meta tagName value
+        pure $ AstPreprocessingTag tag meta (Just (WrittenTag tagName value))
     | isCfnTagName tagName = pure $ AstCloudFormationTag (makeCfnTag tagName value) meta
     | otherwise = pure $ AstUnknownTag (UnknownTag tagName value) meta
 
@@ -93,7 +95,7 @@ makeCfnTag = \case
 -- Preprocessing tag parsing
 ------------------------------------------------------------------------
 
-parsePreprocessingTag :: SrcMeta -> Text -> YamlAst -> Parse YamlAst
+parsePreprocessingTag :: SrcMeta -> Text -> YamlAst -> Parse PreprocessingTag
 parsePreprocessingTag meta tagName value = case tagName of
     "!$" -> parseVarLookupTag meta value
     "!$include" -> parseVarLookupTag meta value
@@ -103,7 +105,7 @@ parsePreprocessingTag meta tagName value = case tagName of
     "!$concat" -> parseSeqTag meta "!$concat" "of arrays to concatenate" (PpConcat . ConcatTag) value
     "!$let" -> parseLetTag meta value
     "!$eq" -> parsePairTag meta "!$eq" "[value1, value2]" (\a b -> PpEq (EqTag a b)) value
-    "!$not" -> parseNotTag meta value
+    "!$not" -> parseNotTag value
     "!$split" -> parsePairTag meta "!$split" "[delimiter, string]" (\a b -> PpSplit (SplitTag a b)) value
     "!$join" -> parsePairTag meta "!$join" "[delimiter, array]" (\a b -> PpJoin (JoinTag a b)) value
     "!$concatMap" -> parseMapLikeTag meta "!$concatMap" mkConcatMapTag value
@@ -111,26 +113,26 @@ parsePreprocessingTag meta tagName value = case tagName of
     "!$mapListToHash" -> parseMapLikeTag meta "!$mapListToHash" mkMapListToHashTag value
     "!$mapValues" -> parseMapValuesTag meta value
     "!$groupBy" -> parseGroupByTag meta value
-    "!$fromPairs" -> wrapSingle meta (PpFromPairs . FromPairsTag) value
-    "!$toYamlString" -> wrapSingle meta (PpToYamlString . ToYamlStringTag) value
-    "!$string" -> wrapSingle meta (PpToYamlString . ToYamlStringTag) value
-    "!$parseYaml" -> wrapSingle meta (PpParseYaml . ParseYamlTag) value
-    "!$toJsonString" -> wrapSingle meta (PpToJsonString . ToJsonStringTag) value
-    "!$parseJson" -> wrapSingle meta (PpParseJson . ParseJsonTag) value
-    "!$escape" -> wrapSingle meta (PpEscape . EscapeTag) value
+    "!$fromPairs" -> wrapSingle (PpFromPairs . FromPairsTag) value
+    "!$toYamlString" -> wrapSingle (PpToYamlString . ToYamlStringTag) value
+    "!$string" -> wrapSingle (PpToYamlString . ToYamlStringTag) value
+    "!$parseYaml" -> wrapSingle (PpParseYaml . ParseYamlTag) value
+    "!$toJsonString" -> wrapSingle (PpToJsonString . ToJsonStringTag) value
+    "!$parseJson" -> wrapSingle (PpParseJson . ParseJsonTag) value
+    "!$escape" -> wrapSingle (PpEscape . EscapeTag) value
     "!$expand" -> parseExpandTag meta value
     _unknownTag -> parseErrorAt meta ("'" <> tagName <> "' is not a valid iidy tag")
 
-wrapSingle :: SrcMeta -> (YamlAst -> PreprocessingTag) -> YamlAst -> Parse YamlAst
-wrapSingle meta mk value = pure $ AstPreprocessingTag (mk (unwrapSingle value)) meta
+wrapSingle :: (YamlAst -> PreprocessingTag) -> YamlAst -> Parse PreprocessingTag
+wrapSingle mk value = pure (mk (unwrapSingle value))
 
 unwrapSingle :: YamlAst -> YamlAst
 unwrapSingle (AstSequence [x] _) = x
 unwrapSingle x = x
 
-parsePairTag :: SrcMeta -> Text -> Text -> (YamlAst -> YamlAst -> PreprocessingTag) -> YamlAst -> Parse YamlAst
+parsePairTag :: SrcMeta -> Text -> Text -> (YamlAst -> YamlAst -> PreprocessingTag) -> YamlAst -> Parse PreprocessingTag
 parsePairTag meta name format mk = \case
-    AstSequence [a, b] _ -> pure $ AstPreprocessingTag (mk a b) meta
+    AstSequence [a, b] _ -> pure (mk a b)
     AstSequence _ _ ->
         parseErrorAt
             meta
@@ -146,19 +148,19 @@ parsePairTag meta name format mk = \case
                 else "must be a sequence with format " <> format
             )
 
-parseSeqTag :: SrcMeta -> Text -> Text -> ([YamlAst] -> PreprocessingTag) -> YamlAst -> Parse YamlAst
+parseSeqTag :: SrcMeta -> Text -> Text -> ([YamlAst] -> PreprocessingTag) -> YamlAst -> Parse PreprocessingTag
 parseSeqTag meta _name desc mk = \case
-    AstSequence items _ -> pure $ AstPreprocessingTag (mk items) meta
+    AstSequence items _ -> pure (mk items)
     _nonSequence -> parseErrorAt meta ("must be a sequence " <> desc)
 
-parseVarLookupTag :: SrcMeta -> YamlAst -> Parse YamlAst
+parseVarLookupTag :: SrcMeta -> YamlAst -> Parse PreprocessingTag
 parseVarLookupTag meta = \case
     AstPlainString raw _ ->
         let (path, query) = splitVarQuery raw
-         in pure $ AstPreprocessingTag (PpVarLookup (VarLookupTag path query Nothing)) meta
+         in pure (PpVarLookup (VarLookupTag path query Nothing))
     AstTemplatedString raw _ ->
         let (path, query) = splitVarQuery raw
-         in pure $ AstPreprocessingTag (PpVarLookup (VarLookupTag path query Nothing)) meta
+         in pure (PpVarLookup (VarLookupTag path query Nothing))
     AstMapping pairs _ -> do
         validateFields ["path"] ["query", "jmespath"] pairs
         case getTextField "path" pairs of
@@ -168,23 +170,17 @@ parseVarLookupTag meta = \case
                 case (queryField, jmespathField) of
                     (Just _, Just _) -> parseErrorAt meta "'query' and 'jmespath' are mutually exclusive"
                     _notBothPresent ->
-                        pure $
-                            AstPreprocessingTag
-                                (PpVarLookup (VarLookupTag path queryField jmespathField))
-                                meta
+                        pure (PpVarLookup (VarLookupTag path queryField jmespathField))
             Nothing -> parseErrorAt meta "'path' missing in !$ tag"
     _nonStringOrMapping -> parseErrorAt meta "invalid format - must be string variable name"
 
-parseIfTag :: SrcMeta -> YamlAst -> Parse YamlAst
+parseIfTag :: SrcMeta -> YamlAst -> Parse PreprocessingTag
 parseIfTag meta = \case
     AstMapping pairs _ ->
         case (getField "test" pairs, getField "then" pairs) of
             (Just test, Just thenVal) -> do
                 validateFields ["test", "then"] ["else"] pairs
-                pure $
-                    AstPreprocessingTag
-                        (PpIf (IfTag test thenVal (getField "else" pairs)))
-                        meta
+                pure (PpIf (IfTag test thenVal (getField "else" pairs)))
             (Nothing, _) -> parseErrorAt meta "'test' missing in !$if tag"
             (_, Nothing) -> parseErrorAt meta "'then' missing in !$if tag"
     _nonMapping -> parseErrorAt meta "must be a mapping with required 'test' and 'then' fields"
@@ -200,83 +196,71 @@ mkConcatMapTag items templ var filt = PpConcatMap (ConcatMapTag items templ var 
 mkMapListToHashTag :: MkMapLike
 mkMapListToHashTag items templ var filt = PpMapListToHash (MapListToHashTag items templ var filt)
 
-parseMapLikeTag :: SrcMeta -> Text -> MkMapLike -> YamlAst -> Parse YamlAst
+parseMapLikeTag :: SrcMeta -> Text -> MkMapLike -> YamlAst -> Parse PreprocessingTag
 parseMapLikeTag meta name mk = \case
     AstMapping pairs _ ->
         case (getField "items" pairs, getField "template" pairs) of
             (Just items, Just templ) -> do
                 validateFields ["items", "template"] ["var", "filter"] pairs
-                pure $
-                    AstPreprocessingTag
-                        (mk items templ (getTextField "var" pairs) (getField "filter" pairs))
-                        meta
+                pure (mk items templ (getTextField "var" pairs) (getField "filter" pairs))
             (Nothing, _) -> parseErrorAt meta ("'items' missing in " <> name <> " tag")
             (_, Nothing) -> parseErrorAt meta ("'template' missing in " <> name <> " tag")
     _nonMapping -> parseErrorAt meta "must be a mapping with 'items' and 'template' fields"
 
-parseLetTag :: SrcMeta -> YamlAst -> Parse YamlAst
+parseLetTag :: SrcMeta -> YamlAst -> Parse PreprocessingTag
 parseLetTag meta = \case
     AstMapping pairs _ ->
         let bindings = [(t, v) | (k, v) <- pairs, Just t <- [getScalarText k], t /= "in"]
             expr = getField "in" pairs
          in case expr of
-                Just e -> pure $ AstPreprocessingTag (PpLet (LetTag bindings e)) meta
+                Just e -> pure (PpLet (LetTag bindings e))
                 Nothing -> parseErrorAt meta "missing required 'in' field"
     _nonMapping -> parseErrorAt meta "must be a mapping with variable bindings and 'in' field"
 
-parseNotTag :: SrcMeta -> YamlAst -> Parse YamlAst
-parseNotTag meta value =
-    pure $ AstPreprocessingTag (PpNot (NotTag (unwrapSingle value))) meta
+parseNotTag :: YamlAst -> Parse PreprocessingTag
+parseNotTag value =
+    pure (PpNot (NotTag (unwrapSingle value)))
 
-parseMergeMapTag :: SrcMeta -> YamlAst -> Parse YamlAst
+parseMergeMapTag :: SrcMeta -> YamlAst -> Parse PreprocessingTag
 parseMergeMapTag meta = \case
     AstMapping pairs _ ->
         case (getField "items" pairs, getField "template" pairs) of
             (Just items, Just templ) -> do
                 validateFields ["items", "template"] ["var"] pairs
-                pure $
-                    AstPreprocessingTag
-                        (PpMergeMap (MergeMapTag items templ (getTextField "var" pairs)))
-                        meta
+                pure (PpMergeMap (MergeMapTag items templ (getTextField "var" pairs)))
             (Nothing, _) -> parseErrorAt meta "'items' missing in !$mergeMap tag"
             (_, Nothing) -> parseErrorAt meta "'template' missing in !$mergeMap tag"
     _nonMapping -> parseErrorAt meta "must be a mapping with 'items' and 'template' fields"
 
-parseMapValuesTag :: SrcMeta -> YamlAst -> Parse YamlAst
+parseMapValuesTag :: SrcMeta -> YamlAst -> Parse PreprocessingTag
 parseMapValuesTag meta = \case
     AstMapping pairs _ ->
         case (getField "items" pairs, getField "template" pairs) of
             (Just items, Just templ) -> do
                 validateFields ["items", "template"] ["var"] pairs
-                pure $
-                    AstPreprocessingTag
-                        (PpMapValues (MapValuesTag items templ (getTextField "var" pairs)))
-                        meta
+                pure (PpMapValues (MapValuesTag items templ (getTextField "var" pairs)))
             (Nothing, _) -> parseErrorAt meta "'items' missing in !$mapValues tag"
             (_, Nothing) -> parseErrorAt meta "'template' missing in !$mapValues tag"
     _nonMapping -> parseErrorAt meta "must be a mapping with 'items' and 'template' fields"
 
-parseGroupByTag :: SrcMeta -> YamlAst -> Parse YamlAst
+parseGroupByTag :: SrcMeta -> YamlAst -> Parse PreprocessingTag
 parseGroupByTag meta = \case
     AstMapping pairs _ ->
         case (getField "items" pairs, getField "key" pairs) of
             (Just items, Just key) -> do
                 validateFields ["items", "key"] ["var", "template"] pairs
-                pure $
-                    AstPreprocessingTag
-                        (PpGroupBy (GroupByTag items key (getTextField "var" pairs) (getField "template" pairs)))
-                        meta
+                pure (PpGroupBy (GroupByTag items key (getTextField "var" pairs) (getField "template" pairs)))
             (Nothing, _) -> parseErrorAt meta "'items' missing in !$groupBy tag"
             (_, Nothing) -> parseErrorAt meta "'key' missing in !$groupBy tag"
     _nonMapping -> parseErrorAt meta "must be a mapping with 'items' and 'key' fields"
 
-parseExpandTag :: SrcMeta -> YamlAst -> Parse YamlAst
+parseExpandTag :: SrcMeta -> YamlAst -> Parse PreprocessingTag
 parseExpandTag meta = \case
     AstMapping pairs _ ->
         case (getField "template" pairs, getField "params" pairs) of
             (Just templ, Just params) -> do
                 validateFields ["template", "params"] [] pairs
-                pure $ AstPreprocessingTag (PpExpand (ExpandTag templ params)) meta
+                pure (PpExpand (ExpandTag templ params))
             (Nothing, _) -> parseErrorAt meta "'template' missing in !$expand tag"
             (_, Nothing) -> parseErrorAt meta "'params' missing in !$expand tag"
     _nonMapping -> parseErrorAt meta "must be a mapping with 'template' and 'params' fields"

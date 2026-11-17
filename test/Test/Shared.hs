@@ -18,6 +18,7 @@ module Test.Shared (
     surrogateJsonFixture,
     nestedSeqFixture,
     preprocTagsFixture,
+    preprocSpellingsFixture,
     preprocTagsImporterFixture,
     listFixture,
 
@@ -576,6 +577,10 @@ nestedSeqFixture = "test-fixtures/get-import/nested-seq.yaml"
 -- | get-import fixture: a plain document holding unresolved @!$@ tags with scalar and mapping arguments.
 preprocTagsFixture :: Text
 preprocTagsFixture = "test-fixtures/get-import/preproc-tags.yaml"
+
+-- | get-import fixture: tags written as an alias, with a one-element sequence argument and with mapping fields out of the parser's order (C32).
+preprocSpellingsFixture :: Text
+preprocSpellingsFixture = "test-fixtures/get-import/preproc-spellings.yaml"
 
 -- | render fixture: imports plain documents with tag arguments of every shape (scalar, mapping, sequence), so the tags must survive the import.
 preprocTagsImporterFixture :: Text

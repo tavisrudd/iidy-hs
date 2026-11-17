@@ -41,7 +41,7 @@ seq_ items = AstSequence items m
 
 -- | Shorthand: preprocessing tag AST node.
 ppTag :: PreprocessingTag -> YamlAst
-ppTag tag = AstPreprocessingTag tag m
+ppTag tag = AstPreprocessingTag tag m Nothing
 
 -- | Shorthand: CloudFormation tag AST node.
 cfnTag :: CloudFormationTag -> YamlAst

@@ -16,7 +16,7 @@ import Iidy.Cli (GetImportArgs (..), GetImportFormat (..))
 import Iidy.GetImport (runGetImportWith)
 import Iidy.Yaml.Imports.Types (ImportType (..), RemoteImports (..), needsAwsEnv)
 import Test.MockAws (MockAws (..), countingEnv, newMockAws, noCredentials)
-import Test.Shared (collectRawOutput, docFixture, listFixture, nestedSeqFixture, orderedJsonFixture, orderedNestedFixture, orderedYamlFixture, preprocTagsFixture, surrogateJsonFixture, testGlobalOpts)
+import Test.Shared (collectRawOutput, docFixture, listFixture, nestedSeqFixture, orderedJsonFixture, orderedNestedFixture, orderedYamlFixture, preprocSpellingsFixture, preprocTagsFixture, surrogateJsonFixture, testGlobalOpts)
 
 getImportTests :: [TestTree]
 getImportTests =
@@ -244,7 +244,35 @@ preprocTagTests =
     [ testCase "yaml: scalar and mapping tag arguments are kept" $
         runFormat GetImportYaml Nothing preprocTagsFixture
             >>= (@?= RunResult 0 [preprocTagsRustYaml] 0)
+    , testCase "yaml: alias names, one-element sequence arguments and mapping field order are kept" $
+        runFormat GetImportYaml Nothing preprocSpellingsFixture
+            >>= (@?= RunResult 0 [preprocSpellingsRustYaml] 0)
     ]
+
+{- | Bytes printed by the Rust binary for 'preprocSpellingsFixture' (C32),
+except that the dash under @c: !$not@ is indented two columns, as for every
+sequence tag argument (see the tag-argument layout entry in DIVERGENCES.md).
+-}
+preprocSpellingsRustYaml :: Text
+preprocSpellingsRustYaml =
+    T.unlines
+        [ "a: !$include x"
+        , "b: !$string x"
+        , "c: !$not"
+        , "  - true"
+        , "d: !$map"
+        , "  template: '{{item}}'"
+        , "  items:"
+        , "  - 1"
+        , "  - 2"
+        , "  var: v"
+        , "e: !$"
+        , "  path: p"
+        , "  jmespath: q"
+        , "f: !$if"
+        , "  then: 1"
+        , "  test: true"
+        ]
 
 ------------------------------------------------------------------------
 -- Document key order (Rust keeps it for unqueried YAML output only)

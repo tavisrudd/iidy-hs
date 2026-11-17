@@ -1,0 +1,11 @@
+a: !$include x
+b: !$string x
+c: !$not [true]
+d: !$map
+  template: "{{item}}"
+  items: [1, 2]
+  var: v
+e: !$ {path: p, jmespath: q}
+f: !$if
+  then: 1
+  test: true

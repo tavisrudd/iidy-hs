@@ -295,7 +295,9 @@ emitTagArgument st indent = \case
     ONumber n -> " " <> emitNumber n
     OBool b -> " " <> if b then "true" else "false"
     ONull -> " null"
-    OArray [single] -> emitTagArgument st indent single
+    -- Rust's render emitter prints a one-element sequence argument as its
+    -- element; serde_yaml (get-import) keeps the sequence.
+    OArray [single] | st == SeqIndented -> emitTagArgument st indent single
     OArray items -> emitArray st indent items
     OObject kvs
         | isTaggedKvs kvs -> " " <> emitTaggedKvs st indent kvs

@@ -32,6 +32,7 @@ module Iidy.Yaml.Ast (
     EscapeTag (..),
     ExpandTag (..),
     preprocessingTagParts,
+    WrittenTag (..),
 
     -- * Other node types
     UnknownTag (..),
@@ -63,7 +64,7 @@ data YamlAst
     | AstTemplatedString !Text !SrcMeta
     | AstSequence ![YamlAst] !SrcMeta
     | AstMapping ![(YamlAst, YamlAst)] !SrcMeta
-    | AstPreprocessingTag !PreprocessingTag !SrcMeta
+    | AstPreprocessingTag !PreprocessingTag !SrcMeta !(Maybe WrittenTag)
     | AstCloudFormationTag !CloudFormationTag !SrcMeta
     | AstUnknownTag !UnknownTag !SrcMeta
     | AstImportedDocument !ImportedDocumentNode !SrcMeta
@@ -79,7 +80,7 @@ astMeta = \case
     AstTemplatedString _ m -> m
     AstSequence _ m -> m
     AstMapping _ m -> m
-    AstPreprocessingTag _ m -> m
+    AstPreprocessingTag _ m _ -> m
     AstCloudFormationTag _ m -> m
     AstUnknownTag _ m -> m
     AstImportedDocument _ m -> m
@@ -265,16 +266,31 @@ data ExpandTag = ExpandTag
     }
     deriving stock (Show, Eq)
 
+-- | The tag name and argument node exactly as they were written in the source.
+data WrittenTag = WrittenTag
+    { wtName :: !Text
+    , wtArgument :: !YamlAst
+    }
+    deriving stock (Show, Eq)
+
+{- | The tag name and argument to print for a preprocessing tag node: the
+written spelling when the parser recorded it, otherwise the canonical form
+from 'canonicalTagParts'.
+-}
+preprocessingTagParts :: SrcMeta -> Maybe WrittenTag -> PreprocessingTag -> (Text, YamlAst)
+preprocessingTagParts meta written tag = case written of
+    Just (WrittenTag name arg) -> (name, arg)
+    Nothing -> canonicalTagParts meta tag
+
 {- | The tag name and argument a 'PreprocessingTag' was parsed from, with the
 argument rebuilt in the shape the parser accepts (a scalar, a sequence or a
-mapping with the tag's field names). The parser normalises some spellings, so
-the result is the canonical form: aliases (@!$include@, @!$string@) give the
-canonical name, and a one-element sequence argument to a single-argument tag
-is given without the sequence. Every node of the result carries the tag's own
+mapping with the tag's field names). Aliases (@!$include@, @!$string@) give
+the canonical name, and a single-argument tag's argument is given without a
+one-element sequence. Every node of the result carries the tag's own
 'SrcMeta'.
 -}
-preprocessingTagParts :: SrcMeta -> PreprocessingTag -> (Text, YamlAst)
-preprocessingTagParts meta = \case
+canonicalTagParts :: SrcMeta -> PreprocessingTag -> (Text, YamlAst)
+canonicalTagParts meta = \case
     PpVarLookup (VarLookupTag path query jmes) -> case jmes of
         Just j -> ("!$", fields [("path", Just (str path)), ("jmespath", Just (str j))])
         Nothing -> ("!$", str (maybe path (\q -> path <> "?" <> q) query))
