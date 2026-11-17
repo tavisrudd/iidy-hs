@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C31
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   C8 side finding and notes/C23/report--decisions-vs-originals.org item 1: resolveEscape uses the Value path and sorts keys; Rust and TypeScript keep source order
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
 :ID: org:01a1e6dc-cebe-72fb-aa2c-c8790fc8172b
 :ADDED: [2026-11-16 Mon 17:16]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 17:43]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C31 — !$escape: keep mapping key order (Rust and TypeScript parity)
 #+date: 2026-11-16
