@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C39
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   Tavis 2026-11-16, C34 follow-up: top-level templates and stack-args reject repeated keys as TypeScript (js-yaml) does; Rust accepts them (last wins) and iidy-hs currently renders both entries
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
 :ID: org:01a1e7e2-78a8-71e8-b16b-70c542426ff1
 :ADDED: [2026-11-16 Mon 22:02]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-17 Tue 14:35]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
 :END:
 #+title: C39 — Reject duplicate mapping keys in templates and stack-args too (Tavis: follow TypeScript)
 #+date: 2026-11-16

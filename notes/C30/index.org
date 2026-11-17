@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C30
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   C11: differences seen while writing explain and demo tests: explain header/fallback text, demo fixed temp dir (C21 covers) and ARN masking, sleep truncation vs rounding
 :CREATED_BY: sonnet-5.5-medium
 :SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a4be70bdbd2b3547b
 :ID: org:01a1e6d8-1a69-7466-b044-90ec7f18c453
 :ADDED: [2026-11-16 Mon 17:11]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-17 Tue 14:35]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
 :END:
 #+title: C30 — Align explain, demo temp dir, masking and sleep rounding with Rust
 #+date: 2026-11-16
