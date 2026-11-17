@@ -7,6 +7,8 @@ different keys, @1@ and @0x1@ are the same key, @01@ is a string, @a@ and
 module Iidy.Yaml.DuplicateKeys (
     KeyId,
     scalarKeyId,
+    sequenceKeyId,
+    mappingKeyId,
     firstDuplicate,
     duplicateMessage,
 ) where
@@ -25,6 +27,8 @@ data KeyId
     | KeyFloat FloatKey
     | KeyBool Bool
     | KeyNull
+    | KeySequence [KeyId]
+    | KeyMapping (Set.Set (KeyId, KeyId))
     deriving stock (Eq, Ord)
 
 -- | A float key: equal values are one key, and NaN equals NaN.
@@ -43,6 +47,15 @@ scalarKeyId resolved text
     | Just n <- intKey text = KeyInt n
     | Just f <- floatKey text = KeyFloat f
     | otherwise = KeyText text
+
+-- | A sequence key repeats another with the same elements in order.
+sequenceKeyId :: [Maybe KeyId] -> Maybe KeyId
+sequenceKeyId items = KeySequence <$> sequence items
+
+-- | A mapping key repeats another with the same entries in any order.
+mappingKeyId :: [(Maybe KeyId, Maybe KeyId)] -> Maybe KeyId
+mappingKeyId entries =
+    KeyMapping . Set.fromList <$> traverse (\(k, v) -> (,) <$> k <*> v) entries
 
 -- | Decimal without leading zeros (signed), or @0x@, @0o@, @0b@ digits.
 intKey :: Text -> Maybe Integer
@@ -109,7 +122,7 @@ firstDuplicate = go Set.empty
             | k `Set.member` seen -> Just (x, duplicateMessage k)
             | otherwise -> go (Set.insert k seen) rest
 
--- | Rust's wording: a string key quoted, a boolean in backquotes.
+-- | Rust's wording: a string key quoted, a boolean in backquotes, no key shown for a sequence or mapping.
 duplicateMessage :: KeyId -> String
 duplicateMessage = \case
     KeyText t -> "duplicate entry with key " <> show t
@@ -119,6 +132,8 @@ duplicateMessage = \case
     KeyFloat (FloatNum n) -> "duplicate entry with key " <> showFloat n
     KeyBool b -> "duplicate entry with key `" <> (if b then "true" else "false") <> "`"
     KeyNull -> "duplicate entry with null key"
+    KeySequence _ -> "duplicate entry in YAML map"
+    KeyMapping _ -> "duplicate entry in YAML map"
   where
     showFloat n
         | Sci.isInteger n = show (truncate n :: Integer) <> ".0"

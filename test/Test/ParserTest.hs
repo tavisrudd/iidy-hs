@@ -213,8 +213,26 @@ duplicateKeyTests =
     , testGroup "scalar key identity as Rust's serde_yaml (C34)" $
         [keyCase "accepted" k1 k2 isRight | (k1, k2) <- acceptedPairs]
             ++ [keyCase "rejected" k1 k2 isLeft | (k1, k2) <- rejectedPairs]
+    , testGroup "complex key identity as Rust's serde_yaml (C34)" $
+        [complexCase "accepted" k1 k2 isRight | (k1, k2) <- [("[1]", "[\"1\"]"), ("[1]", "[1.0]"), ("[1]", "[01]")]]
+            ++ [ complexCase "rejected" k1 k2 isLeft
+               | (k1, k2) <-
+                    [ ("[1]", "[1]")
+                    , ("[1]", "[ 1 ]")
+                    , ("{a: 1}", "{a: 1}")
+                    , ("{a: 1, b: 2}", "{b: 2, a: 1}")
+                    , ("[a, [b]]", "[a, [b]]")
+                    ]
+               ]
+    , testCase "a repeated complex key says so, as Rust does" $
+        case parseYamlStrict "? [1]\n: a\n? [1]\n: b\n" "<test>" of
+            Left (ParseError _ msg) -> msg @?= "duplicate entry in YAML map"
+            Right _ -> assertFailure "expected a duplicate key error"
     ]
   where
+    complexCase verdict k1 k2 ok =
+        testCase (T.unpack (verdict <> ": " <> k1 <> " with " <> k2)) $
+            assertBool "Rust's verdict" (ok (parseYamlStrict (BL.fromStrict (TE.encodeUtf8 ("? " <> k1 <> "\n: a\n? " <> k2 <> "\n: b\n"))) "<test>"))
     dupDoc = "a: 1\nz: 1\nz: 2\n"
     keyCase :: Text -> Text -> Text -> (Either ParseError YamlAst -> Bool) -> TestTree
     keyCase verdict k1 k2 ok =

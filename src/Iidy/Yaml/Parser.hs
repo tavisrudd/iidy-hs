@@ -17,7 +17,7 @@ import Data.Text qualified as T
 import Data.YAML qualified as Y
 import Data.YAML.Event (ScalarStyle (..), Tag, tagToText)
 import Iidy.Yaml.Ast
-import Iidy.Yaml.DuplicateKeys (KeyId, firstDuplicate, scalarKeyId)
+import Iidy.Yaml.DuplicateKeys (KeyId, firstDuplicate, mappingKeyId, scalarKeyId, sequenceKeyId)
 import Iidy.Yaml.Location (Position (..), zeroPosition)
 
 data ParseError = ParseError
@@ -89,7 +89,7 @@ yamlLoader rejectDuplicates uri =
                     startP = convertPos pos
                     endP = childrenEndPos startP (map astMeta items)
                     meta = SrcMeta uri startP endP
-                 in (`Node` Nothing) <$> applyTag meta tag (AstSequence items meta)
+                 in (`Node` sequenceKeyId (map nodeKey nodes)) <$> applyTag meta tag (AstSequence items meta)
         , Y.yMapping = \tag nodes pos ->
             pure $
                 let kvs = [(nodeAst k, nodeAst v) | (k, v) <- nodes]
@@ -99,7 +99,7 @@ yamlLoader rejectDuplicates uri =
                  in case firstDuplicate [(nodeAst k, nodeKey k) | (k, _) <- nodes] of
                         Just (dup, msg)
                             | rejectDuplicates -> Left (unconvertPos (smStart (astMeta dup)), msg)
-                        _noDuplicate -> (`Node` Nothing) <$> applyTag meta tag (AstMapping kvs meta)
+                        _noDuplicate -> (`Node` mappingKeyId [(nodeKey k, nodeKey v) | (k, v) <- nodes]) <$> applyTag meta tag (AstMapping kvs meta)
         , Y.yAlias = \_ _ node _ -> pure $ Right node
         , Y.yAnchor = \_ node _ -> pure $ Right node
         }
