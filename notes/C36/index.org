@@ -1,0 +1,120 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C36
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C16 review 2026-11-16 (P2): TemplateLoader.hs:123 treats a missing Template file's path text as the template body, which template-approval request then uploads
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e71d-4bb3-7248-8c30-cc6be16cdcfe
+:ADDED: [2026-11-16 Mon 18:26]
+:END:
+#+title: C36 — Refuse a Template path that does not exist instead of using the path as the body
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e71d-4bb3-7248-8c30-cc6ac90e5d2e
+:ADDED: [2026-11-16 Mon 18:26]
+:END:
+
+A =Template:= value that is a local path to a file that does not exist is
+used as the template body. In =src/Iidy/Cfn/TemplateLoader.hs=,
+=loadCfnTemplate= (the local-path guard, about line 95) calls
+=doesFileExist= on the resolved path (line 98); when it is false the
+else branch (lines 120-131) treats the value as "might be inline content"
+and returns it as =TemplateBody= (line 131). A typo such as
+=Template: templats/app.yaml= therefore yields a one-line body, and
+=template-approval request= uploads it (found in the C16 review, P2). The
+existing test =missing file treated as inline content (not an error)= in
+=test/Test/TemplateLoaderTest.hs= (line 306) pins this behaviour and must
+change.
+
+What the originals do:
+- Rust (=~/src/iidy/src/cfn/template_loader.rs:57-61=): =is_inline_content=
+  is true when the trimmed text starts with ={= or =[=, contains a newline,
+  or is under 260 bytes with no =/= and no =\=. It is decided before any
+  file check, and inline content is used verbatim (lines 79-83). So in Rust
+  =Template: template.yaml= (existing file, no slash) is taken as the body
+  =template.yaml=, a likely accident rather than a design. Any other value
+  goes to =load_file_import=, which fails with "Failed to load template
+  from: PATH" (line 85-87). Recorded by code reading only: no Rust command
+  loads a template without reaching AWS, so it was not run. A test for
+  inline JSON exists (=tests/template_loading_integration_tests.rs:185=);
+  none covers a short bare word.
+- TypeScript (=~/src/iidy-js/src/cfn/loadCFNTemplate.ts:34-37=): there is no
+  inline content. Every non-URL value goes to =readFromImportLocation=
+  (=src/preprocess/index.ts:452=), whose =parseImportType= (line 184)
+  treats a value without =:= as a file; a missing file throws an
+  =ImportError= with the read error, and a value containing =:= that is not
+  a known scheme throws "Unknown import type".
+
+Proposed rule: keep inline content only for text that cannot be a path:
+starts with ={= or =[= (after trimming) or contains a newline. Everything
+else is a file path, and a missing file is an error naming the resolved
+path. This keeps Rust's real inline cases, matches TypeScript for paths,
+and drops only Rust's "short and slashless" accident (which also makes an
+existing =template.yaml= work, as it does today in iidy-hs).
+
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e71d-4bb3-7248-8c30-cc6927f47791
+:ADDED: [2026-11-16 Mon 18:26]
+:END:
+
+Allowed paths: =src/Iidy/Cfn/TemplateLoader.hs=,
+=test/Test/TemplateLoaderTest.hs=, =test-fixtures/template-loader/=,
+=DIVERGENCES.md=, =notes/C36/=.
+
+Out of scope: the =render:= path, S3 and HTTP handling, the size check,
+the =$imports:= check, error-display styling of the message, any change to
+how =resolveTemplatePath= resolves paths.
+
+Done when:
+- [ ] A Template value that is not a URL, does not start with ={= or =[=,
+  and has no newline, and names no existing file, returns =Left= with an
+  error naming the resolved path; the test is recorded failing first
+  against the current code.
+- [ ] Real inline content still works: text starting with ={= or =[=, and
+  text containing a newline (YAML body), each with a test; the inline
+  =$imports:= error test still passes.
+- [ ] The old test at =TemplateLoaderTest.hs:306= is replaced by the
+  missing-path test (not deleted without a replacement), and the other
+  existing loader tests pass unchanged.
+- [ ] =DIVERGENCES.md= records that a short slashless non-file value is an
+  error in iidy-hs but inline content in Rust, with the Rust reference.
+- [ ] Build warning-free, full suite green, commits name C36.
+
+Stop and record if: the check needs a change outside the allowed paths; a
+fixture or command test relies on a bare word being inline content; or
+a Rust or TypeScript test or document shows the short-slashless inline
+rule is deliberate (both originals agree on it). Then put the exact rule
+choice to Tavis as a question with the recommendation above (the
+narrow rule), and do not implement until he answers.
+
+* TODO Refuse a missing Template path and keep real inline content
+:PROPERTIES:
+:ID: org:01a1e71d-4bb3-7248-8c30-cc68a0a7ad6f
+:ADDED: [2026-11-16 Mon 18:26]
+:END:
+
+Refuse a missing Template path and keep real inline content
+
+Task order:
+1. Add the failing test: a value like =no-such-dir/missing.yaml= and a
+   bare word like =missing-template= (with and without an argsfile path)
+   return =Left= naming the resolved path. Run it, record the failure.
+2. Add inline-content tests (starts with ={=, starts with =[=, multi-line
+   YAML) that pass today, so the rule change cannot break them.
+3. Replace the else branch (lines 120-131) with the rule above: inline only
+   for leading brace or bracket or a newline, else =Left= naming
+   =resolvedPath=. Keep the =$imports:= inline check and put the inline
+   test in one small helper rather than repeating it.
+4. Replace the old test at line 306; add the =DIVERGENCES.md= entry.
+5. Build warning-free, run the full suite, commit naming C36.
+
+Keep task notes under this heading. Add reports and pinned =file-rev:=
+links here as work proceeds.
