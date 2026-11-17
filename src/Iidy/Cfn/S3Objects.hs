@@ -4,6 +4,8 @@
 upload, download and delete of a single object.
 -}
 module Iidy.Cfn.S3Objects (
+    HeadResult (..),
+    headObject,
     s3ObjectExists,
     uploadToS3,
     downloadFromS3,
@@ -16,6 +18,7 @@ import Data.ByteString qualified as BS
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
+import Network.HTTP.Types.Status (statusCode)
 
 import Amazonka qualified
 import Amazonka.Data qualified as AmazonkaData
@@ -26,14 +29,59 @@ import Amazonka.S3.HeadObject qualified as HO
 import Amazonka.S3.PutObject qualified as PO
 import Data.Conduit.List qualified as CL
 
--- | Check if an S3 object exists.
-s3ObjectExists :: Amazonka.Env -> Text -> Text -> IO Bool
-s3ObjectExists awsEnv bucket key = do
+-- | The outcome of a @HeadObject@ request.
+data HeadResult
+    = ObjectPresent
+    | -- | 404
+      ObjectMissing
+    | -- | 403
+      ObjectAccessDenied
+    | -- | any other error, with its text
+      ObjectHeadFailed !Text
+    deriving stock (Show, Eq)
+
+-- | Send @HeadObject@ for an object and classify the outcome.
+headObject :: Amazonka.Env -> Text -> Text -> IO HeadResult
+headObject awsEnv bucket key = do
     let req = HO.newHeadObject (S3.BucketName bucket) (S3.ObjectKey key)
     result <- try @Amazonka.Error $ runResourceT $ Amazonka.send awsEnv req
-    case result of
-        Right _ -> pure True
-        Left _ -> pure False
+    pure $ case result of
+        Right _ -> ObjectPresent
+        Left (Amazonka.ServiceError se)
+            | statusCode se.status == 404 -> ObjectMissing
+            | statusCode se.status == 403 -> ObjectAccessDenied
+        Left ex -> ObjectHeadFailed (T.pack (show ex))
+
+{- | Whether an object exists: 'True' when present, 'False' when missing
+(404), and an error naming the object for access denied (403) or any other
+failure (which also names the env's region).
+-}
+s3ObjectExists :: Amazonka.Env -> Text -> Text -> IO (Either Text Bool)
+s3ObjectExists awsEnv bucket key =
+    headObject awsEnv bucket key >>= \case
+        ObjectPresent -> pure (Right True)
+        ObjectMissing -> pure (Right False)
+        ObjectAccessDenied ->
+            pure
+                ( Left
+                    ( "Access denied (403) checking "
+                        <> location
+                        <> ": the current credentials cannot read the template approval bucket"
+                    )
+                )
+        ObjectHeadFailed err ->
+            pure
+                ( Left
+                    ( "Failed to check "
+                        <> location
+                        <> " in region "
+                        <> Amazonka.fromRegion (Amazonka.region awsEnv)
+                        <> ": "
+                        <> err
+                    )
+                )
+  where
+    location = "s3://" <> bucket <> "/" <> key
 
 -- | Upload content to S3.
 uploadToS3 :: Amazonka.Env -> Text -> Text -> Text -> IO (Either Text ())

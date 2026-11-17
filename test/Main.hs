@@ -44,11 +44,13 @@ import Test.RendererOutputTest (rendererOutputTests)
 import Test.RendererTest (rendererTests)
 import Test.RequestBuilderTest (requestBuilderTests)
 import Test.ResolverTest (resolverTests)
+import Test.S3ObjectsTest (s3ObjectsTests)
 import Test.SecurityControlsTest (securityControlsTests)
 import Test.SpecConformanceTest (specConformanceTests)
 import Test.StackArgsBootstrapTest (stackArgsBootstrapTests)
 import Test.StackArgsLoaderTest (stackArgsLoaderTests)
 import Test.StackOpsConverterTest (stackOpsConverterTests)
+import Test.TemplateApprovalTest (templateApprovalTests)
 import Test.TemplateDiffTest (templateDiffTests)
 import Test.TemplateHashTest (templateHashTests)
 import Test.TemplateLoaderTest (templateLoaderTests)
@@ -117,6 +119,8 @@ main = do
             , testGroup "PreprocessingProperties" preprocessingPropertyTests
             , testGroup "ErrorContent" errorContentTests
             , testGroup "TemplateDiff" templateDiffTests
+            , testGroup "TemplateApproval" templateApprovalTests
+            , testGroup "S3Objects" s3ObjectsTests
             , testGroup "SpecConformance" conformanceTests
             , testGroup "Engine" engineTests
             ]

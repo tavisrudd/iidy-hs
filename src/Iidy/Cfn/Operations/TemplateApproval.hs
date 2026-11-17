@@ -50,7 +50,7 @@ templateApprovalRequest ctx sa _lintTmpl argsfilePath = do
         let s3Loc = "s3://" <> bucket <> "/" <> key
 
         -- Check if already approved
-        alreadyApproved <- lift $ s3ObjectExists (cfnEnv ctx) bucket key
+        alreadyApproved <- liftExceptT (s3ObjectExists (cfnEnv ctx) bucket key)
         if alreadyApproved
             then do
                 lift $
@@ -108,12 +108,12 @@ templateApprovalReview ctx url contextLines = do
             approvedLoc = "s3://" <> bucket <> "/" <> approvedKey
 
         -- Check pending exists
-        pendingExists <- lift $ s3ObjectExists (cfnEnv ctx) bucket pendingKey
+        pendingExists <- liftExceptT (s3ObjectExists (cfnEnv ctx) bucket pendingKey)
         unless pendingExists $
             throwE ("Pending template not found at " <> url)
 
         -- Check if already approved
-        alreadyApproved <- lift $ s3ObjectExists (cfnEnv ctx) bucket approvedKey
+        alreadyApproved <- liftExceptT (s3ObjectExists (cfnEnv ctx) bucket approvedKey)
 
         -- Emit approval status
         lift $

@@ -239,6 +239,8 @@ test-suite iidy-hs-test
     Test.GlobalConfigTest
     Test.PreprocessingPropertyTest
     Test.ErrorContentTest
+    Test.S3ObjectsTest
+    Test.TemplateApprovalTest
     Test.TemplateDiffTest
     Test.SpecConformanceTest
     Test.EngineTest
