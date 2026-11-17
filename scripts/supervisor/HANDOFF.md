@@ -37,10 +37,11 @@ Landed and closed today: C5, C8, C9, C10, C11, C13, C14, C15, C17, C24,
 C25, C26, C27, C28, C29, C31, C33, C34, C36, C37.
 
 In flight:
-- C38 (Sonnet, `claude/C38`): merge `mergeExpandParams` into
-  `mergeParams`; behaviour-neutral; land on the supervisor's diff check.
-- A Sonnet refiner is rewriting C12, C21 and C22 (notes only); vet and
-  commit its edits.
+- C12 (Opus, `claude/C12`): split StackArgsLoader; told to report after
+  task 1 (the C17 backstop seam and its tests) for a review before the
+  moves. Review with Sonnet or Opus (refactor), then send tasks 2-4.
+- C38 landed and closed. C21 and C22 are refined; tasks that depend on
+  Tavis's answers are marked "do not start before" them.
 - C16 (Opus worker, `claude/C16` worktree; tasks 1-3, round 2 and its fix
   round landed). Stopped before "Approval bucket region has one owner";
   remaining: region, presign, deploy builders, estimate-cost, empty-diff
@@ -75,3 +76,12 @@ TODO with no blocker: C12, C21, C22 (after refinement), C32 (priority C).
    file a low-priority card.
 8. C35 rescope, and the plain bug that iidy-hs drops `\x01` in YAML
    output.
+9. C22 `CommandsBefore` (Rust and TypeScript run it through bash; iidy-hs
+   skips it silently): reject it with a clear error now, and file a card
+   for implementing it with its own trust design. `--debug`: keep it
+   accepted and document it as having no effect.
+10. C21: NTP answers more than five minutes from the system clock are
+    rejected and NTP is skipped under `--no-remote-imports`; convert-stack
+    refuses to overwrite files without a new `--force`; plaintext `http:`
+    stays accepted, an https-to-http redirect is refused, no digest
+    pinning. Recommend yes to each.
