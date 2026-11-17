@@ -22,6 +22,7 @@ import Test.ErrorColorTest (errorColorTests)
 import Test.ErrorContentTest (errorContentTests)
 import Test.ErrorFixtureTest (buildErrorTests)
 import Test.ErrorIdTest (errorIdTests)
+import Test.ExfiltrationTest (exfiltrationTests)
 import Test.ExplainTest (explainTests)
 import Test.FilehashTest (filehashTests)
 import Test.FixtureTest (buildFixtureTests)
@@ -121,6 +122,7 @@ main = do
             , testGroup "AwsImportGate" awsImportGateTests
             , testGroup "HttpGuard" httpGuardTests
             , testGroup "CustomTemplateTrust" customTemplateTrustTests
+            , testGroup "Exfiltration" exfiltrationTests
             , testGroup "ParamsClient" paramsClientTests
             , testGroup "TemplateLoader" templateLoaderTests
             , testGroup "GlobalConfig" globalConfigTests

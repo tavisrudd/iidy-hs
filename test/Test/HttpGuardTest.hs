@@ -11,12 +11,9 @@ module Test.HttpGuardTest (httpGuardTests) where
 
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
-import Data.ByteString.Char8 qualified as BC
-import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef, writeIORef)
-import Data.Maybe (listToMaybe, mapMaybe)
+import Data.IORef (readIORef)
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text.Encoding qualified as TE
 import Network.HTTP.Client (Proxy (..), httpLbs, managerSetProxy, newManager, parseRequest, responseBody, useProxy)
 import Network.HTTP.Client qualified as Client
 import Network.Socket qualified as NS
@@ -28,8 +25,6 @@ import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher, 
 import Iidy.Yaml.Imports.Loaders.HttpGuard (
     GuardRefusal (..),
     HttpGuard (..),
-    HttpSeam (..),
-    RawIO (..),
     guardManagerSettings,
     isBlockedAddress,
     resolveHostWith,
@@ -44,6 +39,7 @@ import Iidy.Yaml.Imports.Types (
     importPolicy,
     rootBase,
  )
+import Test.FakeHttp (FakeNet (..), FakeNetwork (..), Reply (..), fakeSeam, newFakeNet, requestKey, v4)
 import Test.ImportFixtures (flagPolicy)
 
 httpGuardTests :: [TestTree]
@@ -57,116 +53,40 @@ httpGuardTests =
     ]
 
 ------------------------------------------------------------------------
--- Fake network
+-- Fake network (see "Test.FakeHttp")
 ------------------------------------------------------------------------
-
--- | Canned responses by host and path.
-data Reply = Ok Text | Redirect Text
-
--- | The fake's record of connections and requests.
-data FakeNet = FakeNet
-    { fnConnected :: !(IORef [NS.SockAddr])
-    , fnRequests :: !(IORef [ByteString])
-    , fnRebindLookups :: !(IORef Int)
-    -- ^ lookups of @rebind.example@ so far
-    }
-
-v4 :: (Int, Int, Int, Int) -> NS.SockAddr
-v4 (a, b, c, d) = NS.SockAddrInet 80 (NS.tupleToHostAddress (fromIntegral a, fromIntegral b, fromIntegral c, fromIntegral d))
 
 publicAddr, proxyAddr, metadataAddr :: NS.SockAddr
 publicAddr = v4 (203, 0, 113, 10)
 proxyAddr = v4 (127, 0, 0, 1)
 metadataAddr = v4 (169, 254, 169, 254)
 
--- | Host names the fake resolver knows; numeric literals resolve without DNS.
-hostTable :: [(String, [NS.SockAddr])]
-hostTable =
-    [ ("public.example", [publicAddr])
-    , ("t.example.com", [publicAddr])
-    , ("other.example", [publicAddr])
-    , ("metadata.evil.example", [metadataAddr])
-    , ("proxy.local", [proxyAddr])
-    ]
-
-replies :: [((ByteString, ByteString), Reply)]
-replies =
-    [ (("public.example", "/ok.yaml"), Ok "a: 1\n")
-    , (("public.example", "/r.yaml"), Redirect "http://169.254.169.254/latest/meta-data/")
-    , (("t.example.com", "/a.yaml"), Redirect "http://t.example.com/b.yaml")
-    , (("t.example.com", "/b.yaml"), Ok "b: 2\n")
-    , (("t.example.com", "/out.yaml"), Redirect "http://other.example/c.yaml")
-    , (("other.example", "/c.yaml"), Ok "c: 3\n")
-    , (("127.0.0.1", "/x.yaml"), Ok "x: local\n")
-    , (("rebind.example", "/ok.yaml"), Ok "r: 1\n")
-    ]
-
-newFakeNet :: IO FakeNet
-newFakeNet = FakeNet <$> newIORef [] <*> newIORef [] <*> newIORef 0
-
-fakeSeam :: FakeNet -> HttpSeam
-fakeSeam net = HttpSeam{hsResolve = resolve, hsConnect = connect}
-  where
-    resolve :: String -> Int -> IO [NS.SockAddr]
-    resolve h p
-        | h == "rebind.example" = do
-            -- first lookup public, every later one loopback (DNS rebinding)
-            n <- atomicModifyIORef' (fnRebindLookups net) (\k -> (k + 1, k))
-            pure [if n == 0 then publicAddr else proxyAddr]
-        | otherwise = case lookup h hostTable of
-            Just addrs -> pure addrs
-            Nothing -> resolveHostWith [NS.AI_NUMERICHOST] h p
-    connect :: NS.SockAddr -> IO RawIO
-    connect addr = do
-        atomicModifyIORef' (fnConnected net) (\as -> (as <> [addr], ()))
-        written <- newIORef BS.empty
-        pending <- newIORef Nothing
-        let readChunk = do
-                mResp <- readIORef pending
-                resp <- case mResp of
-                    Just r -> pure r
-                    Nothing -> do
-                        req <- readIORef written
-                        atomicModifyIORef' (fnRequests net) (\rs -> (rs <> [req], ()))
-                        pure (respond req)
-                writeIORef pending (Just BS.empty)
-                pure resp
-        pure
-            RawIO
-                { rioRead = readChunk
-                , rioWrite = \bs -> atomicModifyIORef' written (\acc -> (acc <> bs, ()))
-                , rioClose = pure ()
-                }
-
--- | The raw HTTP response for a raw HTTP request (direct or via a proxy).
-respond :: ByteString -> ByteString
-respond req = case lookup (requestKey req) replies of
-    Just (Ok body) -> response "200 OK" [] (TE.encodeUtf8 body)
-    Just (Redirect loc) -> response "302 Found" [("Location", TE.encodeUtf8 loc)] ""
-    Nothing -> response "404 Not Found" [] "missing"
-  where
-    response :: ByteString -> [(ByteString, ByteString)] -> ByteString -> ByteString
-    response status headers body =
-        BS.concat $
-            ["HTTP/1.1 ", status, "\r\nContent-Length: ", BC.pack (show (BS.length body)), "\r\nConnection: close\r\n"]
-                <> concat [[k, ": ", v, "\r\n"] | (k, v) <- headers]
-                <> ["\r\n", body]
-
--- | (Host header, path) of a request; a proxied request line carries the full URL.
-requestKey :: ByteString -> (ByteString, ByteString)
-requestKey req =
-    let ls = BC.lines (BC.filter (/= '\r') req)
-        target = case ls of
-            l : _ -> BC.takeWhile (/= ' ') (BC.drop 1 (BC.dropWhile (/= ' ') l))
-            [] -> ""
-        path = case BC.breakSubstring "://" target of
-            (_, rest) | not (BS.null rest) -> BC.dropWhile (/= '/') (BS.drop 3 rest)
-            _direct -> target
-        hostHeader = listToMaybe (mapMaybe (fmap (BC.dropWhile (== ' ')) . BS.stripPrefix "Host:") ls)
-        hostName h
-            | "[" `BS.isPrefixOf` h = BC.takeWhile (/= ']') (BS.drop 1 h)
-            | otherwise = BC.takeWhile (/= ':') h
-     in (maybe "" hostName hostHeader, path)
+{- | Host names the fake resolver knows (numeric literals resolve without
+DNS), and the canned replies. @rebind.example@ answers a public address
+first and loopback on every later lookup (DNS rebinding).
+-}
+network :: FakeNetwork
+network =
+    FakeNetwork
+        { fwHosts =
+            [ ("public.example", [[publicAddr]])
+            , ("t.example.com", [[publicAddr]])
+            , ("other.example", [[publicAddr]])
+            , ("metadata.evil.example", [[metadataAddr]])
+            , ("proxy.local", [[proxyAddr]])
+            , ("rebind.example", [[publicAddr], [proxyAddr]])
+            ]
+        , fwReplies =
+            [ (("public.example", "/ok.yaml"), Ok "a: 1\n")
+            , (("public.example", "/r.yaml"), Redirect "http://169.254.169.254/latest/meta-data/")
+            , (("t.example.com", "/a.yaml"), Redirect "http://t.example.com/b.yaml")
+            , (("t.example.com", "/b.yaml"), Ok "b: 2\n")
+            , (("t.example.com", "/out.yaml"), Redirect "http://other.example/c.yaml")
+            , (("other.example", "/c.yaml"), Ok "c: 3\n")
+            , (("127.0.0.1", "/x.yaml"), Ok "x: local\n")
+            , (("rebind.example", "/ok.yaml"), Ok "r: 1\n")
+            ]
+        }
 
 ------------------------------------------------------------------------
 -- Running an import through the real dispatcher
@@ -175,7 +95,7 @@ requestKey req =
 fetch :: ImportPolicy -> ImportBase -> Text -> IO (FakeNet, Either ImportError ImportData)
 fetch policy base loc = do
     net <- newFakeNet
-    let cfg = (mkImportConfig Nothing policy){icHttpSeam = fakeSeam net}
+    let cfg = (mkImportConfig Nothing policy){icHttpSeam = fakeSeam network net}
     result <- mkFullDispatcher cfg loc base
     pure (net, result)
 
@@ -300,7 +220,7 @@ proxyCases =
     viaProxy url = do
         net <- newFakeNet
         let guard = HttpGuard{hgFilterAddresses = True, hgAllowedHop = Nothing, hgRequester = "https://evil.example/u.yaml"}
-        settings <- guardManagerSettings (fakeSeam net) guard (managerSetProxy (useProxy (Proxy "proxy.local" 3128)) Client.defaultManagerSettings)
+        settings <- guardManagerSettings (fakeSeam network net) guard (managerSetProxy (useProxy (Proxy "proxy.local" 3128)) Client.defaultManagerSettings)
         mgr <- newManager settings
         req <- parseRequest url
         result <- try (BS.toStrict . responseBody <$> httpLbs req mgr)
