@@ -36,6 +36,7 @@ module Test.MockAws (
     newMockAwsIn,
     mockRespond,
     mockRequestLog,
+    mockOperations,
     mockStatus,
     mockAwsFixtureDir,
     parseRequest,
@@ -180,6 +181,12 @@ mockRespond mock match resp =
 -- | The raw requests received so far, in order.
 mockRequestLog :: MockAws -> IO [MockRequest]
 mockRequestLog = readIORef . mockLog
+
+{- | The operation of each request received so far, in order (@?@ for a
+request the mock did not recognise).
+-}
+mockOperations :: MockAws -> IO [Text]
+mockOperations mock = map (maybe "?" callOperation . reqCall) <$> mockRequestLog mock
 
 -- | A reply with this status and an empty body.
 mockStatus :: Int -> MockResponse

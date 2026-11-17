@@ -68,12 +68,12 @@ perBuilderTests b =
                 assertBool ("URL is signed: " <> show url) ("X-Amz-Signature=" `T.isInfixOf` url)
                 assertBool ("URL expires in 900s: " <> show url) ("X-Amz-Expires=900" `T.isInfixOf` url)
             other -> assertFailure ("expected a URL and no body, got " <> show other)
-        operations mock >>= (@?= ["GetBucketLocation", "HeadObject"])
+        mockOperations mock >>= (@?= ["GetBucketLocation", "HeadObject"])
     , testCase "not approved (404): refused with the request command" $ do
         mock <- newMockAws
         result <- run b mock (stackArgs (Just simpleTemplate))
         result @?= Left notApproved
-        operations mock >>= (@?= ["GetBucketLocation", "HeadObject"])
+        mockOperations mock >>= (@?= ["GetBucketLocation", "HeadObject"])
     , testCase "access denied (403): its own message" $ do
         mock <- newMockAws
         mockRespond mock (OnObject "HeadObject" "approvals" simpleApprovedKey) (mockStatus 403)
@@ -99,7 +99,7 @@ perBuilderTests b =
                 ( "Template must be a local file when ApprovedTemplateLocation is set, "
                     <> "not a URL (https://example.com/t.yaml): template approval hashes the rendered local template"
                 )
-        operations mock >>= (@?= [])
+        mockOperations mock >>= (@?= [])
     , testCase "no Template: refused before any AWS call" $ do
         mock <- newMockAws
         result <- run b mock (stackArgs Nothing)
@@ -108,7 +108,7 @@ perBuilderTests b =
                 ( "Template is required in stack-args.yaml when ApprovedTemplateLocation is set: "
                     <> "template approval hashes the rendered local template"
                 )
-        operations mock >>= (@?= [])
+        mockOperations mock >>= (@?= [])
     , testCase "approval off: local body as before, no AWS call" $ do
         mock <- newMockAws
         result <- run b mock (stackArgs (Just simpleTemplate)){saApprovedTemplateLocation = Nothing}
@@ -116,7 +116,7 @@ perBuilderTests b =
             Right (Just body, Nothing) ->
                 assertBool ("body is the template: " <> show body) ("AWSTemplateFormatVersion" `T.isInfixOf` body)
             other -> assertFailure ("expected a body and no URL, got " <> show other)
-        operations mock >>= (@?= [])
+        mockOperations mock >>= (@?= [])
     ]
 
 createOnlyTests :: [TestTree]
@@ -158,7 +158,7 @@ createOnlyTests =
             mock <- newMockAws
             result <- run createBuilder mock (stackArgs (Just path))
             result @?= Left "Template body exceeds maximum size of 999999 bytes (got 1000000 bytes)."
-            operations mock >>= (@?= [])
+            mockOperations mock >>= (@?= [])
     ]
 
 {- | The refusal's suggested command, parsed by the real CLI parser, names
@@ -213,7 +213,3 @@ stackArgs template = (approvalArgs template){saStackName = "approved-stack"}
 -- | The argsfile the builders are given.
 argsfile :: Maybe FilePath
 argsfile = Just "stack-args.yaml"
-
--- | The operations the mock received, in order.
-operations :: MockAws -> IO [Text]
-operations mock = map (maybe "?" callOperation . reqCall) <$> mockRequestLog mock

@@ -47,7 +47,7 @@ lintTests =
         mockRespond mock validateOperation (MockResponse 200 validResponse)
         (result, outputs) <- runLint mock True simpleTemplate
         result @?= Right 0
-        operations mock >>= (@?= ["GetBucketLocation", "HeadObject", "ValidateTemplate", "PutObject"])
+        mockOperations mock >>= (@?= ["GetBucketLocation", "HeadObject", "ValidateTemplate", "PutObject"])
         validations outputs @?= [TemplateValidation True [] []]
         validatedBodies mock >>= (@?= [True])
     , testCase "lint on, invalid: emits the errors, exits 1, no upload" $ do
@@ -55,7 +55,7 @@ lintTests =
         mockRespond mock validateOperation (MockResponse 400 validationError)
         (result, outputs) <- runLint mock True simpleTemplate
         result @?= Right 1
-        operations mock >>= (@?= ["GetBucketLocation", "HeadObject", "ValidateTemplate"])
+        mockOperations mock >>= (@?= ["GetBucketLocation", "HeadObject", "ValidateTemplate"])
         case validations outputs of
             [tv] ->
                 assertBool
@@ -68,7 +68,7 @@ lintTests =
             mock <- newMockAws
             (result, outputs) <- runLint mock True path
             result @?= Right 0
-            operations mock >>= (@?= ["GetBucketLocation", "HeadObject", "PutObject"])
+            mockOperations mock >>= (@?= ["GetBucketLocation", "HeadObject", "PutObject"])
             validations outputs
                 @?= [ TemplateValidation
                         True
@@ -79,14 +79,14 @@ lintTests =
         mock <- newMockAws
         (result, outputs) <- runLint mock False simpleTemplate
         result @?= Right 0
-        operations mock >>= (@?= ["GetBucketLocation", "HeadObject", "PutObject"])
+        mockOperations mock >>= (@?= ["GetBucketLocation", "HeadObject", "PutObject"])
         validations outputs @?= []
     , testCase "lint on, already approved: no ValidateTemplate call" $ do
         mock <- newMockAws
         mockRespond mock (OnObject "HeadObject" "approvals" simpleApprovedKey) (mockStatus 200)
         (result, _) <- runLint mock True simpleTemplate
         result @?= Right 0
-        operations mock >>= (@?= ["GetBucketLocation", "HeadObject"])
+        mockOperations mock >>= (@?= ["GetBucketLocation", "HeadObject"])
     ]
 
 -- | Run the request with lint on or off; the result and the outputs.
@@ -129,13 +129,13 @@ sizeLimitTests =
             mock <- newMockAws
             result <- runRequestFor mock path
             result @?= Right 0
-            operations mock >>= (@?= ["GetBucketLocation", "HeadObject", "PutObject"])
+            mockOperations mock >>= (@?= ["GetBucketLocation", "HeadObject", "PutObject"])
     , testCase "request: a 1000000-byte template is refused without suggesting S3" $
         withSizedTemplate 1000000 $ \path -> do
             mock <- newMockAws
             result <- runRequestFor mock path
             result @?= Left "Template body exceeds maximum size of 999999 bytes (got 1000000 bytes)."
-            operations mock >>= (@?= [])
+            mockOperations mock >>= (@?= [])
     ]
 
 headErrorTests :: [TestTree]
@@ -145,14 +145,14 @@ headErrorTests =
         mockRespond mock (OnObject "HeadObject" "approvals" simpleApprovedKey) (mockStatus 403)
         result <- runRequest mock
         result @?= Left (accessDenied simpleApprovedKey)
-        operations mock >>= (@?= ["GetBucketLocation", "HeadObject"])
+        mockOperations mock >>= (@?= ["GetBucketLocation", "HeadObject"])
     , testCase "request: HeadObject 500 fails naming the region" $ do
         mock <- newMockAws
         mockRespond mock (OnObject "HeadObject" "approvals" simpleApprovedKey) (mockStatus 500)
         result <- runRequest mock
         let prefix = "Failed to check s3://approvals/" <> simpleApprovedKey <> " in region us-east-1: "
         assertBool ("failure names the region: " <> show result) (either (T.isPrefixOf prefix) (const False) result)
-        operations mock >>= (@?= ["GetBucketLocation", "HeadObject"])
+        mockOperations mock >>= (@?= ["GetBucketLocation", "HeadObject"])
     , testCase "review: HeadObject 403 on the pending key is access denied" $ do
         mock <- newMockAws
         mockRespond mock (OnObject "HeadObject" "approvals" simplePendingKey) (mockStatus 403)
@@ -164,7 +164,7 @@ headErrorTests =
         mockRespond mock (OnObject "HeadObject" "approvals" simpleApprovedKey) (mockStatus 403)
         result <- runReview mock
         result @?= Left (accessDenied simpleApprovedKey)
-        operations mock >>= (@?= ["GetBucketLocation", "HeadObject", "HeadObject"])
+        mockOperations mock >>= (@?= ["GetBucketLocation", "HeadObject", "HeadObject"])
     , testCase "review: a missing pending object is still 'not found'" $ do
         mock <- newMockAws
         result <- runReview mock
@@ -194,7 +194,3 @@ runReview :: MockAws -> IO (Either Text Int)
 runReview mock = do
     mcfn <- newMockCfnContext mock OpTemplateApprovalReview "test"
     templateApprovalReview (mcContext mcfn) ("s3://approvals/" <> simplePendingKey) 3
-
--- | The S3 operations the mock received, in order.
-operations :: MockAws -> IO [Text]
-operations mock = map (maybe "?" callOperation . reqCall) <$> mockRequestLog mock
