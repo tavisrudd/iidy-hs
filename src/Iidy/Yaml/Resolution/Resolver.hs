@@ -30,7 +30,7 @@ import Iidy.Yaml.Handlebars.Engine (InterpolateError (..), defaultHelpers, inter
 import Iidy.Yaml.JMESPath (JMESPathError (..), applyJmesPath)
 import Iidy.Yaml.Location (Position, zeroPosition)
 import Iidy.Yaml.OValue
-import Iidy.Yaml.Parser (ParseError (..), parseYaml)
+import Iidy.Yaml.Parser (ParseError (..), parseYaml, parseYamlStrict)
 import Iidy.Yaml.Resolution.Context
 
 {- | Structured classification of resolve errors.
@@ -839,7 +839,7 @@ resolveParseYaml ctx meta (ParseYamlTag strAst) = do
     val <- resolveAst ctx strAst
     case val of
         OString s ->
-            case parseYaml (BL.fromStrict (TE.encodeUtf8 s)) "<parseYaml>" of
+            case parseYamlStrict (BL.fromStrict (TE.encodeUtf8 s)) "<parseYaml>" of
                 Right ast -> Right (astToOValueRaw ast)
                 Left (ParseError _ msg) -> parseSyntaxError meta "!$parseYaml: " msg
         _nonString -> typeMismatchError meta "string" val

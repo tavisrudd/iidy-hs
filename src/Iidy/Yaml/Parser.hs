@@ -1,5 +1,6 @@
 module Iidy.Yaml.Parser (
     parseYaml,
+    parseYamlStrict,
     parseYamlFile,
     ParseError (..),
 ) where
@@ -10,6 +11,7 @@ import Data.Functor.Identity (Identity (..))
 import Data.List qualified as List
 import Data.Scientific (Scientific)
 import Data.Scientific qualified as Sci
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.YAML qualified as Y
@@ -29,8 +31,21 @@ type Parse a = Either ParseError a
 -- Public API
 ------------------------------------------------------------------------
 
+{- | Parse a template or stack-args document. A repeated mapping key is
+accepted and the last value wins, as in Rust's template parser.
+-}
 parseYaml :: BL.ByteString -> Text -> Parse YamlAst
-parseYaml input uri =
+parseYaml = parseYamlWith False
+
+{- | Parse an imported document or a @!$parseYaml@ string. A repeated mapping
+key at any depth is an error, as Rust's serde_yaml reports it (@a@ and @"a"@
+are the same key; @1@ and @"1"@ are not).
+-}
+parseYamlStrict :: BL.ByteString -> Text -> Parse YamlAst
+parseYamlStrict = parseYamlWith True
+
+parseYamlWith :: Bool -> BL.ByteString -> Text -> Parse YamlAst
+parseYamlWith rejectDuplicates input uri =
     let
         -- Ensure trailing newline for HsYAML compatibility
         input' =
@@ -38,7 +53,7 @@ parseYaml input uri =
                 then input <> "\n"
                 else input
      in
-        case runIdentity (Y.decodeLoader (yamlLoader uri) input') of
+        case runIdentity (Y.decodeLoader (yamlLoader rejectDuplicates uri) input') of
             Left (pos, msg) -> Left (ParseError (convertPos pos) (T.pack msg))
             Right [] -> Right (AstNull (emptyMeta uri))
             Right (node : _) -> Right node
@@ -52,8 +67,8 @@ parseYamlFile path = do
 -- Loader (preserves document key order)
 ------------------------------------------------------------------------
 
-yamlLoader :: Text -> Y.Loader Identity YamlAst
-yamlLoader uri =
+yamlLoader :: Bool -> Text -> Y.Loader Identity YamlAst
+yamlLoader rejectDuplicates uri =
     Y.Loader
         { Y.yScalar = \tag style text pos ->
             pure $
@@ -69,10 +84,38 @@ yamlLoader uri =
                 let startP = convertPos pos
                     endP = childrenEndPos startP (map (astMeta . snd) kvs)
                     meta = SrcMeta uri startP endP
-                 in applyTag meta tag (AstMapping kvs meta)
+                 in case firstDuplicateKey (map fst kvs) of
+                        Just (dup, label)
+                            | rejectDuplicates ->
+                                Left (unconvertPos (smStart (astMeta dup)), "duplicate entry with key " <> label)
+                        _noDuplicate -> applyTag meta tag (AstMapping kvs meta)
         , Y.yAlias = \_ _ node _ -> pure $ Right node
         , Y.yAnchor = \_ node _ -> pure $ Right node
         }
+
+-- | A mapping key as YAML compares it: a string, number, boolean or null.
+data KeyIdentity = KeyText Text | KeyNumber Scientific | KeyBool Bool | KeyNull
+    deriving stock (Eq, Ord)
+
+keyIdentity :: YamlAst -> Maybe (KeyIdentity, String)
+keyIdentity = \case
+    AstPlainString t _ -> Just (KeyText t, show t)
+    AstTemplatedString t _ -> Just (KeyText t, show t)
+    AstNumber n _ -> Just (KeyNumber n, either (show @Double) (show @Integer) (Sci.floatingOrInteger n))
+    AstBool b _ -> Just (KeyBool b, if b then "true" else "false")
+    AstNull _ -> Just (KeyNull, "null")
+    _complexKey -> Nothing
+
+-- | The first key that repeats an earlier one, with its display form.
+firstDuplicateKey :: [YamlAst] -> Maybe (YamlAst, String)
+firstDuplicateKey = go Set.empty
+  where
+    go _ [] = Nothing
+    go seen (k : ks) = case keyIdentity k of
+        Nothing -> go seen ks
+        Just (ident, label)
+            | ident `Set.member` seen -> Just (k, label)
+            | otherwise -> go (Set.insert ident seen) ks
 
 ------------------------------------------------------------------------
 -- Scalar resolution (Core schema)

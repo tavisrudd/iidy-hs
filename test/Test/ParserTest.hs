@@ -1,6 +1,7 @@
 module Test.ParserTest (parserTests) where
 
 import Data.ByteString.Lazy qualified as BL
+import Data.Either (isLeft, isRight)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -9,7 +10,7 @@ import Test.Tasty.HUnit
 
 import Iidy.Yaml.Ast (SrcMeta (..), YamlAst (..), astMeta)
 import Iidy.Yaml.Location (Position (..))
-import Iidy.Yaml.Parser (parseYaml)
+import Iidy.Yaml.Parser (ParseError (..), parseYaml, parseYamlStrict)
 
 -- | Helper to parse YAML and extract SrcMeta from the result
 parseGetMeta :: Text -> IO SrcMeta
@@ -22,7 +23,7 @@ parseAst input = case parseYaml (BL.fromStrict (TE.encodeUtf8 input)) "<test>" o
     Right n -> pure n
 
 parserTests :: [TestTree]
-parserTests = basicTests ++ [testGroup "source span info" spanTests]
+parserTests = basicTests ++ [testGroup "source span info" spanTests, testGroup "duplicate keys" duplicateKeyTests]
 
 basicTests :: [TestTree]
 basicTests =
@@ -192,3 +193,23 @@ spanTests =
                 (posColumn (smEnd m) - posColumn (smStart m)) @?= T.length "key"
             other -> assertFailure ("expected AstMapping, got: " <> show other)
     ]
+
+duplicateKeyTests :: [TestTree]
+duplicateKeyTests =
+    [ testCase "parseYaml keeps accepting a repeated key (templates, as Rust)" $
+        assertBool "lenient" (isRight (parseYaml dupDoc "<test>"))
+    , testCase "parseYamlStrict names the repeated key and its line" $
+        case parseYamlStrict dupDoc "<test>" of
+            Left (ParseError pos msg) -> do
+                msg @?= "duplicate entry with key \"z\""
+                posLine pos @?= 3
+            Right _ -> assertFailure "expected a duplicate key error"
+    , testCase "parseYamlStrict rejects a nested repeated key" $
+        assertBool "nested" (isLeft (parseYamlStrict "o:\n  - k: 1\n    k: 2\n" "<test>"))
+    , testCase "parseYamlStrict treats a and \"a\" as one key" $
+        assertBool "same" (isLeft (parseYamlStrict "a: 1\n\"a\": 2\n" "<test>"))
+    , testCase "parseYamlStrict keeps 1 and \"1\" apart" $
+        assertBool "distinct" (isRight (parseYamlStrict "1: a\n\"1\": b\n" "<test>"))
+    ]
+  where
+    dupDoc = "a: 1\nz: 1\nz: 2\n"

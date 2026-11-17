@@ -4,6 +4,7 @@ import Data.Aeson (Value (..))
 import Data.Aeson qualified as Aeson
 import Data.Char (isDigit)
 import Data.Maybe (isJust)
+import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import System.Directory (findExecutable)
@@ -12,7 +13,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
-import Iidy.Yaml.Imports.ContentParsing (ParsedDoc (..), parseByExtensionStrict)
+import Iidy.Yaml.Imports.ContentParsing (ParsedDoc (..), parseByExtensionStrict, parseByFormatSuffix)
 import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig, mkFullDispatcher, mkImportConfig)
 import Iidy.Yaml.Imports.Loaders.Env (loadEnvImport)
 import Iidy.Yaml.Imports.Loaders.Git (loadGitImport)
@@ -31,6 +32,7 @@ importLoaderTests =
     , testGroup "Random loader" randomTests
     , testGroup "Http helpers" httpTests
     , testGroup "JSON ordered view" jsonOrderedTests
+    , testGroup "Duplicate mapping keys" duplicateKeyTests
     , testGroup "Dispatcher routing" dispatchTests
     ]
 
@@ -237,8 +239,41 @@ jsonOrderedTests =
   where
     agrees name txt =
         testCase ("idOrdered agrees with idDoc: " <> name) $
-            case parseByExtensionStrict ".json" txt (TE.encodeUtf8 txt) of
+            case parseByExtensionStrict "t.json" ".json" txt (TE.encodeUtf8 txt) of
                 Left err -> assertBool (show err) False
                 Right pd -> do
                     fmap toValue (pdOrdered pd) @?= Just (pdValue pd)
                     Aeson.eitherDecodeStrict (TE.encodeUtf8 txt) @?= Right (pdValue pd)
+
+------------------------------------------------------------------------
+-- Duplicate mapping keys are rejected in imported documents (C34)
+------------------------------------------------------------------------
+
+duplicateKeyTests :: [TestTree]
+duplicateKeyTests =
+    [ rejectsExt ".yaml" "template" "a: 1\nz: 1\nz: 2\n" "z"
+    , rejectsExt ".yml" "nested mapping" "outer:\n  inner:\n    k: 1\n    k: 2\n" "k"
+    , rejectsExt ".yaml" "mapping in a sequence" "- a: 1\n  a: 2\n" "a"
+    , rejectsExt ".yaml" "plain and quoted spelling" "a: 1\n\"a\": 2\n" "a"
+    , rejectsExt ".yaml" "repeated merge key" "x: 1\n<<: {p: 1}\n<<: {q: 2}\n" "<<"
+    , rejectsExt ".json" "json" "{\"a\":1,\"z\":1,\"z\":2}" "z"
+    , rejectsExt ".json" "nested json" "{\"o\":[{\"k\":1,\"k\":2}]}" "k"
+    , testCase "SSM json suffix rejects" $ rejects (parseByFormatSuffix (Just "json") "{\"q\":1,\"q\":2}") "q"
+    , testCase "SSM yaml suffix rejects" $ rejects (parseByFormatSuffix (Just "yaml") "q: 1\nq: 2\n") "q"
+    , testCase "a number key and a string key of the same digits are distinct" $
+        case parseByExtensionStrict "t.yaml" ".yaml" "1: a\n\"1\": b\n" "" of
+            Left err -> assertBool (show err) False
+            Right _ -> pure ()
+    ]
+  where
+    rejectsExt ext name txt key =
+        testCase ("duplicate key rejected: " <> name) $
+            case parseByExtensionStrict "dir/data" ext txt (TE.encodeUtf8 txt) of
+                Left (ImportError msg) -> do
+                    assertBool (T.unpack msg) ("from dir/data: " `T.isInfixOf` msg)
+                    rejects (Left (ImportError msg) :: Either ImportError ()) key
+                Right _ -> assertBool "expected a duplicate key error" False
+    rejects :: Either ImportError a -> Text -> IO ()
+    rejects (Right _) _ = assertBool "expected a duplicate key error" False
+    rejects (Left (ImportError msg)) key =
+        assertBool (T.unpack msg) (("duplicate entry with key \"" <> key <> "\"") `T.isInfixOf` msg)

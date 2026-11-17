@@ -321,3 +321,15 @@ loaded. Rust takes any string, loads the import and applies the query first,
 then prints `Unsupported format: 'X'. Use 'yaml' or 'json'.` on stderr and
 exits 1 (`src/cfn/get_import.rs`). `render --format` is unchanged and still
 accepts `yaml-cloudformation`.
+
+## Duplicate Mapping Keys: Error Text
+
+**Cause**: HsYAML and aeson token streams, unlike serde_yaml and serde_json,
+do not give a key path or byte column.
+
+A repeated key in an imported YAML or JSON document (file, HTTP, S3, SSM) or
+in a `!$parseYaml` string is rejected, as in Rust, with
+`Failed to parse YAML from F: duplicate entry with key "k"`. Rust adds the
+enclosing key path for nested YAML (`b: duplicate entry ...`) and a line and
+column for JSON; iidy-hs adds ` at line L column C` for YAML and nothing for
+JSON. Top-level templates and stack-args accept repeated keys in both ports.

@@ -32,13 +32,15 @@ import Data.Aeson.Key qualified as Key
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as BL
 import Data.Either (fromRight)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 
 import Iidy.Yaml.Imports.Types (ImportError (..))
+import Iidy.Yaml.Location (Position (..))
 import Iidy.Yaml.OValue (OValue (..), toValue)
-import Iidy.Yaml.Parser (parseYaml)
+import Iidy.Yaml.Parser (ParseError (..), parseYamlStrict)
 import Iidy.Yaml.Resolution.Resolver (astToOValueKeepingTags)
 
 ------------------------------------------------------------------------
@@ -52,13 +54,18 @@ parseYamlContent :: Text -> Either Text Value
 parseYamlContent = fmap toValue . parseYamlOrdered
 
 {- | Parse YAML text to an 'OValue' that keeps mapping keys in source order
-(a duplicate key keeps its first position and takes the last value).
+(a repeated key is an error, as in Rust).
 -}
 parseYamlOrdered :: Text -> Either Text OValue
 parseYamlOrdered content =
-    case parseYaml (BL.fromStrict (TE.encodeUtf8 content)) "<import>" of
+    case parseYamlStrict (BL.fromStrict (TE.encodeUtf8 content)) "<import>" of
         Right ast -> Right (astToOValueKeepingTags ast)
-        Left err -> Left (T.pack (show err))
+        Left err -> Left (describeParseError err)
+
+-- | A YAML parse error as message text with its line and column.
+describeParseError :: ParseError -> Text
+describeParseError (ParseError pos msg) =
+    msg <> " at line " <> T.pack (show (posLine pos)) <> " column " <> T.pack (show (posColumn pos))
 
 {- | A parsed import document: the aeson value (sorted keys) the engine uses,
 and, when the text could be read as YAML, the same document in source order.
@@ -73,26 +80,31 @@ data ParsedDoc = ParsedDoc
 yamlDoc :: OValue -> ParsedDoc
 yamlDoc o = ParsedDoc (toValue o) (Just o)
 
-{- | Read JSON bytes straight from aeson's token stream into an 'OValue' with
-keys in source order (a duplicate key keeps its first position and takes the
-last value). 'Nothing' on malformed input. aeson decodes the escapes, so
-surrogate pairs come out right; the 'Value' is 'toValue' of the result, so
-the text is parsed once.
+{- | Why 'jsonToOValue' gave no value: a key repeated within an object
+(Rust rejects it), or input the token stream cannot read.
 -}
-jsonToOValue :: BS.ByteString -> Maybe OValue
+data JsonFailure = JsonDuplicateKey Text | JsonUnreadable
+
+{- | Read JSON bytes straight from aeson's token stream into an 'OValue' with
+keys in source order. A repeated key in an object is a failure, as in Rust.
+aeson decodes the escapes, so surrogate pairs come out right; the 'Value' is
+'toValue' of the result, so the text is parsed once.
+-}
+jsonToOValue :: BS.ByteString -> Either JsonFailure OValue
 jsonToOValue bytes = case value (bsToTokens bytes) of
-    Right (v, rest) | BS.all isJsonSpace rest -> Just v
-    _ -> Nothing
+    Right (v, rest) | BS.all isJsonSpace rest -> Right v
+    Right _ -> Left JsonUnreadable
+    Left failure -> Left failure
   where
     isJsonSpace w = w `elem` [0x20, 0x09, 0x0a, 0x0d]
-    value :: Tk.Tokens k String -> Either String (OValue, k)
+    value :: Tk.Tokens k String -> Either JsonFailure (OValue, k)
     value = \case
         Tk.TkLit l k -> Right (lit l, k)
         Tk.TkText t k -> Right (OString t, k)
         Tk.TkNumber n k -> Right (ONumber (num n), k)
         Tk.TkArrayOpen a -> array [] a
-        Tk.TkRecordOpen r -> record [] r
-        Tk.TkErr e -> Left e
+        Tk.TkRecordOpen r -> record Set.empty [] r
+        Tk.TkErr _ -> Left JsonUnreadable
     lit = \case
         Tk.LitNull -> ONull
         Tk.LitTrue -> OBool True
@@ -104,24 +116,25 @@ jsonToOValue bytes = case value (bsToTokens bytes) of
     array acc = \case
         Tk.TkItem ts -> value ts >>= \(v, rest) -> array (v : acc) rest
         Tk.TkArrayEnd k -> Right (OArray (reverse acc), k)
-        Tk.TkArrayErr e -> Left e
-    record acc = \case
-        Tk.TkPair key ts ->
-            value ts >>= \(v, rest) -> record (setKey (Key.toText key) v acc) rest
+        Tk.TkArrayErr _ -> Left JsonUnreadable
+    -- acc is reversed
+    record seen acc = \case
+        Tk.TkPair key ts
+            | Key.toText key `Set.member` seen -> Left (JsonDuplicateKey (Key.toText key))
+            | otherwise ->
+                value ts >>= \(v, rest) ->
+                    record (Set.insert (Key.toText key) seen) ((Key.toText key, v) : acc) rest
         Tk.TkRecordEnd k -> Right (OObject (reverse acc), k)
-        Tk.TkRecordErr e -> Left e
-    -- acc is reversed; a repeated key is replaced in place
-    setKey k v acc
-        | any ((== k) . fst) acc = [(k', if k' == k then v else v') | (k', v') <- acc]
-        | otherwise = (k, v) : acc
+        Tk.TkRecordErr _ -> Left JsonUnreadable
 
 {- | Parse JSON bytes once. A malformed document takes the error text from
 'parseJsonContent', so messages stay those of aeson's @eitherDecode@.
 -}
 parseJsonDoc :: BS.ByteString -> Either Text ParsedDoc
 parseJsonDoc bytes = case jsonToOValue bytes of
-    Just o -> Right (yamlDoc o)
-    Nothing -> plainDoc <$> parseJsonContent bytes
+    Right o -> Right (yamlDoc o)
+    Left (JsonDuplicateKey key) -> Left ("duplicate entry with key " <> T.pack (show key))
+    Left JsonUnreadable -> plainDoc <$> parseJsonContent bytes
 
 -- | A document with no key order to keep (scalars, lenient fallbacks).
 plainDoc :: Value -> ParsedDoc
@@ -140,17 +153,17 @@ parseJsonContent rawBytes =
 -- Extension-dispatched variants
 ------------------------------------------------------------------------
 
--- | Parse content by file extension, returning 'ImportError' on parse failure.
-parseByExtensionStrict :: String -> Text -> BS.ByteString -> Either ImportError ParsedDoc
-parseByExtensionStrict ext content rawBytes
+-- | Parse content (named @source@ in errors) by file extension, returning 'ImportError' on parse failure.
+parseByExtensionStrict :: Text -> String -> Text -> BS.ByteString -> Either ImportError ParsedDoc
+parseByExtensionStrict source ext content rawBytes
     | ext `elem` [".yaml", ".yml"] =
         case parseYamlOrdered content of
             Right o -> Right (yamlDoc o)
-            Left err -> Left $ ImportError $ "Failed to parse YAML: " <> err
+            Left err -> Left $ ImportError $ "Failed to parse YAML from " <> source <> ": " <> err
     | ext == ".json" =
         case parseJsonDoc rawBytes of
             Right d -> Right d
-            Left err -> Left $ ImportError $ "Failed to parse JSON: " <> err
+            Left err -> Left $ ImportError $ "Failed to parse JSON from " <> source <> ": " <> err
     | otherwise = Right (plainDoc (String content))
 
 ------------------------------------------------------------------------

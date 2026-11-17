@@ -77,7 +77,7 @@ loadHttpImport seam guard location = do
                                     "UTF-8 decode error for " <> location <> ": " <> T.pack (show ex)
                     Right content ->
                         let ext = takeExtension (T.unpack (urlPath location))
-                         in case parseByExtensionStrict ext content body of
+                         in case parseByExtensionStrict location ext content body of
                                 Left err -> pure (Left err)
                                 Right (ParsedDoc doc ordered) ->
                                     pure $

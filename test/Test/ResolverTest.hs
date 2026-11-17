@@ -1017,11 +1017,16 @@ parseYamlTests =
                 , ("mango", OArray [OObject [("walrus", ONumber 1), ("ant", ONumber 2)]])
                 ]
             )
-    , testCase "!$parseYaml duplicate keys: the last value wins" $
-        assertResolves
+    , testCase "!$parseYaml duplicate keys are rejected, as Rust does (C34)" $
+        assertResolveFailsWith
             emptyContext
             (ppTag (PpParseYaml (ParseYamlTag (str "b: 1\na: 2\nb: 3\n"))))
-            (OObject [("b", ONumber 3), ("a", ONumber 2)])
+            "duplicate entry with key \"b\""
+    , testCase "!$parseYaml nested duplicate keys are rejected (C34)" $
+        assertResolveFailsWith
+            emptyContext
+            (ppTag (PpParseYaml (ParseYamlTag (str "o:\n  - k: 1\n    k: 2\n"))))
+            "duplicate entry with key \"k\""
     , testCase "!$parseYaml non-string input errors" $
         assertResolveFailsWith
             emptyContext

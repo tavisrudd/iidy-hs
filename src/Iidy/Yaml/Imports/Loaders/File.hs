@@ -41,7 +41,7 @@ loadFileImport location baseLocation = do
             Left err -> pure $ Left $ ImportError $ "Invalid UTF-8 in file: " <> T.pack (show err)
             Right content ->
                 let ext = takeExtension fullPath
-                 in case parseByExtensionStrict ext content bs of
+                 in case parseByExtensionStrict location ext content bs of
                         Left err -> pure (Left err)
                         Right (ParsedDoc doc ordered) ->
                             pure $

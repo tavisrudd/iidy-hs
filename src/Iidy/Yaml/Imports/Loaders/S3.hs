@@ -56,7 +56,7 @@ loadS3Import awsEnv location = do
                         Right content ->
                             let S3.ObjectKey keyText = key
                                 ext = T.unpack (extractExtension keyText)
-                             in case parseByExtensionStrict ext content bs of
+                             in case parseByExtensionStrict uri ext content bs of
                                     Left err -> pure (Left err)
                                     Right (ParsedDoc doc ordered) ->
                                         pure $
