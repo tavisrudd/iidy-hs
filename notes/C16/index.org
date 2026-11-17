@@ -278,6 +278,10 @@ separate question (iidy-js lints at deploy; Rust and iidy-hs do not).
   extra call plus =s3:GetBucketLocation= (optional because of the
   fallback). The task list below follows option 3.
 
+  Decision (Tavis, 2026-11-16): option 3, the bucket's own region from
+  =GetBucketLocation=, falling back to the stack's region if the call is
+  denied.
+
 ** User-visible changes (for the docs task)
 :PROPERTIES:
 :ID: org:01a1e6fd-8bb4-76f0-af12-17f2a48b31c1
