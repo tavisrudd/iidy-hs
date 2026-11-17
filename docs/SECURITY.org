@@ -1,15 +1,49 @@
 #+title: Security Model for YAML Import System
 #+options: ^:nil -:nil
 
-This document describes the security model implemented in iidy-hs's YAML preprocessing import system to prevent malicious remote templates from accessing local resources.
+This document describes the security model of iidy-hs's YAML preprocessing import system: what a template loaded from a remote location may read, import and reach, and how a user widens that for sources they trust.
 
 * Overview
-The YAML import system processes untrusted templates that may originate from remote sources (S3, HTTP/HTTPS). The security model distinguishes between *local templates* (loaded from the local filesystem) and *remote templates* (loaded from S3 or HTTP/HTTPS URLs), applying different restrictions to each.
+A template can import other documents, and those documents can import more. Each document is either *trusted* or *untrusted*:
 
-Local templates are trusted: they already execute in the user's local context, so no additional restrictions apply. Remote templates are untrusted: they are restricted from accessing local resources such as files, environment variables, and git metadata.
+- A document loaded from the local filesystem (or standard input) is trusted. It already runs in the user's local context.
+- A document loaded from a remote location (=s3:=, =http:= / =https:=, or through =ssm:=, =ssm-path:= or =cfn:=) is untrusted, unless its location is under a prefix the user passed with =--trust-import-source= *and* every document that led to it is trusted.
+
+Trust is never gained through the import chain: a document under a trusted prefix that an untrusted document requested (directly or further up) is itself untrusted.
+
+An untrusted document:
+
+- cannot use the local-only import types (=file:=, =env:=, =git:=, =filehash:=, =filehash-base64:=) or bare relative paths;
+- cannot use the AWS-backed import types (=s3:= in both forms, =ssm:=, =ssm-path:=, =cfn:=), which would run with the user's AWS credentials;
+- has its HTTP imports filtered: they cannot reach loopback, link-local, unspecified or cloud instance-metadata addresses, on the first request or on any redirect;
+- when used as a custom resource template, expands with its parameters only, not the importing template's variables.
+
+Every imported document, trusted or not, is resolved with only its own =$defs= and =$imports=: it never sees the importing document's variables, and its import locations cannot interpolate them. Values reach an imported document only as =$params= of a custom template. This matches Rust iidy and iidy-js.
+
+* Variable Isolation
+An imported document that has its own =$defs= or =$imports= is preprocessed on its own, starting from an empty set of variables (Rust =process_imported_document=). A reference to a variable of the importing template fails with a variable-not-found error naming it:
+
+#+begin_src yaml
+# local.yaml
+$defs:
+  secret: s3cr3t
+$imports:
+  child: https://example.com/child.yaml
+#+end_src
+
+#+begin_src yaml
+# https://example.com/child.yaml
+$defs:
+  own: value
+leak: "{{secret}}"           # error: Variable not found: secret
+$imports:
+  next: "https://x/{{secret}}.yaml"   # the location cannot see secret either
+#+end_src
+
+To pass a value into a reusable document, make it a custom template with =$params= (see [[file:custom-resource-templates.org][Custom Resource Templates]]).
 
 * Local-Only Import Types
-The following 5 import types are *forbidden from remote templates*:
+These import types are *forbidden from remote documents*, trusted or not (a trusted source never gains them):
 
 | Import Type        | Description                       | Security Risk                        |
 |--------------------+-----------------------------------+--------------------------------------|
@@ -19,78 +53,118 @@ The following 5 import types are *forbidden from remote templates*:
 | =filehash:=        | File hashing (local files)        | Could scan filesystem structure      |
 | =filehash-base64:= | File hashing with base64 encoding | Could scan filesystem structure      |
 
-These types correspond to =ImportFile=, =ImportEnv=, =ImportGit=, =ImportFilehash=, and =ImportFilehashBase64= in the Haskell source. The =isLocalOnly= function in =Types.hs= classifies them.
+These types correspond to =ImportFile=, =ImportEnv=, =ImportGit=, =ImportFilehash= and =ImportFilehashBase64= in the Haskell source. The =isLocalOnly= function in =Types.hs= classifies them.
+
+* AWS-Backed Import Types
+These import types are read with the user's AWS credentials, so only trusted documents may use them:
+
+| Import Type          | Description                   |
+|----------------------+-------------------------------|
+| =s3:= (both forms)   | S3 objects                    |
+| =cfn:=               | CloudFormation stacks/exports |
+| =ssm:=               | SSM parameters                |
+| =ssm-path:=          | SSM parameter paths           |
+
+An untrusted document that uses one gets an error naming its location (or the untrusted document that led to it) and suggesting =--trust-import-source=. The check runs before any AWS environment is built, so a refused import makes no AWS call and a render without credentials reports the trust error. =isAwsBacked= in =Types.hs= is the one classification of these types.
+
+There is no same-bucket exception: an S3-hosted template that imports its sibling objects needs its bucket listed as a trusted source.
 
 * Remote-Allowed Import Types
-The following 6 import types are *allowed from any context*, including remote templates:
+These import types are allowed from any document:
 
-| Import Type      | Description                   | Use Case                              |
-|------------------+-------------------------------+---------------------------------------|
-| =s3:=            | S3 objects                    | Access other S3-stored configurations |
-| =http:/https:= | HTTP endpoints                | Fetch configuration from web APIs     |
-| =cfn:=           | CloudFormation stacks/exports | Dynamic AWS resource references       |
-| =ssm:=           | SSM parameters                | Centralized configuration management  |
-| =ssm-path:=      | SSM parameter paths           | Bulk parameter retrieval              |
-| =random:=        | Random value generation       | Generate unique identifiers           |
+| Import Type      | Description             | Notes                                          |
+|------------------+-------------------------+------------------------------------------------|
+| =http:/https:=   | HTTP endpoints          | Address filter for untrusted documents (below) |
+| =random:=        | Random value generation |                                                |
 
-* Relative Import Behavior
-When a template uses a relative import (no explicit type prefix), the import inherits the type of the parent template:
+* HTTP Address Filter
+An HTTP import requested by an untrusted document cannot reach:
 
-#+begin_src yaml
-# From s3://bucket/configs/app.yaml
-$imports:
-  database: "database.yaml"  # Resolves to s3://bucket/configs/database.yaml
-#+end_src
+- IPv4 loopback =127.0.0.0/8=, unspecified =0.0.0.0/8= and link-local =169.254.0.0/16= (which includes the instance metadata address =169.254.169.254=);
+- IPv6 =::=, =::1=, link-local =fe80::/10= and the AWS link-service range =fd00:ec2::/32= (instance metadata =fd00:ec2::254=, the EKS Pod Identity Agent =fd00:ec2::23=);
+- the IPv4-mapped (=::ffff:a.b.c.d=), IPv4-compatible (=::a.b.c.d=) and NAT64 (=64:ff9b::/96=) forms of the blocked IPv4 ranges.
 
-Explicit local path indicators are blocked from remote templates. Paths starting with =./=, =../=, or =/= are treated as =file:= imports and rejected:
+The host name is resolved locally and the request is refused if any resolved address is blocked. Numeric spellings such as =2852039166= or =0251.0376.0251.0376= resolve to the same blocked address and are refused. The check runs on the first request and on every redirect hop, so a public URL that redirects to the metadata address is refused. For plain HTTP the connection goes to the address that passed the check, so a name that resolves differently a moment later (DNS rebinding) still connects to the checked address.
+
+HTTP imports requested by local or trusted documents are not filtered: a local template may fetch from a development server on =localhost=.
+
+Private address ranges (=10.0.0.0/8=, =172.16.0.0/12=, =192.168.0.0/16=) are not filtered.
+
+* Redirects From a Trusted Source
+A document's trust is decided from the location it was requested at. A trusted document requesting a URL under a trusted prefix may only be redirected to locations that are also trusted; a redirect anywhere else is refused.
+
+* Trusted Sources: =--trust-import-source=
+=--trust-import-source PREFIX= (global, repeatable) makes documents under =PREFIX= trusted like local ones, provided every document that led to them is trusted: they may use the AWS-backed import types, their HTTP imports are not filtered, and as custom templates they keep the importing template's variables. They still cannot use the local-only types.
+
+A prefix must:
+
+- start with a known remote scheme, in lower case: =s3://=, =s3:=, =http://=, =https://=, =ssm:=, =ssm-path:= or =cfn:=;
+- name a bucket or host for the S3 and HTTP forms, with no explicit default port (=:80= on =http://=, =:443= on =https://=; request URLs leave it out, so no location would match);
+- end in =/=;
+- contain no =.= or =..= path segment (also percent-encoded).
+
+An invalid prefix is a command-line error. Matching is a literal, case-sensitive text prefix of the document's location, so =https://t.example.com/= does not trust =https://t.example.com.evil/=, and =s3:bucket/= and =s3://bucket/= are listed separately. A location under a prefix whose remainder has a =.= or =..= segment is not trusted. Documents loaded through =ssm:=, =ssm-path:= or =cfn:= are untrusted unless their location is listed (for example =ssm:/my/templates/=).
+
+Trusted sources come from the command line only: no stack-args or configuration key can widen trust, since such a file could itself be imported.
+
+=iidy demo= passes the flag on to the =iidy= commands a demo script runs.
+
+* Relative Imports
+A bare relative import (no type prefix, such as =database.yaml=) is a local file import. From a remote document it is rejected, as are paths starting with =./=, =../= or =/=. A remote document must give the absolute location of what it imports:
 
 #+begin_src yaml
 # From s3://bucket/config.yaml — these are ALL REJECTED:
 $imports:
+  bad0: "database.yaml"     # Bare relative path from remote
   bad1: "./local.yaml"      # Local path from remote
   bad2: "../local.yaml"     # Local path from remote
   bad3: "/abs/local.yaml"   # Absolute local path from remote
 #+end_src
 
-* Base Path Resolution
-The system derives base paths from the parent template's location to resolve relative imports across different contexts.
+Rust iidy and iidy-js resolve a bare relative import against the remote document's own location; iidy-hs does not (see =DIVERGENCES.md=). Writing the absolute URL gives a remote document the same reach.
 
-** Local File Paths
+* Base Path Resolution
+Relative file imports in local documents resolve against the importing file's directory:
+
 - =/home/app/configs/main.yaml= -> =/home/app/configs/=
 - =./configs/app.yaml= -> =./configs/=
-- =config.yaml= -> `` (empty — current directory)
+- =config.yaml= -> the current directory
 
-** S3 URLs
-- =s3://bucket/file.yaml= -> =s3://bucket/=
-- =s3://bucket/configs/app.yaml= -> =s3://bucket/configs/=
-
-** HTTP/HTTPS URLs
-- =https://example.com/file.yaml= -> =https://example.com/=
-- =https://example.com/configs/app.yaml= -> =https://example.com/configs/=
-
-The =isLocalBase= function decides whether a base location is trusted, and it fails closed: a base is local only when it is positively a local file path. That means =parseTypePrefix= reads it as a plain path (no colon), a =./=, =../= or =/= path, or a =file:= location, or the text before its first colon is not a valid RFC 3986 URI scheme (for example =dir/./c:d.yaml=, which only a local path can produce). Every other base is untrusted: =s3:= in both the short (=s3:bucket/key=) and long (=s3://=) forms, =ssm:=, =ssm-path:=, =cfn:=, =http://=, =https://=, and any unknown scheme-shaped prefix (including a local file named like =a:b.yaml= or a Windows drive path, which must be written with a =./= or =/= prefix to stay local). The =parseTypePrefix= function extracts the type prefix from an import location, treating paths with =./=, =../=, or =/= prefixes as implicit =file:= imports.
+The =isLocalBase= function decides whether a base location is local, and it fails closed: a base is local only when it is positively a local file path. That means =parseTypePrefix= reads it as a plain path (no colon), a =./=, =../= or =/= path, or a =file:= location, or the text before its first colon is not a valid RFC 3986 URI scheme (for example =dir/./c:d.yaml=, which only a local path can produce). Every other base is not local: =s3:= in both the short (=s3:bucket/key=) and long (=s3://=) forms, =ssm:=, =ssm-path:=, =cfn:=, =http://=, =https://=, and any unknown scheme-shaped prefix (including a local file named like =a:b.yaml= or a Windows drive path, which must be written with a =./= or =/= prefix to stay local). Standard input (=-=) is a local base.
 
 * Threat Model
 ** What This Protects Against
-1. *Credential Theft* — Prevents remote templates from reading environment variables containing AWS keys, tokens, or other secrets via =env:= imports.
+1. *Credential Theft* — Remote documents cannot read environment variables (=env:=), the importing template's variables, or values read with the user's AWS credentials (=ssm:=, =ssm-path:=, =cfn:=, =s3:=).
 
-2. *File System Scanning* — Blocks remote templates from reading local files or probing directory structure via =file:=, =filehash:=, and =filehash-base64:= imports.
+2. *Exfiltration* — A remote document's variables hold only its own values and its own non-AWS imports, so an import URL it builds cannot carry the user's secrets. Its HTTP imports cannot reach loopback services or the instance metadata service, including through redirects.
 
-3. *Information Disclosure* — Prevents extraction of git repository metadata (branch, commit hash, tags) via =git:= imports.
+3. *File System Scanning* — Remote documents cannot read local files or probe directory structure via =file:=, =filehash:= and =filehash-base64:=.
 
-4. *Privilege Escalation* — Stops remote templates from accessing local resources beyond their intended scope. A template fetched from S3 cannot reach into the deployer's local filesystem.
+4. *Information Disclosure* — Remote documents cannot extract git repository metadata via =git:=.
+
+5. *Trust Laundering* — An untrusted document cannot gain trust by importing a document under a trusted prefix.
 
 ** What This Allows
-1. *Legitimate Composition* — Remote templates can compose from other remote sources (S3-to-S3, HTTPS-to-S3, etc.).
+1. *Legitimate Composition* — Remote documents can import other remote documents over HTTP, and parameterised custom templates from anywhere.
 
-2. *Relative Imports* — Templates can reference related files in the same remote context without absolute URLs.
+2. *Trusted Remote Sources* — With =--trust-import-source=, templates from listed buckets, hosts or parameter paths keep AWS integration, unfiltered HTTP and parent variables for custom templates.
 
-3. *AWS Integration* — Remote templates can access CloudFormation outputs and SSM parameters for dynamic configuration.
+3. *Local Flexibility* — Local templates keep every import type.
 
-4. *Local Flexibility* — Local templates retain full import capabilities for all trusted operations.
+** Remaining Risks
+- Private address ranges are not filtered.
+- Parameters a user passes to a remote custom template reach it.
+- HTTPS: the address check resolves the host name, and the TLS library then does its own lookup, leaving a DNS-rebinding window between the two. Certificate validation for the requested host name limits it (the metadata service serves no TLS, and a loopback service would need a valid certificate for the attacker's name).
+- With =HTTP_PROXY= / =HTTPS_PROXY= set, the target host name is resolved and checked locally before the request goes to the proxy, but the proxy may resolve it differently, and the proxy's own address is not filtered.
+- Behind a proxy on a network without external DNS, HTTP imports from untrusted documents fail with "cannot resolve", since the target is resolved locally.
+- SOCKS proxy URLs in =http_proxy= / =https_proxy= are not used for HTTP imports (Rust iidy does not support them either).
+- HTTP imports requested by local or trusted documents are not filtered, redirects included, so a public URL a local template imports can redirect to =169.254.169.254=.
+- IPv6 forms that embed an IPv4 address but are not filtered: 6to4 =2002::/16=, Teredo =2001::/32=, local-use NAT64 =64:ff9b:1::/48= and IPv4-translated =::ffff:0:0/96=. Reaching loopback through them needs a relay or translator on the path.
+- Standard input (=-=) is a local base, so =curl ... | iidy render -= runs a remote template with full trust.
+- A location a trusted document builds from imported remote content (for example =$imports: {c: https://x/c.yaml, v: "{{c.loc}}"}= in a local template) loads with the requester's trust. Closing this needs taint tracking.
 
 * CLI Control: =--no-remote-imports=
-The =--no-remote-imports= flag disables all network-fetching import types at the CLI level. When set, any =http:=, =https:=, or =s3:= import returns an error instead of fetching content.
+The =--no-remote-imports= flag disables all network-fetching import types at the CLI level. When set, any =http:=, =https:= or =s3:= import returns an error instead of fetching content.
 
 *Blocked by =--no-remote-imports=:*
 
@@ -99,38 +173,30 @@ The =--no-remote-imports= flag disables all network-fetching import types at the
 
 *NOT blocked by =--no-remote-imports=:*
 
-- =cfn:=, =ssm:=, =ssm-path:= — these are AWS API calls that go through the AWS SDK with IAM authentication. They require credentials and are bounded by IAM policy, not open HTTP. They are gated by =--profile= / AWS credential configuration, not by the remote imports flag.
+- =cfn:=, =ssm:=, =ssm-path:= — AWS API calls through the AWS SDK with IAM authentication (still refused from untrusted documents by the trust model).
 - =env:=, =file:=, =git:=, =filehash:=, =random:= — local operations.
 
-This flag is orthogonal to the remote-base trust model described above. The trust model prevents remote /templates/ from reading local resources. The =--no-remote-imports= flag prevents local /users/ from fetching remote content, useful in air-gapped or egress-restricted environments.
+This flag is orthogonal to the trust model described above. The trust model limits what remote /documents/ may do. The =--no-remote-imports= flag prevents local /users/ from fetching remote content, useful in air-gapped or egress-restricted environments.
 
 The default is =--remote-imports= (allowed). Use =--no-remote-imports= to restrict.
 
 * Implementation Notes
-Security validation is centralized in =parseImportType= in =src/Iidy/Yaml/Imports/Types.hs=. This function:
+The trust decision lives in =src/Iidy/Yaml/Imports/Types.hs=:
 
-1. Extracts the type prefix from the import location (=parseTypePrefix=).
-2. Maps the prefix to an =ImportType= constructor.
-3. Checks whether the base location is positively local (=isLocalBase=).
-4. Rejects the import if both conditions hold: the base is not local AND the import type is local-only (=isLocalOnly=).
+- =isLocalBase= decides whether a location is a local file;
+- =isTrustedBase= is =isLocalBase= or a listed trusted-source prefix (=parseTrustedSource= validates prefixes);
+- =ImportBase= carries the requesting document's location and the chain of documents that led to it; =isTrustedRequester= requires every link to be trusted;
+- =checkImport= is the import gate: =parseImportType= (local-only types need a local base), then the AWS-backed check (=isAwsBacked=) against =isTrustedRequester=.
 
-Individual import loaders live under =src/Iidy/Yaml/Imports/Loaders/=:
+The dispatcher (=src/Iidy/Yaml/Imports/Loaders/Dispatch.hs=) calls =checkImport= before any loader runs, and derives each HTTP request's guard with =httpGuardFor= (=src/Iidy/Yaml/Imports/Loaders/HttpGuard.hs=). The HTTP guard uses only the public http-client API: =managerModifyRequest= checks every hop, and a wrapped =managerRawConnection= connects plain HTTP to the checked address. =preprocessWithConfig= builds the dispatcher and passes the same trusted sources to the engine (=src/Iidy/Yaml/Engine.hs=), which threads =ImportBase= through nested imports, starts each imported document from empty variables, and marks each custom template with whether it inherits parent variables.
 
-- =File.hs= — Local filesystem imports
-- =Env.hs= — Environment variable imports
-- =Git.hs= — Git metadata imports
-- =S3.hs= — S3 object imports
-- =Http.hs= — HTTP/HTTPS imports
-- =Cfn.hs= — CloudFormation stack/export imports
-- =Ssm.hs= — SSM parameter imports
-- =Random.hs= — Random value generation
+Individual import loaders live under =src/Iidy/Yaml/Imports/Loaders/=: =File.hs=, =Env.hs=, =Git.hs=, =S3.hs=, =Http.hs= (with =HttpGuard.hs=), =Cfn.hs=, =Ssm.hs= and =Random.hs=.
 
-Base path threading occurs in =src/Iidy/Yaml/Engine.hs=, where =baseLocation= is passed through the preprocessing pipeline and propagated to child imports. The =TagContext= in =src/Iidy/Yaml/Resolution/Context.hs= carries the =tcInputUri= field, which tracks the current template's origin for resolution.
-
-When a security violation is detected, the system returns a clear error:
+Errors name the refused import type and the location involved, for example:
 
 #+begin_example
 Import type file is not allowed from remote templates
+Import type ssm is not allowed from remote templates: https://example.com/t.yaml is not a trusted source (to allow it, pass --trust-import-source with a prefix of that location)
 #+end_example
 
-The implementation follows the principle of secure by default: remote templates are restricted unless the import type is explicitly classified as remote-safe.
+The implementation is secure by default: remote documents are restricted unless the user names their source as trusted.

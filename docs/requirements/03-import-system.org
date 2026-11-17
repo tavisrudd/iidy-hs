@@ -4,7 +4,7 @@
 * Overview
 The import system is iidy-hs's mechanism for injecting external data into a YAML preprocessing pipeline before template resolution. Imports appear under the top-level =$imports= key of any preprocessed YAML document. Each entry maps a variable name to an import location string. The system resolves every import location, parses the result into a typed value, and injects it as an environment variable available to Handlebars expressions and =$defs= throughout the document.
 
-Eleven import types are supported, covering local files, environment variables, git metadata, random values, file hashing, S3 objects, HTTP endpoints, CloudFormation stack data, and SSM Parameter Store parameters. A security model distinguishes between trusted local templates and untrusted remote templates (loaded from S3 or HTTP/HTTPS), blocking local-resource access from the remote context. Cycle detection prevents infinite recursion in nested imports.
+The supported import types cover local files, environment variables, git metadata, random values, file hashing, S3 objects, HTTP endpoints, CloudFormation stack data, and SSM Parameter Store parameters. A security model distinguishes between trusted documents (local, or under a =--trust-import-source= prefix reached through trusted documents) and untrusted remote documents, which cannot use local-only or AWS-backed imports and whose HTTP imports cannot reach loopback, link-local or metadata addresses. Every imported document is resolved without the importing document's variables. Cycle detection prevents infinite recursion in nested imports.
 
 Behavioral parity with the Rust iidy binary is the acceptance standard. Where this document says "matches Rust oracle," byte-for-byte output equivalence on the same input is the target, with documented divergences as the only permitted exceptions.
 
@@ -16,13 +16,14 @@ Behavioral parity with the Rust iidy binary is the acceptance standard. Where th
 *Known divergences from the Rust oracle* (see also =DIVERGENCES.md=):
 
 - *cfn sub-types:* JS does not support legacy dot syntax (=cfn:stackName.key=); this was a Rust-only addition and is not ported.
+- *Remote trust model (card C15):* untrusted documents cannot use AWS-backed imports, their HTTP imports are address-filtered, remote custom templates see only their parameters, and =--trust-import-source= widens trust. Rust and iidy-js have none of these restrictions and no such flag. Bare relative imports from remote documents are rejected (Rust and iidy-js inherit the remote base).
 
 --------------
 
 * Import Dispatch Architecture
 The import system has a layered dispatch architecture with security and credential gates.
 
-** Type Classification (=parseImportType=)
+** Type Classification (=parseImportType=, =checkImport=)
 #+begin_example
 parseImportType :: Text -> Text -> Either ImportError ImportType
 parseImportType location baseLocation =
@@ -40,13 +41,15 @@ parseImportType location baseLocation =
 - No colon in location: returns =("", location)= which defaults to =ImportFile=
 - Unknown prefix: returns =Left "Unknown import type '<prefix>' in <location>"=
 
+=checkImport trusted location base= composes =parseImportType= with the AWS-backed check: when =isAwsBacked importType= (=cfn=, =ssm=, =ssm-path=, =s3= in both forms) and the requester chain is not trusted (=isTrustedRequester=), it fails with =Import type <type> is not allowed from remote templates: <location> is not a trusted source (...)=. The =base= is an =ImportBase=: the requesting document's location plus the locations of the documents that led to it; =isTrustedRequester= requires each to pass =isTrustedBase= (=isLocalBase= or a listed trusted-source prefix).
+
 ** Dispatch and Security Gates (=mkFullDispatcher=)
 #+begin_example
 mkFullDispatcher :: ImportConfig -> LoadImportFn
-mkFullDispatcher cfg location baseLocation =
-  case parseImportType location baseLocation of   -- GATE 1: remote template security
+mkFullDispatcher cfg location base =
+  case checkImport trusted location base of        -- GATE 1: trust (local-only and AWS-backed)
     Left err  -> err
-    Right typ -> dispatch cfg typ location baseLocation
+    Right typ -> dispatch cfg typ location base
 
 dispatch cfg typ location baseLocation = case typ of
   ImportFile          -> loadFileImport location baseLocation
@@ -56,7 +59,8 @@ dispatch cfg typ location baseLocation = case typ of
   ImportFilehash      -> loadFilehashImport location baseLocation False
   ImportFilehashBase64-> loadFilehashImport location baseLocation True
   ImportHttp          -> withRemote cfg $          -- GATE 2: --no-remote-imports
-                           loadHttpImport location
+                           loadHttpImport seam (httpGuardFor trusted location base) location
+                                                    -- GATE 4: address filter, redirect rule
   ImportS3            -> withRemote cfg $           -- GATE 2: --no-remote-imports
                            withAwsEnv cfg $ \env -> -- GATE 3: AWS credentials
                              loadS3Import env location
@@ -68,11 +72,14 @@ dispatch cfg typ location baseLocation = case typ of
                            loadSsmPathImport env location
 #+end_example
 
-Three security gates:
+Security gates:
 
-1. *Remote template gate* (=parseImportType=): blocks local-only imports from remote base locations
+1. *Trust gate* (=checkImport=): blocks local-only imports from remote base locations, and AWS-backed imports from untrusted requester chains, before any loader or AWS environment is used
 2. *=--no-remote-imports= gate* (=withRemote=): blocks HTTP and S3 when =BlockRemoteImports= is set. CFN, SSM, and SSM-path are NOT blocked because they use IAM-authenticated AWS SDK calls, not open HTTP fetches.
 3. *AWS credentials gate* (=withAwsEnv=): blocks CFN, SSM, SSM-path, and S3 when no AWS environment is configured. Error: ="AWS import type requires credentials and is not available in this context"=
+4. *HTTP guard* (=httpGuardFor=, =guardManagerSettings= in =HttpGuard.hs=): for an untrusted requester chain, refuses loopback, link-local, unspecified and metadata addresses on every hop (=managerModifyRequest=) and connects plain HTTP to the checked address (wrapped =managerRawConnection=); for a trusted requester asking for a URL under a trusted prefix, refuses a redirect that leaves the trusted locations.
+
+=preprocessWithConfig= (=Dispatch.hs=) builds the dispatcher from an =ImportConfig= and passes the same policy's trusted sources to the engine (=preprocessYamlWith=), which uses them for custom-template variable inheritance.
 
 ** Content Parsing Pipeline
 Four parsing modes exist, dispatched by loader type:
@@ -147,7 +154,7 @@ Processing order within a document:
 1. =$defs= is fully resolved first (all defs available to all imports)
 2. =$imports= entries are resolved sequentially in declaration order
 3. Each resolved import is added to the environment before the next import's location is interpolated
-4. When an imported document contains =$imports= or =$defs=, it is recursively preprocessed with its own environment. Custom resource templates registered inside the imported document are NOT exported to the parent.
+4. When an imported document contains =$imports= or =$defs=, it is recursively preprocessed with its own environment, starting empty: the importing document's variables are not visible to it, nor to its import-location interpolation (Rust =process_imported_document=, =engine.rs:409=). Its imports are requested with an =ImportBase= that extends the requester chain. Custom resource templates registered inside the imported document are NOT exported to the parent.
 
 ** Import Manifest
 Every successfully resolved import produces an =ImportRecord=:
@@ -436,8 +443,9 @@ loadFilehashImport location baseLocation isBase64 =
 - The response body is decoded as UTF-8. Non-UTF-8 bytes produce an import error.
 - Extension-based content parsing applies (strict): =.yaml/.yml= -> YAML parse; =.json= -> JSON parse; other -> raw string. YAML and JSON parse failures are errors (no fallback).
 - S3 fetch exceptions (network, credentials, access denied, object not found) are wrapped in a descriptive import error.
-- Templates loaded from S3 are considered remote (base location starts with =s3://=) and are subject to security restrictions on further imports (see US-03-010).
-- Relative imports within an S3-based template inherit the S3 base path. A relative path =sibling.yaml= inside =s3://bucket/configs/app.yaml= resolves to =s3://bucket/configs/sibling.yaml=.
+- Templates loaded from S3 are considered remote (base location starts with =s3://= or =s3:=) and are subject to security restrictions on further imports (see US-03-010).
+- This import type is AWS-backed: it is refused from untrusted documents (see US-03-010).
+- Relative imports within an S3-based template are not supported: a bare relative path is a local file import and is rejected from a remote base (divergence from Rust and iidy-js, see =DIVERGENCES.md=). Use the absolute =s3://= location.
 - This import type is blocked by =--no-remote-imports=.
 - This import type requires AWS credentials.
 
@@ -487,14 +495,16 @@ loadS3Import awsEnv location =
 - Content parsing is based on the URL path's file extension (extracted from the path component after stripping scheme, host, query string, and fragment). =.yaml/.yml= and =.json= trigger structured parsing; other extensions yield raw string. YAML and JSON parse failures are errors (strict parsing, no fallback to raw string).
 - HTTP and HTTPS URLs are treated as the same import type; both are routed to the same loader.
 - Templates loaded from HTTP or HTTPS are considered remote and are subject to security restrictions on further imports (see US-03-010).
-- Relative imports within an HTTP/HTTPS template resolve relative to the parent URL's directory component. =sibling.yaml= inside =https://example.com/configs/app.yaml= resolves to =https://example.com/configs/sibling.yaml=.
+- Relative imports within an HTTP/HTTPS template are not supported: a bare relative path is a local file import and is rejected from a remote base. Use the absolute URL.
+- A request from an untrusted requester chain cannot reach loopback, link-local, unspecified or metadata addresses (IPv4, IPv6 and IPv4-embedding IPv6 forms), checked on the first request and every redirect hop; plain HTTP connects to the checked address. A request under a trusted prefix from a trusted requester may only be redirected to trusted locations.
+- =HTTP_PROXY= / =HTTPS_PROXY= (and =NO_PROXY=) are honoured; the target is still resolved and checked locally first. SOCKS proxy URLs are not used.
 - This import type is blocked by =--no-remote-imports=.
 
 *Logic Flow:*
 
 #+begin_example
-loadHttpImport location =
-  mgr              <- newTlsManager
+loadHttpImport seam guard location =
+  mgr              <- newManager =<< guardManagerSettings seam guard tlsManagerSettings
   (status, body)   <- fetchHttpStreaming mgr location
     -- Sets response timeout: httpTimeoutSeconds * 1_000_000 microseconds
     -- Reads chunks via readWithLimit, throws HttpSizeLimitExceeded if > 10 MB
@@ -510,7 +520,7 @@ loadHttpImport location =
 *Edge Cases:*
 
 - A URL with no path extension (e.g., =https://api.example.com/config=) returns the body as a raw string regardless of Content-Type header. iidy-hs does not inspect Content-Type.
-- HTTP redirects: the HTTP client follows redirects automatically; the final URL determines the effective content.
+- HTTP redirects: the HTTP client follows redirects automatically; the final URL determines the effective content, and the requested URL stays the document's location (and so decides its trust). Each hop passes the guard.
 - HTTPS with an untrusted certificate: the HTTP client uses the system trust store; untrusted certificates cause an import error.
 - Query strings and fragments are stripped before extension extraction, so =https://example.com/file.yaml?v=1#section= correctly detects =.yaml=.
 
@@ -552,7 +562,7 @@ The following cfn sub-types are supported:
 - =cfn:stack:= returns a top-level mapping with =Outputs=, =Parameters=, and =Tags= keys, each being a mapping of key-to-value pairs.
 - The stack must exist in the current AWS account and region. A missing stack produces an error.
 - AWS credentials must be available. Access denied conditions produce a wrapped error.
-- This import type is allowed from remote templates.
+- This import type is AWS-backed: it is allowed from local and trusted documents only (see US-03-010).
 - This import type is NOT blocked by =--no-remote-imports= (uses IAM auth, not open HTTP).
 
 *Logic Flow:*
@@ -636,7 +646,7 @@ loadCfnImport awsEnv location =
 
 *Both types:*
 
-- Allowed from remote templates.
+- AWS-backed: allowed from local and trusted documents only (see US-03-010).
 - NOT blocked by =--no-remote-imports= (uses IAM auth, not open HTTP).
 - AWS credentials must be available.
 
@@ -698,11 +708,16 @@ loadSsmPathImport awsEnv location =
 *Acceptance Criteria:*
 
 - The trust check fails closed. A base location is local only when it is positively a local file path: a plain path, a =./=, =../= or =/= path, a =file:= location, or a path whose text before its first colon is not a valid RFC 3986 URI scheme. Every other base is untrusted, including =s3:= (short and =s3://= forms), =ssm:=, =ssm-path:=, =cfn:=, =http://=, =https://= and any unknown scheme-shaped prefix.
-- Five import types are classified as local-only: file, env, git, filehash, filehash-base64.
+- The local-only import types are file, env, git, filehash and filehash-base64. A trusted source never gains them.
+- The AWS-backed import types are s3 (both forms), cfn, ssm and ssm-path (=isAwsBacked=). They are refused unless the requester chain is trusted: every document from the root to the requester passes =isTrustedBase= (=isLocalBase=, or a location under a =--trust-import-source= prefix). The error names the untrusted location and suggests =--trust-import-source=.
+- =--trust-import-source PREFIX= (repeatable, command line only) is validated at parse time (=parseTrustedSource=): a lower-case remote scheme (=s3://=, =s3:=, =http://=, =https://=, =ssm:=, =ssm-path:=, =cfn:=), a bucket or host for the S3 and HTTP forms with no explicit default port, a trailing =/=, and no =.= or =..= segment. Matching is a literal, case-sensitive prefix; a location whose remainder has a =.= or =..= segment is not trusted.
+- Trust is not gained through the chain: a document under a trusted prefix requested by an untrusted document is untrusted.
+- HTTP imports from untrusted requester chains are address-filtered (see US-03-007).
 - When a remote template attempts a local-only import, the error is: =Import type <typeStr> is not allowed from remote templates=.
 - Paths starting with =./=, =../=, or =/= are unconditionally treated as file imports, even without an explicit =file:= prefix. This means a remote template cannot escape the restriction using a bare relative path.
-- Relative imports from remote templates (bare path, no explicit type prefix, not starting with =./=, =../=, or =/=) inherit the parent's base location. The import location is resolved relative to the parent's directory in the same scheme (S3 or HTTPS).
-- Six remote-safe types are permitted from any context: S3, HTTP/HTTPS, cfn, ssm, ssm-path, random.
+- Relative imports from remote templates (bare path, no explicit type prefix, not starting with =./=, =../=, or =/=) are file imports and are rejected; remote templates must use absolute locations. (Rust and iidy-js resolve them against the remote base; see =DIVERGENCES.md=.)
+- HTTP/HTTPS and random are permitted from any document.
+- Every imported document is resolved without the importing document's variables (US-03-011, merge semantics).
 - Security validation is performed before any loader is called.
 - The security model is applied per-import, not per-document. A local template that imports a remote template does not transfer its local privileges to the remote template.
 
@@ -734,16 +749,15 @@ isLocalOnly = \case
 | =/home/user/configs/main.yaml=         | =/home/user/configs/=                    |
 | =./configs/app.yaml=                   | =./configs/=                             |
 | =config.yaml= (no directory)           | `` (empty -> current working directory)  |
-| =s3://bucket/file.yaml=                | =s3://bucket/=                           |
-| =s3://bucket/configs/app.yaml=         | =s3://bucket/configs/=                   |
-| =https://example.com/file.yaml=        | =https://example.com/=                   |
-| =https://example.com/configs/app.yaml= | =https://example.com/configs/=           |
+
+Remote documents have no base directory for relative imports: a bare relative import from them is rejected.
 
 *Edge Cases:*
 
 - A local template that imports a remote template: the remote import executes with the remote template's S3 or HTTPS URL as its base location. Any further imports from that remote document are subject to remote restrictions.
-- A remote template that imports another remote template in a different scheme (S3 importing HTTPS) is permitted, as both are remote-safe.
-- A remote template with a bare relative import like =database.yaml= (no =./= prefix) inherits the parent's remote base and resolves to the same S3 bucket prefix or HTTPS directory.
+- A remote template that imports another remote template over HTTPS is permitted; importing over =s3:= needs the requester chain to be trusted.
+- A remote template with a bare relative import like =database.yaml= (no =./= prefix) is rejected as a file import.
+- A local template imports =https://evil.example/u.yaml=, which imports =https://t.example.com/db.yaml= under a trusted prefix: =db.yaml= is untrusted (its requester is), so its =ssm:= import is refused.
 
 *Error Scenarios:*
 
@@ -751,6 +765,8 @@ isLocalOnly = \case
 - =file:./local.yaml= from HTTPS template: =Import type file is not allowed from remote templates=
 - =./local.yaml= from S3 template (implicit file): =Import type file is not allowed from remote templates=
 - =/absolute/path= from HTTPS template: =Import type file is not allowed from remote templates=
+- =ssm:/app/x= from an untrusted HTTPS template: =Import type ssm is not allowed from remote templates: <location> is not a trusted source (to allow it, pass --trust-import-source with a prefix of that location)=
+- An HTTP import from an untrusted template that resolves to =169.254.169.254=: =HTTP fetch error for <url>: refused: <url> resolves to 169.254.169.254:80: loopback, link-local and metadata addresses are not allowed ...=
 
 *Complexity Notes:* Medium. The security boundary is a single predicate composition; the challenge is that =parseTypePrefix= must correctly handle the edge case where =./=, =../=, and =/= prefixes classify bare paths as =file:= imports before the security check fires.
 
@@ -795,7 +811,7 @@ See "Circular Import Detection Algorithm" in the Import Dispatch Architecture se
 *Acceptance Criteria:*
 
 - Import location strings are checked for ={{= before invoking the import loader.
-- If ={{= is present, the location string is passed through the Handlebars interpolation engine with the current environment (all previously resolved =$defs= and =$imports=) as context.
+- If ={{= is present, the location string is passed through the Handlebars interpolation engine with the current document's environment (its own previously resolved =$defs= and =$imports=; never the importing document's) as context.
 - If ={{= is absent, the location is used verbatim (no interpolation overhead).
 - All standard Handlebars helpers are available during location interpolation (=defaultHelpers=).
 - Interpolation failure (undefined variable, syntax error) produces a =PeHandlebarsError= and halts preprocessing.

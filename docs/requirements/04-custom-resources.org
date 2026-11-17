@@ -28,7 +28,7 @@ Out of scope: the =$imports= resolution mechanism itself (covered in PRD-03), CF
 2. *Instance detection*: In the consumer's =Resources= section, entries whose =Type= matches an import key are routed to the expansion pipeline. All others pass through unchanged. Circular template expansion (a template referencing itself directly or indirectly) is detected via an =activeExpansions= set and rejected with: ="Circular template expansion detected: '<typeName>' is already being expanded"=.
 3. *Parameter extraction and merging*: =Properties= from the resource instance are extracted as the provided parameter map. Defaults from =ParamDef= fill in any missing keys via =mergeParams=.
 4. *Validation*: The merged parameter map is checked against all =ParamDef= constraints (type, AllowedValues, AllowedPattern, Schema) via =validateParams=. CFN intrinsic values (those containing =!Ref=, =!Sub=, etc.) are exempted from structural constraints because they cannot be evaluated at preprocessing time.
-5. *Template re-parse and expansion*: The template's raw body is re-parsed with the merged parameters as Handlebars bindings. The resolved value tree then has =Overrides= deep-merged in, references rewritten with the name prefix, and non-Resources sections promoted to the parent document via =extractGlobalSections=.
+5. *Template re-parse and expansion*: The template's raw body is re-parsed with the merged parameters as variable bindings (see "Variable Scope" below). The resolved value tree then has =Overrides= deep-merged in, references rewritten with the name prefix, and non-Resources sections promoted to the parent document via =extractGlobalSections=.
 
 *Pipeline type declarations* (pseudocode):
 
@@ -76,6 +76,9 @@ expandCustomResource
 --   9. resources  = map (prefixKey, rewriteRefs prefix globals) (extractResources withOvr)
 --  10. sections   = extractGlobalSections prefix globals withOvr
 #+end_example
+
+** Variable Scope
+A template body (resource-type use and =!$expand= alike) resolves with its merged parameters. A template loaded from a trusted document -- a local file, or a location under a =--trust-import-source= prefix reached only through trusted documents (=isTrustedRequester= on the template's =ImportBase=) -- also sees the importing template's variables, with parameters taking precedence (Rust parity). A template loaded from an untrusted remote location (S3, HTTP(S), =ssm:=, =ssm-path:=, =cfn:=) sees its parameters only (iidy-js behaviour; a divergence from Rust recorded in =DIVERGENCES.md=). The engine records the decision in =TemplateInfo.tiInheritsParentVars= when the template is imported; =templateVariables= in =Context.hs= applies it at both expansion sites.
 
 ** Key-Order Preservation
 All expansion operations preserve YAML key insertion order by using an ordered-map value type throughout. Reference rewriting, section promotion, deep merge, and extraction all operate on this ordered type rather than converting to an unordered map until JSON Schema validation requires it.
@@ -235,7 +238,7 @@ validateSchema schema value = case schema of
 *Edge Cases*:
 
 - A template with =$params: []= (empty sequence) is valid. It behaves as a macro with no parameters — its resources are expanded and renamed, but no parameter extraction or validation is performed.
-- A template may contain Handlebars expressions that reference param names. Expressions referencing names not present in =$params= resolve to empty string during template re-parse (standard Handlebars behavior). The preprocessing variable pre-check (ERR_2001) does not fire during custom resource template re-parse because the template body is re-parsed in a fresh context where the merged parameter map is the entire variable environment, bypassing the pre-check that applies to top-level document preprocessing.
+- A template may contain Handlebars expressions that reference param names. A reference to a name that is neither a parameter nor (for a local or trusted template) a variable of the importing template fails with a variable-not-found error naming it. An untrusted remote template cannot read the importing template's variables this way (see "Variable Scope").
 - A template may omit =Resources= entirely if it is used only for its =Parameters= or =Outputs= promotion behavior.
 
 *Error Scenarios*:
@@ -264,6 +267,7 @@ validateSchema schema value = case schema of
 - The expanded resources appear in the final CloudFormation template under their prefixed names.
 - The original resource entry (with the synthetic =Type=) is removed from the output; only the expanded resources remain.
 - Regular AWS resource types coexist in the same =Resources= section and pass through unchanged.
+- A local or trusted template's body sees the importing template's variables as well as its parameters; an untrusted remote template's body sees its parameters only (see "Variable Scope").
 - =NamePrefix= on the resource entry overrides the default prefix (which is the resource's logical name). Example: =NamePrefix: Custom= produces =CustomQueue= instead of =OrderEventsQueue=.
 
 *Logic Flow*:

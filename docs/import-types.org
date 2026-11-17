@@ -129,7 +129,7 @@ $imports:
   account_limits: s3://my-infra-bucket/accounts/prod/limits.json
 #+end_src
 
-*Notes:* AWS credentials must be available in the environment or via the configured profile. Templates loaded from S3 are considered remote and cannot use local import types.
+*Notes:* AWS credentials must be available in the environment or via the configured profile. =s3:= reads with the user's credentials, so only local templates and trusted sources (=--trust-import-source=) may use it, in both the =s3://= and the short =s3:bucket/key= forms. Templates loaded from S3 are considered remote and cannot use local import types.
 
 --------------
 
@@ -148,7 +148,7 @@ $imports:
   feature_flags: https://releases.example.com/flags/prod.json
 #+end_src
 
-*Notes:* Templates loaded from HTTP or HTTPS are considered remote and cannot use local import types. Relative imports within a remote template inherit the parent's base URL. See [[file:SECURITY.org]] for the full remote template security model.
+*Notes:* Templates loaded from HTTP or HTTPS are considered remote and cannot use local import types. A remote template must import with absolute locations: a bare relative path is a local file import and is rejected. An HTTP import requested by an untrusted template cannot reach loopback, link-local or instance-metadata addresses, including through redirects. =HTTP_PROXY= / =HTTPS_PROXY= are honoured. See [[file:SECURITY.org]] for the full remote template security model.
 
 --------------
 
@@ -201,7 +201,7 @@ $imports:
   full_stack: cfn:stack:networking-stack
 #+end_src
 
-*Notes:* The stack must exist in the current account and region. When looking up a specific field, it must be present in the stack, otherwise preprocessing fails.
+*Notes:* The stack must exist in the current account and region. When looking up a specific field, it must be present in the stack, otherwise preprocessing fails. =cfn:= reads with the user's credentials, so only local templates and trusted sources (=--trust-import-source=) may use it.
 
 --------------
 
@@ -221,7 +221,7 @@ $imports:
   rate_limits: ssm:/myapp/prod/rate-limits:yaml
 #+end_src
 
-*Notes:* The parameter must exist in the current account and region. Requires =ssm:GetParameter= permission and, for SecureString parameters, the relevant KMS decrypt permission.
+*Notes:* The parameter must exist in the current account and region. Requires =ssm:GetParameter= permission and, for SecureString parameters, the relevant KMS decrypt permission. Only local templates and trusted sources (=--trust-import-source=) may use =ssm:=.
 
 --------------
 
@@ -251,29 +251,35 @@ $imports:
   # each parameter value is parsed as JSON before being placed in the mapping
 #+end_src
 
-*Notes:* Requires =ssm:GetParametersByPath= permission on the path prefix. For KMS-encrypted parameters, the relevant decrypt permission is also required.
+*Notes:* Requires =ssm:GetParametersByPath= permission on the path prefix. For KMS-encrypted parameters, the relevant decrypt permission is also required. Only local templates and trusted sources (=--trust-import-source=) may use =ssm-path:=.
 
 --------------
 
 * Security Restrictions
-Local templates (loaded from the filesystem) can use any import type. Remote templates (loaded from S3, HTTP, or HTTPS) are restricted.
+Local templates (loaded from the filesystem or standard input) can use any import type. Remote templates (loaded from S3 or HTTP(S), or through =ssm:=, =ssm-path:= or =cfn:=) are restricted. A remote template is trusted only when its location is under a =--trust-import-source= prefix and every template that led to it is trusted.
 
-*Blocked in remote templates:*
+*Blocked in every remote template:*
 
-- =file:= -- local filesystem access
+- =file:= -- local filesystem access, including bare relative paths
 - =env:= -- environment variable access
 - =git:= -- local git repository access
 - =filehash:= / =filehash-base64:= -- local file hashing
 
-*Allowed in remote templates:*
+*Blocked in untrusted remote templates (allowed from trusted sources):*
 
-- =s3:=, =http:=, =https:= -- remote content
+- =s3:= (both forms) -- S3 objects, read with the user's credentials
 - =cfn:= -- CloudFormation outputs and exports
 - =ssm:=, =ssm-path:= -- Parameter Store
+
+*Allowed in every remote template:*
+
+- =http:=, =https:= -- remote content; from an untrusted template, loopback, link-local and instance-metadata addresses are refused, on every redirect too
 - =random:= -- random value generation
 
-Relative imports within a remote template resolve using the parent's scheme. A relative path =./sibling.yaml= inside an S3 template resolves to an S3 object in the same bucket prefix, not a local file. Explicit local path indicators (=./=, =../=, or an absolute path starting with =/=) are blocked when used from remote templates.
+Every imported document is resolved with only its own =$defs= and =$imports=; it cannot read the importing template's variables. Pass values to reusable documents as =$params= of a custom template.
 
-Additionally, the =--no-remote-imports= CLI flag blocks =http:=, =https:=, and =s3:= imports entirely (regardless of whether the importing template is local or remote). This is useful in air-gapped or egress-restricted environments. AWS API-based imports (=cfn:=, =ssm:=, =ssm-path:=) are NOT blocked by this flag — they are gated by AWS credentials and IAM policy instead.
+Explicit local path indicators (=./=, =../=, or an absolute path starting with =/=) and bare relative paths are blocked when used from remote templates: a remote template must import with absolute locations.
 
-For the full security model, see [[file:SECURITY.org]].
+Additionally, the =--no-remote-imports= CLI flag blocks =http:=, =https:=, and =s3:= imports entirely (regardless of whether the importing template is local or remote). This is useful in air-gapped or egress-restricted environments. AWS API-based imports (=cfn:=, =ssm:=, =ssm-path:=) are NOT blocked by this flag.
+
+For the full security model, including =--trust-import-source= and the remaining risks, see [[file:SECURITY.org]].

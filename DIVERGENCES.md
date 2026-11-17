@@ -156,6 +156,80 @@ import the parent's remote type (`mod.rs:263-281`, test
 file import and rejects it from an untrusted parent. This difference predates
 C14 and is unchanged by it.
 
+## AWS-Backed Imports Refused From Untrusted Documents
+
+**Cause**: Intentional security fix (card C15).
+
+A document whose requester chain is not trusted (any document from the
+root template to it is remote and not under a `--trust-import-source`
+prefix) cannot import `s3:` (both forms), `ssm:`, `ssm-path:` or `cfn:`. The
+error names the import type and the untrusted location and suggests
+`--trust-import-source`. The check runs before any AWS environment is used,
+so a refused import makes no AWS call. Rust and iidy-js let a remote
+template read these with the user's credentials, which together with an
+attacker-built import URL let it send secrets to a server it controls (the
+C4 review's finding). There is no same-bucket exception for `s3:`.
+
+## HTTP Imports From Untrusted Documents: Address Filter
+
+**Cause**: Intentional security fix (card C15).
+
+An HTTP import requested by an untrusted document cannot reach IPv4
+`127.0.0.0/8`, `0.0.0.0/8` or `169.254.0.0/16`, IPv6 `::`, `::1`, `fe80::/10`
+or `fd00:ec2::/32`, or the IPv4-mapped, IPv4-compatible and NAT64
+(`64:ff9b::/96`) forms of the blocked IPv4 ranges. The host name is resolved
+locally and checked on the first request and on every redirect hop; plain
+HTTP connects to the checked address. A trusted document's request to a URL
+under a trusted prefix may only be redirected to trusted locations. Rust and
+iidy-js fetch any address.
+
+Known gaps:
+
+- HTTPS: the TLS library does its own lookup after the check, leaving a
+  DNS-rebinding window, limited by certificate validation for the requested
+  host name.
+- With `HTTP_PROXY` / `HTTPS_PROXY` set, the target is resolved and checked
+  locally before the request goes to the proxy, but the proxy may resolve it
+  differently, and the proxy's own address is not filtered. Behind a proxy
+  on a network without external DNS, these imports fail with "cannot
+  resolve".
+- Private address ranges, 6to4 (`2002::/16`), Teredo (`2001::/32`), local-use
+  NAT64 (`64:ff9b:1::/48`) and IPv4-translated (`::ffff:0:0/96`) addresses are
+  not filtered.
+- Requests from local or trusted documents are not filtered, redirects
+  included.
+
+HTTP imports no longer use a SOCKS proxy given in `http_proxy` /
+`https_proxy` (the HTTP manager is built from `tlsManagerSettings`, which
+honours HTTP proxies only). Rust's `reqwest` is built without its `socks`
+feature, so this matches Rust; earlier iidy-hs versions accepted SOCKS
+there.
+
+## Custom Templates From Untrusted Locations: Parameters Only
+
+**Cause**: Intentional security fix (card C15); follows iidy-js.
+
+A custom resource template loaded from an untrusted location expands with
+its parameters only, for resource-type use and for `!$expand`. Rust gives
+every custom template the importing template's variables; iidy-hs keeps
+that for local templates and templates under a trusted prefix reached
+through trusted documents, and follows iidy-js (which isolates non-local
+templates) for the rest.
+
+## `--trust-import-source`
+
+**Cause**: iidy-hs addition (card C15); neither Rust nor iidy-js has it.
+
+`--trust-import-source PREFIX` (global, repeatable) makes documents under a
+remote location prefix trusted like local files, when every document that
+led to them is trusted: they may use AWS-backed imports, their HTTP imports
+are not filtered, and as custom templates they see the importing template's
+variables. They never gain the local-only import types. Prefixes are
+validated at parse time (lower-case remote scheme, bucket or host without a
+default port, trailing `/`, no `.` or `..` segment) and match as literal,
+case-sensitive text prefixes. Trust comes from the command line only. `iidy
+demo` passes the flag on to the commands it runs.
+
 ## Terminal Width: COLUMNS Override
 
 **Cause**: Kept from the earlier Haskell implementation (card C9).

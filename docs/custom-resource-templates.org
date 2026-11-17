@@ -104,6 +104,9 @@ Resources:
       QueueLabel: OrderEvents
 #+end_src
 
+** Variables a template sees
+A template's body resolves with its parameters. A template loaded from a trusted location -- a local file, or a location under a =--trust-import-source= prefix reached only through trusted templates -- also sees the importing template's variables (its =$defs= and =$imports=), as in Rust iidy. A template loaded from any other remote location (S3, HTTP(S), =ssm:=, =ssm-path:=, =cfn:=) sees its parameters only, as in iidy-js, so a remote template cannot read the consumer's values unless they are passed as parameters. This applies both to resource-type use and to =!$expand=. See [[file:SECURITY.org][Security Model]].
+
 ** Name prefixing
 Each resource in the template gets the consumer's logical name prepended. =Queue= becomes =OrderEventsQueue=, =QueueDepthAlarm= becomes =OrderEventsQueueDepthAlarm=. Use =NamePrefix= on the consumer entry to override:
 
@@ -193,9 +196,9 @@ Templates are imported via =$imports=, which supports several import sources:
 
 - *Mono-repo*: Templates live alongside application code. Relative paths (=$imports: { Queue: ../../shared/monitored-queue.yaml }=) keep everything versioned together. Changes to templates are reviewed in the same PR as the consuming stacks.
 
-- *S3 bucket*: A shared bucket of blessed templates (=$imports: { Queue: s3://company-cfn-templates/monitored-queue/v2.yaml }=). Template authors publish versioned artifacts; consumers pin to a version. Updates are opt-in.
+- *S3 bucket*: A shared bucket of blessed templates (=$imports: { Queue: s3://company-cfn-templates/monitored-queue/v2.yaml }=). Template authors publish versioned artifacts; consumers pin to a version. Updates are opt-in. Templates from the bucket are remote: they see only their parameters and cannot use =s3:=, =ssm:=, =ssm-path:= or =cfn:= imports themselves. Pass =--trust-import-source s3://company-cfn-templates/= to trust them like local files (for example when a template imports sibling objects from the same bucket).
 
-- *HTTP/HTTPS*: Templates hosted on an internal service or CDN. Useful for organizations that already have an artifact registry.
+- *HTTP/HTTPS*: Templates hosted on an internal service or CDN. Useful for organizations that already have an artifact registry. The same remote rules apply; trust a host with =--trust-import-source https://templates.example.com/=.
 
 The choice depends on how tightly coupled template evolution should be to consumer deployments. Mono-repo gives atomic updates; S3/HTTP gives independent versioning.
 
