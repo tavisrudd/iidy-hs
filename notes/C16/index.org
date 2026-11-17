@@ -48,8 +48,9 @@ before any change. Starting points there: =src/cfn/approval/index.ts=,
 :END:
 
 Allowed paths: =src/Iidy/Cfn/= (including the new modules
-=src/Iidy/Cfn/S3Objects.hs= and =src/Iidy/Cfn/ApprovedTemplate.hs= planned
-below, and =Operations/=), =test/= (including =test/Test/MockAws.hs= and
+=src/Iidy/Cfn/S3Objects.hs=, =src/Iidy/Cfn/TemplateDiff.hs= and
+=src/Iidy/Cfn/ApprovedTemplate.hs= planned below, and =Operations/=),
+=test/= (including =test/Test/MockAws.hs= and
 new test modules), =test-fixtures/=, the =other-modules= lists in
 =iidy-hs.cabal= for added modules, =docs/command-reference.org=,
 =docs/requirements/10-template-approval.org=,
@@ -58,20 +59,21 @@ describes template approval, =DIVERGENCES.md=, =notes/C16/=.
 
 Out of scope: =app/Main.hs= and the CLI parser (no new flags; the review
 prompt seam goes in the library); the hash algorithm (stays SHA256); the
-51 KB inline limit in =TemplateLoader.hs= and the 1 MB S3 limit iidy-js uses
-for approval (see the open point under the decision); presigning
-user-supplied HTTPS S3 =Template= URLs (iidy-js =maybeSignS3HttpUrl=);
-=UsePreviousTemplate= (iidy-hs ignores it everywhere today); deploy-time
-=--lint-template= on create and update (parsed, never used, in both ports;
-see the open point); the =--diff= preview of update-stack (compares the
-local template, as iidy-js does); the review command's region and its
-decline exit code; =lint-template= itself beyond extracting its validation
-call.
+51 KB inline limit for templates sent as a body (unchanged; only the
+approval path moves to 1 MB); presigning user-supplied HTTPS S3 =Template=
+URLs (iidy-js =maybeSignS3HttpUrl=); =UsePreviousTemplate= (iidy-hs ignores
+it everywhere today); deploy-time =--lint-template= on create and update
+(parsed, never used, in both ports; see the open point); the =--diff=
+preview of update-stack (compares the local template, as iidy-js does); the
+review command's decline exit code; =lint-template= itself beyond
+extracting its validation call and measuring its size limit in bytes.
 
 Done when:
-- [ ] One function owns "the approved location for this template" and every
-  command (request, create-stack, update-stack, create-changeset,
-  estimate-cost) calls it; no other code computes the approved key.
+- [ ] One module, =src/Iidy/Cfn/ApprovedTemplate.hs=, owns the approved key,
+  the pending key, the approved key derived from a pending key, and the
+  approval bucket's region; request, review, create-stack, update-stack,
+  create-changeset and estimate-cost all call it, and no other code builds
+  or strips these keys or picks that region.
 - [ ] Mock-AWS tests (=test/Test/MockAws.hs=, no real AWS) show, for each
   of =buildCreateStackRequest=, =buildUpdateStackRequest=,
   =buildCreateChangeSetRequest= and the estimate-cost request: with the
@@ -79,33 +81,59 @@ Done when:
   =bucket/key= (=X-Amz-Signature= present) and =templateBody= is
   =Nothing=; with no =ApprovedTemplateLocation=, the request is unchanged
   and no S3 call is made.
+- [ ] Presign tests with a fixed signing time assert =X-Amz-Date=,
+  =X-Amz-Expires=900=, the credential scope region, and with session keys
+  =X-Amz-Security-Token=.
+- [ ] A test with the stack in one region and the approval bucket in
+  another (mock region =eu-west-1=, bucket location set by the mock) shows
+  =HeadObject= and the presigned host and scope use the bucket's region,
+  for a deploy builder and for the request.
 - [ ] Mock-AWS tests show the missing-approval refusal (HeadObject 404: the
-  error names =template-approval request= and the argsfile, and no
-  CloudFormation call is made) and a distinct access-denied message
-  (HeadObject 403).
-- [ ] A mock-AWS test shows a =Template= that is an =s3://= or =https://=
-  URL is refused, with approval on, by both the request command and a
-  deploy builder, before any S3 call.
+  error text, including the suggested =template-approval request= command
+  with =--region= and =--environment=, is asserted, and no mutating
+  CloudFormation call is made; =DescribeStacks= before the builder, as in
+  iidy-js, is allowed), a distinct access-denied message (HeadObject 403),
+  and for other HEAD failures a message naming the region used.
+- [ ] Mock-AWS tests show refusals, with approval on, by both the request
+  command and a deploy builder, before any S3 call: a =Template= that is an
+  =s3://= or =https://= URL, and no =Template= at all. Each test asserts
+  the new message text and fails on the old code.
+- [ ] Approval-path size tests: a rendered template of 999999 bytes is
+  accepted and one of 1000000 bytes refused, by the request and by one
+  deploy builder, and that refusal does not suggest uploading to S3.
+- [ ] A request test written first and failing on the old code: HeadObject
+  403 on the approved key fails the request with no =PutObject=.
 - [ ] Mock-AWS tests for =template-approval review= with an empty diff: the
   prompt is asked; on yes the approved and =latest= objects are written and
   the pending object is deleted; on no nothing is written.
 - [ ] Mock-AWS tests for =template-approval request=: the pending
   =PutObject= carries =x-amz-acl: bucket-owner-full-control=; with lint on,
   =ValidateTemplate= runs on the local body and a validation failure exits
-  1 without uploading; with =--no-lint-template= no =ValidateTemplate= call
-  is made.
+  1 without uploading; a body over the inline validation limit (measured in
+  bytes) is skipped with the existing warning; with =--no-lint-template= no
+  =ValidateTemplate= call is made.
 - [ ] Docs describe the new behaviour (list under the decision); the false
   "step 5" and the "known gap" notes are gone; =DIVERGENCES.md= has entries
   for the deploy-time enforcement and empty-diff prompt (both differ from
-  Rust) and for SHA256 versus the iidy-js MD5 keys.
+  Rust), for SHA256 versus the iidy-js MD5 keys, for the request lint using
+  =ValidateTemplate= rather than iidy-js's local laundry-cfn lint, and for
+  the approval bucket region rule.
+- [ ] =TemplateApproval.hs= stays under 500 lines (S3 helpers and the diff
+  moved out).
 - [ ] Each task is its own commit naming C16; build warning-free; full suite
   green on every commit.
 
 Stop and record if: presigning needs a dependency not already in
 =iidy-hs.cabal= (=Amazonka.Presign.presignURL= ships in the =amazonka=
-package already listed, so none is expected); =presignURL= cannot sign
-with the mock env or produces a URL CloudFormation would not accept (for
-example path-style on a dotted bucket name); the mock cannot serve S3 REST
+package already listed, so none is expected); =Amazonka.presignURL= cannot
+sign with the mock or session keys or produces a URL CloudFormation would
+not accept (for example path-style on a dotted bucket name); Tavis has not
+answered the region question under "Open points for Tavis" when the region
+task is reached, or answers with an option other than the recommended one
+(record it; the region task and its tests change); =GetBucketLocation=
+cannot be served by the mock or its legacy values (empty for us-east-1,
+=EU=) are not mapped by amazonka's =LocationConstraint=; the mock cannot
+serve S3 REST
 operations without a change to how existing fixtures are named; a
 =CfnContext= cannot be built in tests without touching =app/=; an existing
 test's expected value must change for a reason other than the no-diff
@@ -193,6 +221,40 @@ iidy-js here; add it as a task before the docs task, with a test at the
 boundary. Deploy-time lint stays out of C16 and goes to Tavis as a
 separate question (iidy-js lints at deploy; Rust and iidy-hs do not).
 
+- Region of the approval bucket (question for Tavis, 2026-11-16). What
+  each tool uses today:
+  - iidy-js: the request runs in the stack's region (=loadStackArgs.ts=
+    112-133 configures AWS from the stack args, =configureAWS.ts:89-94=);
+    the review forces us-east-1 (=approval/index.ts:78=); deploy signs a
+    URL on =s3.amazonaws.com= for us-east-1 (=stackArgsToX.ts:35=,
+    =maybeSignS3HttpUrl.ts:24-25=). The working iidy-js setup is one
+    us-east-1 bucket serving stacks in every region (aws-sdk v2 follows S3
+    region redirects for the request; not verified here, no
+    =node_modules=).
+  - Rust: the request uses the stack's region (=context.create_s3_client=,
+    =src/cfn/mod.rs:398-405=, used at =template_approval_request.rs:63=);
+    the review uses =--region= or else us-east-1
+    (=template_approval_review.rs:248-254=).
+  - iidy-hs: the request uses the stack's region (=app/Main.hs:245-247=,
+    =runCfnWithArgs=); the review uses =--region= or the default chain's
+    region, with no us-east-1 default (=app/Main.hs:253=,
+    =src/Iidy/Cfn/Runner.hs:107-111=).
+  amazonka does not follow S3 region redirects, so a request in the ports
+  only works when the bucket is in the stack's region. Forcing us-east-1 as
+  iidy-js would break port users whose bucket sits in a stack region other
+  than us-east-1, so it is not taken without Tavis. Options:
+  1. us-east-1 always, as iidy-js (breaks those port users; their objects
+     stay where they are but iidy-hs stops finding them).
+  2. The stack's region, as the ports' request (breaks the iidy-js layout
+     for stacks outside us-east-1; review needs =--region=).
+  3. The bucket's own region from =GetBucketLocation= (sent to us-east-1,
+     which answers for any bucket; empty means us-east-1, =EU= means
+     eu-west-1), falling back to the stack's region if the call is denied.
+  Recommendation: option 3. It serves both existing layouts without moving
+  any object, makes the review independent of =--region=, and costs one
+  extra call plus =s3:GetBucketLocation= (optional because of the
+  fallback). The task list below follows option 3.
+
 ** User-visible changes (for the docs task)
 :PROPERTIES:
 :ID: org:01a1e6fd-8bb4-76f0-af12-17f2a48b31c1
@@ -221,6 +283,17 @@ separate question (iidy-js lints at deploy; Rust and iidy-hs do not).
   and exits 1 without uploading on errors; the pending object is uploaded
   with =bucket-owner-full-control=; a =HeadObject= error other than "not
   found" now fails the command instead of being read as "not approved".
+  A =ValidateTemplate= access or network error also fails the request.
+- The refusal suggests =iidy-hs template-approval request <argsfile>= with
+  =--region= and =--environment= (and =--profile= when known), and ends
+  "to begin the approval process.", as iidy-js.
+- Approval on with no =Template= is refused with a clear message.
+- Templates on the approval path (request and deploy) may be up to 1 MB
+  rendered, as iidy-js; templates sent as a body keep the 51 KB limit.
+- The approval bucket's region is looked up with =GetBucketLocation= (if
+  Tavis takes the recommended option) for request, review, the existence
+  check and the presigned URL, so a us-east-1 bucket serves stacks in any
+  region and =review= no longer needs =--region=.
 
 * TODO Mock S3 REST operations and a test CfnContext
 :PROPERTIES:
@@ -236,12 +309,17 @@ a 400; =httpResponse= (124-134) labels every non-200 "Bad Request"; the log
 fixture names and the existing GetImport tests unchanged:
 - recognise S3 hosts (=<bucket>.s3[.<region>].amazonaws.com= and path
   style) and map the method to =HeadObject=, =GetObject=, =PutObject=,
-  =DeleteObject=, recording bucket and key;
-- per-mock overrides for status and body (404, 403, error XML for
-  =ValidateTemplate=), set when the mock is created; HEAD replies with no
-  body;
-- a raw request log (method, path, headers, body) so tests can assert the
-  =x-amz-acl= header and which objects were written.
+  =DeleteObject=, and =GET /?location= to =GetBucketLocation=, recording
+  bucket and key;
+- overrides for status and body keyed by operation plus bucket and key,
+  with a default per operation (one review run HEADs pending 200 and
+  approved 404 and GETs pending and =latest= with different bodies), and
+  query-protocol overrides (error XML for =ValidateTemplate=); HEAD replies
+  with no body; status lines match the code (404 Not Found, 403 Forbidden);
+- =newMockAws= takes the env region (keep a us-east-1 default for existing
+  callers), so a test can run with =eu-west-1=;
+- a raw request log (method, host, path, headers, body) so tests can assert
+  the =x-amz-acl= header, the host region and which objects were written.
 Add a helper that builds a =CfnContext= over a mock env with
 =createContextFromEnv= (=src/Iidy/Cfn/Context.hs:81-106=) and collects
 emitted =OutputData= in an =IORef=; =test/Test/Phase14FixTest.hs:126= and
@@ -249,47 +327,253 @@ emitted =OutputData= in an =IORef=; =test/Test/Phase14FixTest.hs:126= and
 =TimeProvider=. Commit with a small self-test (HeadObject 200 and 404
 served as configured).
 
-* TODO Move the S3 helpers out and classify HeadObject results
+** Plan review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e705-50d0-7367-a65a-88f38182ce13
+:ADDED: [2026-11-16 Mon 18:00]
+:END:
+Reviewer: review worker (Claude Opus 5.5). Plan checked against
+=~/src/iidy-js= and iidy-hs =main= at =7474031=.
+
+Verdict: revise first. The plan follows iidy-js on the command set, the
+existence check, the empty-diff prompt and URL-template refusal, and uses one
+function for the hash on request and deploy (the request uploads
+=encodeUtf8 body= and =calculateTemplateHash= hashes the same bytes,
+=TemplateHash.hs:23-25=; the review re-uploads the pending object's bytes, so
+the approved object is byte-identical). No command is missed: iidy-js has no
+=--approve= flags, exec-changeset and delete touch no template, and
+=update-stack --changeset= and create-or-update reach the three builders. Two
+gaps need plan changes before work starts (findings 1 and 2).
+
+1. Task: new, after "One owner for the approved location". The 1 MB limit
+   the supervisor put in scope has no task, and "Out of scope" still lists it.
+   Change: drop it from Out of scope; add a task "Approval path uses the 1 MB
+   limit": give =loadCfnTemplate= a limit-taking variant (keep the current
+   name at =templateMaxBytes= so =test/Test/TemplateLoaderTest.hs= is
+   unchanged) and have =approvedTemplateFor= use =s3TemplateMaxBytes=
+   (=TemplateLoader.hs:42=, as iidy-js =approval/index.ts:41= and
+   =approvedTemplateVersionLocation.ts:12=). On this path the size error
+   must not say "Upload to S3 and use the S3 URL instead"
+   (=TemplateLoader.hs:212=), since URL templates are refused there. Tests at
+   999999 and 1000000 bytes, for request and one deploy builder.
+2. Tasks: "Move the S3 helpers out" and "Deploy builders". Region. The plan
+   HEADs and presigns with =cfnEnv ctx=, the stack's region. iidy-js always
+   signs for us-east-1 on =s3.amazonaws.com= whatever the stack region
+   (=stackArgsToX.ts:35=, =maybeSignS3HttpUrl.ts:24-25=) and its review
+   forces us-east-1 (=approval/index.ts:78=), so the working iidy-js setup is
+   one us-east-1 bucket serving stacks in every region. Under the plan a
+   stack in eu-west-1 HEADs =<bucket>.s3.eu-west-1.amazonaws.com=, gets a
+   301 or 400, and is refused. Change: make the approval bucket's region the
+   one owner's decision in =ApprovedTemplate.hs= (for parity, an env with
+   =Amazonka.region= set to us-east-1 for HEAD and presign; or the bucket's
+   region from =GetBucketLocation=), apply it to the request's S3 calls too,
+   and give a non-404/403 HEAD failure a message that names the region used.
+   Let =newMockAws= take a region so a test can run the builder with
+   eu-west-1 and assert the presigned host and credential scope. If the
+   choice is not clear from iidy-js, add it to "Stop and record if" and ask
+   Tavis.
+3. Task: "Move the S3 helpers out". =Amazonka.Presign.presignURL= takes an
+   =AuthEnv= and a =Region= and is pure; the =Env= form is
+   =Amazonka.presignURL :: Env -> UTCTime -> Seconds -> a -> m ByteString=
+   (module =Amazonka=), which reads the env's current credentials. Change:
+   name that function, take the signing time as an argument (caller passes
+   =getCurrentTime=) so the test can assert =X-Amz-Date=,
+   =X-Amz-Expires=900= and the scope region exactly, and add a test with
+   session keys (=Amazonka.Auth.Keys.fromSession=) asserting
+   =X-Amz-Security-Token= is in the URL, since deploys mostly run under
+   assumed roles and the mock uses static keys only. Presigning makes no
+   HTTP call, so it needs no mock. 900 seconds matches the aws-sdk v2
+   =getSignedUrl= default iidy-js relied on.
+4. Task: "Move the S3 helpers out". It bundles a pure move with a behaviour
+   change (non-404 HEAD now fails the request). Change: commit the move
+   alone, then the classification with a request-level test written first
+   and failing on the old code: HeadObject 403 on the approved key, expect
+   failure and no =PutObject= (today it uploads the pending object).
+5. Task: "One owner for the approved location". The "URL template refused
+   before any S3 call" test passes on current code, which already stops at
+   "Failed to load template body" (=TemplateApproval.hs:82=) before S3.
+   Change: assert the new refusal text so the test fails first. Also define
+   the case iidy-js throws on (=approvedTemplateVersionLocation.ts:25=):
+   approval on and no =Template= (update-stack without one) must refuse with
+   a clear message, with a test; the plan leaves it undefined.
+6. Task: "One owner for the approved location". The request appends
+   =.pending= (=TemplateApproval.hs:108=) and the review strips it (148);
+   the review's strip is a second derivation of the approved key, which the
+   first "Done when" item forbids. Change: put the pending-key and
+   approved-key-from-pending functions in =ApprovedTemplate.hs= and use them
+   in both.
+7. Task: "Deploy builders". The refusal text drops what iidy-js adds:
+   =normalizeIidyCLICommand= puts =--region= and =--profile= in the
+   suggested command and the message ends "to begin the approval process."
+   (=AbstractCloudFormationStackCommand.ts:218-230=). The key depends on the
+   render, so a request run without the deploy's region or environment can
+   upload a different hash. Change: build the suggested command with
+   =--region= (from the env) and =--environment= (=cfnEnvironment ctx=),
+   plus =--profile= where the context records it, and test the text.
+8. Task: "Request: honour the lint flag". iidy-js lints the request locally
+   with laundry-cfn (=lint.ts:11-16=, with =Parameters= under
+   =--lint-using-parameters=), not CloudFormation =ValidateTemplate=; the plan
+   follows Rust. Change: add this to the =DIVERGENCES.md= list in the docs
+   task, and say in the docs that a =ValidateTemplate= access or network error
+   also fails the request. Keep the over-size skip branch in the extracted
+   function (the request can now carry up to 1 MB, finding 1), and measure
+   bytes there, not =T.length= (=LintTemplate.hs:51= compares characters
+   with a byte limit; pre-existing).
+9. Task: "Move the S3 helpers out". Module size: moving the S3 helpers
+   (329-369) leaves =TemplateApproval.hs= near 460 lines before the lint
+   call and the confirm seam are added. Change: also move =generateDiff= and
+   its LCS helpers (371-503) to their own module under =src/Iidy/Cfn/=
+   (update the import at =test/Test/TemplateDiffTest.hs:9=), leaving about
+   330 lines.
+10. Task: "Mock S3 REST operations". Overrides "per mock" are too coarse: one
+    review run HEADs the pending key (200) and the approved key (404) and
+    GETs pending and =latest= with different bodies. Change: key overrides by
+    operation plus bucket and key, with a default per operation.
+11. Task: "Review prompts on an empty diff". The seam is acceptable: no
+    command has one today (=Params/Review.hs:69=, =DeleteStack.hs:96=,
+    =Changeset.hs:542= call =requestConfirmation= directly, behind a skip
+    flag), and a =CfnContext= field would reach =app/=. Change: give the
+    argument the type of =requestConfirmation= (=Text -> IO ConfirmResult=)
+    so =templateApprovalReview= is that function partially applied. Also
+    word the refusal gate as "no mutating CloudFormation call":
+    =update-stack --changeset= and create-or-update call =DescribeStacks=
+    before the builder (=UpdateStack.hs:156=, =CreateOrUpdate.hs:65=, =136=),
+    as iidy-js does.
+
+** Plan revision 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e708-49cb-7228-b2c7-c99b191578b7
+:ADDED: [2026-11-16 Mon 18:04]
+:END:
+
+Worker =claude-C16=. Each finding and the change made:
+
+1. The 1 MB limit left "Out of scope"; new task "Approval path uses the 1
+   MB limit" after the approved-location task; boundary tests added to
+   "Done when".
+2. Region: new task "Approval bucket region has one owner"; a cross-region
+   item in "Done when"; =newMockAws= takes a region (mock task). The
+   current region use of iidy-js, Rust and iidy-hs is under "Open points
+   for Tavis" with three options; the tasks follow the recommended option
+   (=GetBucketLocation= with fallback to the stack's region), and "Stop and
+   record if" covers another answer.
+3. Presign is now its own task naming =Amazonka.presignURL= (module
+   =Amazonka=), with the signing time as an argument, exact
+   =X-Amz-Date=, =X-Amz-Expires=900= and scope assertions, and a
+   session-key test for =X-Amz-Security-Token=.
+4. Split: "Move the S3 helpers and the diff out" is a pure move; "Classify
+   HeadObject results" follows with the 403 request test written first.
+5. The approved-location task now asserts the new refusal text (fails on
+   the old "Failed to load template body") and adds the no-=Template=
+   refusal with a test.
+6. =ApprovedTemplate.hs= owns the pending key and the approved key derived
+   from a pending key; request (=TemplateApproval.hs:108=) and review (148)
+   use them.
+7. The deploy refusal builds the suggested command with =--region=,
+   =--environment= and =--profile= when known, ends "to begin the approval
+   process.", and is tested by text.
+8. Lint task keeps the over-size skip, measures bytes; docs task adds the
+   =ValidateTemplate= versus laundry-cfn divergence and the "access or
+   network error fails the request" note.
+9. =generateDiff= and its helpers move to =src/Iidy/Cfn/TemplateDiff.hs= in
+   the move task; =test/Test/TemplateDiffTest.hs:9= import updated.
+10. Mock overrides keyed by operation, bucket and key with a per-operation
+    default.
+11. Review seam takes =Text -> IO ConfirmResult=; the refusal gate reads
+    "no mutating CloudFormation call" in "Done when" and the deploy task.
+
+* TODO Move the S3 helpers and the diff out of TemplateApproval.hs
 :PROPERTIES:
 :ID: org:01a1e6fd-8bb4-76f0-af12-17f07ad58c4f
 :ADDED: [2026-11-16 Mon 17:52]
 :END:
 
-=src/Iidy/Cfn/Operations/TemplateApproval.hs= is 503 lines; its S3 helpers
-(=s3ObjectExists=, =uploadToS3=, =downloadFromS3=, =deleteFromS3=, lines
-329-369) move to a new =src/Iidy/Cfn/S3Objects.hs=. Changes there:
-- replace =s3ObjectExists=, which reads every error as "absent" (line
-  336), with a =headObject= returning present, missing (404), access
-  denied (403) or failed with the error text;
-- =uploadToS3= takes an optional canned ACL;
-- add =presignGetObject :: Amazonka.Env -> Text -> Text -> IO Text= using
-  =Amazonka.Presign.presignURL= (=amazonka= package, already a dependency;
-  nothing in =src/= presigns today) with the current time and a 900 second
-  expiry.
-The request and review keep their behaviour except that a non-404
-=HeadObject= failure now fails the command (iidy-js
-=approval/index.ts:38-63= rethrows). Tests: the three classifications
-through the mock, and the presigned URL's host, path and signature query
-keys.
+Pure move, no behaviour change. =src/Iidy/Cfn/Operations/TemplateApproval.hs=
+is 503 lines. Move its S3 helpers (=s3ObjectExists=, =uploadToS3=,
+=downloadFromS3=, =deleteFromS3=, lines 329-369) to a new
+=src/Iidy/Cfn/S3Objects.hs=, and =generateDiff= with its LCS and hunk
+helpers (lines 371-503) to a new =src/Iidy/Cfn/TemplateDiff.hs=; update the
+import at =test/Test/TemplateDiffTest.hs:9= and the =other-modules= lists.
+=TemplateApproval.hs= ends near 330 lines. Existing tests pass unedited
+apart from that import.
 
-* TODO One owner for the approved location; request uses it
+* TODO One owner for the approved location; request and review use it
 :PROPERTIES:
 :ID: org:01a1e6fd-8bb4-76f0-af12-17ef9e861ac1
 :ADDED: [2026-11-16 Mon 17:52]
 :END:
 
-New =src/Iidy/Cfn/ApprovedTemplate.hs= with one function, for example
-=approvedTemplateFor :: CfnContext -> StackArgs -> Maybe FilePath -> IO
-(Either Text (Maybe ApprovedTemplate))=, returning =Nothing= when
-=saApprovedTemplateLocation= is unset and otherwise the bucket, key and
-rendered local body. It refuses a =Template= that is a URL before any
-load (export the URL predicate from =TemplateLoader.hs=, whose =isS3Url=
-and =isHttpUrl= at lines 171-175 are private, rather than copying it),
-loads with =loadCfnTemplate=, and builds the key with
-=generateVersionedLocation= (=src/Iidy/Cfn/TemplateHash.hs:56-74=).
+New =src/Iidy/Cfn/ApprovedTemplate.hs= with:
+- =approvedTemplateFor :: CfnContext -> StackArgs -> Maybe FilePath -> IO
+  (Either Text (Maybe ApprovedTemplate))=, returning =Nothing= when
+  =saApprovedTemplateLocation= is unset and otherwise the bucket, key and
+  rendered local body. With approval on it refuses, before any load or S3
+  call, a =Template= that is a URL (export the URL predicate from
+  =TemplateLoader.hs=, whose =isS3Url= and =isHttpUrl= at lines 171-175 are
+  private, rather than copying it) and a missing =Template= (iidy-js
+  throws here, =approvedTemplateVersionLocation.ts:25=). It loads with
+  =loadCfnTemplate= and builds the key with =generateVersionedLocation=
+  (=src/Iidy/Cfn/TemplateHash.hs:56-74=);
+- =pendingKeyFor= (append =.pending=) and =approvedKeyFromPending= (strip it,
+  rejecting keys without the suffix).
 Replace the inline steps in =templateApprovalRequest= (=TemplateApproval.hs=
-65-88) with it. Tests: request with a URL template refused before any S3
-call; request key unchanged for an existing fixture template.
+65-88 and the pending key at 108) and the review's suffix check and strip
+(145-148) with these. Tests, each written to fail on the old code by
+asserting the new message text: request with an =s3://= and with an
+=https://= template refused before any S3 call; request with no =Template=
+refused. Also: request key unchanged for an existing fixture template;
+round trip of the two key functions.
+
+* TODO Approval bucket region has one owner
+:PROPERTIES:
+:ID: org:01a1e708-49cb-7228-b2c7-c99a3c50b801
+:ADDED: [2026-11-16 Mon 18:04]
+:END:
+
+Follows the recommended option under "Open points for Tavis" (stop if Tavis
+has chosen another). Add to =ApprovedTemplate.hs= one function, for example
+=approvalS3Env :: Amazonka.Env -> Text -> IO Amazonka.Env=, that sends
+=GetBucketLocation= for the bucket through an env with region us-east-1,
+maps the answer (empty to us-east-1, =EU= to eu-west-1, as amazonka's
+=LocationConstraint= allows), falls back to the given env's region when
+the call fails, and returns the env with =Amazonka.region= set. Use it for
+every S3 call of the request (=HeadObject=, =PutObject=) and the review
+(=HeadObject=, =GetObject=, =PutObject=, =DeleteObject=); the deploy and
+presign tasks use it too. Tests with the mock in =eu-west-1= and the bucket
+location answered as us-east-1, as eu-west-1, as empty, and denied
+(fallback): the logged S3 host region matches.
+
+* TODO Classify HeadObject results; request fails on errors other than 404
+:PROPERTIES:
+:ID: org:01a1e708-49cb-7228-b2c7-c99917e3d9e3
+:ADDED: [2026-11-16 Mon 18:04]
+:END:
+
+First add a request test that fails on the old code: =HeadObject= 403 on
+the approved key; expect the request to fail with no =PutObject= (today
+=s3ObjectExists=, now in =S3Objects.hs=, reads every error as absent and
+the pending object is uploaded). Then replace =s3ObjectExists= with
+=headObject= returning present, missing (404), access denied (403) or
+failed with the error text, and use it in request and review: missing
+proceeds as today, anything else fails the command (iidy-js
+=approval/index.ts:38-63= rethrows). A failure that is neither 404 nor 403
+names the bucket region used. Tests for the four outcomes through the mock.
+
+* TODO Approval path uses the 1 MB limit
+:PROPERTIES:
+:ID: org:01a1e708-49cb-7228-b2c7-c99860777adb
+:ADDED: [2026-11-16 Mon 18:04]
+:END:
+
+Give =loadCfnTemplate= a variant taking the size limit, keeping the current
+name and behaviour at =templateMaxBytes= so
+=test/Test/TemplateLoaderTest.hs= is unchanged, and have
+=approvedTemplateFor= use =s3TemplateMaxBytes= (=TemplateLoader.hs:42=), as
+iidy-js (=approval/index.ts:41=, =approvedTemplateVersionLocation.ts:12=).
+On this path the size error must not say "Upload to S3 and use the S3 URL
+instead" (=TemplateLoader.hs:212=), since URL templates are refused there.
+Tests at 999999 and 1000000 rendered bytes for the request now, and for
+one deploy builder in the deploy task.
 
 * TODO Request: bucket-owner-full-control ACL on the pending upload
 :PROPERTIES:
@@ -314,9 +598,31 @@ from =lintTemplate= (=src/Iidy/Cfn/Operations/LintTemplate.hs:48-78=) into
 a function taking the body, use it in =lintTemplate= unchanged, and call it
 in the request on the rendered local body before the upload, as Rust
 (=template_approval_request.rs:79-89=): emit the validation, exit 1 without
-uploading on errors. Tests: lint on and valid uploads; lint on and invalid
-emits errors and makes no =PutObject=; lint off makes no
-=ValidateTemplate= call.
+uploading on errors. Keep the over-size skip branch in the extracted
+function (the request can now carry up to 1 MB) and measure the body in
+UTF-8 bytes, not =T.length= (=LintTemplate.hs:51= compares characters with
+a byte limit). iidy-js lints locally with laundry-cfn (=lint.ts:11-16=);
+this follows Rust and goes in =DIVERGENCES.md= (docs task). Tests: lint on
+and valid uploads; lint on and invalid emits errors and makes no
+=PutObject=; a body over the inline limit skips validation with the
+warning and uploads; lint off makes no =ValidateTemplate= call.
+
+* TODO Presign the approved object's URL
+:PROPERTIES:
+:ID: org:01a1e708-49ca-7608-afcb-583519b93397
+:ADDED: [2026-11-16 Mon 18:04]
+:END:
+
+Add =presignGetObject= to =S3Objects.hs= over =Amazonka.presignURL :: Env ->
+UTCTime -> Seconds -> a -> m ByteString= (module =Amazonka=, in the
+=amazonka= package already listed; nothing in =src/= presigns today),
+which reads the env's current credentials. It takes the signing time as an
+argument (callers pass =getCurrentTime=) and a 900 second expiry, the
+aws-sdk v2 =getSignedUrl= default iidy-js relied on. Presigning makes no
+HTTP call, so the tests need no mock responses: with a fixed time and
+static keys assert host, path, =X-Amz-Date=, =X-Amz-Expires=900= and the
+credential scope region; with session keys
+(=Amazonka.Auth.Keys.fromSession=) assert =X-Amz-Security-Token=.
 
 * TODO Deploy builders send the presigned approved URL
 :PROPERTIES:
@@ -327,19 +633,33 @@ emits errors and makes no =PutObject=; lint off makes no
 Add =resolveDeployTemplate :: CfnContext -> StackArgs -> Maybe FilePath ->
 IO (Either Text TemplateResult)= to =ApprovedTemplate.hs=: with no
 location it is =loadCfnTemplate= as today; otherwise =approvedTemplateFor=,
-=headObject=, then a =TemplateResult= with no body and the presigned URL,
-or a refusal (missing: "Template version has not been approved ... Run:
-iidy-hs template-approval request <argsfile>", after iidy-js
-=AbstractCloudFormationStackCommand.ts:214-223=; access denied: its own
-message). Use it in =buildCreateStackRequest=, =buildUpdateStackRequest=
+=approvalS3Env=, =headObject=, then a =TemplateResult= with no body and the
+URL from =presignGetObject= (signed for the bucket's region), or a refusal
+before any mutating CloudFormation call. Missing: "Template version has
+not been approved or the current IAM principal does not have permission to
+access it. Run: iidy-hs template-approval request <argsfile> --region R
+--environment E [--profile P] to begin the approval process.", after
+iidy-js (=AbstractCloudFormationStackCommand.ts:214-230=, whose
+=normalizeIidyCLICommand= adds region and profile); the region comes from
+the context's env, the environment from =cfnEnvironment ctx= (the key
+depends on the render, so a request without them can upload another hash),
+the profile from =cfnCredentialSources= when it records one. Access denied
+gets its own message; other failures name the region. Use it in
+=buildCreateStackRequest=, =buildUpdateStackRequest=
 and =buildCreateChangeSetRequest= (=src/Iidy/Cfn/RequestBuilder.hs:69=,
 =110=, =159=), and fold their three copies of the =ImportConfig= and load
 lines (64 and 69, 105 and 110, 157 and 159) into that one call. Their only
 callers are =CreateStack.hs:56=, =UpdateStack.hs:84= and
 =Changeset.hs:122=; create-or-update (=CreateOrUpdate.hs:65=, =69=, =136=,
 =167=) and =update-stack --changeset= (=UpdateStack.hs:164=) go through
-them. Tests per builder: approved (URL set, body =Nothing=), missing,
-access denied, URL template, approval off (body as before, no S3 call).
+them; =update-stack --changeset= and create-or-update call =DescribeStacks=
+first (=UpdateStack.hs:156=, =CreateOrUpdate.hs:65=, =136=), as iidy-js
+does, which is allowed. Tests per builder: approved (URL set, body
+=Nothing=), missing (full refusal text asserted), access denied, URL
+template, no =Template=, approval off (body as before, no S3 call). Also,
+for one builder: bucket in a region other than the stack's (presigned host
+and scope use the bucket's region), and the 999999 and 1000000 byte
+boundary from the 1 MB task.
 
 * TODO estimate-cost uses the approved URL
 :PROPERTIES:
@@ -364,10 +684,14 @@ outcome with a clearer message.
 Remove the no-diff branch (=TemplateApproval.hs:226-238=) so the diff, the
 prompt (line 240) and =approveTemplate= (264-297) run for every pending
 template, as iidy-js (=approval/index.ts:115-144=). =requestConfirmation=
-reads stdin (=src/Iidy/Confirm.hs:33-44=), so add a library seam, for
-example =templateApprovalReviewWith= taking the confirm action, with
-=templateApprovalReview= passing =requestConfirmation=; =app/Main.hs:254=
-stays as is. Tests with pending equal to =latest=: yes writes approved and
+reads stdin (=src/Iidy/Confirm.hs:33-44=), so add a library seam,
+=templateApprovalReviewWith= whose first argument has the type of
+=requestConfirmation= (=Text -> IO ConfirmResult=), with
+=templateApprovalReview= being it partially applied to
+=requestConfirmation=; =app/Main.hs:254= stays as is. No command has such a
+seam today (=Params/Review.hs:69=, =DeleteStack.hs:96=, =Changeset.hs:542=
+call =requestConfirmation= directly), and a =CfnContext= field would reach
+=app/=. Tests with pending equal to =latest=: yes writes approved and
 =latest= and deletes pending; no writes nothing and returns the existing
 decline code; a non-empty diff still prompts.
 
@@ -389,6 +713,11 @@ empty-diff auto-approve (246, 277 pseudo-code) and the "enforces no
 application-level check" text (377, 424) with the deploy-time check.
 =docs/requirements/05-cfn-operations.org= and any other doc found by
 =grep -ril approv docs=: add the deploy-time check where create, update,
-changeset and estimate-cost are described. =DIVERGENCES.md=: entries for
-deploy-time enforcement and the empty-diff prompt (Rust has neither) and
-for SHA256 keys versus iidy-js MD5.
+changeset and estimate-cost are described. Say that a =ValidateTemplate=
+access or network error also fails the request, document the 1 MB
+approval-path limit, the refusal's suggested command, and the bucket
+region rule. =DIVERGENCES.md=: entries for deploy-time enforcement and the
+empty-diff prompt (Rust has neither), SHA256 keys versus iidy-js MD5, the
+request lint using =ValidateTemplate= rather than iidy-js's local
+laundry-cfn lint (=lint.ts:11-16=), and the bucket region rule versus
+iidy-js (us-east-1) and Rust (stack region; review us-east-1).
