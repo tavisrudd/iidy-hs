@@ -134,9 +134,9 @@ The =isLocalBase= function decides whether a base location is local, and it fail
 
 * Threat Model
 ** What This Protects Against
-1. *Credential Theft* — Remote documents cannot read environment variables (=env:=), the importing template's variables, or values read with the user's AWS credentials (=ssm:=, =ssm-path:=, =cfn:=, =s3:=).
+1. *Credential Theft* — Untrusted documents cannot read environment variables (=env:=), the importing template's variables, or values read with the user's AWS credentials (=ssm:=, =ssm-path:=, =cfn:=, =s3:=).
 
-2. *Exfiltration* — A remote document's variables hold only its own values and its own non-AWS imports, so an import URL it builds cannot carry the user's secrets. Its HTTP imports cannot reach loopback services or the instance metadata service, including through redirects.
+2. *Exfiltration* — An untrusted document's variables hold only its own values and its own non-AWS imports, so an import URL it builds cannot carry the user's secrets. Its HTTP imports cannot reach loopback services or the instance metadata service, including through redirects.
 
 3. *File System Scanning* — Remote documents cannot read local files or probe directory structure via =file:=, =filehash:= and =filehash-base64:=.
 
