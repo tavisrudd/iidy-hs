@@ -3,6 +3,8 @@
 -}
 module Test.StackArgsBootstrapTest (stackArgsBootstrapTests) where
 
+import Amazonka qualified
+import Amazonka.SSM.GetParameter qualified as GP
 import Data.ByteString.Lazy.Char8 qualified as BLC
 import Data.IORef (readIORef)
 import Data.Map.Strict qualified as Map
@@ -23,7 +25,7 @@ import Iidy.Cfn.StackArgsLoader (CredentialField (..), LoadedStackArgs (..), Raw
 import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..))
 import Iidy.Yaml.Imports.Types (RemoteImports (..), importPolicy)
 import Iidy.Yaml.Parser (parseYaml)
-import Test.MockAws (MockAws (..), newMockAws, recordingEnvFactory)
+import Test.MockAws (MockAws (..), mockAccessKey, mockSecretKey, mockSessionToken, newMockAws, newRefusingMockAws, recordingEnvFactory)
 import Test.Shared (noAwsSettings)
 
 stackArgsBootstrapTests :: [TestTree]
@@ -128,6 +130,22 @@ stackArgsBootstrapTests =
         err <- expectLeft result
         assertBool ("reports the cause: " <> T.unpack err) ("mock: no such profile literal-profile" `T.isInfixOf` err)
         assertBool ("names the import: " <> T.unpack err) ("ssm:/app/db-host" `T.isInfixOf` err)
+    , testCase "a transport failure while building the env names no credential" $ do
+        refusing <- newRefusingMockAws
+        let factory _ = Amazonka.runResourceT (Amazonka.send refusing (GP.newGetParameter "/x")) >> pure refusing
+        result <-
+            loadStackArgsBootstrapped
+                factory
+                (fixturePath "literal-ssm.yaml")
+                "dev"
+                OpCreateStack
+                noAwsSettings
+                (importPolicy AllowRemoteImports)
+        err <- expectLeft result
+        mapM_
+            (\bad -> assertBool (T.unpack bad <> " leaked in: " <> T.unpack err) (not (bad `T.isInfixOf` err)))
+            [mockSessionToken, mockAccessKey, mockSecretKey, "Signature=", "X-Amz-Security-Token"]
+        assertBool ("names the host: " <> T.unpack err) ("ssm.us-east-1.amazonaws.com" `T.isInfixOf` err)
     ]
 
 ------------------------------------------------------------------------

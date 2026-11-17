@@ -16,12 +16,15 @@ reaches a terminal or a log may use it; format the exception here instead.
 -}
 module Iidy.Aws.Errors (
     formatAwsError,
+    formatAuthError,
     formatHttpException,
+    formatBuildException,
 ) where
 
 import Amazonka qualified
+import Amazonka.Auth.Exception (AuthError (..))
 import Amazonka.Data qualified as AmazonkaData
-import Control.Exception (displayException)
+import Control.Exception (SomeException, displayException, fromException)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -38,6 +41,27 @@ formatAwsError = \case
     Amazonka.TransportError he -> formatHttpException he
     Amazonka.SerializeError se ->
         AmazonkaData.toText se.abbrev <> ": could not parse the response (" <> T.pack se.message <> ")"
+
+{- | A description of a credential-retrieval 'AuthError'. A 'RetrievalError'
+wraps the 'HttpException' of the metadata or container-credentials request,
+whose @show@ prints the request headers (the metadata token); the other
+constructors hold only text or a path.
+-}
+formatAuthError :: AuthError -> Text
+formatAuthError = \case
+    RetrievalError he -> "credential retrieval failed: " <> formatHttpException he
+    other -> T.pack (show other)
+
+{- | A description of an exception from building an AWS environment: an
+AWS, credential or HTTP exception goes through its formatter, anything
+else through 'displayException'.
+-}
+formatBuildException :: SomeException -> Text
+formatBuildException e
+    | Just awsErr <- fromException e = formatAwsError awsErr
+    | Just authErr <- fromException e = formatAuthError authErr
+    | Just httpErr <- fromException e = formatHttpException httpErr
+    | otherwise = T.pack (displayException e)
 
 {- | A one-line description of an 'HttpException': the host (never the path,
 query string, headers or proxy) and the failure.

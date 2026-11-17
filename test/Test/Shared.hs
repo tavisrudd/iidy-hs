@@ -23,6 +23,11 @@ module Test.Shared (
     preprocTagsImporterFixture,
     listFixture,
 
+    -- * Amazonka error builders
+    mkServiceError,
+    mkServiceErrorNoMsg,
+    mkSerializeError,
+
     -- * Test data builders
     testTokenInfo,
     testStackDef,
@@ -58,6 +63,8 @@ module Test.Shared (
     odConstructorName,
 ) where
 
+import Amazonka qualified
+import Amazonka.Types qualified as AT
 import Control.Concurrent.STM (newTVarIO)
 import Data.Aeson (Value (..))
 import Data.Aeson.Key qualified as AesonKey
@@ -69,6 +76,7 @@ import Data.Text (Text)
 import Data.Text.Encoding qualified as TE
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..))
+import Network.HTTP.Types.Status (status400)
 import System.IO (Handle, hClose, hSetEncoding, stderr, stdout, utf8)
 import System.IO.Temp (withSystemTempFile)
 
@@ -607,3 +615,24 @@ orderedJsonFixture = "test-fixtures/get-import/ordered.json"
 -- | A @.json@ file whose value is a surrogate-pair escape (C28).
 surrogateJsonFixture :: Text
 surrogateJsonFixture = "test-fixtures/get-import/surrogate.json"
+
+------------------------------------------------------------------------
+-- Amazonka error builders
+------------------------------------------------------------------------
+
+-- | A CloudFormation 'Amazonka.ServiceError' with a code and a message.
+mkServiceError :: Text -> Text -> Amazonka.Error
+mkServiceError code msg =
+    Amazonka.ServiceError
+        (AT.ServiceError' "CloudFormation" status400 [] (Amazonka.ErrorCode code) (Just (Amazonka.ErrorMessage msg)) Nothing)
+
+-- | A CloudFormation 'Amazonka.ServiceError' with a code and no message.
+mkServiceErrorNoMsg :: Text -> Amazonka.Error
+mkServiceErrorNoMsg code =
+    Amazonka.ServiceError
+        (AT.ServiceError' "CloudFormation" status400 [] (Amazonka.ErrorCode code) Nothing Nothing)
+
+-- | A 'Amazonka.SerializeError', for negative tests.
+mkSerializeError :: String -> Amazonka.Error
+mkSerializeError msg =
+    Amazonka.SerializeError (AT.SerializeError' "CloudFormation" status400 Nothing msg)

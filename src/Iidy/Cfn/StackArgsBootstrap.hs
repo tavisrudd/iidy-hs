@@ -23,7 +23,7 @@ module Iidy.Cfn.StackArgsBootstrap (
     importSettingsMismatch,
 ) where
 
-import Control.Exception (SomeAsyncException, SomeException, displayException, fromException, throwIO, try)
+import Control.Exception (SomeAsyncException, SomeException, fromException, throwIO, try)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Maybe (fromMaybe, isJust, isNothing)
 import Data.Text (Text)
@@ -32,6 +32,7 @@ import Data.Text qualified as T
 import Amazonka qualified
 
 import Iidy.Aws.CredentialSource (AwsSettings)
+import Iidy.Aws.Errors (formatBuildException)
 import Iidy.Cfn.StackArgsLoader (
     CredentialField,
     LoadedStackArgs (..),
@@ -220,7 +221,7 @@ buildImportEnv mkEnv argsfile location settings = do
                         <> " ("
                         <> describeSettings settings
                         <> "): "
-                        <> T.pack (displayException e)
+                        <> formatBuildException e
 
 -- | The refusal for a credential field that is not plain; @why@ is a clause.
 computedFieldError :: Text -> Text -> AwsSettings -> CredentialField -> Text -> Text

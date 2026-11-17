@@ -11,7 +11,7 @@ import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 import Amazonka qualified
 import Amazonka.Auth.Keys qualified as Keys
 
-import Iidy.Cfn.S3Objects (HeadResult (..), headObject, presignGetObject, s3ObjectExists)
+import Iidy.Cfn.S3Objects (HeadResult (..), bucketRegion, headObject, presignGetObject, s3ObjectExists)
 import Test.MockAws
 import Test.MockCfnContext (mockCfnTime)
 
@@ -79,8 +79,13 @@ headTests =
     , testCase "500 is a failure with the error text" $ do
         result <- headWith 500
         case result of
-            ObjectHeadFailed err -> assertBool ("names the status text: " <> show err) ("Internal Server Error" `T.isInfixOf` err)
+            ObjectHeadFailed err -> assertBool ("names the status: " <> show err) ("500" `T.isInfixOf` err)
             other -> assertBool ("expected a failure, got " <> show other) False
+    , testCase "bucketRegion: a failure names the HTTP status" $ do
+        mock <- newMockAws
+        mockRespond mock (OnOperation "s3" "GetBucketLocation") (mockStatus 403)
+        result <- bucketRegion (mockEnv mock) "approvals"
+        either ("HTTP 403" `T.isInfixOf`) (const False) result @?= True
     , testCase "s3ObjectExists: a failure names the env's region" $ do
         mock <- newMockAwsIn (Amazonka.Region' "eu-west-1")
         mockRespond mock (OnOperation "s3" "HeadObject") (mockStatus 500)

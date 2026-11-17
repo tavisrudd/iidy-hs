@@ -2,22 +2,20 @@
 
 module Test.ChangesetTest (changesetTests) where
 
-import Amazonka qualified
 import Amazonka.CloudFormation.Types qualified as CF
 import Amazonka.CloudFormation.Types.Change qualified as CChange
 import Amazonka.CloudFormation.Types.ResourceChange qualified as CRC
 import Amazonka.CloudFormation.Types.ResourceChangeDetail qualified as CRCD
 import Amazonka.CloudFormation.Types.ResourceTargetDefinition qualified as CRTD
-import Amazonka.Types qualified as AT
 import Data.List (nub)
 import Data.Text qualified as T
-import Network.HTTP.Types.Status (status400)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
 import Iidy.Aws.Errors (formatAwsError)
 import Iidy.Cfn.Operations.Changeset (convertChange, convertDetail, generateDashedName, isNonRetryableError)
 import Iidy.Output.Types (ChangeDetail (..), ChangeInfo (..))
+import Test.Shared (mkSerializeError, mkServiceError, mkServiceErrorNoMsg)
 
 changesetTests :: [TestTree]
 changesetTests =
@@ -135,31 +133,3 @@ changesetTests =
             isNonRetryableError (mkSerializeError "parse") @?= False
         ]
     ]
-  where
-    mkServiceError :: T.Text -> T.Text -> Amazonka.Error
-    mkServiceError code msg =
-        Amazonka.ServiceError
-            ( AT.ServiceError'
-                "CloudFormation"
-                status400
-                []
-                (Amazonka.ErrorCode code)
-                (Just (Amazonka.ErrorMessage msg))
-                Nothing
-            )
-
-    mkServiceErrorNoMsg :: T.Text -> Amazonka.Error
-    mkServiceErrorNoMsg code =
-        Amazonka.ServiceError
-            ( AT.ServiceError'
-                "CloudFormation"
-                status400
-                []
-                (Amazonka.ErrorCode code)
-                Nothing
-                Nothing
-            )
-
-    mkSerializeError :: String -> Amazonka.Error
-    mkSerializeError msg =
-        Amazonka.SerializeError (AT.SerializeError' "CloudFormation" status400 Nothing msg)

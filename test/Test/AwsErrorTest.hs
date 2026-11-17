@@ -6,13 +6,14 @@ hold the host but none of the fake credentials or the signature.
 -}
 module Test.AwsErrorTest (awsErrorTests) where
 
-import Control.Exception (toException)
+import Control.Exception (throwIO, toException)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 import Amazonka qualified
+import Amazonka.Auth.Exception (AuthError (..))
 import Amazonka.SSM.GetParameter qualified as GP
 import Amazonka.Types qualified as AT
 import Data.Text.Encoding qualified as TE
@@ -49,6 +50,11 @@ awsErrorTests =
             env <- newRefusingMockAws
             s3ObjectExists env "approvals" "t.yaml" >>= \case
                 Left msg -> assertClean "approvals.s3.us-east-1.amazonaws.com" msg
+                Right _ -> assertFailure "expected a failure"
+        , testCase "a credential-retrieval failure names the host, not the request headers" $ do
+            let he = HttpExceptionRequest (signedRequestOf "http://169.254.169.254/latest/api/token") ResponseTimeout
+            tryBuildEnv (throwIO (RetrievalError he)) >>= \case
+                Left msg -> assertClean "169.254.169.254" msg
                 Right _ -> assertFailure "expected a failure"
         , testCase "an env provider that fails with a transport error names no credential" $ do
             env <- newRefusingMockAws
@@ -87,11 +93,7 @@ assertImportLeak host = \case
 
 formatAwsErrorTests :: [TestTree]
 formatAwsErrorTests =
-    [ testCase "ServiceError prints code: message" $
-        formatAwsError (serviceError (Just "Stack does not exist")) @?= "ValidationError: Stack does not exist"
-    , testCase "ServiceError without a message prints the code alone" $
-        formatAwsError (serviceError Nothing) @?= "ValidationError"
-    , testCase "ServiceError leaves out its response headers" $ do
+    [ testCase "ServiceError leaves out its response headers" $ do
         let err = Amazonka.ServiceError (AT.ServiceError' "SSM" status400 [("X-Secret", "hdr-secret")] (Amazonka.ErrorCode "Oops") Nothing Nothing)
         assertBool "no header value" (not ("hdr-secret" `T.isInfixOf` formatAwsError err))
     , testCase "TransportError carries the host, not the request" $ do
@@ -104,8 +106,6 @@ formatAwsErrorTests =
         T.isInfixOf "bad xml" msg @?= True
         T.isInfixOf "body-secret" msg @?= False
     ]
-  where
-    serviceError m = Amazonka.ServiceError (AT.ServiceError' "CloudFormation" status400 [] (Amazonka.ErrorCode "ValidationError") (Amazonka.ErrorMessage <$> m) Nothing)
 
 formatHttpExceptionTests :: [TestTree]
 formatHttpExceptionTests =
@@ -135,15 +135,17 @@ formatHttpExceptionTests =
 
 -- | A request as Amazonka signs it: session token and credentials in the headers.
 signedRequest :: HttpExceptionContent -> HttpException
-signedRequest = HttpExceptionRequest req
-  where
-    req =
-        (parseRequest_ "https://ssm.us-east-1.amazonaws.com/?X-Amz-Signature=sig-secret")
-            { requestHeaders =
-                [ ("X-Amz-Security-Token", TE.encodeUtf8 mockSessionToken)
-                , ("Authorization", "AWS4-HMAC-SHA256 Credential=" <> TE.encodeUtf8 mockAccessKey <> "/x, Signature=sig")
-                ]
-            }
+signedRequest = HttpExceptionRequest (signedRequestOf "https://ssm.us-east-1.amazonaws.com/?X-Amz-Signature=sig-secret")
+
+-- | A request to this URL carrying the session token and credentials in its headers.
+signedRequestOf :: String -> Client.Request
+signedRequestOf url =
+    (parseRequest_ url)
+        { requestHeaders =
+            [ ("X-Amz-Security-Token", TE.encodeUtf8 mockSessionToken)
+            , ("Authorization", "AWS4-HMAC-SHA256 Credential=" <> TE.encodeUtf8 mockAccessKey <> "/x, Signature=sig")
+            ]
+        }
 
 statusResponse :: Int -> Client.Response ()
 statusResponse code =

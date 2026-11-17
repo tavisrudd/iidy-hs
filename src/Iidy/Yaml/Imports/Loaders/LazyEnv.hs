@@ -22,7 +22,7 @@ import System.IO.Error (ioeGetErrorString)
 import Amazonka qualified
 import Amazonka.Auth.Exception qualified as AuthEx
 
-import Iidy.Aws.Errors (formatAwsError)
+import Iidy.Aws.Errors (formatAuthError, formatAwsError)
 import Iidy.Yaml.Engine (LoadImportFn)
 import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
 import Iidy.Yaml.Imports.Types (ImportError (..), ImportPolicy, importNeedsAwsEnv)
@@ -55,7 +55,7 @@ tryBuildEnv :: IO Amazonka.Env -> IO (Either Text Amazonka.Env)
 tryBuildEnv mkEnv =
     (Right <$> mkEnv)
         `catches` [ Handler $ \(e :: AuthEx.AuthError) ->
-                        pure (Left ("AWS credentials not available: " <> T.pack (show e)))
+                        pure (Left ("AWS credentials not available: " <> formatAuthError e))
                   , Handler $ \(e :: IOException) ->
                         pure (Left (T.strip (T.pack (ioeGetErrorString e))))
                   , Handler $ \(e :: Amazonka.Error) ->
