@@ -41,6 +41,11 @@ modules, =test-fixtures/=, =notes/C34/=.
 
 Out of scope: any other parse rule; key order (C8, C28, C31 landed).
 
+In scope as a follow-on from the C28 re-review: once duplicates are
+rejected, =setKey= in =src/Iidy/Yaml/Imports/ContentParsing.hs= (the JSON
+token builder) no longer needs to scan for an earlier key, which is O(n²)
+per object today; drop the scan or reject at that point.
+
 Done when:
 - [ ] A YAML or JSON document with a repeated key at any depth fails to
   load with an error naming the file and the key, matching Rust's message

@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C28
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C25 side finding: iidy-hs get-import prints keys sorted, Rust keeps document order; ImportData would need to keep order
 :CREATED_BY: opus-5.5-medium
@@ -12,6 +12,8 @@
 :END:
 :CLOCK:
 CLOCK: [2026-11-16 Mon 17:48]--[2026-11-16 Mon 17:51] => 0:03
+CLOCK: [2026-11-16 Mon 17:55]--[2026-11-16 Mon 18:00] => 0:05
+CLOCK: [2026-11-16 Mon 18:00]--[2026-11-16 Mon 18:06] => 0:06
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 17:47]
@@ -23,6 +25,22 @@ CLOCK: [2026-11-16 Mon 17:48]--[2026-11-16 Mon 17:51] => 0:03
 - Clock-out [2026-11-16 Mon 17:51]
   Agent: sonnet-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a095f4dd5d9a09ea0
+- Clock-in [2026-11-16 Mon 17:55]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a095f4dd5d9a09ea0
+- Clock-out [2026-11-16 Mon 18:00]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a095f4dd5d9a09ea0
+- Clock-in [2026-11-16 Mon 18:00]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a095f4dd5d9a09ea0
+- Clock-out [2026-11-16 Mon 18:06]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a095f4dd5d9a09ea0
+- Card state STARTED → DONE [2026-11-16 Mon 18:09]
+  Note: Landed 037bf12, b314c38, 3b63dbe, dbcb051: get-import keeps document key order for unqueried YAML; JSON parsed once from aeson tokens (surrogate pairs fixed); Sonnet review fix first, fix round 1, re-review land; duplicates to C34
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C28 — get-import: keep document key order (Rust parity)
 #+date: 2026-11-16
@@ -139,10 +157,15 @@ while C26 is in flight); or a residual order difference remains for some
 import type (record it in =DIVERGENCES.md= and ask Tavis whether it is
 acceptable).
 
-* TODO Reproduce the order difference with both binaries
+* DONE Reproduce the order difference with both binaries
 :PROPERTIES:
 :ID: org:01a1e6fd-4600-776f-a2b4-2ca1851aede6
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:09] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 
 Reproduced 2026-11-16. Fixtures =ordered.yaml= (=z: [1]=, =a: 2=),
@@ -152,7 +175,19 @@ sorted keys (=a: 2= then =z:=); the Rust binary (=~/src/iidy/target/debug/iidy=)
 printed =z:= first, nested =z= before =a=, and the =.json= file in document
 order. =--format json= and =--query @= were sorted in both.
 
+Command lines (cwd the C28 worktree, before the change; H is the iidy-hs
+binary built there, R is =~/src/iidy/target/debug/iidy=):
+: for f in ordered.yaml ordered-nested.yaml ordered.json; do
+:   for o in "" "--format json" "--query @"; do
+:     $R get-import $o test-fixtures/get-import/$f; $H get-import $o test-fixtures/get-import/$f
+:   done
+: done
+
 ** Question for supervisor
+:PROPERTIES:
+:ID: org:01a1e6cc-bbfb-73fa-9536-c73d9ddbbde5
+:ADDED: [2026-11-16 Mon 16:58]
+:END:
 Duplicate keys: Rust rejects duplicate keys in a
 file: =Failed to parse YAML from F: duplicate entry with key "z"= (and for a
 =.json= file the same with "JSON"). iidy-hs accepts them silently (YAML:
@@ -163,10 +198,6 @@ duplicate test was added. Decide: separate card for duplicate-key rejection?
 Answer (supervisor's call, 2026-11-16): yes, filed as C34 (Rust and the
 TypeScript original both reject duplicates); C28 adds no duplicate test.
 The =Resolver.hs= export outside the allowed paths is accepted.
-:PROPERTIES:
-:ID: org:01a1e6cc-bbfb-73fa-9536-c73d9ddbbde5
-:ADDED: [2026-11-16 Mon 16:58]
-:END:
 
 Build iidy-hs on the branch base through =scripts/guarded-build= (the root
 =iidy-hs= link is stale). Create the fixtures under
@@ -175,21 +206,35 @@ and a nested mapping with unsorted keys; =ordered.json=). Run get-import on
 each with both binaries, default format, =--format json= and =--query=, and
 record the outputs here.
 
-* TODO Failing tests for ordered output
+* DONE Failing tests for ordered output
+:PROPERTIES:
+:ID: org:01a1e6cf-add4-7612-9ad4-c77482449b5f
+:ADDED: [2026-11-16 Mon 17:02]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:09] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+:END:
 
 Tests =keyOrderTests= in =test/Test/GetImportTest.hs= (fixtures in
 =Test/Shared.hs=). Failing run on the branch base: the three "keep document
 order" tests failed (got sorted text, e.g. =a: 2\nz:\n- 1\n=); the json,
 query and env tests passed both before and after.
-:PROPERTIES:
-:ID: org:01a1e6cf-add4-7612-9ad4-c77482449b5f
-:ADDED: [2026-11-16 Mon 17:02]
-:END:
 
 Add the cases from the gate to =test/Test/GetImportTest.hs= using the
 existing =runFormat= helper and =collectRawOutput=; record the failing run.
 
-* TODO Carry the document order through ImportData
+* DONE Carry the document order through ImportData
+:PROPERTIES:
+:ID: org:01a1e6cf-add4-7612-9ad4-c773c262fd48
+:ADDED: [2026-11-16 Mon 17:02]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:09] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+:END:
 
 Design: new field =idOrdered :: Maybe OValue= (=Nothing= means use
 =fromValue idDoc=). =ContentParsing= gets =parseYamlOrdered= (one YAML parse;
@@ -203,17 +248,171 @@ C26 had landed, so the edit is one export line. ssm-path objects stay
 unordered (Nothing). Residual: Rust prints an error for =--format json= or
 =--query= on a document with unresolved =!$= tags (=Failed to convert YAML to
 JSON=); iidy-hs prints the one-key tag object. Pre-existing (C26), unchanged.
-Byte comparison vs Rust (=cmp= of stdout+stderr), identical for default,
+Byte comparison vs Rust, command line:
+: for f in ordered.yaml ordered-nested.yaml ordered.json doc.yaml list.yaml nested-seq.yaml preproc-tags.yaml; do
+:   for o in "" "--format json" "--query @"; do
+:     $R get-import $o test-fixtures/get-import/$f > r.txt 2>&1
+:     $H get-import $o test-fixtures/get-import/$f > h.txt 2>&1; cmp r.txt h.txt
+:   done
+: done
+Result (=cmp= of stdout+stderr), identical for default,
 =--format json= and =--query @= on ordered.yaml, ordered-nested.yaml,
 ordered.json, doc.yaml, list.yaml, nested-seq.yaml, and default on
 preproc-tags.yaml. Full suite on the rebased tip: all tests passed.
 Commit: b1bb0cf.
-:PROPERTIES:
-:ID: org:01a1e6cf-add4-7612-9ad4-c773c262fd48
-:ADDED: [2026-11-16 Mon 17:02]
-:END:
 
 Add the ordered field, fill it in the YAML and JSON parsing loaders and
 =ContentParsing.hs=, give the other constructors the default, and make
 =emitDoc= use it when there is no =--query= and the format is YAML. Record
 the passing run, the Rust byte comparison and the full suite.
+
+** Fix round 1 notes
+:PROPERTIES:
+:ID: org:01a1e704-a481-7217-9c3b-c43af8eea2ea
+:ADDED: [2026-11-16 Mon 18:00]
+:END:
+Item 2 (laziness): =idOrdered= and =ParsedDoc.pdOrdered= were declared with a
+bang (=!(Maybe OValue)=), which forced the second JSON parse on
+construction; both are now plain lazy fields (commit ebf725f). The cabal
+default-extensions are DerivingStrategies, LambdaCase, OverloadedStrings; no
+=Strict= or =StrictData= anywhere. So the parse runs only when =emitDoc=
+reads =idOrdered=.
+Item 3: =jsonOrderedTests= in =test/Test/ImportLoaderTest.hs= (commit
+4735e49) pins agreement for floats, a big integer and =\u= escapes.
+Items 4 and 5 done in this file.
+
+** Question for supervisor
+:PROPERTIES:
+:ID: org:01a1e704-a481-7217-9c3b-c439479af969
+:ADDED: [2026-11-16 Mon 18:00]
+:END:
+Item 1 (surrogate-pair =\ud83d\ude00= in a .json file) cannot be fixed at
+the root inside this repository. There is no YAML lexer here: =Iidy.Yaml.Parser=
+calls the HsYAML library (=Data.YAML=), whose scalar decoding turns each =\u=
+escape into one code point before we see the text, so the surrogate halves
+are already replaced by U+FFFD in the scalar =Text=. Rust on the same escape
+inside a plain .yaml file errors ("found invalid Unicode character escape
+code"), so only the JSON path differs. Options: (a) vendor or patch HsYAML
+(new dependency copy, outside allowed paths); (b) in =jsonDoc= fall back to
+=Nothing= (ordered view dropped, so that file prints sorted) when the text has
+a =\u= escape in D800 to DFFF, the reviewer's alternative, which you ruled
+out as a workaround; (c) decode the JSON ordered view from aeson plus a
+key-order scan instead of the YAML parse. Which one?
+Answer (supervisor's call): none of (a) to (c); build the JSON ordered view
+from aeson's token stream. Done in commit dbcb051: =jsonToOValue= in
+=ContentParsing.hs= reads =Data.Aeson.Decoding.ByteString.bsToTokens=
+(about 35 lines, total functions); =idDoc= is =toValue= of it, so .json is
+parsed once, by aeson, and JSON no longer goes through the YAML parse. On
+malformed input =parseJsonContent= supplies the error text, so messages are
+unchanged. Tests: fixture =surrogate.json= with get-import YAML output
+=e: 😀= (recorded failing first: printed two U+FFFD), and the agreement test
+now also compares against =Aeson.eitherDecodeStrict=.
+
+** Review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e6ff-47f7-73ad-8843-c0bd91293e44
+:ADDED: [2026-11-16 Mon 17:54]
+:END:
+Commit b1bb0cf (base ad81363): fix first, 5 defects (1 medium, 4 low).
+
+Check 1 (revert proof): reverted the =emitDoc= use of =idOrdered= in the
+review worktree (tests kept). "document key order": the three "keep document
+order" tests failed with sorted text (=a: 2\nz:\n- 1\n=, nested
+=a= before =z=, the .json file sorted); the json, two query and env tests
+passed, as expected. Restored with =git checkout --=.
+
+Check 2 (design). Every =ImportData= site sets =idOrdered= correctly: file
+and http and s3 and ssm =:yaml= or =:json= take it from =ParsedDoc=; ssm-path,
+cfn (single =mkImportData=), env, git, filehash (=mkFilehashData=) and random
+set =Nothing=, which is right (scalars, or no source order). YAML text is
+parsed once (=yamlDoc= derives both views from one =OValue=). JSON text is
+parsed twice (aeson, then YAML for the ordered view) by design. No second
+converter: =parseYamlContent= is =toValue= of =parseYamlOrdered=.
+
+Defects:
+1. Medium. =ContentParsing.hs= =jsonDoc=: reading JSON text through the YAML
+   parser mis-decodes a surrogate-pair escape. A file =s.json= of
+   ={"u":"😀"}=: Rust prints =u: 😀=; iidy-hs now prints =u: =
+   followed by two U+FFFD (bytes =ef bf bd ef bf bd=). Before C28 the aeson
+   path printed the emoji, so this is a regression for .json get-import
+   (YAML output). A literal UTF-8 emoji is fine. Smallest fix: fix the
+   surrogate-pair decode in the YAML double-quoted escape handling
+   (=Iidy.Yaml.Parser= lexer, outside the allowed paths, so ask the
+   supervisor) or, inside the paths, fall back to =Nothing= when the JSON
+   text contains =\u= escapes in the D800 to DFFF range; add a test.
+2. Low. =jsonDoc= parses every .json import twice, and the engine (not only
+   get-import) reaches it through =parseByExtensionStrict=, so each JSON
+   import in a template pays a second parse and keeps the =OValue= alive
+   for output that only get-import reads. Smallest fix: make the ordered
+   view lazy (=idOrdered :: Maybe OValue= with the parse as a thunk is not
+   possible while the parse decides Just or Nothing; use a lazy field
+   =Either Text OValue= or have get-import re-parse =idRawData= itself).
+3. Low. Value-equality of the JSON ordered view is not tested: no test
+   compares the ordered view of a .json file against =idDoc= (numbers such as
+   =1.0=, =1e5=, big integers, =\u= escapes). Add a fixture with those and
+   assert =toValue ordered == idDoc= or the Rust text. (Observed today:
+   =z: 1.0=, =e: 1e5=, a 23-digit integer print as =1=, =100000=,
+   =12345678901234567890123= in iidy-hs; Rust prints =1.0=, =100000.0=,
+   =1.2345678901234568e22=; see pre-existing 1 below, not new.)
+4. Low (card file). Task headings with body text before their =:PROPERTIES:=
+   drawer: "** Question for supervisor" (body at the heading, drawer after
+   it), "* TODO Failing tests for ordered output", and "* TODO Carry the
+   document order through ImportData". "* TODO Reproduce the order
+   difference with both binaries" is correct. Move each drawer directly
+   under its heading line.
+5. Low (card file). The first task records the reproduction only in prose
+   ("sorted in both"); the gate asks for the command lines and the outputs
+   for the three commands on both binaries, and the same for the byte
+   comparison ("identical for ... " without the commands). Record the
+   literal command lines.
+
+Duplicate keys: not a defect (C34). Observed for ={"z":1,"a":2,"z":3}= in a
+.json file: default YAML prints =z: 3= then =a: 2=, while =--format json=
+prints =z: 1= (aeson view), so the two outputs disagree on the value;
+Rust rejects the file, so C34 resolves it.
+
+Pre-existing (not caused by C28), reproduce with
+=iidy-hs get-import F.json= against the Rust binary on ={"z": 1.0, "e": 1e5,
+"t":"a\tb\u0001"}=: iidy-hs prints =z: 1=, =e: 100000=, ='a<TAB>b'= and drops
+the \u0001; Rust prints =z: 1.0=, =e: 100000.0=, ="a\tb\x01"=. Scalar
+formatting of the emitter, unchanged here.
+
+** Re-review 2026-11-16
+:PROPERTIES:
+:ID: org:5d0b7a52-3c1e-4c7a-9f0e-6a2c4e8b1d93
+:ADDED: [2026-11-16 Mon 19:10]
+:END:
+Fix round (b314c38, 3b63dbe, dbcb051): land, 1 low defect. Previous
+defects 1 to 3 are fixed.
+
+Check 1 (dbcb051 revert proof): restored =ContentParsing.hs= to b314c38 in
+the review worktree (tests kept) and ran the surrogate get-import test:
+FAIL, expected =e: 😀=, got two U+FFFD (=\65533\65533=). Restored; the
+agreement and key-order groups pass on dbcb051 (14 of 14 selected).
+
+Check 2 (=jsonToOValue=): every token kind is handled (literals, text,
+numbers via Integer, Decimal and Scientific, nested arrays and records;
+=TkErr=, =TkArrayErr=, =TkRecordErr= map to =Nothing=). No partial
+functions. Probed through =parseByExtensionStrict=: nested empty
+containers, =1.0=, =1e5=, a 23-digit integer, =-0=, =1E-3=, =😀=,
+=\u0001= all equal aeson's =eitherDecodeStrict=. Trailing garbage (=1 2=,
+=[1]x=) and leading zeros (=01=), trailing comma, truncated input, empty
+input, and a lone surrogate =\ud800= all fail with the same messages as
+before (the error text comes from =parseJsonContent=, only reached on
+=Nothing=). Surrounding whitespace is accepted. Laziness: =pdValue= is
+=toValue= of the lazily built ordered view, so the engine path parses the
+bytes once, through the token stream; the second parse is gone, and
+=idOrdered= stays unforced for the engine (b314c38).
+
+Check 3 (idDoc via =toValue=): equal to aeson for all agreement-test cases.
+Duplicate keys, recorded only (C34): for ={"z":1,"a":2,"z":3}= the new
+=idDoc= has =z = 3= (last wins, order z, a) but aeson's =eitherDecode= gives
+=z = 1=. So the value of a duplicate-key .json import, in the engine and in
+=--format json=, changed from first-wins to last-wins; the YAML output now
+agrees with it. C34 rejects such files, which makes the change moot.
+
+1. Low. =setKey= in =jsonToOValue= (ContentParsing.hs, record branch) scans
+   the accumulator for every key: O(n^2) for an object with many keys, now
+   on the engine path for every .json import. Smallest fix: build with a
+   =Data.Map= of seen keys (or accumulate in a list and dedupe once at
+   =TkRecordEnd=). Only matters for objects with thousands of keys.

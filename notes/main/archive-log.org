@@ -25,6 +25,7 @@
 - [2026-11-16 Mon 17:12] [[file:../C11/index.org][C11]] — Landed 9a1459a, 609bc33: explain and demo tests with export-only seams (Explain output via pure explainOutput), two get-import failure cases; mutations caught; landed on supervisor's diff check
 - [2026-11-16 Mon 17:42] [[file:../C26/index.org][C26]] — Landed 05cc94d, cc6f429 (replayed 04a55f8, 889e4fd): plain imported documents keep unresolved !$ tags as Rust does; three rare spellings accepted as divergences (supervisor's call), follow-up C32; Sonnet review: land, 0 defects
 - [2026-11-16 Mon 17:46] [[file:../C31/index.org][C31]] — Landed bcf336b: !$escape keeps mapping key order via astToOValueRaw; render byte-identical to Rust; one-line fix landed on supervisor's diff check
+- [2026-11-16 Mon 18:09] [[file:../C28/index.org][C28]] — Landed 037bf12, b314c38, 3b63dbe, dbcb051: get-import keeps document key order for unqueried YAML; JSON parsed once from aeson tokens (surrogate pairs fixed); Sonnet review fix first, fix round 1, re-review land; duplicates to C34
 * COMMENT meta
 :PROPERTIES:
 :LANE: main
