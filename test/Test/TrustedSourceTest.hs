@@ -5,6 +5,7 @@
 module Test.TrustedSourceTest (trustedSourceTests) where
 
 import Data.Either (isLeft)
+import Data.List qualified as List
 import Data.Text (Text)
 import Data.Text qualified as T
 import Test.Tasty (TestTree, testGroup)
@@ -12,10 +13,13 @@ import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 import Iidy.Yaml.Imports.Types (
     TrustedSources,
+    childBase,
     isTrustedBase,
+    isTrustedRequester,
     mkTrustedSources,
     noTrustedSources,
     parseTrustedSource,
+    rootBase,
     trustedSourceText,
  )
 
@@ -24,6 +28,7 @@ trustedSourceTests =
     [ testGroup "parseTrustedSource accepts" acceptCases
     , testGroup "parseTrustedSource rejects" rejectCases
     , testGroup "isTrustedBase" trustCases
+    , testGroup "isTrustedRequester" requesterCases
     ]
 
 ------------------------------------------------------------------------
@@ -100,6 +105,7 @@ trustTable =
     , (["https://t.example.com/"], "https://t.example.com/dir/a.yaml", True)
     , (["https://t.example.com/"], "https://t.example.com.evil/a.yaml", False)
     , (["https://t.example.com/"], "https://t.example.com:8443/a.yaml", False)
+    , (["https://t.example.com/"], "https://t.example.com@evil.example/a.yaml", False)
     , (["https://t.example.com/"], "http://t.example.com/a.yaml", False)
     , (["https://t.example.com/"], "https://T.example.com/a.yaml", False)
     , (["https://t.example.com/team/"], "https://t.example.com/team/a.yaml", True)
@@ -124,4 +130,29 @@ trustCases =
         ts <- if null ps then pure noTrustedSources else sources ps
         isTrustedBase ts loc @?= expected
     | (ps, loc, expected) <- trustTable
+    ]
+
+------------------------------------------------------------------------
+-- Requester chains: trust is not gained through the import chain
+------------------------------------------------------------------------
+
+-- | (document locations from the root down, expected trust of the last)
+chainTable :: [([Text], Bool)]
+chainTable =
+    [ (["local.yaml"], True)
+    , (["local.yaml", "https://t.example.com/a.yaml"], True)
+    , (["local.yaml", "https://t.example.com/a.yaml", "https://t.example.com/b.yaml"], True)
+    , (["local.yaml", "https://evil.example/u.yaml"], False)
+    , (["local.yaml", "https://evil.example/u.yaml", "https://t.example.com/a.yaml"], False)
+    , (["local.yaml", "https://t.example.com/a.yaml", "https://evil.example/u.yaml", "https://t.example.com/b.yaml"], False)
+    ]
+
+requesterCases :: [TestTree]
+requesterCases =
+    [ testCase (T.unpack (T.intercalate " -> " chain)) $ do
+        ts <- sources ["https://t.example.com/"]
+        case chain of
+            root : rest -> isTrustedRequester ts (List.foldl' childBase (rootBase root) rest) @?= expected
+            [] -> assertFailure "empty chain"
+    | (chain, expected) <- chainTable
     ]

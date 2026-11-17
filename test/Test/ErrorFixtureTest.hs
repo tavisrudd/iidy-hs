@@ -9,8 +9,8 @@ import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
 import Iidy.Yaml.Engine (preprocessYaml)
-import Iidy.Yaml.Imports.Loaders.File (loadFileImport)
 import Iidy.Yaml.Parser (parseYaml)
+import Test.ImportFixtures (fileLoader)
 
 errorFixtureDir :: FilePath
 errorFixtureDir = "test-fixtures/example-templates/errors"
@@ -29,7 +29,7 @@ buildOneErrorTest fname = testCase (takeBaseName fname) $ do
     case parseResult of
         Left _pe -> pure ()
         Right ast -> do
-            preprocessResult <- preprocessYaml loadFileImport ast (T.pack inPath)
+            preprocessResult <- preprocessYaml fileLoader ast (T.pack inPath)
             case preprocessResult of
                 Left _err -> pure ()
                 Right _r ->

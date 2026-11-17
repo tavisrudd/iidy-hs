@@ -14,8 +14,8 @@ import Test.Tasty.HUnit
 import Iidy.Yaml.Detection (detectYamlSpec, shouldUseYaml11Compatibility)
 import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.Engine (PreprocessError (..), PreprocessResult (..), preprocessYaml, preprocessYaml11)
-import Iidy.Yaml.Imports.Loaders.File (loadFileImport)
 import Iidy.Yaml.Parser (parseYaml)
+import Test.ImportFixtures (fileLoader)
 
 fixtureDir :: FilePath
 fixtureDir = "test-fixtures"
@@ -81,7 +81,7 @@ runFixtureTest inPath outPath = do
     let source = TE.decodeUtf8 (BL.toStrict rawInput)
         useYaml11 = shouldUseYaml11Compatibility (detectYamlSpec source)
         preprocess = if useYaml11 then preprocessYaml11 else preprocessYaml
-    preprocessResult <- preprocess loadFileImport ast (T.pack inPath)
+    preprocessResult <- preprocess fileLoader ast (T.pack inPath)
     pr <- case preprocessResult of
         Left err ->
             assertFailure $

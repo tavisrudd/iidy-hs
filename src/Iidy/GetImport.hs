@@ -37,6 +37,7 @@ import Iidy.Yaml.Imports.Types (
     ImportPolicy (..),
     needsAwsEnv,
     parseImportType,
+    rootBase,
  )
 import Iidy.Yaml.JMESPath (applyJmesPath)
 import Iidy.Yaml.OValue (OValue, fromValue)
@@ -73,7 +74,7 @@ runGetImportWith mkEnv emit args gopts = do
         Left err -> reportImportError err
         Right mEnv -> do
             let importCfg = mkImportConfig mEnv policy
-            result <- mkFullDispatcher importCfg location baseLocation
+            result <- mkFullDispatcher importCfg location (rootBase baseLocation)
             case result of
                 Left (ImportError err) -> reportImportError err
                 Right importData -> emitDoc emit gopts args importData

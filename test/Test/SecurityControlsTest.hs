@@ -14,7 +14,7 @@ import Iidy.Yaml.CustomResources.Params (
     validateParams,
  )
 import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig, mkFullDispatcher, mkImportConfig)
-import Iidy.Yaml.Imports.Types (ImportError (..), ImportType (..), RemoteImports (..), importPolicy, parseImportType)
+import Iidy.Yaml.Imports.Types (ImportError (..), ImportType (..), RemoteImports (..), importPolicy, parseImportType, rootBase)
 import Iidy.Yaml.OValue (OValue (..))
 
 securityControlsTests :: [TestTree]
@@ -68,36 +68,36 @@ blockedCfg = mkImportConfig Nothing (importPolicy BlockRemoteImports)
 noRemoteImportsTests :: [TestTree]
 noRemoteImportsTests =
     [ testCase "http: import blocked when remote imports disabled" $ do
-        result <- mkFullDispatcher blockedCfg "http://example.com/data.json" "."
+        result <- mkFullDispatcher blockedCfg "http://example.com/data.json" (rootBase ".")
         case result of
             Left (ImportError e) ->
                 assertBool "mentions --no-remote-imports" ("--no-remote-imports" `T.isInfixOf` e)
             Right _ -> fail "Expected Left for http: with remote imports disabled"
     , testCase "https: import blocked when remote imports disabled" $ do
-        result <- mkFullDispatcher blockedCfg "https://example.com/data.json" "."
+        result <- mkFullDispatcher blockedCfg "https://example.com/data.json" (rootBase ".")
         case result of
             Left (ImportError e) ->
                 assertBool "mentions --no-remote-imports" ("--no-remote-imports" `T.isInfixOf` e)
             Right _ -> fail "Expected Left for https: with remote imports disabled"
     , testCase "s3: import blocked when remote imports disabled" $ do
-        result <- mkFullDispatcher blockedCfg "s3://bucket/key.yaml" "."
+        result <- mkFullDispatcher blockedCfg "s3://bucket/key.yaml" (rootBase ".")
         case result of
             Left (ImportError e) ->
                 assertBool "mentions --no-remote-imports" ("--no-remote-imports" `T.isInfixOf` e)
             Right _ -> fail "Expected Left for s3: with remote imports disabled"
     , testCase "env: import still works when remote imports disabled" $ do
-        result <- mkFullDispatcher blockedCfg "env:HOME" "."
+        result <- mkFullDispatcher blockedCfg "env:HOME" (rootBase ".")
         case result of
             Left (ImportError e) -> fail $ "Expected Right for env: import, got: " <> T.unpack e
             Right _ -> pure ()
     , testCase "file: import still works when remote imports disabled" $ do
-        result <- mkFullDispatcher blockedCfg "file:test-fixtures/test-stack-args.yaml" "."
+        result <- mkFullDispatcher blockedCfg "file:test-fixtures/test-stack-args.yaml" (rootBase ".")
         case result of
             Left (ImportError e) -> fail $ "Expected Right for file: import, got: " <> T.unpack e
             Right _ -> pure ()
     , testCase "cfn: import requires AWS env (not blocked by --no-remote-imports)" $ do
         -- cfn: without AWS env gives "requires credentials" not "--no-remote-imports"
-        result <- mkFullDispatcher blockedCfg "cfn:stack/key" "."
+        result <- mkFullDispatcher blockedCfg "cfn:stack/key" (rootBase ".")
         case result of
             Left (ImportError e) ->
                 assertBool
@@ -105,7 +105,7 @@ noRemoteImportsTests =
                     ("credentials" `T.isInfixOf` e && not ("--no-remote-imports" `T.isInfixOf` e))
             Right _ -> fail "Expected Left for cfn: without AWS env"
     , testCase "ssm: import requires AWS env (not blocked by --no-remote-imports)" $ do
-        result <- mkFullDispatcher blockedCfg "ssm:/param" "."
+        result <- mkFullDispatcher blockedCfg "ssm:/param" (rootBase ".")
         case result of
             Left (ImportError e) ->
                 assertBool

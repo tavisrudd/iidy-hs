@@ -15,6 +15,10 @@ module Iidy.Yaml.Imports.Types (
     trustedSourceList,
     parseTrustedSource,
     isTrustedBase,
+    ImportBase (..),
+    rootBase,
+    childBase,
+    isTrustedRequester,
     isAwsBacked,
     needsAwsEnv,
     checkImport,
@@ -147,23 +151,27 @@ needsAwsEnv remoteImports ty =
     isAwsBacked ty && (ty /= ImportS3 || remoteImports == AllowRemoteImports)
 
 {- | The import gate: 'parseImportType' (local-only types need a local
-base) plus the AWS-backed check: a document whose base is not trusted
-('isTrustedBase') may not import @cfn:@, @ssm:@, @ssm-path:@ or @s3:@.
+base) plus the AWS-backed check: a requesting document that is not trusted
+('isTrustedRequester') may not import @cfn:@, @ssm:@, @ssm-path:@ or @s3:@.
 -}
-checkImport :: TrustedSources -> Text -> Text -> Either ImportError ImportType
-checkImport trusted location baseLocation = do
-    importType <- parseImportType location baseLocation
-    if isAwsBacked importType && not (isTrustedBase trusted baseLocation)
-        then
-            Left $
-                ImportError $
-                    "Import type "
-                        <> T.takeWhile (/= ':') location
-                        <> " is not allowed from remote templates: "
-                        <> baseLocation
-                        <> " is not a trusted source (to allow it, pass --trust-import-source"
-                        <> " with a prefix of that location)"
-        else Right importType
+checkImport :: TrustedSources -> Text -> ImportBase -> Either ImportError ImportType
+checkImport trusted location base = do
+    importType <- parseImportType location (ibLocation base)
+    case untrustedLink trusted base of
+        Just untrusted | isAwsBacked importType -> Left (ImportError (refusal untrusted))
+        _trustedOrNotAws -> Right importType
+  where
+    refusal :: Text -> Text
+    refusal untrusted =
+        "Import type "
+            <> T.takeWhile (/= ':') location
+            <> " is not allowed from remote templates: "
+            <> ( if untrusted == ibLocation base
+                    then ibLocation base
+                    else ibLocation base <> " was requested through " <> untrusted <> ", which"
+               )
+            <> " is not a trusted source (to allow it, pass --trust-import-source"
+            <> " with a prefix of that location)"
 
 {- | Parse an import type prefix from a location string.
 Returns @Right ("", loc)@ for plain file paths (no colon or relative/absolute paths).
@@ -231,6 +239,40 @@ isLocalOnly = \case
     ImportFilehash -> True
     ImportFilehashBase64 -> True
     _remoteType -> False
+
+------------------------------------------------------------------------
+-- Requesting documents
+------------------------------------------------------------------------
+
+{- | The document an import is requested from: its location (the base
+that relative imports resolve against) and the locations of the documents
+that led to it, nearest first, ending at the root template.
+-}
+data ImportBase = ImportBase
+    { ibLocation :: !Text
+    , ibRequesters :: ![Text]
+    }
+    deriving stock (Show, Eq)
+
+-- | The base of a root document (a template or argsfile given directly).
+rootBase :: Text -> ImportBase
+rootBase loc = ImportBase{ibLocation = loc, ibRequesters = []}
+
+-- | The base of a document loaded at @loc@ by a request from @parent@.
+childBase :: ImportBase -> Text -> ImportBase
+childBase parent loc = ImportBase{ibLocation = loc, ibRequesters = ibLocation parent : ibRequesters parent}
+
+{- | Whether a requesting document is trusted: its own location and every
+document that led to it are trusted ('isTrustedBase'). Trust cannot be
+gained through the import chain, so a document under a trusted prefix
+that an untrusted document requested is itself untrusted.
+-}
+isTrustedRequester :: TrustedSources -> ImportBase -> Bool
+isTrustedRequester trusted = null . untrustedLink trusted
+
+-- | The nearest untrusted location in a requester chain, if any.
+untrustedLink :: TrustedSources -> ImportBase -> Maybe Text
+untrustedLink trusted base = List.find (not . isTrustedBase trusted) (ibLocation base : ibRequesters base)
 
 ------------------------------------------------------------------------
 -- Trusted sources

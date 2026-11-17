@@ -45,7 +45,7 @@ import Iidy.Cfn.Types (CfnOperation)
 import Iidy.Yaml.Ast (YamlAst)
 import Iidy.Yaml.Engine (LoadImportFn)
 import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
-import Iidy.Yaml.Imports.Types (ImportError (..), ImportPolicy (..), checkImport, needsAwsEnv)
+import Iidy.Yaml.Imports.Types (ImportBase, ImportError (..), ImportPolicy (..), checkImport, needsAwsEnv)
 
 {- | Load a stack-args file, building the import environment with the given
 factory at the first AWS import. Production passes
@@ -160,7 +160,7 @@ bootstrapLoader ranWith mkEnv argsfile environment cliAws policy ast = do
 An import the dispatcher's gate ('checkImport') refuses makes none, so the
 user sees the trust error rather than an AWS environment error.
 -}
-isAwsImport :: ImportPolicy -> Text -> Text -> Bool
+isAwsImport :: ImportPolicy -> Text -> ImportBase -> Bool
 isAwsImport policy location baseLocation =
     either
         (const False)

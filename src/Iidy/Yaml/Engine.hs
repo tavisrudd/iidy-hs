@@ -24,7 +24,7 @@ import Iidy.Yaml.Ast
 import Iidy.Yaml.CustomResources.Params (parseParams)
 import Iidy.Yaml.Handlebars.Engine (InterpolateError (..), defaultHelpers, interpolate)
 import Iidy.Yaml.Imports.Manifest
-import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportRecord (..))
+import Iidy.Yaml.Imports.Types (ImportBase (..), ImportData (..), ImportError (..), ImportRecord (..), childBase, rootBase)
 import Iidy.Yaml.OValue (OValue (..), fromValue, toValue)
 import Iidy.Yaml.Parser (parseYaml)
 import Iidy.Yaml.Resolution.Context
@@ -48,8 +48,10 @@ data PreprocessError
     | PeCycleError !Text
     deriving stock (Show)
 
--- | Function type for loading imports (passed in by caller)
-type LoadImportFn = Text -> Text -> IO (Either ImportError ImportData)
+{- | Function type for loading imports (passed in by caller): the import
+location and the requesting document ('ImportBase').
+-}
+type LoadImportFn = Text -> ImportBase -> IO (Either ImportError ImportData)
 
 ------------------------------------------------------------------------
 -- Public API
@@ -71,7 +73,7 @@ process loader ast baseLocation yaml11Compat = do
         Left err -> pure $ Left $ PeCycleError err
         Right stack' -> do
             -- Phase 1: Load imports and build environment
-            result <- loadImportsAndDefs loader ast baseLocation Map.empty Map.empty emptyManifest stack'
+            result <- loadImportsAndDefs loader ast (rootBase baseLocation) Map.empty Map.empty emptyManifest stack'
             case result of
                 Left err -> pure $ Left err
                 Right (env, templateDefs, manifest, _stack'') -> do
@@ -103,22 +105,22 @@ process loader ast baseLocation yaml11Compat = do
 loadImportsAndDefs ::
     LoadImportFn ->
     YamlAst ->
-    Text ->
+    ImportBase ->
     Map Text OValue ->
     Map Text TemplateInfo ->
     ImportManifest ->
     ImportStack ->
     IO (Either PreprocessError (Map Text OValue, Map Text TemplateInfo, ImportManifest, ImportStack))
-loadImportsAndDefs loader ast baseLocation env0 tmplDefs0 manifest0 stack0 =
+loadImportsAndDefs loader ast base env0 tmplDefs0 manifest0 stack0 =
     case ast of
         AstMapping pairs _ -> do
             let defsAst = findSectionPairs "$defs" pairs
                 importsAst = findSectionPairs "$imports" pairs
             -- Process $defs
-            case processDefs env0 defsAst baseLocation of
+            case processDefs env0 defsAst (ibLocation base) of
                 Left err -> pure $ Left err
                 Right env1 ->
-                    processImports loader env1 tmplDefs0 manifest0 stack0 importsAst baseLocation
+                    processImports loader env1 tmplDefs0 manifest0 stack0 importsAst base
         _nonMapping -> pure $ Right (env0, tmplDefs0, manifest0, stack0)
 
 findSectionPairs :: Text -> [(YamlAst, YamlAst)] -> [(YamlAst, YamlAst)]
@@ -159,11 +161,11 @@ processImports ::
     ImportManifest ->
     ImportStack ->
     [(YamlAst, YamlAst)] ->
-    Text ->
+    ImportBase ->
     IO (Either PreprocessError (Map Text OValue, Map Text TemplateInfo, ImportManifest, ImportStack))
-processImports _loader env tmplDefs manifest stack [] _baseLocation =
+processImports _loader env tmplDefs manifest stack [] _base =
     pure $ Right (env, tmplDefs, manifest, stack)
-processImports loader env tmplDefs manifest stack ((keyAst, locAst) : rest) baseLocation = do
+processImports loader env tmplDefs manifest stack ((keyAst, locAst) : rest) base = do
     let importKey = extractKeyText keyAst
         locationText = extractKeyText locAst
     -- Interpolate handlebars in import location
@@ -174,7 +176,7 @@ processImports loader env tmplDefs manifest stack ((keyAst, locAst) : rest) base
             case pushImport resolvedLoc stack of
                 Left cycleErr -> pure $ Left $ PeCycleError cycleErr
                 Right stack' -> do
-                    result <- loader resolvedLoc baseLocation
+                    result <- loader resolvedLoc base
                     case result of
                         Left err -> pure $ Left $ PeImportError err
                         Right importData -> do
@@ -190,19 +192,19 @@ processImports loader env tmplDefs manifest stack ((keyAst, locAst) : rest) base
                             let record =
                                     ImportRecord
                                         { irKey = Just importKey
-                                        , irFrom = baseLocation
+                                        , irFrom = ibLocation base
                                         , irImported = idLocation importData
                                         , irSha256Digest = computeSha256 (idRawData importData)
                                         }
                                 manifest' = addRecord record manifest
                             -- Recursively preprocess if imported doc has $imports or $defs
-                            importResult <- processImportedDoc loader (idDoc importData) (idRawData importData) (idLocation importData) manifest' stack'
+                            importResult <- processImportedDoc loader (idDoc importData) (idRawData importData) (childBase base (idLocation importData)) manifest' stack'
                             case importResult of
                                 Left err -> pure $ Left err
                                 Right (importedValue, manifest'', stack'') -> do
                                     let env' = Map.insert importKey importedValue env
                                     let stackFinal = popImport stack''
-                                    processImports loader env' tmplDefs' manifest'' stackFinal rest baseLocation
+                                    processImports loader env' tmplDefs' manifest'' stackFinal rest base
 
 ------------------------------------------------------------------------
 -- Recursive import preprocessing
@@ -213,27 +215,29 @@ The document starts from an empty environment: it sees only its own
 @$defs@ and @$imports@, never the importing document's variables, so its
 import locations cannot interpolate the parent's values either. Matches
 Rust's process_imported_document (engine.rs:380-442, fresh
-@EnvValues::new()@ at :409).
+@EnvValues::new()@ at :409). Its own imports are requested with
+'childBase', which records the documents that led to it, so the
+dispatcher can tell whether the requester chain is trusted.
 -}
 processImportedDoc ::
     LoadImportFn ->
     Value ->
     Text ->
-    Text ->
+    ImportBase ->
     ImportManifest ->
     ImportStack ->
     IO (Either PreprocessError (OValue, ImportManifest, ImportStack))
-processImportedDoc loader doc rawData docLocation manifest stack =
+processImportedDoc loader doc rawData docBase manifest stack =
     case doc of
         Object obj
             | hasImportsOrDefs obj -> do
                 -- Re-parse to AST and recursively preprocess
-                case parseYaml (BL.fromStrict (TE.encodeUtf8 rawData)) docLocation of
+                case parseYaml (BL.fromStrict (TE.encodeUtf8 rawData)) (ibLocation docBase) of
                     Left _parseErr ->
                         -- If re-parse fails, fall back to raw value
                         pure $ Right (fromValue doc, manifest, stack)
                     Right ast -> do
-                        result <- loadImportsAndDefs loader ast docLocation Map.empty Map.empty manifest stack
+                        result <- loadImportsAndDefs loader ast docBase Map.empty Map.empty manifest stack
                         case result of
                             Left err -> pure $ Left err
                             Right (docEnv, _docTmplDefs, manifest', stack') -> do
@@ -241,7 +245,7 @@ processImportedDoc loader doc rawData docLocation manifest stack =
                                 let ctx =
                                         emptyContext
                                             { tcVariables = docEnv
-                                            , tcInputUri = Just docLocation
+                                            , tcInputUri = Just (ibLocation docBase)
                                             }
                                 case resolveAst ctx ast of
                                     Left reErr -> pure $ Left $ PeResolveError reErr

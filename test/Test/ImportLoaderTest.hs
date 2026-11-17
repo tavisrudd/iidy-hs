@@ -18,7 +18,7 @@ import Iidy.Yaml.Imports.Loaders.Env (loadEnvImport)
 import Iidy.Yaml.Imports.Loaders.Git (loadGitImport)
 import Iidy.Yaml.Imports.Loaders.Http (urlPath)
 import Iidy.Yaml.Imports.Loaders.Random (loadRandomImport)
-import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..), RemoteImports (..), importPolicy)
+import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..), RemoteImports (..), importPolicy, rootBase)
 import Iidy.Yaml.OValue (toValue)
 
 defaultImportCfg :: ImportConfig
@@ -180,7 +180,7 @@ dispatchTests :: [TestTree]
 dispatchTests =
     [ testCase "dispatches env: to env loader" $ do
         setEnv "IIDY_DISPATCH_TEST" "dispatched"
-        result <- mkFullDispatcher defaultImportCfg "env:IIDY_DISPATCH_TEST" "."
+        result <- mkFullDispatcher defaultImportCfg "env:IIDY_DISPATCH_TEST" (rootBase ".")
         unsetEnv "IIDY_DISPATCH_TEST"
         case result of
             Left (ImportError e) -> fail (T.unpack e)
@@ -188,14 +188,14 @@ dispatchTests =
                 idType dat @?= ImportEnv
                 idRawData dat @?= "dispatched"
     , testCase "dispatches git: to git loader" $ do
-        result <- mkFullDispatcher defaultImportCfg "git:sha" "."
+        result <- mkFullDispatcher defaultImportCfg "git:sha" (rootBase ".")
         case result of
             Left (ImportError e) -> fail (T.unpack e)
             Right dat -> do
                 idType dat @?= ImportGit
                 T.length (idRawData dat) @?= 40
     , testCase "dispatches random: to random loader" $ do
-        result <- mkFullDispatcher defaultImportCfg "random:int" "."
+        result <- mkFullDispatcher defaultImportCfg "random:int" (rootBase ".")
         case result of
             Left (ImportError e) -> fail (T.unpack e)
             Right dat -> do
@@ -206,7 +206,7 @@ dispatchTests =
         let awsPrefixes = ["cfn:stack/key", "ssm:/param", "ssm-path:/path", "s3://bucket/key"]
         mapM_
             ( \loc -> do
-                result <- mkFullDispatcher defaultImportCfg loc "."
+                result <- mkFullDispatcher defaultImportCfg loc (rootBase ".")
                 case result of
                     Left (ImportError e) ->
                         assertBool

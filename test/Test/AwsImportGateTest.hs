@@ -16,7 +16,7 @@ import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 import Iidy.Yaml.Engine (PreprocessError (..), PreprocessResult (..))
 import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
-import Iidy.Yaml.Imports.Types (ImportData, ImportError (..), ImportPolicy, RemoteImports (..), importPolicy)
+import Iidy.Yaml.Imports.Types (ImportData, ImportError (..), ImportPolicy, RemoteImports (..), importPolicy, rootBase)
 import Iidy.Yaml.OValue (toValue)
 import Test.ImportFixtures (flagPolicy, preprocessText, stubDocLoader)
 import Test.MockAws (MockAws (..), newMockAws)
@@ -108,7 +108,7 @@ refusedMatrix =
 dispatchWithMock :: ImportPolicy -> Text -> Text -> IO (MockAws, Either ImportError ImportData)
 dispatchWithMock policy loc base = do
     mock <- newMockAws
-    result <- mkFullDispatcher (mkImportConfig (Just (mockEnv mock)) policy) loc base
+    result <- mkFullDispatcher (mkImportConfig (Just (mockEnv mock)) policy) loc (rootBase base)
     pure (mock, result)
 
 isTrustRefusal :: Text -> Bool
@@ -146,8 +146,28 @@ engineCases =
                 Object obj -> KM.lookup "out" obj @?= Just (String "db.internal.example")
                 other -> assertFailure ("expected an object, got " <> show other)
         readIORef (mockRequests mock) >>= (@?= ["ssm.GetParameter.json"])
+    , testCase "trust is not gained through an untrusted requester" $ do
+        -- local -> untrusted https://evil.example/u.yaml -> trusted-prefix
+        -- https://t.example.com/r.yaml -> ssm: (the C15 review's laundering
+        -- chain): r.yaml is loaded as untrusted, so its ssm: is refused.
+        policy <- flagPolicy ["https://t.example.com/"]
+        mock <- newMockAws
+        let dispatcher = mkFullDispatcher (mkImportConfig (Just (mockEnv mock)) policy)
+            loader = stubDocLoader evilDoc evilSource (stubDocLoader remoteDoc remoteSource dispatcher)
+            root = "$imports:\n  u: \"" <> evilDoc <> "\"\nout: \"{{u.v}}\"\n"
+        result <- preprocessText loader "local.yaml" root
+        case result of
+            Left (PeImportError (ImportError e)) ->
+                assertBool ("expected a trust refusal, got: " <> T.unpack e) (isTrustRefusal e && remoteDoc `T.isInfixOf` e)
+            Left other -> assertFailure ("expected a trust refusal, got " <> show other)
+            Right r -> assertFailure ("laundered ssm: read: " <> show (toValue (prValue r)))
+        readIORef (mockRequests mock) >>= (@?= [])
     ]
   where
+    evilDoc :: Text
+    evilDoc = "https://evil.example/u.yaml"
+    evilSource :: Text
+    evilSource = "$defs:\n  own: x\n$imports:\n  t: \"" <> remoteDoc <> "\"\nv: \"{{t.value}}\"\n"
     renderWith :: ImportPolicy -> IO (MockAws, Either PreprocessError PreprocessResult)
     renderWith policy = do
         mock <- newMockAws

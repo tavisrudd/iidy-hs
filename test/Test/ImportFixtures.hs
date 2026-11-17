@@ -6,6 +6,7 @@ module Test.ImportFixtures (
     stubDocLoader,
     preprocessText,
     flagPolicy,
+    fileLoader,
 ) where
 
 import Data.ByteString.Lazy qualified as BL
@@ -19,7 +20,8 @@ import Iidy.Cli (Cli (..), importPolicyFromOpts)
 import Iidy.Cli.Parser (cliParserInfo)
 import Iidy.Yaml.Engine (LoadImportFn, PreprocessError, PreprocessResult, preprocessYaml)
 import Iidy.Yaml.Imports.ContentParsing (parseYamlContent)
-import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportPolicy, ImportType (..))
+import Iidy.Yaml.Imports.Loaders.File (loadFileImport)
+import Iidy.Yaml.Imports.Types (ImportBase (..), ImportData (..), ImportError (..), ImportPolicy, ImportType (..))
 import Iidy.Yaml.Parser (parseYaml)
 
 {- | Serve the YAML document @raw@ at @docLoc@, as the matching remote
@@ -53,3 +55,7 @@ flagPolicy prefixes =
   where
     args :: [String]
     args = concat [["--trust-import-source", T.unpack p] | p <- prefixes] <> ["render", "t.yaml"]
+
+-- | Load every import as a local file relative to the requesting document.
+fileLoader :: LoadImportFn
+fileLoader loc base = loadFileImport loc (ibLocation base)

@@ -33,7 +33,7 @@ m :: SrcMeta
 m = SrcMeta "<test>" zeroPosition zeroPosition
 
 -- | A mock loader that always succeeds with a simple string value.
-alwaysSucceedLoader :: Text -> Text -> IO (Either ImportError ImportData)
+alwaysSucceedLoader :: LoadImportFn
 alwaysSucceedLoader _loc _base =
     pure $
         Right $

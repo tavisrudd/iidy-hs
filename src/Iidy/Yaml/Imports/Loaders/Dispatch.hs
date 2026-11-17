@@ -11,6 +11,7 @@ module Iidy.Yaml.Imports.Loaders.Dispatch (
 ) where
 
 import Amazonka qualified
+import Data.Text (Text)
 
 import Iidy.Yaml.Engine (LoadImportFn)
 import Iidy.Yaml.Imports.Loaders.Cfn (loadCfnImport)
@@ -22,6 +23,7 @@ import Iidy.Yaml.Imports.Loaders.Random (loadRandomImport)
 import Iidy.Yaml.Imports.Loaders.S3 (loadS3Import)
 import Iidy.Yaml.Imports.Loaders.Ssm (loadSsmImport, loadSsmPathImport)
 import Iidy.Yaml.Imports.Types (
+    ImportBase (..),
     ImportData,
     ImportError (..),
     ImportPolicy (..),
@@ -59,16 +61,18 @@ When the policy's 'ipRemoteImports' is 'BlockRemoteImports', HTTP and S3 imports
 are rejected.
 -}
 mkFullDispatcher :: ImportConfig -> LoadImportFn
-mkFullDispatcher cfg location baseLocation =
-    case checkImport (ipTrustedSources (icPolicy cfg)) location baseLocation of
+mkFullDispatcher cfg location base =
+    case checkImport (ipTrustedSources (icPolicy cfg)) location base of
         Left err -> pure (Left err)
-        Right importType -> dispatch cfg importType location baseLocation
+        Right importType -> dispatch cfg importType location (ibLocation base)
 
--- | Dispatch a classified import type to its loader.
+-- | Dispatch a classified import type to its loader, given the base location.
 dispatch ::
     ImportConfig ->
     ImportType ->
-    LoadImportFn
+    Text ->
+    Text ->
+    IO (Either ImportError ImportData)
 dispatch cfg importType location baseLocation = case importType of
     ImportFile -> loadFileImport location baseLocation
     ImportEnv -> loadEnvImport location

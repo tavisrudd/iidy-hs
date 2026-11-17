@@ -13,7 +13,7 @@ import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
 import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig, mkFullDispatcher, mkImportConfig)
 import Iidy.Yaml.Imports.Loaders.File (loadFilehashImport)
-import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..), RemoteImports (..), importPolicy)
+import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..), RemoteImports (..), importPolicy, rootBase)
 
 defaultImportCfg :: ImportConfig
 defaultImportCfg = mkImportConfig Nothing (importPolicy AllowRemoteImports)
@@ -151,7 +151,7 @@ testDispatchFilehash = testCase "dispatches filehash: to filehash loader" $
         let fp = dir </> "test.txt"
         BS.writeFile fp "dispatch test"
         let location = "filehash:" <> T.pack fp
-        result <- mkFullDispatcher defaultImportCfg location "."
+        result <- mkFullDispatcher defaultImportCfg location (rootBase ".")
         case result of
             Left (ImportError e) -> fail (T.unpack e)
             Right dat -> do
@@ -164,7 +164,7 @@ testDispatchFilehashBase64 = testCase "dispatches filehash-base64: to filehash l
         let fp = dir </> "test.txt"
         BS.writeFile fp "dispatch test"
         let location = "filehash-base64:" <> T.pack fp
-        result <- mkFullDispatcher defaultImportCfg location "."
+        result <- mkFullDispatcher defaultImportCfg location (rootBase ".")
         case result of
             Left (ImportError e) -> fail (T.unpack e)
             Right dat ->
@@ -176,7 +176,7 @@ testDispatchFile = testCase "dispatches bare paths to file loader" $
         let fp = dir </> "test.yaml"
         BS.writeFile fp "key: value"
         let location = T.pack fp
-        result <- mkFullDispatcher defaultImportCfg location "."
+        result <- mkFullDispatcher defaultImportCfg location (rootBase ".")
         case result of
             Left (ImportError e) -> fail (T.unpack e)
             Right dat ->

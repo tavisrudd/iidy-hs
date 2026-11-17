@@ -24,6 +24,7 @@ import Iidy.Yaml.Imports.Types (
     RemoteImports (..),
     importPolicy,
     parseImportType,
+    rootBase,
  )
 import Iidy.Yaml.Parser (parseYaml)
 import Test.ImportFixtures (stubDocLoader)
@@ -148,7 +149,7 @@ untrustedAwsMatrix :: [TestTree]
 untrustedAwsMatrix =
     [ testCase (caseName base loc) $ do
         mock <- newMockAws
-        result <- mkFullDispatcher (mkImportConfig (Just (mockEnv mock)) (importPolicy AllowRemoteImports)) loc base
+        result <- mkFullDispatcher (mkImportConfig (Just (mockEnv mock)) (importPolicy AllowRemoteImports)) loc (rootBase base)
         assertRejected result
         readIORef (mockRequests mock) >>= (@?= [])
     | base <- untrustedBases
@@ -169,7 +170,7 @@ localMatrix =
 dispatcherMatrix :: [TestTree]
 dispatcherMatrix =
     [ testCase (caseName base loc) $
-        mkFullDispatcher (mkImportConfig Nothing (importPolicy AllowRemoteImports)) loc base
+        mkFullDispatcher (mkImportConfig Nothing (importPolicy AllowRemoteImports)) loc (rootBase base)
             >>= assertRejected
     | base <- untrustedBases
     , loc <- localOnlyImports

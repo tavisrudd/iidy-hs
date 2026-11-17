@@ -16,8 +16,8 @@ import Iidy.Yaml.Errors.Conversion (
     formatParseErrorEnhanced,
     formatPreprocessErrorEnhanced,
  )
-import Iidy.Yaml.Imports.Loaders.File (loadFileImport)
 import Iidy.Yaml.Parser (ParseError (..), parseYaml)
+import Test.ImportFixtures (fileLoader)
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -39,7 +39,7 @@ getErrorOutput fname = do
         Left pe ->
             formatParseErrorEnhanced ColorNever filePath source (pePosition pe) (peMessage pe)
         Right ast -> do
-            result <- preprocessYaml loadFileImport ast filePath
+            result <- preprocessYaml fileLoader ast filePath
             case result of
                 Left err ->
                     formatPreprocessErrorEnhanced ColorNever filePath source err
