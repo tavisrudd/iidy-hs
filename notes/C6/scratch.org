@@ -1,0 +1,6 @@
+* Cache artifacts
+- =~/src/iidy-hs/.supervisor/tmp/claude-C6.9aHrpa= (worker claude-C6, second
+  budget, 2026-11-16): loop scripts, per-batch outputs, =.hang= captures and
+  event logs.
+  Moved to =~/src/iidy-hs/.supervisor/trash/2026-11-16/claude-C6/claude-C6.9aHrpa=;
+  the key captures are copied to =notes/C6/evidence-2026-11-16/=.

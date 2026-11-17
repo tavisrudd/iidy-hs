@@ -1,0 +1,709 @@
+HANG pid=1902498 label=wd2-N-r73 run=1 rts=-N date=2026-11-16T20:35:28-07:00
+26.57 28.72 24.66 26/1441 1904073
+== /proc/1902498/task/1902498 iidy-hs-test wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902502 ghc_ticker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902503 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902504 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902505 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902506 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902507 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902508 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902509 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902510 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902511 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902512 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902513 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902514 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902515 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902516 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902517 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902518 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902519 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902520 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902521 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902522 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902523 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902524 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902525 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902526 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1902498/task/1902527 ghc_worker wchan=poll_schedule_timeout.constprop.0 State:	S (sleeping)
+== /proc/1902498/task/1902528 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902529 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902530 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902531 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902532 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902533 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902534 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902535 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902536 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902537 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902538 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902539 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902540 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902541 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902542 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902543 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902544 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902545 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902546 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902547 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902548 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902549 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902550 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902551 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902552 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902553 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902554 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902555 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902556 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902557 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902558 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902559 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902560 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902561 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1902562 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1902498/task/1903165 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== wchan counts
+     24 do_epoll_wait
+     38 futex_do_wait
+      1 poll_schedule_timeout.constprop.0
+== fds
+total 0
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 0 -> /dev/null
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 1 -> pipe:[418779195]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 10 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 100 -> pipe:[418747779]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 101 -> pipe:[418747779]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 102 -> anon_inode:[eventfd]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 103 -> pipe:[418747780]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 104 -> pipe:[418747780]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 105 -> anon_inode:[eventfd]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 11 -> pipe:[418747757]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 12 -> pipe:[418747757]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 13 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 14 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 15 -> pipe:[418747758]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 16 -> pipe:[418747758]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 17 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 18 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 19 -> pipe:[418747759]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 2 -> pipe:[418779195]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 20 -> pipe:[418747759]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 21 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 22 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 23 -> pipe:[418747760]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 24 -> pipe:[418747760]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 25 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 26 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 27 -> pipe:[418747761]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 28 -> pipe:[418747761]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 29 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 3 -> anon_inode:[timerfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 30 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 31 -> pipe:[418747762]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 32 -> pipe:[418747762]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 33 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 34 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 35 -> pipe:[418747763]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 36 -> pipe:[418747763]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 37 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 38 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 39 -> pipe:[418747764]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 4 -> pipe:[418747755]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 40 -> pipe:[418747764]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 41 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 42 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 43 -> pipe:[418747765]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 44 -> pipe:[418747765]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 45 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 46 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 47 -> pipe:[418747766]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 48 -> pipe:[418747766]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 49 -> anon_inode:[eventfd]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 5 -> pipe:[418747755]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 50 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 51 -> pipe:[418747767]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 52 -> pipe:[418747767]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 53 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 54 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 55 -> pipe:[418747768]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 56 -> pipe:[418747768]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 57 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 58 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 59 -> pipe:[418747769]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 6 -> anon_inode:[eventpoll]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 60 -> pipe:[418747769]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 61 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 62 -> anon_inode:[eventpoll]
+l-wx------ 1 tavis tavis 64 Nov 16 20:34 63 -> pipe:[418779195]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 64 -> pipe:[418747770]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 65 -> pipe:[418747770]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 66 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 67 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 68 -> pipe:[418747771]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 69 -> pipe:[418747771]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 7 -> pipe:[418747756]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 70 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 71 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 72 -> pipe:[418747772]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 73 -> pipe:[418747772]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 74 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 75 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 76 -> pipe:[418747773]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 77 -> pipe:[418747773]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 78 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 79 -> anon_inode:[eventpoll]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 8 -> pipe:[418747756]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 80 -> pipe:[418747774]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 81 -> pipe:[418747774]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 82 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 83 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 84 -> pipe:[418747775]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 85 -> pipe:[418747775]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 86 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 87 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 88 -> pipe:[418747776]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 89 -> pipe:[418747776]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 9 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 90 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 91 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 92 -> pipe:[418747777]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 93 -> pipe:[418747777]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 94 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 95 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:35 96 -> pipe:[418747778]
+l-wx------ 1 tavis tavis 64 Nov 16 20:35 97 -> pipe:[418747778]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 98 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:35 99 -> anon_inode:[eventpoll]
+== cpu utime stime (now, +3s)
+13 7
+14 7
+== log
+iidy-hs
+  TemplateLoader
+    URL passthrough
+      s3:// URL returned as trTemplateUrl:                            OK
+      https://s3... URL returned as trTemplateUrl:                    OK
+      https:// URL returned as trTemplateUrl:                         OK
+      http:// URL returned as trTemplateUrl:                          OK
+      Nothing input returns empty result:                             OK
+    render: success
+      render: simple template returns trTemplateBody:                 OK (0.02s)
+      render: body does not contain $defs: or $imports: keys:         OK (0.03s)
+      render: with $defs resolves variable references:                OK (0.03s)
+      render: env name injected as $envValues (filtered from output): OK (0.03s)
+    Local file
+      local file without render: returns body:                        OK
+      local file body contains AWSTemplateFormatVersion:              OK (0.02s)
+    Failure paths
+      render: with malformed YAML returns Left with parse error:      OK (0.03s)
+      local file with $imports: but no render: prefix returns Left:   C6-WATCHDOG dump 0 threads=55
+C6-WATCHDOG ThreadId 69 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 68 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 67 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 66 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 53 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 52 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 51 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 50 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 49 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 48 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 47 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 46 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 45 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 44 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 43 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 42 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 41 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 40 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 39 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 38 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 37 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 36 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 35 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 34 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 33 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 32 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 31 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 30 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 2 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 0"
+C6-WATCHDOG ThreadId 3 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 1"
+C6-WATCHDOG ThreadId 4 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 2"
+C6-WATCHDOG ThreadId 5 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 3"
+C6-WATCHDOG ThreadId 6 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 4"
+C6-WATCHDOG ThreadId 7 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 5"
+C6-WATCHDOG ThreadId 8 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 6"
+C6-WATCHDOG ThreadId 9 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 7"
+C6-WATCHDOG ThreadId 10 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 8"
+C6-WATCHDOG ThreadId 11 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 9"
+C6-WATCHDOG ThreadId 12 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 10"
+C6-WATCHDOG ThreadId 13 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 11"
+C6-WATCHDOG ThreadId 14 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 12"
+C6-WATCHDOG ThreadId 15 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 13"
+C6-WATCHDOG ThreadId 16 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 14"
+C6-WATCHDOG ThreadId 17 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 15"
+C6-WATCHDOG ThreadId 18 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 16"
+C6-WATCHDOG ThreadId 19 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 17"
+C6-WATCHDOG ThreadId 20 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 18"
+C6-WATCHDOG ThreadId 21 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 19"
+C6-WATCHDOG ThreadId 22 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 20"
+C6-WATCHDOG ThreadId 23 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 21"
+C6-WATCHDOG ThreadId 24 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 22"
+C6-WATCHDOG ThreadId 25 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 23"
+C6-WATCHDOG ThreadId 26 ThreadBlocked BlockedOnForeignCall Just "TimerManager"
+C6-WATCHDOG ThreadId 27 ThreadBlocked BlockedOnSTM Nothing
+C6-WATCHDOG ThreadId 28 ThreadRunning Nothing
+C6-WATCHDOG dump 1 threads=55
+C6-WATCHDOG ThreadId 28 ThreadRunning Nothing
+C6-WATCHDOG ThreadId 27 ThreadBlocked BlockedOnSTM Nothing
+C6-WATCHDOG ThreadId 26 ThreadBlocked BlockedOnForeignCall Just "TimerManager"
+C6-WATCHDOG ThreadId 25 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 23"
+C6-WATCHDOG ThreadId 24 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 22"
+C6-WATCHDOG ThreadId 23 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 21"
+C6-WATCHDOG ThreadId 22 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 20"
+C6-WATCHDOG ThreadId 21 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 19"
+C6-WATCHDOG ThreadId 20 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 18"
+C6-WATCHDOG ThreadId 19 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 17"
+C6-WATCHDOG ThreadId 18 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 16"
+C6-WATCHDOG ThreadId 17 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 15"
+C6-WATCHDOG ThreadId 16 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 14"
+C6-WATCHDOG ThreadId 15 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 13"
+C6-WATCHDOG ThreadId 14 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 12"
+C6-WATCHDOG ThreadId 13 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 11"
+C6-WATCHDOG ThreadId 12 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 10"
+C6-WATCHDOG ThreadId 11 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 9"
+C6-WATCHDOG ThreadId 10 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 8"
+C6-WATCHDOG ThreadId 9 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 7"
+C6-WATCHDOG ThreadId 8 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 6"
+C6-WATCHDOG ThreadId 7 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 5"
+C6-WATCHDOG ThreadId 6 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 4"
+C6-WATCHDOG ThreadId 5 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 3"
+C6-WATCHDOG ThreadId 4 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 2"
+C6-WATCHDOG ThreadId 3 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 1"
+C6-WATCHDOG ThreadId 2 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 0"
+C6-WATCHDOG ThreadId 30 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 31 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 32 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 33 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 34 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 35 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 36 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 37 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 38 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 39 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 40 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 41 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 42 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 43 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 44 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 45 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 46 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 47 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 48 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 49 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 50 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 51 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 52 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 53 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 66 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 67 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 68 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 69 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG dump 2 threads=55
+C6-WATCHDOG ThreadId 69 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 68 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 67 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 66 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 53 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 52 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 51 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 50 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 49 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 48 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 47 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 46 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 45 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 44 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 43 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 42 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 41 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 40 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 39 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 38 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 37 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 36 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 35 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 34 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 33 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 32 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 31 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 30 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 2 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 0"
+C6-WATCHDOG ThreadId 3 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 1"
+C6-WATCHDOG ThreadId 4 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 2"
+C6-WATCHDOG ThreadId 5 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 3"
+C6-WATCHDOG ThreadId 6 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 4"
+C6-WATCHDOG ThreadId 7 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 5"
+C6-WATCHDOG ThreadId 8 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 6"
+C6-WATCHDOG ThreadId 9 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 7"
+C6-WATCHDOG ThreadId 10 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 8"
+C6-WATCHDOG ThreadId 11 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 9"
+C6-WATCHDOG ThreadId 12 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 10"
+C6-WATCHDOG ThreadId 13 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 11"
+C6-WATCHDOG ThreadId 14 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 12"
+C6-WATCHDOG ThreadId 15 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 13"
+C6-WATCHDOG ThreadId 16 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 14"
+C6-WATCHDOG ThreadId 17 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 15"
+C6-WATCHDOG ThreadId 18 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 16"
+C6-WATCHDOG ThreadId 19 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 17"
+C6-WATCHDOG ThreadId 20 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 18"
+C6-WATCHDOG ThreadId 21 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 19"
+C6-WATCHDOG ThreadId 22 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 20"
+C6-WATCHDOG ThreadId 23 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 21"
+C6-WATCHDOG ThreadId 24 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 22"
+C6-WATCHDOG ThreadId 25 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 23"
+C6-WATCHDOG ThreadId 26 ThreadBlocked BlockedOnForeignCall Just "TimerManager"
+C6-WATCHDOG ThreadId 27 ThreadBlocked BlockedOnSTM Nothing
+C6-WATCHDOG ThreadId 28 ThreadRunning Nothing
+C6-WATCHDOG dump 3 threads=55
+C6-WATCHDOG ThreadId 28 ThreadRunning Nothing
+C6-WATCHDOG ThreadId 27 ThreadBlocked BlockedOnSTM Nothing
+C6-WATCHDOG ThreadId 26 ThreadBlocked BlockedOnForeignCall Just "TimerManager"
+C6-WATCHDOG ThreadId 25 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 23"
+C6-WATCHDOG ThreadId 24 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 22"
+C6-WATCHDOG ThreadId 23 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 21"
+C6-WATCHDOG ThreadId 22 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 20"
+C6-WATCHDOG ThreadId 21 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 19"
+C6-WATCHDOG ThreadId 20 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 18"
+C6-WATCHDOG ThreadId 19 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 17"
+C6-WATCHDOG ThreadId 18 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 16"
+C6-WATCHDOG ThreadId 17 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 15"
+C6-WATCHDOG ThreadId 16 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 14"
+C6-WATCHDOG ThreadId 15 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 13"
+C6-WATCHDOG ThreadId 14 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 12"
+C6-WATCHDOG ThreadId 13 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 11"
+C6-WATCHDOG ThreadId 12 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 10"
+C6-WATCHDOG ThreadId 11 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 9"
+C6-WATCHDOG ThreadId 10 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 8"
+C6-WATCHDOG ThreadId 9 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 7"
+C6-WATCHDOG ThreadId 8 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 6"
+C6-WATCHDOG ThreadId 7 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 5"
+C6-WATCHDOG ThreadId 6 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 4"
+C6-WATCHDOG ThreadId 5 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 3"
+C6-WATCHDOG ThreadId 4 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 2"
+C6-WATCHDOG ThreadId 3 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 1"
+C6-WATCHDOG ThreadId 2 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 0"
+C6-WATCHDOG ThreadId 30 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 31 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 32 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 33 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 34 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 35 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 36 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 37 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 38 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 39 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 40 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 41 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 42 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 43 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 44 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 45 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 46 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 47 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 48 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 49 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 50 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 51 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 52 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 53 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 66 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 67 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 68 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 69 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG dump 4 threads=55
+C6-WATCHDOG ThreadId 69 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 68 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 67 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 66 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 53 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 52 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 51 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 50 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 49 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 48 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 47 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 46 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 45 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 44 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 43 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 42 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 41 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 40 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 39 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 38 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 37 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 36 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 35 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 34 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 33 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 32 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 31 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 30 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 2 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 0"
+C6-WATCHDOG ThreadId 3 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 1"
+C6-WATCHDOG ThreadId 4 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 2"
+C6-WATCHDOG ThreadId 5 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 3"
+C6-WATCHDOG ThreadId 6 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 4"
+C6-WATCHDOG ThreadId 7 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 5"
+C6-WATCHDOG ThreadId 8 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 6"
+C6-WATCHDOG ThreadId 9 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 7"
+C6-WATCHDOG ThreadId 10 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 8"
+C6-WATCHDOG ThreadId 11 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 9"
+C6-WATCHDOG ThreadId 12 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 10"
+C6-WATCHDOG ThreadId 13 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 11"
+C6-WATCHDOG ThreadId 14 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 12"
+C6-WATCHDOG ThreadId 15 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 13"
+C6-WATCHDOG ThreadId 16 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 14"
+C6-WATCHDOG ThreadId 17 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 15"
+C6-WATCHDOG ThreadId 18 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 16"
+C6-WATCHDOG ThreadId 19 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 17"
+C6-WATCHDOG ThreadId 20 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 18"
+C6-WATCHDOG ThreadId 21 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 19"
+C6-WATCHDOG ThreadId 22 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 20"
+C6-WATCHDOG ThreadId 23 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 21"
+C6-WATCHDOG ThreadId 24 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 22"
+C6-WATCHDOG ThreadId 25 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 23"
+C6-WATCHDOG ThreadId 26 ThreadBlocked BlockedOnForeignCall Just "TimerManager"
+C6-WATCHDOG ThreadId 27 ThreadBlocked BlockedOnSTM Nothing
+C6-WATCHDOG ThreadId 28 ThreadRunning Nothing
+C6-WATCHDOG dump 5 threads=55
+C6-WATCHDOG ThreadId 28 ThreadRunning Nothing
+C6-WATCHDOG ThreadId 27 ThreadBlocked BlockedOnSTM Nothing
+C6-WATCHDOG ThreadId 26 ThreadBlocked BlockedOnForeignCall Just "TimerManager"
+C6-WATCHDOG ThreadId 25 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 23"
+C6-WATCHDOG ThreadId 24 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 22"
+C6-WATCHDOG ThreadId 23 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 21"
+C6-WATCHDOG ThreadId 22 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 20"
+C6-WATCHDOG ThreadId 21 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 19"
+C6-WATCHDOG ThreadId 20 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 18"
+C6-WATCHDOG ThreadId 19 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 17"
+C6-WATCHDOG ThreadId 18 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 16"
+C6-WATCHDOG ThreadId 17 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 15"
+C6-WATCHDOG ThreadId 16 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 14"
+C6-WATCHDOG ThreadId 15 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 13"
+C6-WATCHDOG ThreadId 14 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 12"
+C6-WATCHDOG ThreadId 13 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 11"
+C6-WATCHDOG ThreadId 12 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 10"
+C6-WATCHDOG ThreadId 11 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 9"
+C6-WATCHDOG ThreadId 10 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 8"
+C6-WATCHDOG ThreadId 9 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 7"
+C6-WATCHDOG ThreadId 8 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 6"
+C6-WATCHDOG ThreadId 7 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 5"
+C6-WATCHDOG ThreadId 6 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 4"
+C6-WATCHDOG ThreadId 5 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 3"
+C6-WATCHDOG ThreadId 4 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 2"
+C6-WATCHDOG ThreadId 3 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 1"
+C6-WATCHDOG ThreadId 2 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 0"
+C6-WATCHDOG ThreadId 30 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 31 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 32 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 33 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 34 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 35 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 36 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 37 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 38 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 39 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 40 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 41 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 42 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 43 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 44 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 45 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 46 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 47 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 48 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 49 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 50 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 51 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 52 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 53 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 66 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 67 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 68 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 69 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG dump 6 threads=55
+C6-WATCHDOG ThreadId 69 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 68 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 67 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 66 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 53 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 52 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 51 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 50 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 49 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 48 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 47 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 46 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 45 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 44 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 43 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 42 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 41 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 40 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 39 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 38 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 37 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 36 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 35 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 34 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 33 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 32 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 31 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 30 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 2 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 0"
+C6-WATCHDOG ThreadId 3 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 1"
+C6-WATCHDOG ThreadId 4 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 2"
+C6-WATCHDOG ThreadId 5 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 3"
+C6-WATCHDOG ThreadId 6 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 4"
+C6-WATCHDOG ThreadId 7 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 5"
+C6-WATCHDOG ThreadId 8 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 6"
+C6-WATCHDOG ThreadId 9 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 7"
+C6-WATCHDOG ThreadId 10 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 8"
+C6-WATCHDOG ThreadId 11 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 9"
+C6-WATCHDOG ThreadId 12 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 10"
+C6-WATCHDOG ThreadId 13 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 11"
+C6-WATCHDOG ThreadId 14 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 12"
+C6-WATCHDOG ThreadId 15 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 13"
+C6-WATCHDOG ThreadId 16 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 14"
+C6-WATCHDOG ThreadId 17 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 15"
+C6-WATCHDOG ThreadId 18 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 16"
+C6-WATCHDOG ThreadId 19 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 17"
+C6-WATCHDOG ThreadId 20 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 18"
+C6-WATCHDOG ThreadId 21 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 19"
+C6-WATCHDOG ThreadId 22 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 20"
+C6-WATCHDOG ThreadId 23 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 21"
+C6-WATCHDOG ThreadId 24 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 22"
+C6-WATCHDOG ThreadId 25 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 23"
+C6-WATCHDOG ThreadId 26 ThreadBlocked BlockedOnForeignCall Just "TimerManager"
+C6-WATCHDOG ThreadId 27 ThreadBlocked BlockedOnSTM Nothing
+C6-WATCHDOG ThreadId 28 ThreadRunning Nothing
+C6-WATCHDOG dump 7 threads=55
+C6-WATCHDOG ThreadId 28 ThreadRunning Nothing
+C6-WATCHDOG ThreadId 27 ThreadBlocked BlockedOnSTM Nothing
+C6-WATCHDOG ThreadId 26 ThreadBlocked BlockedOnForeignCall Just "TimerManager"
+C6-WATCHDOG ThreadId 25 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 23"
+C6-WATCHDOG ThreadId 24 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 22"
+C6-WATCHDOG ThreadId 23 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 21"
+C6-WATCHDOG ThreadId 22 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 20"
+C6-WATCHDOG ThreadId 21 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 19"
+C6-WATCHDOG ThreadId 20 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 18"
+C6-WATCHDOG ThreadId 19 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 17"
+C6-WATCHDOG ThreadId 18 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 16"
+C6-WATCHDOG ThreadId 17 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 15"
+C6-WATCHDOG ThreadId 16 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 14"
+C6-WATCHDOG ThreadId 15 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 13"
+C6-WATCHDOG ThreadId 14 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 12"
+C6-WATCHDOG ThreadId 13 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 11"
+C6-WATCHDOG ThreadId 12 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 10"
+C6-WATCHDOG ThreadId 11 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 9"
+C6-WATCHDOG ThreadId 10 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 8"
+C6-WATCHDOG ThreadId 9 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 7"
+C6-WATCHDOG ThreadId 8 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 6"
+C6-WATCHDOG ThreadId 7 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 5"
+C6-WATCHDOG ThreadId 6 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 4"
+C6-WATCHDOG ThreadId 5 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 3"
+C6-WATCHDOG ThreadId 4 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 2"
+C6-WATCHDOG ThreadId 3 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 1"
+C6-WATCHDOG ThreadId 2 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 0"
+C6-WATCHDOG ThreadId 30 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 31 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 32 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 33 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 34 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 35 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 36 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 37 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 38 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 39 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 40 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 41 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 42 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 43 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 44 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 45 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 46 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 47 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 48 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 49 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 50 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 51 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 52 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 53 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 66 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 67 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 68 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 69 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG dump 8 threads=55
+C6-WATCHDOG ThreadId 69 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 68 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 67 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 66 ThreadBlocked BlockedOnBlackHole Just "tasty_test_execution_thread"
+C6-WATCHDOG ThreadId 53 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 52 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 51 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 50 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 49 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 48 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 47 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 46 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 45 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 44 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 43 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 42 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 41 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 40 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 39 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 38 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 37 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 36 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 35 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 34 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 33 ThreadBlocked BlockedOnException Nothing
+C6-WATCHDOG ThreadId 32 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 31 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 30 ThreadFinished Nothing
+C6-WATCHDOG ThreadId 2 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 0"
+C6-WATCHDOG ThreadId 3 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 1"
+C6-WATCHDOG ThreadId 4 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 2"
+C6-WATCHDOG ThreadId 5 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 3"
+C6-WATCHDOG ThreadId 6 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 4"
+C6-WATCHDOG ThreadId 7 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 5"
+C6-WATCHDOG ThreadId 8 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 6"
+C6-WATCHDOG ThreadId 9 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 7"
+C6-WATCHDOG ThreadId 10 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 8"
+C6-WATCHDOG ThreadId 11 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 9"
+C6-WATCHDOG ThreadId 12 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 10"
+C6-WATCHDOG ThreadId 13 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 11"
+C6-WATCHDOG ThreadId 14 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 12"
+C6-WATCHDOG ThreadId 15 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 13"
+C6-WATCHDOG ThreadId 16 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 14"
+C6-WATCHDOG ThreadId 17 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 15"
+C6-WATCHDOG ThreadId 18 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 16"
+C6-WATCHDOG ThreadId 19 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 17"
+C6-WATCHDOG ThreadId 20 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 18"
+C6-WATCHDOG ThreadId 21 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 19"
+C6-WATCHDOG ThreadId 22 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 20"
+C6-WATCHDOG ThreadId 23 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 21"
+C6-WATCHDOG ThreadId 24 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 22"
+C6-WATCHDOG ThreadId 25 ThreadBlocked BlockedOnForeignCall Just "IOManager on cap 23"
+C6-WATCHDOG ThreadId 26 ThreadBlocked BlockedOnForeignCall Just "TimerManager"
+C6-WATCHDOG ThreadId 27 ThreadBlocked BlockedOnSTM Nothing
+C6-WATCHDOG ThreadId 28 ThreadRunning Nothing
+== after INT
+     24 do_epoll_wait
+     38 futex_do_wait
+      1 poll_schedule_timeout.constprop.0
+16 8
+still alive after INT

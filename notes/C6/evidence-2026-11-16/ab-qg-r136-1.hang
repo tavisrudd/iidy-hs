@@ -1,0 +1,207 @@
+HANG pid=1851278 label=ab-qg-r136 run=1 rts=-N -qg date=2026-11-16T20:25:33-07:00
+26.30 28.16 20.78 25/1431 1852896
+== /proc/1851278/task/1851278 iidy-hs-test wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851281 ghc_ticker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851282 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851283 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851284 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851285 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851286 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851287 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851288 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851289 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851290 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851291 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851292 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851293 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851294 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851295 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851296 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851297 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851299 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851300 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851301 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851302 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851303 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851304 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851305 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851306 ghc_worker wchan=do_epoll_wait State:	S (sleeping)
+== /proc/1851278/task/1851307 ghc_worker wchan=poll_schedule_timeout.constprop.0 State:	S (sleeping)
+== /proc/1851278/task/1851308 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851309 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851310 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851311 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851312 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851313 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851314 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851315 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851316 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851317 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851318 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851319 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851320 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851321 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851322 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851323 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851324 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851325 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851326 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851327 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851328 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851329 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851330 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851331 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851332 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851333 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851334 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851335 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851336 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851337 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851338 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851339 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851340 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851341 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851342 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851343 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851344 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1851278/task/1851349 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== wchan counts
+     24 do_epoll_wait
+     40 futex_do_wait
+      1 poll_schedule_timeout.constprop.0
+== fds
+total 0
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 0 -> /dev/null
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 1 -> pipe:[418569813]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 10 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 100 -> pipe:[418531563]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 101 -> pipe:[418531563]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 102 -> anon_inode:[eventfd]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 103 -> pipe:[418543548]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 104 -> pipe:[418543548]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 105 -> anon_inode:[eventfd]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 11 -> pipe:[418550528]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 12 -> pipe:[418550528]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 13 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 14 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 15 -> pipe:[418550529]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 16 -> pipe:[418550529]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 17 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 18 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 19 -> pipe:[418550530]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 2 -> pipe:[418569813]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 20 -> pipe:[418550530]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 21 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 22 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 23 -> pipe:[418550531]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 24 -> pipe:[418550531]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 25 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 26 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 27 -> pipe:[418550532]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 28 -> pipe:[418550532]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 29 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 3 -> anon_inode:[timerfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 30 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 31 -> pipe:[418550533]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 32 -> pipe:[418550533]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 33 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 34 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 35 -> pipe:[418550534]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 36 -> pipe:[418550534]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 37 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 38 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 39 -> pipe:[418550535]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 4 -> pipe:[418569818]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 40 -> pipe:[418550535]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 41 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 42 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 43 -> pipe:[418550536]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 44 -> pipe:[418550536]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 45 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 46 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 47 -> pipe:[418550537]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 48 -> pipe:[418550537]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 49 -> anon_inode:[eventfd]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 5 -> pipe:[418569818]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 50 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 51 -> pipe:[418550538]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 52 -> pipe:[418550538]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 53 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 54 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 55 -> pipe:[418550539]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 56 -> pipe:[418550539]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 57 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 58 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 59 -> pipe:[418550540]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 6 -> anon_inode:[eventpoll]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 60 -> pipe:[418550540]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 61 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 62 -> anon_inode:[eventpoll]
+l-wx------ 1 tavis tavis 64 Nov 16 20:24 63 -> pipe:[418569813]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 64 -> pipe:[418550541]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 65 -> pipe:[418550541]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 66 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 67 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 68 -> pipe:[418550542]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 69 -> pipe:[418550542]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 7 -> pipe:[418550527]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 70 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 71 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 72 -> pipe:[418531556]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 73 -> pipe:[418531556]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 74 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 75 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 76 -> pipe:[418531557]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 77 -> pipe:[418531557]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 78 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 79 -> anon_inode:[eventpoll]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 8 -> pipe:[418550527]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 80 -> pipe:[418531558]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 81 -> pipe:[418531558]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 82 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 83 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 84 -> pipe:[418531559]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 85 -> pipe:[418531559]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 86 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 87 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 88 -> pipe:[418531560]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 89 -> pipe:[418531560]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 9 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 90 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 91 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 92 -> pipe:[418531561]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 93 -> pipe:[418531561]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 94 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 95 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:25 96 -> pipe:[418531562]
+l-wx------ 1 tavis tavis 64 Nov 16 20:25 97 -> pipe:[418531562]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 98 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:25 99 -> anon_inode:[eventpoll]
+== cpu utime stime (now, +3s)
+23 3
+23 3
+== log
+iidy-hs
+  TemplateLoader
+    URL passthrough
+      s3:// URL returned as trTemplateUrl:                            OK
+      https://s3... URL returned as trTemplateUrl:                    OK
+      https:// URL returned as trTemplateUrl:                         OK
+      http:// URL returned as trTemplateUrl:                          OK
+      Nothing input returns empty result:                             OK
+    render: success
+      render: simple template returns trTemplateBody:                 OK (0.01s)
+      render: body does not contain $defs: or $imports: keys:         OK (0.01s)
+      render: with $defs resolves variable references:                OK (0.02s)
+      render: env name injected as $envValues (filtered from output): OK (0.01s)
+    Local file
+      local file without render: returns body:                        OK (0.01s)
+      local file body contains AWSTemplateFormatVersion:              OK (0.01s)
+    Failure paths
+      render: with malformed YAML returns Left with parse error:      OK (0.01s)
+      local file with $imports: but no render: prefix returns Left:   == after INT
+     24 do_epoll_wait
+     40 futex_do_wait
+      1 poll_schedule_timeout.constprop.0
+23 3
+still alive after INT

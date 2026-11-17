@@ -12,6 +12,7 @@
 :END:
 :CLOCK:
 CLOCK: [2026-11-16 Mon 16:18]--[2026-11-16 Mon 16:32] => 0:14
+CLOCK: [2026-11-16 Mon 20:02]--[2026-11-16 Mon 20:40] => 0:38
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:17]
@@ -34,6 +35,12 @@ CLOCK: [2026-11-16 Mon 16:18]--[2026-11-16 Mon 16:32] => 0:14
 - Card state NEXT → STARTED [2026-11-16 Mon 20:01]
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 20:02]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:abf3ea522a00a8554
+- Clock-out [2026-11-16 Mon 20:40]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:abf3ea522a00a8554
 :END:
 #+title: C6 — Find and fix the intermittent hang in the test suite
 #+date: 2026-11-16
@@ -223,6 +230,95 @@ so the fix task is not started.
 - The first hang ran under GHC 9.10.3 inside =cabal test ... | tail -5= in
   the hook, possibly while other builds loaded the host; the attempt here
   is GHC 9.12.3, so a 9.10-only RTS issue cannot be ruled out either.
+
+** Second budget 2026-11-16 (worker claude-C6): hang reproduced under load
+:PROPERTIES:
+:ID: org:01a1e797-ec17-72cf-bb80-c66d925376fc
+:ADDED: [2026-11-16 Mon 20:40]
+:END:
+Base =7d8f30c= (branch =claude/C6-hang=), GHC 9.12.3, built once with
+=scripts/guarded-build cabal build all --enable-tests -j4=. Loops ran the
+built binary outside the lock, one run at a time, from the worktree root,
+=--timeout=20s -p PATTERN=, stdin on =/dev/null=, with a 60 s wall-clock
+watchdog that captured =/proc/PID/task/*= state, fds, CPU ticks and the log
+before sending SIGINT and then =kill -9=. The loop script is
+[[file:evidence-2026-11-16/loop-pipe-noel.sh][loop-pipe-noel.sh]]; the
+captures are in =evidence-2026-11-16/=. "Load" means 24 =nice -n 10= shell
+busy loops on the 24-core host (load average 26-30).
+
+| Batch                               | RTS flags        | Load   | Runs | Hangs                        |
+|-------------------------------------+------------------+--------+------+------------------------------|
+| single test (malformed YAML)        | -N/-N1/-N2/-N4   | idle   |  500 | 0                            |
+| TemplateLoader group                | -N/-N1/-N2       | idle   |  100 | 0                            |
+| group, event log + flush interval   | -N -l            | loaded |  100 | 2 (at exit, see below)       |
+| single test, event log              | -N/-N2 -l        | loaded |  200 | 0                            |
+| group, no event log                 | -N               | loaded |  800 | 2 (mid-run)                  |
+| group, no event log                 | -N -qg           | loaded |  350 | 1 (mid-run)                  |
+| group, -A64k (discarded)            | -N -A64k         | loaded |    9 | 0; size-limit test >20 s     |
+
+Results:
+- The single test named by the C36 lead never hung (700 runs). The hang
+  needs the group running in parallel under CPU load; the stuck point
+  printed by tasty is not fixed: C36 stopped at =render: with malformed
+  YAML=, all three mid-run hangs here stopped at the next test, =local file
+  with $imports: but no render: prefix returns Left=. Tasty prints results
+  in order, so the printed name is only the first unfinished test.
+- Mid-run hangs match the first C6 hang exactly: 24 =do_epoll_wait=, 38-40
+  =futex_do_wait=, 1 =poll=, zero CPU over 3 s, the 20 s tasty timeout never
+  reported, SIGINT ignored, only =kill -9= ends it. =-qg= (no parallel GC)
+  still hangs, so it is not a parallel-GC sync.
+- Thread dump of a mid-run hang (env-gated watchdog thread in =test/Main.hs=
+  using =GHC.Conc.Sync.listThreads=/=threadStatus=; diagnostic only, not
+  committed, [[file:evidence-2026-11-16/watchdog.diff][watchdog.diff]]; capture
+  [[file:evidence-2026-11-16/wd2-N-r73-1.hang][wd2-N-r73-1.hang]]). The RTS
+  is alive (the watchdog ran every 5 s for 40 s), so this is not an RTS-wide
+  freeze. Stable across all 9 dumps:
+  - 4 threads labelled =tasty_test_execution_thread= in
+    =ThreadBlocked BlockedOnBlackHole=;
+  - 4 unlabelled threads in =BlockedOnException= (a =throwTo= that cannot
+    be delivered; most likely tasty's timeout throwing at those 4 test
+    threads);
+  - 1 thread =BlockedOnSTM= (tasty's reporter), the IO and timer managers
+    in their foreign calls, everything else =ThreadFinished=.
+  No live thread can own the black holes, so the owner finished (or died)
+  without its waiters being woken. The RTS only lets =throwTo= interrupt a
+  thread blocked on a black hole when the target is unmasked, so a waiter
+  that is masked is unkillable, which is why the timeout and SIGINT do
+  nothing.
+- Code reading of the loader path found no =unsafePerformIO=,
+  =uninterruptibleMask=, FFI or =MVar= of our own (=src/= has none on this
+  path; =BL.readFile= is consumed to EOF by =parseYamlWith='s =BL.last=).
+  The likeliest shared thunks are CAFs used by many tests at once, for
+  example the =Text= literal in =hasImportsKey= (used by every local-file
+  and inline-template test) or =defaultImportCfg= in the test module.
+- Two runs with =+RTS -l --eventlog-flush-interval=1= hung at process exit
+  instead (all tests passed, 4-5 threads left, main thread running or in a
+  futex, event log truncated to the shutdown records). Without the flush
+  interval no exit hang was seen; treat this as a second problem caused by
+  the capture flags, and drop =--eventlog-flush-interval= from the capture
+  procedure below.
+
+Cause, as far as the evidence goes: a test thread blocked forever on a
+black hole (a thunk or CAF being evaluated by another thread) whose owner
+is gone. Nothing in the project's code on this path can produce that; it
+points at the GHC RTS (seen on 9.10.3 and 9.12.3), which is outside the
+card's allowed paths. Not yet done: a standalone reproduction (many threads
+forcing one shared thunk under load) to name the RTS bug, and mapping the
+blocked thread IDs to test names.
+
+*** Question for supervisor
+:PROPERTIES:
+:ID: org:01a1e797-ec17-72cf-bb80-c66c1a6e9089
+:ADDED: [2026-11-16 Mon 20:40]
+:END:
+The hang reproduces (about 1 in 300 loaded group runs) and is a black-hole
+wait with no live owner, apparently in the GHC RTS, not in project code.
+The card's stop rule applies. Options: (a) a further budget for a
+standalone stress test outside the suite to confirm and report the RTS bug
+upstream; (b) a mitigation in =iidy-hs.cabal= (outside the allowed paths),
+such as running the suite with fewer capabilities, which does not fix the
+cause and is not yet shown to help; (c) park the card WAITING with this
+evidence. Which should the card do?
 
 * DONE Record what to capture on a future hang
 :PROPERTIES:

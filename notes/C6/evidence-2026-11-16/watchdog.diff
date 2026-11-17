@@ -1,0 +1,48 @@
+diff --git a/test/Main.hs b/test/Main.hs
+index 7b437ee..03d1a29 100644
+--- a/test/Main.hs
++++ b/test/Main.hs
+@@ -1,5 +1,10 @@
+ module Main (main) where
+ 
++import Control.Concurrent (forkIO, threadDelay)
++import Control.Monad (void)
++import GHC.Conc.Sync (listThreads, threadLabel, threadStatus)
++import System.Environment (lookupEnv)
++import System.IO (hFlush, hPutStrLn, stderr)
+ import Test.Tasty (defaultMain, testGroup)
+ 
+ import Iidy.Cli.HelpTest qualified as HelpTest
+@@ -64,8 +69,32 @@ import Test.TimingTest (timingTests)
+ import Test.TrustedSourceTest (trustedSourceTests)
+ import Test.WatchStackTest (watchStackTests)
+ 
++-- C6 DIAGNOSTIC (not for commit): after 25 s, dump every Haskell thread.
++c6Watchdog :: IO ()
++c6Watchdog = do
++    threadDelay 25000000
++    let dump :: Int -> IO ()
++        dump n = do
++            ts <- listThreads
++            hPutStrLn stderr ("C6-WATCHDOG dump " <> show n <> " threads=" <> show (length ts))
++            mapM_
++                ( \t -> do
++                    st <- threadStatus t
++                    lbl <- threadLabel t
++                    hPutStrLn stderr ("C6-WATCHDOG " <> show t <> " " <> show st <> " " <> show lbl)
++                )
++                ts
++            hFlush stderr
++            threadDelay 5000000
++            dump (n + 1)
++    dump 0
++
+ main :: IO ()
+ main = do
++    wd <- lookupEnv "C6_WATCHDOG"
++    case wd of
++        Just _ -> void (forkIO c6Watchdog)
++        Nothing -> pure ()
+     fixtureTests <- buildFixtureTests
+     errorTests <- buildErrorTests
+     conformanceTests <- specConformanceTests

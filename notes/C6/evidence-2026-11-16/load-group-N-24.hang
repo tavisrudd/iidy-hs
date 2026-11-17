@@ -1,0 +1,55 @@
+HANG pid=1775900 label=load-group-N run=24 rts=-N date=2026-11-16T20:09:44-07:00
+23.14 10.72 5.58 25/1362 1777437
+== /proc/1775900/task/1775900 iidy-hs-test wchan=futex_do_wait State:	S (sleeping)
+== /proc/1775900/task/1775904 ghc_ticker wchan=futex_do_wait State:	S (sleeping)
+== /proc/1775900/task/1775908 ghc_worker wchan=futex_do_wait State:	S (sleeping)
+== wchan counts
+      3 futex_do_wait
+== fds
+total 0
+lr-x------ 1 tavis tavis 64 Nov 16 20:09 0 -> /dev/null
+l-wx------ 1 tavis tavis 64 Nov 16 20:09 1 -> pipe:[418334091]
+l-wx------ 1 tavis tavis 64 Nov 16 20:09 2 -> pipe:[418334091]
+lrwx------ 1 tavis tavis 64 Nov 16 20:09 23 -> anon_inode:[eventpoll]
+lr-x------ 1 tavis tavis 64 Nov 16 20:09 24 -> pipe:[418334101]
+l-wx------ 1 tavis tavis 64 Nov 16 20:09 25 -> pipe:[418334101]
+lrwx------ 1 tavis tavis 64 Nov 16 20:09 26 -> anon_inode:[eventfd]
+lrwx------ 1 tavis tavis 64 Nov 16 20:09 3 -> /home/tavis/src/iidy-hs/.supervisor/tmp/claude-C6.9aHrpa/load-group-N.cur.eventlog
+lrwx------ 1 tavis tavis 64 Nov 16 20:09 4 -> anon_inode:[timerfd]
+lr-x------ 1 tavis tavis 64 Nov 16 20:09 5 -> pipe:[418334096]
+l-wx------ 1 tavis tavis 64 Nov 16 20:09 6 -> pipe:[418334096]
+l-wx------ 1 tavis tavis 64 Nov 16 20:08 63 -> pipe:[418334091]
+== log
+iidy-hs
+  TemplateLoader
+    URL passthrough
+      s3:// URL returned as trTemplateUrl:                            OK
+      https://s3... URL returned as trTemplateUrl:                    OK
+      https:// URL returned as trTemplateUrl:                         OK
+      http:// URL returned as trTemplateUrl:                          OK
+      Nothing input returns empty result:                             OK
+    render: success
+      render: simple template returns trTemplateBody:                 OK
+      render: body does not contain $defs: or $imports: keys:         OK
+      render: with $defs resolves variable references:                OK
+      render: env name injected as $envValues (filtered from output): OK
+    Local file
+      local file without render: returns body:                        OK
+      local file body contains AWSTemplateFormatVersion:              OK
+    Failure paths
+      render: with malformed YAML returns Left with parse error:      OK (0.01s)
+      local file with $imports: but no render: prefix returns Left:   OK (0.01s)
+      render: with AWS import but no AWS env returns Left:            OK (0.01s)
+      local file with invalid UTF-8 bytes returns Left:               OK
+      render: template exceeding size limit returns Left:             OK (0.95s)
+      inline content with $imports: returns Left:                     OK
+      missing path returns Left naming the path:                      OK
+      missing bare word returns Left naming the path:                 OK
+      missing path resolves against the argsfile directory:           OK
+      inline JSON object is used as the body:                         OK
+      inline JSON array is used as the body:                          OK
+      inline body with leading whitespace before a brace:             OK
+      inline multi-line YAML is used as the body:                     OK
+
+All 24 tests passed (0.95s)
+still alive after INT
