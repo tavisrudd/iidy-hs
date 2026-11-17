@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C20
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
 :CREATED_BY: opus-5.5-medium
@@ -10,9 +10,36 @@
 :ID: org:01a1e691-48ec-7029-b574-3a72e11429bd
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
+:CLOCK:
+CLOCK: [2026-11-17 Tue 11:30]--[2026-11-17 Tue 11:52] => 0:22
+CLOCK: [2026-11-17 Tue 12:05]--[2026-11-17 Tue 12:09] => 0:04
+CLOCK: [2026-11-17 Tue 12:10]--[2026-11-17 Tue 12:11] => 0:01
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-17 Tue 11:28]
   Note: Assigned to Sonnet sub-agent claude-C20 (Tavis 2026-11-17)
+  Agent: opus-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
+- Clock-in [2026-11-17 Tue 11:30]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:acb4526cd90248ab2
+- Clock-out [2026-11-17 Tue 11:52]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:acb4526cd90248ab2
+- Clock-in [2026-11-17 Tue 12:05]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:acb4526cd90248ab2
+- Clock-out [2026-11-17 Tue 12:09]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:acb4526cd90248ab2
+- Clock-in [2026-11-17 Tue 12:10]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:acb4526cd90248ab2
+- Clock-out [2026-11-17 Tue 12:11]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:acb4526cd90248ab2
+- Card state STARTED → DONE [2026-11-17 Tue 12:12]
+  Note: Landed ada10c8..0e15639: alias node cap, 50 MiB expanded-size cap, import depth 32 and count 1000, helper output 1 MiB on every helper, HTTP total 60 s; Opus review + 2 fix rounds; follow-ups C44 C45 C46
   Agent: opus-5.5-medium
   Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
 :END:
@@ -100,6 +127,14 @@ bomb (253 MB) is rejected by the size cap. The size cap is a user-visible
 limit like the others: name it, test just under and just over it, and
 record it in the security docs.
 
+Correction (supervisor, 2026-11-17, from the C20 review): both paragraphs
+above rest on wrong arithmetic. The C4 bomb starts from a list of ten
+scalars, so its five alias levels hold over 1.2 million nodes, and the
+250,000 node cap already rejects it; 19,753,104 bytes is its rendered size
+and 253 MB was process memory, not output. The 50 MiB size cap stays as a
+second guard. The security-docs part moved to card C22 (supervisor's
+call); this card records the limits in =DIVERGENCES.md=.
+
 Values (the review gives none; confirmed by Tavis 2026-11-16 as proposed,
 except the alias cap above; each is a user-visible limit). They are named
 constants in =Iidy.Constants=, with the reason recorded beside each:
@@ -122,17 +157,17 @@ constants in =Iidy.Constants=, with the reason recorded beside each:
 Rust has none of these, so each is a divergence to record.
 
 Done when:
-- [ ] The Rust comparison above is re-checked (grep of =~/src/iidy/src/yaml/=
+- [x] The Rust comparison above is re-checked (grep of =~/src/iidy/src/yaml/=
   and =cfn/= for limits) and recorded in the first task note, together with
   the confirmed values (alias cap 250,000 nodes).
-- [ ] The measured node count of the largest existing fixture or example
+- [x] The measured node count of the largest existing fixture or example
   template is recorded and is below 250,000.
-- [ ] Each limit is enforced with a clear error naming the limit, the value
+- [x] Each limit is enforced with a clear error naming the limit, the value
   and what hit it (for example "YAML alias expansion exceeds 1000000 nodes
   in <location>"; "import depth 33 exceeds 32: a.yaml -> b.yaml -> ..."),
   surfacing through the existing error types and display, not a crash or
   a hang.
-- [ ] Tests, each with a 10 second timeout and each recorded failing
+- [x] Tests, each with a 10 second timeout and each recorded failing
   (killed by the timeout or out of memory is acceptable evidence) before
   the fix: a generated alias bomb with enough levels to pass the node limit
   is rejected quickly; a bomb just under the limit still loads; a linear
@@ -141,12 +176,12 @@ Done when:
   huge width errors and =pad= to a small width is unchanged; an HTTP import
   whose body drips past the total time errors, using a local test server or
   an injected clock, not a real network.
-- [ ] Every existing fixture, example template and test passes unchanged
+- [x] Every existing fixture, example template and test passes unchanged
   (the full suite, which renders the example templates, is green); no
   expected output changed.
-- [ ] =DIVERGENCES.md= has one entry listing the four limits and their
+- [x] =DIVERGENCES.md= has one entry listing the four limits and their
   values.
-- [ ] Build warning-free, full suite green, commits name C20.
+- [x] Build warning-free, full suite green, commits name C20.
 
 Stop and record if: a limit would need a value other than the confirmed
 ones above (do not pick other values); the alias
@@ -156,30 +191,83 @@ time cannot be tested without a real network; or the work needs a change
 outside the allowed paths. Budget: if a limit takes more than two
 implement-and-test rounds, stop and record the state.
 
-* TODO Re-check Rust and record the confirmed limit values
+* DONE Re-check Rust and record the confirmed limit values
 :PROPERTIES:
 :ID: org:01a1e692-142a-7666-9ade-4c5468fd30cb
 :ADDED: [2026-11-16 Mon 15:54]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 11:52] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:acb4526cd90248ab2
 :END:
 
 Grep the Rust tree for limits, record the finding, and copy the confirmed
 values above into this card's task note. Add the constants to
 =Iidy.Constants= with a one-line reason each.
 
-* TODO Cap import depth and total imports
+** Result
+:PROPERTIES:
+:ID: org:01a1eada-2b06-77c5-b4f3-b27f0547688f
+:ADDED: [2026-11-17 Tue 11:52]
+:END:
+- Rust re-check: grep of =~/src/iidy/src/yaml/= and =src/cfn/= for
+  max/limit/depth finds no alias, depth, import-count or helper-size
+  constant; only the circular-import check (=engine.rs:82-84=, "Circular
+  import detected"). Every limit is a divergence, one =DIVERGENCES.md=
+  entry ("Resource Limits on Untrusted Input").
+- Duplication search: HTTP size cap and response timeout already live in
+  =Iidy.Constants= and =Http.hs= (=readWithLimit=, =responseTimeoutMicro=);
+  the total-time limit extends those. Import cycle/chain tracking has one
+  owner, =Imports/Manifest.hs= (=pushImport=, =isChain=), so depth and
+  count go there. Constants all in =Iidy.Constants=.
+- Confirmed values (constants with reasons): alias nodes 250,000
+  (=yamlMaxAliasNodes=), expanded scalar text 50 MiB
+  (=yamlMaxExpandedBytes=, Tavis 2026-11-17), import depth 32
+  (=importMaxDepth=), imports per run 1,000 (=importMaxTotal=), helper
+  output 1,048,576 characters (=helperMaxOutputChars=), HTTP total time
+  60 s (=httpTotalTimeoutSeconds=).
+- Largest checked-in document (all =.yaml/.yml= under =test-fixtures/= and
+  =fixtures/=, 188 files; a permanent test walks them): 3,479 nodes
+  (=test-fixtures/example-templates/yaml-iidy-syntax/frompairs.yaml=), far
+  below 250,000; no existing document is rejected.
+
+* DONE Cap import depth and total imports
 :PROPERTIES:
 :ID: org:01a1e6c8-2279-70ac-bb06-81c820689747
 :ADDED: [2026-11-16 Mon 16:53]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 11:52] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:acb4526cd90248ab2
 :END:
 
 Enforce in =pushImport= (the chain length is already tracked in
 =isChain=) and the manifest count, with the failing chain and fan-out tests
 first.
 
-* TODO Cap alias expansion
+** Result
+:PROPERTIES:
+:ID: org:01a1eada-2b06-77c5-b4f3-b27e4512ae12
+:ADDED: [2026-11-17 Tue 11:52]
+:END:
+Enforced in =pushImport= (=Manifest.hs=), which now returns
+=Either PushError ImportStack= (=ImportCycle= keeps =PeCycleError=; the
+new =ImportLimit= surfaces as =PeImportError=, because the cycle error's
+display text says "circular import detected"). =isTotal= counts pushes and
+survives =popImport=; the root document is exempt from both counts.
+Failing first: endless chain TIMEOUT 10 s, fan-out of 1,001 loaded.
+
+* DONE Cap alias expansion
 :PROPERTIES:
 :ID: org:01a1e6c8-2279-70ac-bb06-81c783a075f2
 :ADDED: [2026-11-16 Mon 16:53]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 11:52] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:acb4526cd90248ab2
 :END:
 
 Find the cheapest place that bounds expanded work before resolution
@@ -187,21 +275,230 @@ Find the cheapest place that bounds expanded work before resolution
 walk with sharing taken into account); do not resolve the full expansion
 to measure it. Failing bomb tests first.
 
-* TODO Cap helper output and HTTP total time
+** Result
+:PROPERTIES:
+:ID: org:01a1eada-2b06-77c5-b4f3-b27dbc2aa2ba
+:ADDED: [2026-11-17 Tue 11:52]
+:END:
+Counted in the parser (=Parser.hs=), no resolver change: each loaded =Node=
+carries its alias-expanded node count and scalar bytes (strict fields; an
+alias returns the shared node, so each shared subtree is measured once).
+Both limits are checked as each scalar, sequence and mapping is built, so a
+bomb is refused at the first level that crosses a limit, before any
+expansion and in constant memory (that is the measure point for the size
+cap: the parser, fail fast, not the renderer). Errors name limit, value and
+the document: "YAML alias expansion exceeds 250000 nodes in bomb.yaml".
+Failing first (limits not enforced): six-level bomb and 801x64 KiB alias
+both FAIL (the parse succeeded). Memory is not an issue at the parse level,
+which only shares nodes; the preprocess test of the five-level bomb (123,463
+nodes) runs in 0.04 s.
+
+*** Corrected finding: the C4 bomb is rejected by the node cap
+:PROPERTIES:
+:ID: org:01a1eae8-1c05-705b-bc4e-8d555ab53519
+:ADDED: [2026-11-17 Tue 12:07]
+:END:
+(Corrects my earlier note; the question to Tavis is withdrawn.) The C4
+bomb has a list of ten scalars at level 0 and five alias levels of ten, so
+it holds over 1.2 million nodes (reviewer's rebuild: 19,753,098 bytes, 262
+MB) and the 250,000 node cap rejects it. My "111,111 nodes" arithmetic
+assumed a scalar at level 0. My "five-level bomb loads" test is a different
+document (five levels over a single scalar, 123,463 nodes), now named so;
+a new test builds the C4 bomb itself and expects the rejection. The 50 MiB
+size cap stays as decided.
+
+* DONE Cap helper output and HTTP total time
 :PROPERTIES:
 :ID: org:01a1e6c8-2279-70ac-bb06-81c63dae377c
 :ADDED: [2026-11-16 Mon 16:53]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 11:52] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:acb4526cd90248ab2
 :END:
 
 =helperPad= first, then any other helper that can amplify (record the
 check); then the overall timeout around =fetchHttpStreaming=.
 
-* TODO Implement limits with tests
+** Result
+:PROPERTIES:
+:ID: org:01a1eada-2b06-77c5-b4f3-b27b7d1d665d
+:ADDED: [2026-11-17 Tue 11:52]
+:END:
+=pad= checks the padded size before =T.replicate= (division, not
+multiplication, so a huge width cannot overflow). Check of the other
+helpers: =replace= also amplifies (a long replacement for many matches),
+so it is capped too, computed from =T.count= without building the result;
+every other helper is linear in its inputs (=concat=, =substring=, case and
+encoding helpers). HTTP: =loadHttpImportWithin= wraps the whole fetch in
+=System.Timeout.timeout= (=loadHttpImport= passes 60 s). Test: a seam whose
+connection sends headers and drips one byte per 50 ms (no socket), with a
+1 s limit. Failing first: TIMEOUT 10 s. Http.hs change is limited to the
+total time (C19 overlap).
+
+* DONE Implement limits with tests
 :PROPERTIES:
 :ID: org:01a1e692-142a-7666-9ade-4c531d19c021
 :ADDED: [2026-11-16 Mon 15:54]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 11:52] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:acb4526cd90248ab2
 :END:
 
 Add the =DIVERGENCES.md= entry, run the full suite through
 =scripts/guarded-build=, and record the results and measured time and memory
 of the bomb test before and after.
+
+** Result
+:PROPERTIES:
+:ID: org:01a1eada-2b06-77c5-b4f3-b27a44ddccc1
+:ADDED: [2026-11-17 Tue 11:52]
+:END:
+Failing before the fix (production files at HEAD, limits unenforced, test
+binary run with =+RTS -M2g=, per-test 10 s): 8 of 15 tests failed: six-level
+bomb, 801-alias size case, endless chain (TIMEOUT), fan-out 1,001, pad one
+past the limit, pad 50,000,000, replace over the limit, HTTP drip (TIMEOUT).
+The seven others are controls (under-limit cases and small pad/replace).
+After the fix: all 15 pass, the HTTP case in 1.01 s, the rest in
+milliseconds. =DIVERGENCES.md= has the one entry. Full-suite result is
+recorded in the final report.
+
+** Review 2026-11-17
+:PROPERTIES:
+:ID: org:01a1eae3-ecd2-74e7-bb28-acede0f3bdcb
+:ADDED: [2026-11-17 Tue 12:02]
+:END:
+Reviewer: review worker. Commit =51fc02c= on =a1d763d=: *fix first* (one
+gate miss, the rest small).
+
+Checked and fine: every YAML parse (templates, stack args, imports,
+=!$parseYaml=, =!$expand= and template bodies) goes through =parseYamlWith=,
+so the node and byte caps cannot be bypassed by another alias path; nested
+aliases, merge keys (a six-level =<<:= bomb is rejected) and anchors (HsYAML
+rejects an alias to an anchor in another document) count correctly; sums
+cannot overflow. Depth and count errors surface as =PeImportError= with a
+chain bounded by the depth (34 entries at most); the stack is threaded
+through siblings and nested imports. =timeout= wraps =withResponse=, so the
+bracket closes the connection, and the inner exception types still reach
+their handlers. The =replace= cap is in scope (the card's value covers
+every helper) and correct: empty =search= skips the =T.count= guard. Full
+suite at the tip: 2209 tests pass, no warnings. With the five production
+files reverted (=Http.hs= kept only a no-limit =loadHttpImportWithin=
+shim), =-p ResourceLimits --timeout=10s +RTS -M2g=: 8 of 16 fail (six-level
+bomb, size case, endless chain TIMEOUT, fan-out 1,001, both pad errors,
+replace, HTTP drip TIMEOUT); the other 8 are controls.
+
+C4 bomb value (point for Tavis): the review's bomb was the classic form,
+level 0 a list of ten =lol= scalars, then five alias levels. Reconstructed
+(6 lines, 312 bytes) with limits reverted it renders 19,753,098 bytes in
+1.46 s at 262 MB, matching the report's 19,753,104 / 253 MB. It holds over
+1.2 million nodes, so at the tip the 250,000 node cap rejects it
+(=c4q.yaml:6:6=). The card's 111,111-node arithmetic and the worker's
+"Finding for Tavis" both assumed a scalar level 0. The size cap counts
+scalar bytes, not rendered output: this bomb has about 3.3 MB of scalar
+text, so no cap value between 19 and 50 MiB would reject it either. No
+checked-in document comes near any value in that range (largest 3,479
+nodes); only a local or S3 YAML data import with that much scalar text
+would be rejected (HTTP bodies stop at 10 MB, templates at 1 MB).
+
+1. Medium, =src/Iidy/Yaml/Handlebars/Helpers.hs:38-70=: the helper cap
+   covers only =pad= and =replace=; =toJson=, =toJsonPretty= and =toYaml=
+   (lines 293-306) serialize a value that aliases or =$defs= share, so one
+   helper result passes 1,048,576 characters. Input: =$defs= with
+   =l0: &l0 <150 x>= and four alias levels of ten, =out: "{{toJson l4}}"=;
+   the tip renders 3,032,229 bytes, no error. The card's value is "no single
+   helper result longer than 1,048,576 characters". Fix: wrap every entry
+   of =defaultHelpers= in one post-check of the result length (keep the
+   =pad=/=replace= pre-checks, which avoid the allocation), and test
+   =toJson= over the limit.
+2. Low, =notes/C20/index.org:270-284= (and the card's 2026-11-16 Decision
+   arithmetic): the finding that the C4 bomb is 111,111 nodes and passes
+   both caps is wrong (see above); it is rejected by the node cap. Fix:
+   correct the note so the open question to Tavis is withdrawn or restated.
+3. Low, =src/Iidy/Constants.hs:99=: =helperMaxOutputChars= says "Only @pad@
+   can amplify its input"; =replace= is capped too (and =toJson= amplifies,
+   item 1). Fix: reword.
+4. Low, docs: the 2026-11-17 decision says to record the size cap "in the
+   security docs"; =docs/SECURITY.org= mentions none of the limits, only
+   =DIVERGENCES.md= does. =docs/= is outside the allowed paths: supervisor
+   to widen the paths or accept =DIVERGENCES.md= as the record.
+5. Low, =test/Test/ResourceLimitsTest.hs:136-160, 244-254=: repeats
+   existing fixtures. =preprocessText= and the call-counting loader repeat
+   =Test.ImportFixtures= (=preprocessText=, =recordingLoader=,
+   =stubDocsLoader=; the hand-built =idDoc= also differs from =idRawData=);
+   =drippingSeam= repeats =Test.FakeHttp='s seam. Fix: add a generated-doc
+   stub and a dripping =Reply= to those fixtures and use them.
+6. Low, =test/Test/ResourceLimitsTest.hs:117,149=: partial =maximum=
+   (an empty corpus, e.g. a wrong working directory, crashes with no
+   message) and =read=. Fix: assert the corpus is non-empty; =readMaybe=.
+
+Residual (outside this card's mechanism, recommend a new card): both caps
+count only what the parser builds. =$defs= references amplify the same way
+with no limit: a 9-line file (=a0: xxxxxxxxxx=, then =aN: [!$ aN-1 x10]=
+for N = 1..6, =out: !$ a6=) renders 25,000,005 bytes in 1.18 s at the
+tip, and each further line multiplies by ten; a remote import can carry
+it. Bounding it needs a count in the resolver (overlaps C26).
+
+Pre-existing (not counted):
+- =Helpers.hs:158=: ={{replace "abc" "" "x"}}= kills the run with
+  =Data.Text.replace: empty input= (partial =T.replace=); Rust's
+  =str::replace= inserts the replacement between characters (=xaxbxcx=).
+- =src/Iidy/Yaml/Imports/ContentParsing.hs:61,73=: an imported document's
+  parse error reads "Failed to parse YAML from bomb6.yaml: ParseError
+  {pePosition = ..., peMessage = \"... in <import>\"}": Haskell =show=
+  and a placeholder URI instead of the location.
+
+** Fix round 1 (review items 1, 3, 5, 6; 2 is the corrected finding above;
+:PROPERTIES:
+:ID: org:01a1eae8-1c05-705b-bc4e-8d54167968e7
+:ADDED: [2026-11-17 Tue 12:07]
+:END:
+item 4 is the supervisor's call: DIVERGENCES.md is the record, no docs/
+change)
+- 1: =defaultHelpers= is now =Map.mapWithKey limitOutput helperTable=, one
+  wrapper checking every helper's string result against
+  =helperMaxOutputChars=; the =pad= and =replace= pre-checks stay. Test:
+  =toJson= over a value whose levels each hold ten references to the one
+  below (7.5 MB serialized). Failing before the wrapper: "expected an
+  error" (the wrapper disabled, 1 of 19 tests failed); passes with it.
+- 3: the =Iidy.Constants= comment no longer says only =pad= amplifies.
+- 5: the import tests use =Test.ImportFixtures= (=preprocessText=,
+  =recordingLoader=, =stubDocsLoader= with generated documents); the
+  dripping server is a =Drip= reply in =Test.FakeHttp=.
+- 6: the corpus test asserts the corpus is non-empty (no =maximum=); the
+  chain loader's =read= is gone.
+
+*** Re-review 2026-11-17
+:PROPERTIES:
+:ID: org:01a1eaeb-197b-74e1-9b35-5bdafed28e46
+:ADDED: [2026-11-17 Tue 12:10]
+:END:
+Branch rebased on =7d9ab05=: =git range-diff= shows =ada10c8= identical to
+=51fc02c=. Fix round =a1fd127=: *fix first*, 1 defect (one line).
+
+- (1) Resolved. =defaultHelpers = Map.mapWithKey limitOutput helperTable=
+  checks every =String= result; other result types cannot amplify. The
+  =pad=/=replace= pre-checks remain. With the wrapper replaced by the
+  identity, the new =toJson= over-limit test FAILS (1 of 19 in
+  =ResourceLimits=); at the tip, =ResourceLimits= and =Handlebars= pass
+  (48 tests).
+- (2) Resolved. The task note is corrected and the question withdrawn; the
+  new test builds the C4 bomb itself and expects the node-cap rejection
+  (passes). The 2026-11-16 Decision paragraph in Scope still carries the
+  111,111 arithmetic; that is the supervisor's record to annotate.
+- (3) Resolved: the comment names every helper plus the =pad=/=replace=
+  pre-checks.
+- (5) Resolved. The import tests use =stubDocsLoader=, =recordingLoader=,
+  =unknownLoader= and =preprocessText= from =Test.ImportFixtures=; the HTTP
+  test uses =fakeSeam= with the new =Drip= reply. =replyFor= is shared by
+  =respond= and =isDripReply=, and the =Ok=/=Redirect= paths are unchanged.
+- (6) =maximum= and =read= are gone, but the fix adds another partial
+  function:
+  1. Low, =test/Test/ResourceLimitsTest.hs:233=: =levels !! n= (partial
+     =!!=). It cannot fail on the infinite =iterate= list, but it breaks the
+     no-partial-functions rule. Fix: =iterate step base= indexed through
+     =drop n= with a pattern match, or build level =n= by folding =n=
+     times.

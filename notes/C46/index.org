@@ -1,0 +1,63 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C46
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   C20 review 2026-11-17: ContentParsing.hs shows ParseError records and a placeholder URI
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
+:ID: org:01a1eaec-1b33-7219-87c8-c8ba35fa9393
+:ADDED: [2026-11-17 Tue 12:11]
+:END:
+#+title: C46 — Imported-document parse errors print Haskell show output and <import>
+#+date: 2026-11-17
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1eaec-1b33-7219-87c8-c8b98d487014
+:ADDED: [2026-11-17 Tue 12:11]
+:END:
+
+Found by the Opus review of [[file:../C20/index.org][C20]] (2026-11-17).
+When an imported document fails to parse, the error reads
+"Failed to parse YAML from bomb6.yaml: ParseError {pePosition = ...,
+peMessage = \"... in <import>\"}": Haskell =show= of the error record and a
+placeholder URI instead of the import's location
+(=src/Iidy/Yaml/Imports/ContentParsing.hs= lines 61 and 73). Top-level
+parse errors are displayed properly; imports should look the same.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1eaec-1b33-7219-87c8-c8b8a0ef3cce
+:ADDED: [2026-11-17 Tue 12:11]
+:END:
+
+Allowed paths: =src/Iidy/Yaml/Imports/ContentParsing.hs=, the error
+display module it should reuse (find it; do not write a second formatter),
+=test/Test/ImportLoaderTest.hs= or the existing parse-error display tests,
+=notes/C46/=.
+
+Out of scope: the wording of top-level parse errors; Rust's own messages
+unless they differ in content (record Rust's for comparison).
+
+Done when:
+- [ ] An imported document's parse error shows the import's location (path
+  or URL, with line and column) and the message, formatted by the same code
+  as a top-level parse error, with no Haskell record syntax.
+- [ ] A test for a local and an HTTP (fake) import, recorded failing first.
+- [ ] Build warning-free, full suite green, commits name C46.
+
+Stop and record if: fixing it changes the error type that other code
+matches on.
+
+* TODO Imported-document parse errors print Haskell show output and <import>
+:PROPERTIES:
+:ID: org:01a1eaec-1b33-7219-87c8-c8b75f6e5f19
+:ADDED: [2026-11-17 Tue 12:11]
+:END:
+
+Find the top-level parse-error display, route import parse errors
+through it with the real location, tests first.

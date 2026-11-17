@@ -1,0 +1,59 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C45
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   C20 review 2026-11-17: Data.Text.replace empty input kills the run; Rust inserts between characters
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
+:ID: org:01a1eaec-1b12-71b1-b018-dd463e185ed9
+:ADDED: [2026-11-17 Tue 12:11]
+:END:
+#+title: C45 — replace helper with an empty search string crashes the run
+#+date: 2026-11-17
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1eaec-1b12-71b1-b018-dd454884eb06
+:ADDED: [2026-11-17 Tue 12:11]
+:END:
+
+Found by the Opus review of [[file:../C20/index.org][C20]] (2026-11-17).
+={{replace "abc" "" "x"}}= kills the whole run with
+=Data.Text.replace: empty input=: the =replace= helper
+(=src/Iidy/Yaml/Handlebars/Helpers.hs=, around line 158) calls the partial
+=T.replace=. Rust's =str::replace= with an empty pattern inserts the
+replacement between every character and at both ends (=xaxbxcx=). The
+project forbids partial functions.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1eaec-1b12-71b1-b018-dd444fe7efc1
+:ADDED: [2026-11-17 Tue 12:11]
+:END:
+
+Allowed paths: =src/Iidy/Yaml/Handlebars/Helpers.hs= (the =replace=
+helper only), =test/Test/HandlebarsTest.hs=, =notes/C45/=.
+
+Out of scope: other helpers; C20's output cap on =replace= (keep it).
+
+Done when:
+- [ ] =replace= with an empty search string matches Rust's output (record
+  the Rust binary's output for =abc= and for the empty string in the card,
+  from =~/src/iidy=), and stays within C20's helper output cap.
+- [ ] A test recorded failing (crashing) before the fix passes after it.
+- [ ] Build warning-free, full suite green, commits name C45.
+
+Stop and record if: Rust errors instead (then match its error).
+
+* TODO replace helper with an empty search string crashes the run
+:PROPERTIES:
+:ID: org:01a1eaec-1b12-71b1-b018-dd43576c6235
+:ADDED: [2026-11-17 Tue 12:11]
+:END:
+
+Record Rust's behaviour, write the failing test, then replace the partial
+call.
