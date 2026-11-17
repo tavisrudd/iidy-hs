@@ -280,6 +280,12 @@ Only if a hang reproduced. Write the regression or stress test first and
 record it failing (timing out) on the branch base, then fix the deadlock or
 unbounded wait. Do not skip the test.
 
+Supervisor note 2026-11-16: the C16 worker saw one pre-commit hook test
+run fail and the immediate retry pass (no hang, no timeout); the hook
+prints only the tail, so the failing test is unknown. A second flakiness
+signal besides the hang. Next time: keep the full test log of the hook
+(the hook's log path under =dist-newstyle/.../test/=) before retrying.
+
 * DONE Align the Makefile test target with the hook timeout
 :PROPERTIES:
 :ADDED: [2026-11-16 Mon 16:30]
