@@ -21,7 +21,7 @@ The approval workflow is divided into two logical operations:
 
 Key data requirements:
 
-- =ApprovedTemplateLocation= in the argsfile must be a valid =s3://bucket/path= URL.
+- =ApprovedTemplateLocation= in the argsfile must be a valid S3 URL: =s3://bucket/path=, or bucket-only =s3://bucket= or =s3://bucket/= (objects then sit at the bucket root).
 - =Template= in the argsfile must be a locally-resolvable path (file, =render:= prefix, or inline). An S3 or HTTP(S) URL, or no =Template=, is refused before any load or AWS call, by the request and by every deploy command.
 - On the approval path (request and deploy) the rendered template may be up to 999,999 bytes, counted in UTF-8 bytes; the error for a larger one does not suggest uploading to S3. Templates sent as a body keep the 51,199-byte limit.
 
@@ -162,7 +162,7 @@ This is ORDER-SENSITIVE (not set-theoretic). The =--context= flag controls how m
 - The template is loaded via the full preprocessing pipeline (including =render:= prefix YAML engine pass, import resolution, and Handlebars interpolation).
 - Template loading failure (file not found, YAML parse error, import resolution error) is returned as an error immediately; no S3 calls are made.
 - A SHA256 hash of the fully-processed UTF-8 template content is computed.
-- The approved S3 key is derived as =<baseKey>/<hash><ext>= (no =.pending= suffix). If the base location is invalid (no bucket, no key), an error is returned.
+- The approved S3 key is derived as =<baseKey>/<hash><ext>= (no =.pending= suffix). A bucket-only base location puts the key at the bucket root (=<hash><ext>=, no leading slash); a location with no bucket is an error.
 - If an object already exists at the approved key (verified by =HeadObject=), the command exits 0 and emits =ApprovalRequestResult= with =alreadyApproved = True=. No upload is performed. =nextSteps= contains ="Template has already been approved"=.
 - A =HeadObject= answer other than 200 or 404 fails the command: 403 with "Access denied (403) checking s3://B/K: the current credentials cannot read the template approval bucket (S3 also answers 403 for a missing object when s3:ListBucket is not granted)", anything else with "Failed to check s3://B/K in region R: <error>".
 - If no approved object exists, the template is uploaded to the =.pending= key (=approvedKey <> ".pending"=) via =PutObject= with the =bucket-owner-full-control= ACL. On upload failure the command returns an error ="Failed to upload pending template: <awsError>"=.
@@ -528,7 +528,7 @@ The hash computation requires a cryptographic SHA256 implementation over UTF-8-e
   - Base location without trailing slash (="s3://bucket/templates"=) — verify same key is produced.
   - Template path with =.yaml= extension — verify extension appears in key.
   - Template path with no extension — verify key ends with the hash directly.
-  - Invalid base location (no bucket, no key) — verify an error is returned.
+  - Bucket-only base location (=s3://bucket=, =s3://bucket/=) — verify the key sits at the bucket root; no bucket — verify an error is returned.
 - S3 URL parsing with:
   - Valid URL ="s3://bucket/some/key"= — verify =("bucket", "some/key")=.
   - URL without =s3://= prefix — verify error.
@@ -567,7 +567,7 @@ The hash computation requires a cryptographic SHA256 implementation over UTF-8-e
 - JSON renderer produces valid JSON for all four approval output types.
 
 ** Known Gaps (not yet tested or implemented)
-- Partial-failure handling during promotion (approved upload succeeds, latest upload fails): not tested; the current implementation discards upload errors during promotion.
+- Partial-failure handling during promotion (approved upload succeeds, latest upload fails): not tested. Each write stops the review with its error, so a failure after the approved upload leaves the approved object written without the =latest= copy and with the pending object still present.
 - Context-line trimming in diff output: implemented via =buildHunks= which uses =contextLines= to control context window around changes. Tests should verify hunk boundaries and ="---"= separators.
 
 --------------

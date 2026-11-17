@@ -957,7 +957,7 @@ All used tokens (primary and derived) are tracked and included in the =OdCommand
 *Acceptance Criteria:*
 
 - Load the template via the standard template loading pipeline.
-- If the template body exceeds 51199 bytes (UTF-8): emit a =TemplateValidation= with a warning message (="Template exceeds 51200 bytes; skipping CFN validation"=), no errors. Return exit code 0.
+- A file or =render:= template over 51199 bytes is rejected by the template loader before this step. Only an inline =Template= value reaches the size check: if it exceeds 51199 bytes (UTF-8), emit a =TemplateValidation= with a warning message (="Template exceeds 51200 bytes; skipping CFN validation"=), no errors. Return exit code 0.
 - If the template body is within limits: call =ValidateTemplate= API.
   - On success: emit =TemplateValidation= with no errors, no warnings. Return exit code 0.
   - On API error: emit =TemplateValidation= with the error message. Return exit code 1.
