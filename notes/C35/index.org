@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C35
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   C28 review 2026-11-16: the emitter prints 1.0 as 1, 1e5 as 100000 and 'a\tb\x01' as a quoted raw tab while dropping \x01; Rust prints 1.0, 100000.0 and "a\tb\x01"
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
 :ID: org:01a1e700-105d-7600-affb-617edd580164
 :ADDED: [2026-11-16 Mon 17:55]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 18:13]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C35 — YAML emitter: print floats and control characters as Rust does
 #+date: 2026-11-16
