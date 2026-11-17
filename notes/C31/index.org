@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C31
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C8 side finding and notes/C23/report--decisions-vs-originals.org item 1: resolveEscape uses the Value path and sorts keys; Rust and TypeScript keep source order
 :CREATED_BY: opus-5.5-medium
@@ -10,8 +10,21 @@
 :ID: org:01a1e6dc-cebe-72fb-aa2c-c8790fc8172b
 :ADDED: [2026-11-16 Mon 17:16]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 17:43]--[2026-11-16 Mon 17:46] => 0:03
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 17:43]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 17:43]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac75b1455b233028a
+- Clock-out [2026-11-16 Mon 17:46]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac75b1455b233028a
+- Card state STARTED → DONE [2026-11-16 Mon 17:46]
+  Note: Landed bcf336b: !$escape keeps mapping key order via astToOValueRaw; render byte-identical to Rust; one-line fix landed on supervisor's diff check
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -70,21 +83,21 @@ Out of scope: =astToValueRaw= and its other callers (=parseYamlContent=,
 preprocessing tags; JavaScript integer-key hoisting; any other tag.
 
 Done when:
-- [ ] A regression test is recorded failing before the fix: a
+- [X] A regression test is recorded failing before the fix: a
   mapping under =!$escape= with keys =zeta=, =alpha=, =mid=, ="10"=, ="2"=
   resolves to an =OObject= in exactly that order (the resolver-level test
   next to the escape tests), plus a nested mapping and a mapping inside a
   sequence, and a duplicate key keeping first position with the last value.
   Record the failing assertion output in the first task note.
-- [ ] An end-to-end case renders a template with that =!$escape= and the
+- [X] An end-to-end case renders a template with that =!$escape= and the
   text matches the Rust binary byte for byte; record both command lines and
   the identical output (and the pre-fix difference) in the task note. Use
   =~/src/iidy-hs/iidy-rs render= and the freshly built iidy-hs =render= on
   the same file; neither command reaches AWS.
-- [ ] Scalars, sequences, CloudFormation tags and nested preprocessing tags
+- [X] Scalars, sequences, CloudFormation tags and nested preprocessing tags
   under =!$escape= produce the same values as before (existing escape tests
   unedited and passing).
-- [ ] Build warning-free, full suite green, commits name C31.
+- [X] Build warning-free, full suite green, commits name C31.
 
 Stop and record if: the fix needs more than =resolveEscape= (for example
 the ordered value is re-sorted later in the renderer or emitter); an
@@ -93,10 +106,15 @@ fix for some input (record it and ask Tavis); or the edit needs a path
 outside the allowed ones, including =Resolver.hs= lines that C26 or C28 has
 changed in flight.
 
-* TODO Reproduce the order loss and write the failing regression tests
+* DONE Reproduce the order loss and write the failing regression tests
 :PROPERTIES:
 :ID: org:01a1e6dc-cebe-72fb-aa2c-c876a5a28f59
 :ADDED: [2026-11-16 Mon 17:16]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 17:46] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac75b1455b233028a
 :END:
 
 Build iidy-hs (guarded build), render a file with
@@ -105,21 +123,78 @@ difference. Then add the escape-order tests from the gate to
 =test/Test/ResolverTest.hs= and run them; the order assertions must fail
 and the scalar tests pass. Record the failing output here.
 
-* TODO Switch resolveEscape to astToOValueRaw
+** Result (claude-C31)
+:PROPERTIES:
+:ID: org:01a1e6f8-36a4-76fa-b514-cdb775dc1ada
+:ADDED: [2026-11-16 Mon 17:46]
+:END:
+Pre-fix render (iidy-hs build of the branch base) against Rust, on
+=out: !$escape= over =zeta, alpha, mid, "10", "2"=: Rust keeps that order and
+quotes ='10'=, ='2'=; iidy-hs printed =10, 2, alpha, mid, zeta= (sorted). A
+nested file (mapping, mapping inside a sequence, duplicate =dup=) differed the
+same way. Command lines: =~/src/iidy/target/debug/iidy render FILE= and
+=dist-newstyle/.../x/iidy-hs/build/iidy-hs/iidy-hs render FILE=, local files,
+no AWS.
+
+Failing regression tests (before the fix), in =test/Test/ResolverTest.hs=
+escapeTests; the five older escape tests pass:
+#+begin_example
+!$escape keeps mapping keys in source order: FAIL
+  expected: OObject [("zeta",..1),("alpha",..2),("mid",..3),("10",..4),("2",..5)]
+   but got: OObject [("10",..4),("2",..5),("alpha",..2),("mid",..3),("zeta",..1)]
+!$escape keeps source order in nested mappings and sequences: FAIL
+   but got: OObject [("alpha",OArray [OObject [("bee"..),("walrus"..)]]),("zeta",OObject [("ant"..),("yak"..)])]
+!$escape duplicate keys: first position, last value: FAIL
+  expected: OObject [("b",3),("a",2)]  but got: OObject [("a",2),("b",3)]
+#+end_example
+
+* DONE Switch resolveEscape to astToOValueRaw
 :PROPERTIES:
 :ID: org:01a1e6df-6b8c-7368-930b-1cd92bae3b27
 :ADDED: [2026-11-16 Mon 17:19]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 17:46] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac75b1455b233028a
 :END:
 Change =resolveEscape= to return =astToOValueRaw contentAst= directly; drop
 imports that become unused. Rerun the new tests (now passing) and the full
 suite.
 
-* TODO Side-by-side run against Rust and close
+** Result (claude-C31)
+:PROPERTIES:
+:ID: org:01a1e6f8-36a4-76fa-b514-cdb6c1880a99
+:ADDED: [2026-11-16 Mon 17:46]
+:END:
+=resolveEscape= is now =pure $ astToOValueRaw contentAst= (the one ordered
+owner; C26's =rawToOValue= mode argument is unchanged and =astToValueRaw= stays
+for its other callers). No import became unused. Duplication search: the only
+other flatten-then-sort path for escape was =astToValueRaw=; no new
+conversion was added. Commit on =claude/C31=: C31 !$escape keeps mapping key
+order. Full suite (1765 tests) green on the rebased tip, no warnings.
+
+* DONE Side-by-side run against Rust and close
 :PROPERTIES:
 :ID: org:01a1e6df-6b8c-7368-930b-1cd835cad658
 :ADDED: [2026-11-16 Mon 17:19]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 17:46] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac75b1455b233028a
 :END:
 Repeat the render comparison from the first task with the fixed build on
 the same files plus a nested and a duplicate-key case, record command lines
 and byte-identical output, and note any remaining difference. Close the
 card.
+
+** Result (claude-C31)
+:PROPERTIES:
+:ID: org:01a1e6f8-36a3-731c-b328-156327de60ed
+:ADDED: [2026-11-16 Mon 17:46]
+:END:
+Post-fix =render= output is byte-identical to Rust (=cmp=) for both files:
+the five-key case (=zeta, alpha, mid, '10', '2'=) and the nested file
+(nested mapping, mapping in a sequence, duplicate =dup= at first position with
+value 3). No remaining difference found.
