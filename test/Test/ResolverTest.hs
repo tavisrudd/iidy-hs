@@ -942,7 +942,38 @@ escapeTests =
             (ctxWith [("env", OString "prod")])
             (ppTag (PpEscape (EscapeTag (varLookup "env"))))
             (OString "!$escaped")
+    , testCase "!$escape keeps mapping keys in source order" $
+        assertResolves
+            emptyContext
+            ( ppTag . PpEscape . EscapeTag . map_ $
+                [(str k, num n) | (k, n) <- escapeOrderKeys]
+            )
+            (OObject [(k, ONumber (fromInteger n)) | (k, n) <- escapeOrderKeys])
+    , testCase "!$escape keeps source order in nested mappings and sequences" $
+        assertResolves
+            emptyContext
+            ( ppTag . PpEscape . EscapeTag . map_ $
+                [ (str "zeta", map_ [(str "yak", num 1), (str "ant", num 2)])
+                , (str "alpha", seq_ [map_ [(str "walrus", num 1), (str "bee", num 2)]])
+                ]
+            )
+            ( OObject
+                [ ("zeta", OObject [("yak", ONumber 1), ("ant", ONumber 2)])
+                , ("alpha", OArray [OObject [("walrus", ONumber 1), ("bee", ONumber 2)]])
+                ]
+            )
+    , testCase "!$escape duplicate keys: first position, last value" $
+        assertResolves
+            emptyContext
+            ( ppTag . PpEscape . EscapeTag . map_ $
+                [(str "b", num 1), (str "a", num 2), (str "b", num 3)]
+            )
+            (OObject [("b", ONumber 3), ("a", ONumber 2)])
     ]
+
+-- | Keys deliberately out of alphabetical and numeric order.
+escapeOrderKeys :: [(Text, Integer)]
+escapeOrderKeys = [("zeta", 1), ("alpha", 2), ("mid", 3), ("10", 4), ("2", 5)]
 
 ------------------------------------------------------------------------
 -- 18. ParseYaml tests

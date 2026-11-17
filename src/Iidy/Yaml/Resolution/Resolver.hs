@@ -859,7 +859,7 @@ resolveParseJson ctx meta (ParseJsonTag strAst) = do
 
 resolveEscape :: TagContext -> SrcMeta -> EscapeTag -> Resolve OValue
 resolveEscape _ctx _meta (EscapeTag contentAst) =
-    pure $ fromValue $ astToValueRaw contentAst
+    pure $ astToOValueRaw contentAst
 
 resolveExpand :: TagContext -> SrcMeta -> ExpandTag -> Resolve OValue
 resolveExpand ctx meta (ExpandTag templateRefAst paramsAst) = do
