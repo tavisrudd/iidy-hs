@@ -27,6 +27,7 @@
 - [2026-11-16 Mon 17:46] [[file:../C31/index.org][C31]] — Landed bcf336b: !$escape keeps mapping key order via astToOValueRaw; render byte-identical to Rust; one-line fix landed on supervisor's diff check
 - [2026-11-16 Mon 18:09] [[file:../C28/index.org][C28]] — Landed 037bf12, b314c38, 3b63dbe, dbcb051: get-import keeps document key order for unqueried YAML; JSON parsed once from aeson tokens (surrogate pairs fixed); Sonnet review fix first, fix round 1, re-review land; duplicates to C34
 - [2026-11-16 Mon 18:19] [[file:../C17/index.org][C17]] — Landed c93293d..763b189 and the docs fix: stack-args AWS imports refused when Profile/Region/AssumeRoleARN is computed (fail-closed raw reading plus post-preprocessing backstop); Opus review fix first, fix round 1, re-review land; backstop wiring test noted on C12; scoping vs iidy-js pending Tavis
+- [2026-11-16 Mon 19:28] [[file:../C29/index.org][C29]] — Landed bf6a9a0 (replayed 88de7b7): get-import --format accepts exactly yaml and json at parse time (Tavis: follow TypeScript); own format type; DIVERGENCES entry; landed on supervisor's diff check
 * COMMENT meta
 :PROPERTIES:
 :LANE: main

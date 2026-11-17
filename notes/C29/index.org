@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C29
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C25 side finding: iidy-hs accepts it, Rust says Unsupported format
 :CREATED_BY: opus-5.5-medium
@@ -10,8 +10,21 @@
 :ID: org:01a1e6cc-bc1e-7064-b2be-8e64b8f5dbfe
 :ADDED: [2026-11-16 Mon 16:58]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 19:02]--[2026-11-16 Mon 19:26] => 0:24
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 19:02]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 19:02]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aba0d1629e54ec434
+- Clock-out [2026-11-16 Mon 19:26]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aba0d1629e54ec434
+- Card state STARTED → DONE [2026-11-16 Mon 19:28]
+  Note: Landed bf6a9a0 (replayed 88de7b7): get-import --format accepts exactly yaml and json at parse time (Tavis: follow TypeScript); own format type; DIVERGENCES entry; landed on supervisor's diff check
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -96,52 +109,98 @@ loading, print the Rust line); it costs a worse error for the user, so it
 is not the default.
 
 Done when:
-- [ ] Reproduction recorded on the first task: =yaml-cloudformation= and
+- [X] Reproduction recorded on the first task: =yaml-cloudformation= and
   =bogus= on a fresh iidy-hs build and on the Rust binary, with stdout,
   stderr and exit code of each.
-- [ ] =giaFormat= has a type that cannot hold =RenderCfnYaml=; =emitDoc=
+- [X] =giaFormat= has a type that cannot hold =RenderCfnYaml=; =emitDoc=
   matches exhaustively on it with no wildcard and no unreachable branch;
   =render= still accepts all three formats (its tests untouched and green).
-- [ ] Tests: the parser rejects =yaml-cloudformation= and a bogus value for
+- [X] Tests: the parser rejects =yaml-cloudformation= and a bogus value for
   get-import with exit code 1 and the expected message; accepts =yaml=,
   =json=, and rejects =yml=, =YAML= and =Json=; =render
   --format yaml-cloudformation= still parses. The existing get-import
   parser tests pass with only the type name changed.
-- [ ] =DIVERGENCES.md= has one entry for the differences in the Decision
+- [X] =DIVERGENCES.md= has one entry for the differences in the Decision
   paragraph; if Tavis chooses exact parity instead, the entry is not needed
   and the tests pin the Rust text and the post-load timing.
-- [ ] Build warning-free, full suite green, commits name C29.
+- [X] Build warning-free, full suite green, commits name C29.
 
 Stop and record if: making the
 type get-import-only needs changes to =render= or any other command; or the
 work needs a change outside the allowed paths.
 
-* TODO Reproduce the rejection with both binaries
+* DONE Reproduce the rejection with both binaries
 :PROPERTIES:
 :ID: org:01a1e6cc-bc1e-7064-b2be-8e61e4cbe2bc
 :ADDED: [2026-11-16 Mon 16:58]
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 19:26] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aba0d1629e54ec434
+:END:
+
+Results (iidy-hs built from this branch, Rust =target/release/iidy=; local
+file =a: 1, b: [x, y]=, no AWS). All exit 1 with empty stdout.
+- iidy-hs, =yaml-cloudformation=, =bogus=, =YAML=, =yml=: stderr
+  =error: option --format: Unknown output format: X. Valid formats: json,
+  yaml=, blank line, =Usage: iidy-hs get-import [OPTIONS] IMPORT=, blank
+  line, =For more information, try '--help'.= (before the fix =yml= and
+  =YAML= were accepted: the new parser test failed on =yml=; log
+  =.supervisor/tmp/c29-red.log=: "get-import --format accepts exactly
+  lower-case yaml and json: FAIL ... yml"; the other new tests passed).
+- Rust, same four values: stderr =Unsupported format: 'X'. Use 'yaml' or
+  'json'.=
+- Decision: Tavis, 2026-11-16: follow TypeScript, accept exactly =yaml= and
+  =json=.
 
 Build iidy-hs through =scripts/guarded-build= (the root =iidy-hs= link is
 stale) and run =get-import --format yaml-cloudformation=, =--format bogus=
 and =--format YAML= on a small file with both binaries. Record stdout,
 stderr and exit code, and the Decision once Tavis has confirmed it.
 
-* TODO Give get-import its own format type
+* DONE Give get-import its own format type
 :PROPERTIES:
 :ID: org:01a1e6cf-adf0-731d-b83d-7ad56a862567
 :ADDED: [2026-11-16 Mon 17:02]
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 19:26] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aba0d1629e54ec434
+:END:
+
+Done in 88de7b7. New =GetImportFormat = GetImportJson | GetImportYaml= in
+=Cli.hs=; =giaFormat= uses it; =emitDoc= matches both constructors with no
+wildcard. =render= and =renderFormatReader= untouched.
+Duplication check: reused =eitherReader= and the existing
+=getImportFormatReader= (rewritten in place, no second reader); the other
+format readers (=renderFormatReader=, =paramFormatReader=) differ in type
+and accepted spellings so were left alone as out of scope. No other
+duplicate found.
 
 Add the two-constructor type in =Cli.hs=, use it in
 =getImportFormatReader= and =getImportArgsParser=, update =emitDoc= and the
 tests that build =GetImportArgs= (=GetImportTest= helpers, =CliParserTest=).
 
-* TODO Tests and the divergence entry
+* DONE Tests and the divergence entry
 :PROPERTIES:
 :ID: org:01a1e6cf-adf0-731d-b83d-7ad4b6f1cf5d
 :ADDED: [2026-11-16 Mon 17:02]
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 19:26] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:aba0d1629e54ec434
+:END:
+
+Tests in =CliParserTest.hs=: bogus and =yaml-cloudformation= give a usage
+error with exit 1 and (for bogus) the expected message; =yml=, =YAML=,
+=Json=, =JSON=, =Yaml= rejected; existing =render --format
+yaml-cloudformation= test still passes; get-import json/yaml tests only
+changed type name. =DIVERGENCES.md= has one entry. Full suite at commit
+88de7b7 (pre-commit hook, rebased tip = main + 1): all 1984 tests passed,
+hlint clean, -Werror build.
 
 Add the parser cases from the gate, add the =DIVERGENCES.md= entry, and
 record the full-suite result.
