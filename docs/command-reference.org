@@ -16,12 +16,17 @@ These options apply to every command and may be placed before or after the subco
 | =--output-mode <MODE>=           | =interactive= in terminals | Output mode: =interactive=, =plain=, or =json=                                                               |
 | =--color <WHEN>=                 | =auto=                     | ANSI color output: =auto=, =always=, or =never=                                                              |
 | =--theme <THEME>=                | =auto=                     | Color theme: =auto=, =light=, =dark=, or =high-contrast=                                                     |
-| =--debug=                        | false                      | Log debug information to stderr                                                                              |
+| =--debug=                        | false                      | Accepted and has no effect (as in Rust iidy; see below)                                                      |
 | =--log-full-error=               | false                      | Log full error information to stderr                                                                         |
 | =--no-remote-imports=            | false                      | Disallow =http:=, =https:= and =s3:= imports (=cfn:=, =ssm:=, =ssm-path:= are not affected)                  |
 | =--trust-import-source <PREFIX>= | none                       | Trust remote templates under PREFIX like local ones (repeatable). See below                                  |
 
 =--trust-import-source PREFIX= names a remote location prefix whose templates are trusted like local files: they may use the AWS-backed import types (=s3:=, =ssm:=, =ssm-path:=, =cfn:=), their HTTP imports may reach any address, and as custom resource templates they see the importing template's variables. Trust needs every template in the import chain to be trusted, so a template under the prefix that an untrusted template imported stays untrusted. A request under a trusted prefix may only be redirected to trusted locations. The option may be repeated. A prefix must start with =s3://=, =s3:=, =http://=, =https://=, =ssm:=, =ssm-path:= or =cfn:= (lower case), end in =/=, name a bucket or host for the S3 and HTTP forms without a default port (=:80= / =:443=), and contain no =.= or =..= segment; anything else is a command-line error. Matching is a literal text prefix, so =https://t.example.com/= does not trust =https://t.example.com.evil/=. See [[file:SECURITY.org][Security Model]].
+
+=--debug= is accepted and has no effect: iidy-hs prints no extra debug output
+with it. Rust iidy also accepts the flag and ignores it (its help text, which
+iidy-hs keeps, says "Log debug information to stderr."); iidy-js sets its log
+level to =debug= with it.
 
 * Exit Codes
 | Code | Meaning                                                       |

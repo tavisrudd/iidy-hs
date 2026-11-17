@@ -565,3 +565,17 @@ that sets `CommandsBefore` is refused before any stack operation, with an
 error naming the file, the field and the command, so a pre-deploy step (a
 build, a check, an upload) is never skipped silently. Every other command,
 and `render`, accepts the file; the field is parsed and ignored.
+
+## `--debug`: Accepted, No Effect
+
+**Cause**: shared with Rust (not a divergence from it); recorded for the
+difference from iidy-js (Tavis, card C22).
+
+`--debug` is accepted and does nothing; the help text keeps Rust's "Log debug
+information to stderr.". Rust parses the flag (`src/cli.rs:100-107`) and
+nothing reads it; its `debug!` output follows `RUST_LOG`
+(`src/main.rs:265`), and `debug_log!` is compiled in only with the
+`debug-logging` cargo feature. iidy-js sets `DEBUG` and the log level to
+`debug` with the flag (`src/cli/utils.ts:22-25`, `src/main.ts:470`), and
+its `logger.debug` calls then print (for example
+`src/cfn/stackArgsToX.ts:47-52`). Scripts that pass `--debug` keep working.

@@ -30,7 +30,7 @@ The CLI is the sole entry point into the system. It owns argument parsing, envir
 - =--theme <THEME>= selects the color palette. Values: =auto=, =light=, =dark=, =high-contrast=. Default: =auto=. =IIDY_THEME= env var sets the default. =auto= selects based on terminal background detection.
 - =--no-remote-imports= disables HTTP and S3 =$imports= (flag; default: remote imports enabled). AWS API imports (=cfn:=, =ssm:=, =ssm-path:=) are not affected. Stored internally as a boolean where True = imports allowed, False = disallowed.
 - =--trust-import-source PREFIX= (repeatable) names remote locations whose documents are trusted when every document that requested them is trusted; see =docs/SECURITY.org=. Validated at parse time: a prefix must use a remote scheme, name a host or bucket, end in =/=, and not spell out a default port.
-- =--debug= enables debug logging to stderr (flag, default: false).
+- =--debug= is accepted and has no effect (flag, default: false). Rust parses it and nothing reads it (=~/src/iidy/src/cli.rs:100-107=; its logging follows =RUST_LOG=); the help text "Log debug information to stderr." is kept from Rust. iidy-js sets its log level to =debug= (=~/src/iidy-js/src/cli/utils.ts:22-25=). See =DIVERGENCES.md=.
 - =--log-full-error= prints full error detail to stderr including stack traces (flag, default: false).
 - =-V, --version= prints =iidy-hs <semver>= and exits 0.
 - =-h, --help= prints the custom top-level help and exits 0.
