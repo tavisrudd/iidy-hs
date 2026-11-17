@@ -22,7 +22,9 @@ import Iidy.Demo (
     maskAwsAccountNumbers,
     parseDemoScript,
     runDemo,
+    sleepMicros,
     substituteIidyCommand,
+    typingDelayMicros,
     unpackFiles,
  )
 import Iidy.Yaml.Imports.Types (RemoteImports (..), importPolicy)
@@ -33,6 +35,7 @@ demoTests =
     [ testGroup "parseDemoScript" parseTests
     , testGroup "unpackFiles" unpackTests
     , testGroup "maskAwsAccountNumbers" maskTests
+    , testGroup "delay rounding" delayTests
     , testGroup "substituteIidyCommand" substituteTests
     , -- runDemo uses the fixed directory <tmpdir>/iidy-demo and deletes it on
       -- exit (card C21 fixes that), so these must not overlap each other.
@@ -68,6 +71,12 @@ parseTests =
                     , DemoSetEnv (Map.fromList [("K", "v")])
                     ]
                 )
+    , testCase "a fractional sleep value is kept (iidy-js demo.ts:123)" $
+        fmap snd (parseDemoScript (object ["demo" .= [object ["sleep" .= (0.5 :: Double)]]]))
+            @?= Right [DemoSleep 0.5]
+    , testCase "a negative sleep value is rejected" $
+        parseDemoScript (object ["demo" .= [object ["sleep" .= (-1 :: Int)]]])
+            @?= Left "demo sleep must not be negative"
     , testCase "files are optional" $
         parseDemoScript (object ["demo" .= ([] :: [Value])]) @?= Right (Map.empty, [])
     , testCase "not a mapping" $
@@ -123,9 +132,47 @@ maskTests =
         maskAwsAccountNumbers "12345678901" @?= "12345678901"
     , testCase "a 13-digit run is left alone" $
         maskAwsAccountNumbers "1234567890123" @?= "1234567890123"
+    , testCase "standalone number with surrounding spaces (demo.rs:490-510)" $
+        maskAwsAccountNumbers "  account = 123456789012  " @?= "  account = ************  "
+    , testCase "IAM role ARN (demo.rs:512-516)" $
+        maskAwsAccountNumbers "arn:aws:iam::123456789012:role/MyRole"
+            @?= "arn:aws:iam::************:role/MyRole"
+    , testCase "STS assumed-role ARN (demo.rs:518-522)" $
+        maskAwsAccountNumbers "arn:aws:sts::999888777666:assumed-role/Foo"
+            @?= "arn:aws:sts::************:assumed-role/Foo"
+    , testCase "IAM user ARN (demo.rs:524-528)" $
+        maskAwsAccountNumbers "arn:aws:iam::111222333444:user/admin"
+            @?= "arn:aws:iam::************:user/admin"
     , testCase "digits inside a longer word are left alone" $
         maskAwsAccountNumbers "abc123456789012 123456789012xyz"
             @?= "abc123456789012 123456789012xyz"
+    ]
+
+------------------------------------------------------------------------
+-- sleepMicros / typingDelayMicros
+------------------------------------------------------------------------
+
+{- | iidy-hs rounds the scaled delay to the nearest microsecond. Rust truncates
+whole seconds / milliseconds (demo.rs:134-136, 363-366); see DIVERGENCES.md.
+-}
+delayTests :: [TestTree]
+delayTests =
+    [ testCase "sleep 1 at timescaling 0.5 is 0.5s (Rust: 0s)" $
+        sleepMicros 1 0.5 @?= 500000
+    , testCase "sleep 1 at timescaling 1.5 is 1.5s (Rust: 1s)" $
+        sleepMicros 1 1.5 @?= 1500000
+    , testCase "sleep 0.5 at timescaling 1 is 0.5s" $
+        sleepMicros 0.5 1 @?= 500000
+    , testCase "sleep 0 is 0" $
+        sleepMicros 0 1.5 @?= 0
+    , testCase "sleep rounds to the nearest microsecond, not down" $
+        sleepMicros 1.0000007 1 @?= 1000001
+    , testCase "typing delay at timescaling 0.5 is 25ms (Rust: 25ms)" $
+        typingDelayMicros 0.5 @?= 25000
+    , testCase "typing delay at timescaling 1.5 is 75ms (Rust: 75ms)" $
+        typingDelayMicros 1.5 @?= 75000
+    , testCase "typing delay rounds to the nearest microsecond, not down" $
+        typingDelayMicros 0.0000347 @?= 2
     ]
 
 ------------------------------------------------------------------------
@@ -199,6 +246,7 @@ runTests =
                     [ "demo:"
                     , "  - banner: Hello"
                     , "  - sleep: 3"
+                    , "  - sleep: 0.5"
                     , "  - silent: \"echo quiet > " <> T.pack dir <> "/marker\""
                     ]
             )

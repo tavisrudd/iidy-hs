@@ -10,6 +10,8 @@ module Iidy.Demo (
     unpackFiles,
     maskAwsAccountNumbers,
     substituteIidyCommand,
+    sleepMicros,
+    typingDelayMicros,
 ) where
 
 import Control.Concurrent (threadDelay)
@@ -22,6 +24,7 @@ import Data.ByteString.Lazy qualified as BL
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe, isNothing)
+import Data.Scientific (toRealFloat)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -62,7 +65,7 @@ import Iidy.Yaml.Parser (ParseError (..), parseYaml)
 data DemoCommand
     = DemoShell !Text
     | DemoSilent !Text
-    | DemoSleep !Int
+    | DemoSleep !Double
     | DemoSetEnv !(Map Text Text)
     | DemoBanner !Text
     deriving stock (Show, Eq)
@@ -147,7 +150,10 @@ parseCommand :: Value -> Either Text DemoCommand
 parseCommand (String cmd) = Right (DemoShell cmd)
 parseCommand (Object obj)
     | Just (String cmd) <- KM.lookup "silent" obj = Right (DemoSilent cmd)
-    | Just (Number n) <- KM.lookup "sleep" obj = Right (DemoSleep (truncate n))
+    | Just (Number n) <- KM.lookup "sleep" obj
+    , n < 0 =
+        Left "demo sleep must not be negative"
+    | Just (Number n) <- KM.lookup "sleep" obj = Right (DemoSleep (toRealFloat n))
     | Just (String txt) <- KM.lookup "banner" obj = Right (DemoBanner txt)
     | Just (Object env') <- KM.lookup "setenv" obj =
         Right (DemoSetEnv (Map.fromList [(Key.toText k, extractText v) | (k, v) <- KM.toList env']))
@@ -195,8 +201,7 @@ runCommand cmd workDir envMap iidyExe timescaling maskSecrets policy = case cmd 
         execShell substituted workDir envMap maskSecrets
         pure envMap
     DemoSleep secs -> do
-        let scaledUs = round (fromIntegral secs * timescaling * 1000000 :: Double) :: Int
-        threadDelay scaledUs
+        threadDelay (sleepMicros secs timescaling)
         pure envMap
     DemoSetEnv newVars ->
         pure (Map.union newVars envMap)
@@ -249,6 +254,19 @@ execWithMasking cmd workDir envList = do
 -- Display
 ------------------------------------------------------------------------
 
+{- | Microseconds a @sleep:@ step waits: seconds scaled by the timescaling,
+rounded to the nearest microsecond. Rust truncates to whole seconds
+(demo.rs:134-136); iidy-js scales exactly (demo.ts:123).
+-}
+sleepMicros :: Double -> Double -> Int
+sleepMicros secs timescaling = round (secs * timescaling * 1000000)
+
+{- | Microseconds between typed characters: 50ms scaled by the timescaling,
+rounded. Rust truncates to whole milliseconds (demo.rs:363-366).
+-}
+typingDelayMicros :: Double -> Int
+typingDelayMicros timescaling = round (50.0 * timescaling * 1000)
+
 -- | Print a command character by character to simulate typing.
 printCommand :: Text -> Double -> IO ()
 printCommand cmd timescaling = do
@@ -259,8 +277,7 @@ printCommand cmd timescaling = do
     forM_ (T.unpack cmd) $ \ch -> do
         putChar ch
         hFlush stdout
-        let delayUs = round (50.0 * timescaling * 1000 :: Double) :: Int
-        threadDelay delayUs
+        threadDelay (typingDelayMicros timescaling)
     putStrLn ""
     hSetBuffering stdout LineBuffering
 
