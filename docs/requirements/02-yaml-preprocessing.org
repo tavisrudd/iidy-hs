@@ -1156,7 +1156,7 @@ These tags are distinct from the =!$= preprocessing tags. Their inner content is
 
 * Cross-References
 - =docs/import-types.md= -- all supported import source types (=./file=, =ssm:=, =s3://=, =env:=, =git:=, =cfn:=, =http://=, =random:=)
-- =docs/SECURITY.md= -- import security restrictions and path sandboxing
+- [[file:../SECURITY.org][docs/SECURITY.org]] -- import trust model, restrictions and threat model
 - =docs/requirements/01-cli-interface.md= -- =--yaml-spec=, =--format=, and =render= command spec
 - =docs/requirements/03-import-system.md= -- import resolution, security model, cycle detection
 - =docs/requirements/04-custom-resources.md= -- custom resource expansion pipeline (automatic expansion via =$params= registration)

@@ -865,7 +865,7 @@ See "Circular Import Detection Algorithm" in the Import Dispatch Architecture se
 
 * Cross-References
 - =docs/import-types.md= -- user-facing reference for all import type syntax and examples.
-- =docs/SECURITY.md= -- full security model with threat analysis.
+- [[file:../SECURITY.org][docs/SECURITY.org]] -- full security model with threat analysis.
 - =docs/requirements/00-overview.md= -- project-level requirements context.
 - =docs/requirements/01-cli-interface.md= -- CLI options that affect import behavior (=--environment=, =--profile=, =--assume-role-arn=, =--region=).
 - =docs/requirements/02-yaml-preprocessing.md= -- two-phase pipeline, variable scope, and Handlebars integration that the import system feeds into.
