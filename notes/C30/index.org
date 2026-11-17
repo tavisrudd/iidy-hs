@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C30
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C11: differences seen while writing explain and demo tests: explain header/fallback text, demo fixed temp dir (C21 covers) and ARN masking, sleep truncation vs rounding
 :CREATED_BY: sonnet-5.5-medium
@@ -10,8 +10,28 @@
 :ID: org:01a1e6d8-1a69-7466-b044-90ec7f18c453
 :ADDED: [2026-11-16 Mon 17:11]
 :END:
+:CLOCK:
+CLOCK: [2026-11-17 Tue 14:36]--[2026-11-17 Tue 14:43] => 0:07
+CLOCK: [2026-11-17 Tue 14:45]--[2026-11-17 Tue 14:48] => 0:03
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-17 Tue 14:35]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
+- Clock-in [2026-11-17 Tue 14:36]
+  Agent: sonnet-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a3703ac9de848b719
+- Clock-out [2026-11-17 Tue 14:43]
+  Agent: sonnet-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a3703ac9de848b719
+- Clock-in [2026-11-17 Tue 14:45]
+  Agent: sonnet-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a3703ac9de848b719
+- Clock-out [2026-11-17 Tue 14:48]
+  Agent: sonnet-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a3703ac9de848b719
+- Card state STARTED → DONE [2026-11-17 Tue 14:51]
+  Note: Landed 9c725db..efddbfb (explain message and ERR_6002 follow Rust, fractional demo sleep with 0..86400 bound, rounding and masking pinned, divergences recorded); reviewed by the Opus review worker, re-review clean
   Agent: opus-5.5-medium
   Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
 :END:
@@ -123,30 +143,30 @@ Decisions (Tavis, 2026-11-16):
 Done when:
 - [X] The two questions are answered by Tavis (above); no further question
   is open.
-- [ ] A fractional =sleep:= value in a demo script is accepted and sleeps
+- [X] A fractional =sleep:= value in a demo script is accepted and sleeps
   the scaled fractional time; a test pins =sleep: 0.5= and an integer
   value, and the divergence from Rust (which rejects or floors it) is in
   =DIVERGENCES.md=.
-- [ ] =iidy explain= with no codes prints Rust's text
+- [X] =iidy explain= with no codes prints Rust's text
   =Please provide one or more error codes to explain (e.g., ERR_2001)= to
   stderr and exits 0 (confirm Haskell's current exit status first and record
   it); a test pins both.
-- [ ] ERR_6002's description is =Unknown handlebars helper= as in Rust, and
+- [X] ERR_6002's description is =Unknown handlebars helper= as in Rust, and
   a test compares every description in =allErrors= with Rust's
   =description()= list recorded in the test (=ids.rs:110-170=), so no other
   drift exists.
-- [ ] Masking is pinned by tests for the Rust ARN cases (=demo.rs:490-530=:
+- [X] Masking is pinned by tests for the Rust ARN cases (=demo.rs:490-530=:
   =arn:aws:iam::123456789012:role/MyRole=,
   =arn:aws:sts::999888777666:assumed-role/Foo=,
   =arn:aws:iam::111222333444:user/admin=) and a standalone case with
   surrounding spaces; no code change is expected, and if a case fails,
   stop and record it.
-- [ ] Tests pin the kept rounding of sleep and typing delays at
+- [X] Tests pin the kept rounding of sleep and typing delays at
   timescaling 0.5 and 1.5, and the choice is written in =DIVERGENCES.md=.
-- [ ] =DIVERGENCES.md= records the kept explain layout (header plus details
+- [X] =DIVERGENCES.md= records the kept explain layout (header plus details
   paragraph for all codes, against Rust's generic block for most codes and
   long markdown for four) with its cause and the Rust reference.
-- [ ] Every difference that remains is listed in =DIVERGENCES.md= with its
+- [X] Every difference that remains is listed in =DIVERGENCES.md= with its
   cause; build warning-free, full suite green, commits name C30.
 
 Stop and record if:
@@ -164,10 +184,15 @@ Stop and record if:
 Answered by Tavis on 2026-11-16; see "Decisions (Tavis, 2026-11-16)" in
 Scope and gate. Nothing to do.
 
-* TODO Explain: no-argument message, exit status and ERR_6002 wording
+* DONE Explain: no-argument message, exit status and ERR_6002 wording
 :PROPERTIES:
 :ID: org:01a1e6df-6b76-715a-9d49-20e760fb942f
 :ADDED: [2026-11-16 Mon 17:19]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 14:42] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a3703ac9de848b719
 :END:
 Change the empty-codes case in =Explain.hs= (=explainOutput [] =...=) to
 Rust's text. Check what exit status =app/Main.hs= line 79 gives (it returns
@@ -178,31 +203,185 @@ the list in the test as data so no Rust file is read at run time. Record the
 failing-first run for the 6002 case. The layout stays as it is (Tavis,
 2026-11-16): do not port Rust's layout.
 
-* TODO Demo masking: pin the Rust ARN cases
+* DONE Demo masking: pin the Rust ARN cases
 :PROPERTIES:
 :ID: org:01a1e6df-6b76-715a-9d49-20e65ecdba13
 :ADDED: [2026-11-16 Mon 17:19]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 14:42] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a3703ac9de848b719
 :END:
 Add the ARN and standalone cases from =demo.rs:490-530= to the
 =maskAwsAccountNumbers= group in =test/Test/DemoTest.hs=. No code change is
 expected (see Context). Record one mutation (for example removing the
 leading =\b=) that fails them.
 
-* TODO Demo sleep rounding and fractional sleep values
+* DONE Demo sleep rounding and fractional sleep values
 :PROPERTIES:
 :ID: org:01a1e6df-6b76-715a-9d49-20e52bb91f6b
 :ADDED: [2026-11-16 Mon 17:19]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 14:42] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a3703ac9de848b719
 :END:
 Tavis kept rounding: add tests that pin the current rounding at
 timescaling 0.5 and 1.5 and write the divergence. Make =sleep:= accept
 fractional values (=Demo.hs= line 149 today truncates), with a failing-first
 test for =sleep: 0.5=. Do not edit the temp-dir lines (C21).
 
-* TODO Record remaining differences in DIVERGENCES.md
+* DONE Record remaining differences in DIVERGENCES.md
 :PROPERTIES:
 :ID: org:01a1e6df-6b76-715a-9d49-20e4ebc8109a
 :ADDED: [2026-11-16 Mon 17:19]
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 14:42] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a3703ac9de848b719
+:END:
 Add one entry per kept difference (explain layout, sleep rounding, fractional
 sleep values, masking streaming), each with cause and the Rust and TypeScript
 references from Context. Run the full suite, then close the card.
+
+** Worker notes (claude-C30)
+:PROPERTIES:
+:ID: org:01a1eb76-9823-73e2-98ad-4cbbf563c151
+:ADDED: [2026-11-17 Tue 14:43]
+:END:
+- Existing owners found: =Explain.hs= (=explainOutput=, =allErrors=),
+  =Demo.hs= (=parseCommand=, =runCommand=, =printCommand=,
+  =maskAwsAccountNumbers=), tests in =ExplainTest.hs= and =DemoTest.hs=. No
+  new module; two small pure functions (=sleepMicros=, =typingDelayMicros=)
+  were extracted from the existing inline arithmetic so rounding is testable.
+- Explain exit status: =app/Main.hs= =CmdExplain codes -> explainErrors
+  codes= returns normally, so the exit status is 0 (unchanged). Pinned by a
+  test that =explainErrors []= returns.
+- Failing-first (explain): with the new tests and old code, the no-argument
+  test failed (got =Usage: iidy explain <CODE>...=) and the description test
+  failed on ERR_6002 =Unknown Handlebars helper= vs Rust's lower-case form.
+  The first run also showed the Rust list I typed was truncated after
+  ERR_9001; fixed the test data (ERR_9002-9005 match already).
+- Masking: the four Rust cases passed without code change. Mutation
+  removing the leading =\b= fails only the existing 13-digit and in-word
+  tests (the ARN cases have =:= before the digits, so they hold either
+  way). Mutation =[^:]\b[0-9]{12}\b= (a colon no longer a boundary) fails
+  the new ARN and standalone cases (6 of 9 mask tests failed).
+- Sleep failing-first: =fmap snd (parseDemoScript sleep: 0.5)= with the old
+  =truncate= gave =DemoSleep 0= against expected 0.5. Fixed with
+  =DemoSleep !Double=. Negative values: the old code accepted them (a
+  non-positive threadDelay), so now they are rejected at parse time with
+  =demo sleep must not be negative= (matches Rust's =u64=); a user-visible
+  edge the card allowed ("rejected as before or with a clear error").
+- Flake: the first pre-commit run of the explain commit failed in the
+  test suite (output hidden by the hook's =tail -5=); the same suite passed
+  on rerun, twice. Likely the fixed =<tmp>/iidy-demo= directory shared
+  with concurrent workers (C21), not reproducible here.
+- Commits: 9c725db, 9d50844, af0ad58.
+
+** Review 2026-11-17
+:PROPERTIES:
+:ID: org:01a1eb78-c452-758f-8dad-a688aa4396e3
+:ADDED: [2026-11-17 Tue 14:45]
+:END:
+Reviewer: review worker (Claude). Branch =claude/C30= at af0ad58, base
+30e0c50.
+
+Verdicts: 9c725db land; 9d50844 land; af0ad58 land. No blocking defect.
+
+Checks done:
+- Reverting =src/Iidy/Explain.hs= to main and restoring the old =truncate=
+  parse in =Demo.hs= (keeping =DemoSleep !Double= so the tests compile; a
+  full revert of =Demo.hs= fails at compile time on =sleepMicros= and
+  =DemoSleep 0.5=): four tests fail (no-codes prompt, Rust description
+  list, fractional sleep, negative sleep). Restored afterwards. The
+  =explainErrors []= exit-0 test and the delay-rounding tests pass on main
+  too, as expected: they pin kept behaviour.
+- =rustDescriptions= equals Rust =ids.rs:110-179= line for line.
+- Negative =sleep:= gives exit 1 with stderr =Failed to parse demo script:
+  demo sleep must not be negative= (=Demo.hs:101-104=), before any temp
+  directory is made. Matches Rust, which rejects through =u64= (=serde=
+  untagged falls through to "did not match any variant").
+- Pre-commit flake theory (shared =<tmp>/iidy-demo=): unlikely. Every suite
+  run (pre-commit hook and workers) holds the host-wide exclusive =flock= in
+  =scripts/guarded-build=, and the =runDemo= tests are sequential
+  (=dependentTestGroup=), so two suites cannot remove each other's directory.
+  Only an unlocked run or a manual =iidy demo= could collide. Other causes
+  the hidden =tail -5= could have masked: the guard's exit 75 (low memory or
+  lock-wait timeout) or a C6 hang hitting the 60 s timeout.
+
+Defects:
+1. Low. =docs/requirements/07-error-handling.org:397= and
+   =docs/requirements/11-utilities.org:136,152= still give the no-argument
+   text as =Usage: iidy explain <CODE>...=; =11-utilities.org:193,258= still
+   say =DemoSleep Int= and do not mention fractional or negative values.
+   =docs/= is outside the card's allowed paths. Fix: the supervisor widens
+   the paths to those two files for a follow-up commit, or files a card.
+2. Low. =Demo.hs= =sleepMicros=: a huge =sleep:= overflows silently.
+   =round= of a Double above =maxBound :: Int= wraps: =sleep: 1e13= gives
+   -8446744073709551616 µs, =sleep: 1e300= and =sleep: 1e400= (=toRealFloat=
+   gives Infinity) give 0, so =threadDelay= returns at once and the step does
+   not sleep. Rust saturates (=as u64=) and sleeps for good. Inputs are
+   absurd (over 9.2e12 s), so this only matters for clarity. The change
+   also removes an older hazard: =truncate= on a Scientific like =1e1000000000=
+   built a huge Integer. Fix: clamp before rounding, e.g.
+   =round (min 9.2e18 (secs * timescaling * 1e6))=, or reject at parse.
+3. Low (duplication). =typingDelayMicros ts= repeats the seconds-to-rounded-
+   microseconds formula of =sleepMicros=; it equals =sleepMicros 0.05 ts= (the
+   three typing-delay tests give the same values). Fix: define it that way
+   (or inline the call in =printCommand= and drop the export) so the rounding
+   choice has one owner.
+
+Notes (no action): 9d50844 carries the fractional-sleep change plus the
+rounding and masking test pins; the pins are test-only, so the split is
+acceptable. =Demo.hs= is 381 lines.
+
+** Fix round 1 (claude-C30)
+:PROPERTIES:
+:ID: org:01a1eb7b-33c6-73a5-a0c9-50670a8674a4
+:ADDED: [2026-11-17 Tue 14:48]
+:END:
+- Scope extension (supervisor, 2026-11-17): =docs/requirements/07-error-handling.org=
+  and =docs/requirements/11-utilities.org= were added to the allowed paths for
+  this fix only.
+- Huge sleep: failing-first test (1e13 parsed to =DemoSleep 1.0e13=) then
+  =parseCommand= rejects any =sleep:= above 86400 (one day) with =demo sleep
+  must not exceed 86400 seconds=. The bound compares the =Scientific=
+  before any Double or Integer conversion; 1e1000000000 is covered.
+- =typingDelayMicros = sleepMicros 0.05=: one owner for the rounding rule.
+- Docs: the explain no-argument text and the =DemoSleep= type updated.
+
+*** Re-review 2026-11-17
+:PROPERTIES:
+:ID: org:01a1eb7e-0e2a-704a-942f-79aac72caa05
+:ADDED: [2026-11-17 Tue 14:51]
+:END:
+Fix round d445d1b, c33338e, fb8d7b4, efddbfb (diff =af0ad58..claude/C30=).
+Verdict: land all four; the three earlier defects are fixed, no new defect.
+
+- Bound (d445d1b): the =scientific-0.3.8.1= =Ord= instance compares
+  coefficient and exponent through their base-10 magnitudes (=cmp= checks
+  =log10= sizes first) and never expands the exponent; =1e1000000000 >
+  86400= returns at once in GHC. With the bound guard disabled
+  (=n > maxSleepSeconds && n < 0=) the new test fails: =expected Left "demo
+  sleep must not exceed 86400 seconds" but got Right (... [DemoSleep
+  1.0e13])=. Restored. Note: the test decodes with aeson; the real demo path
+  goes through =Iidy.Yaml.Parser.parseFloat=, which reads a =Double= first,
+  so =sleep: 1e400= and =.inf= arrive as =1.797693134862316e308= (rejected
+  by the bound) and =.nan= arrives negative (rejected as negative, a slightly
+  odd message). Both are rejected, so no change needed.
+- Residual, =--timescaling=: reachable. =src/Iidy/Cli/Parser.hs:789-795=
+  reads it with =auto= and no bound, so =--timescaling 2e8= with
+  =sleep: 86400= gives over 9.2e18 µs; =round= wraps and the step does not
+  sleep. =Infinity=, =NaN= and negative factors are also accepted (a negative
+  one skips every delay). Rust takes any =f64= too and saturates. Worth a
+  small low-priority follow-up card: reject a non-finite or negative
+  timescaling at the CLI, or clamp in =sleepMicros=. Not for this card.
+- =typingDelayMicros = sleepMicros 0.05= (c33338e): one owner now; the
+  three typing-delay tests still pass.
+- Docs (fb8d7b4, efddbfb): =07-error-handling.org= and =11-utilities.org=
+  now give Rust's no-argument message, =DemoSleep Double= and the 0 to
+  86400 range; =DIVERGENCES.md= records the upper bound. Accurate.

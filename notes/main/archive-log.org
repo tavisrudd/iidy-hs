@@ -41,6 +41,7 @@
 - [2026-11-17 Tue 13:27] [[file:../C18/index.org][C18]] — Landed 82f48c8..c433818: escapeControl + one escapeOutputData pass in the renderer, raw outputs exempt; Opus review, fix round 1 (derived token); follow-ups C47 C48
 - [2026-11-17 Tue 13:29] [[file:../C35/index.org][C35]] — Landed ..de2fb83: non-printable strings and keys double-quoted with YAML escapes in every emitter incl. convert-stack (shared escaping, own quote policy kept), U+FFFE/FFFF, key with line feed, blank-line fix; Opus review + 2 fix rounds; C42 now unblocked
 - [2026-11-17 Tue 13:39] [[file:../C19/index.org][C19]] — Landed 41e4f23..5ec8f28 (replayed; worker's b37def5+aa65d10 squashed, b37def5 alone failed -Werror): one AWS/HTTP error formatter, three duplicates removed, every site routed incl. S3Objects, LazyEnv, StackArgsBootstrap; S3 errors keep HTTP status; Opus review + fix round 1
+- [2026-11-17 Tue 14:51] [[file:../C30/index.org][C30]] — Landed 9c725db..efddbfb (explain message and ERR_6002 follow Rust, fractional demo sleep with 0..86400 bound, rounding and masking pinned, divergences recorded); reviewed by the Opus review worker, re-review clean
 * COMMENT meta
 :PROPERTIES:
 :LANE: main
