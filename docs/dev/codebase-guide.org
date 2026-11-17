@@ -1,22 +1,21 @@
-# iidy-hs Codebase Guide
+#+title: iidy-hs Codebase Guide
+#+options: ^:nil -:nil
 
 Module navigation reference for the iidy-hs Haskell project.
 
-## Quick Start
-
-```
+* Quick Start
+#+begin_example
 cabal build          # compile (runs inside nix devshell)
 cabal test           # run all tests
 cabal run iidy-hs    # run the binary
 make spec            # run PLT Redex spec tests (requires: cd spec && nix develop)
 make snapshot        # regenerate spec/snapshot.json after spec changes
-```
+#+end_example
 
-Entry point: `app/Main.hs` -- parses CLI, dispatches to command handlers.
+Entry point: =app/Main.hs= -- parses CLI, dispatches to command handlers.
 
-## Project Structure
-
-```
+* Project Structure
+#+begin_example
 iidy-hs/
   app/Main.hs              -- Entry point: CLI parse + command dispatch
   src/Iidy/                 -- Library source
@@ -35,22 +34,19 @@ iidy-hs/
   scripts/                   -- Snapshot comparison and CI helpers
   iidy-hs.cabal              -- Package definition
   flake.nix                  -- Nix build and devshell
-```
+#+end_example
 
-## Source Modules by Layer
-
-### CLI Layer
-
-```
+* Source Modules by Layer
+** CLI Layer
+#+begin_example
 src/Iidy/
   Cli.hs                    -- Command enum, GlobalOpts, StackOpts
   Cli/
     Parser.hs               -- optparse-applicative parser construction
-```
+#+end_example
 
-### YAML Preprocessing Layer
-
-```
+** YAML Preprocessing Layer
+#+begin_example
 src/Iidy/Yaml/
   Parser.hs                 -- HsYAML event-based parsing with position tracking
   Ast.hs                    -- YamlAst node definitions
@@ -89,11 +85,10 @@ src/Iidy/Yaml/
     Enhanced.hs             -- Enhanced error display with context
     Display.hs              -- Custom error formatting with line/column
     Conversion.hs           -- Error conversion from AWS/JSON Schema errors
-```
+#+end_example
 
-### CloudFormation Layer
-
-```
+** CloudFormation Layer
+#+begin_example
 src/Iidy/Cfn/
   Types.hs                  -- StackArgs, operation enums, change types
   Context.hs                -- CfnContext (AWS clients + config)
@@ -120,22 +115,20 @@ src/Iidy/Cfn/
     TemplateApproval.hs     -- template-approval command
     Changeset.hs            -- Shared changeset operations + helpers
     ConvertStack.hs         -- convert-stack-to-iidy command
-```
+#+end_example
 
-### AWS Layer
-
-```
+** AWS Layer
+#+begin_example
 src/Iidy/Aws/
   Config.hs                 -- AWS SDK configuration + region resolution
   CredentialSource.hs       -- Credential source detection
   ClientReqToken.hs         -- Idempotency token management
   Sts.hs                    -- STS operations (getCallerIdentity)
   Timing.hs                 -- NTP time sync + time providers
-```
+#+end_example
 
-### Output Layer
-
-```
+** Output Layer
+#+begin_example
 src/Iidy/Output/
   Types.hs                  -- 26 OutputData variants
   Renderer.hs               -- Renderer trait + OutputMode enum
@@ -148,11 +141,10 @@ src/Iidy/Output/
   Renderers/
     Interactive.hs          -- ANSI terminal output
     Json.hs                 -- JSON structured output
-```
+#+end_example
 
-### Supporting Commands
-
-```
+** Supporting Commands
+#+begin_example
 src/Iidy/
   Render.hs                 -- render command
   Explain.hs                -- Error code explanation
@@ -160,21 +152,19 @@ src/Iidy/
   GetImport.hs              -- Retrieve import values
   InitStackArgs.hs          -- Scaffold new stack-args project
   Types.hs                  -- Basic shared type definitions
-```
+#+end_example
 
-### SSM Parameters
-
-```
+** SSM Parameters
+#+begin_example
 src/Iidy/Params/
   Client.hs                 -- SSM parameter CRUD operations
   Review.hs                 -- Review pending parameter changes
-```
+#+end_example
 
-## Test Structure
-
+* Test Structure
 Tests are split across multiple modules:
 
-```
+#+begin_example
 test/Main.hs               -- Entry point: registers test groups (tasty framework)
 test/Test/                 -- Test modules
 test-fixtures/
@@ -182,34 +172,31 @@ test-fixtures/
   expected-outputs/         -- Golden output snapshots
 spec/
   snapshot.json             -- Conformance vectors read by SpecConformanceTest
-```
+#+end_example
 
-Test categories: unit tests for each layer, spec conformance tests (from PLT
-Redex snapshot), snapshot comparison against Rust oracle outputs, property tests
-for parsers and emitters, integration tests for the output pipeline.
+Test categories: unit tests for each layer, spec conformance tests (from PLT Redex snapshot), snapshot comparison against Rust oracle outputs, property tests for parsers and emitters, integration tests for the output pipeline.
 
 Scripts for cross-implementation snapshot comparison:
 
-```
+#+begin_example
 scripts/
   snapshot-compare.sh       -- Compare render fixtures vs Rust snapshots
   error-snapshot-compare.sh -- Compare error fixtures vs Rust snapshots
-```
+#+end_example
 
-## Key Entry Points
-
+* Key Entry Points
 Reading order for understanding the codebase:
 
-1. `app/Main.hs` -- CLI dispatch; shows how commands map to handlers
-2. `src/Iidy/Cli/Parser.hs` -- All 22 commands and their option parsing
-3. `src/Iidy/Cfn/Context.hs` -- CfnContext threading through all operations
-4. `src/Iidy/Yaml/Engine.hs` -- Preprocessing pipeline (import, resolve, emit)
-5. `src/Iidy/Output/Manager.hs` -- OutputDispatch wiring renderers to commands
-6. `src/Iidy/Output/Types.hs` -- The 26 OutputData variants that flow through the system
+1. =app/Main.hs= -- CLI dispatch; shows how commands map to handlers
+2. =src/Iidy/Cli/Parser.hs= -- All 22 commands and their option parsing
+3. =src/Iidy/Cfn/Context.hs= -- CfnContext threading through all operations
+4. =src/Iidy/Yaml/Engine.hs= -- Preprocessing pipeline (import, resolve, emit)
+5. =src/Iidy/Output/Manager.hs= -- OutputDispatch wiring renderers to commands
+6. =src/Iidy/Output/Types.hs= -- The 26 OutputData variants that flow through the system
 
 Data flow for a typical stack operation:
 
-```
+#+begin_example
 Main.hs
   -> Cli/Parser.hs          (parse CLI args)
   -> Cfn/StackArgsLoader.hs  (load stack-args.yaml)
@@ -218,4 +205,4 @@ Main.hs
   -> Cfn/Operations/*.hs     (execute operation)
   -> Output/Manager.hs       (dispatch OutputData to renderer)
   -> Output/Renderers/*.hs   (format for terminal or JSON)
-```
+#+end_example

@@ -1,198 +1,136 @@
-# Security Model for YAML Import System
+#+title: Security Model for YAML Import System
+#+options: ^:nil -:nil
 
-This document describes the security model implemented in iidy-hs's YAML
-preprocessing import system to prevent malicious remote templates from
-accessing local resources.
+This document describes the security model implemented in iidy-hs's YAML preprocessing import system to prevent malicious remote templates from accessing local resources.
 
-## Overview
+* Overview
+The YAML import system processes untrusted templates that may originate from remote sources (S3, HTTP/HTTPS). The security model distinguishes between *local templates* (loaded from the local filesystem) and *remote templates* (loaded from S3 or HTTP/HTTPS URLs), applying different restrictions to each.
 
-The YAML import system processes untrusted templates that may originate from
-remote sources (S3, HTTP/HTTPS). The security model distinguishes between
-**local templates** (loaded from the local filesystem) and **remote templates**
-(loaded from S3 or HTTP/HTTPS URLs), applying different restrictions to each.
+Local templates are trusted: they already execute in the user's local context, so no additional restrictions apply. Remote templates are untrusted: they are restricted from accessing local resources such as files, environment variables, and git metadata.
 
-Local templates are trusted: they already execute in the user's local context,
-so no additional restrictions apply. Remote templates are untrusted: they are
-restricted from accessing local resources such as files, environment variables,
-and git metadata.
+* Local-Only Import Types
+The following 5 import types are *forbidden from remote templates*:
 
-## Local-Only Import Types
+| Import Type        | Description                       | Security Risk                        |
+|--------------------+-----------------------------------+--------------------------------------|
+| =file:=            | Local filesystem access           | Could read sensitive files           |
+| =env:=             | Local environment variables       | Could access secrets and credentials |
+| =git:=             | Local git repository access       | Could extract repository information |
+| =filehash:=        | File hashing (local files)        | Could scan filesystem structure      |
+| =filehash-base64:= | File hashing with base64 encoding | Could scan filesystem structure      |
 
-The following 5 import types are **forbidden from remote templates**:
+These types correspond to =ImportFile=, =ImportEnv=, =ImportGit=, =ImportFilehash=, and =ImportFilehashBase64= in the Haskell source. The =isLocalOnly= function in =Types.hs= classifies them.
 
-| Import Type      | Description                       | Security Risk                          |
-|------------------|-----------------------------------|----------------------------------------|
-| `file:`          | Local filesystem access           | Could read sensitive files             |
-| `env:`           | Local environment variables       | Could access secrets and credentials   |
-| `git:`           | Local git repository access       | Could extract repository information   |
-| `filehash:`      | File hashing (local files)        | Could scan filesystem structure        |
-| `filehash-base64:` | File hashing with base64 encoding | Could scan filesystem structure     |
+* Remote-Allowed Import Types
+The following 6 import types are *allowed from any context*, including remote templates:
 
-These types correspond to `ImportFile`, `ImportEnv`, `ImportGit`,
-`ImportFilehash`, and `ImportFilehashBase64` in the Haskell source. The
-`isLocalOnly` function in `Types.hs` classifies them.
+| Import Type      | Description                   | Use Case                              |
+|------------------+-------------------------------+---------------------------------------|
+| =s3:=            | S3 objects                    | Access other S3-stored configurations |
+| =http:/https:= | HTTP endpoints                | Fetch configuration from web APIs     |
+| =cfn:=           | CloudFormation stacks/exports | Dynamic AWS resource references       |
+| =ssm:=           | SSM parameters                | Centralized configuration management  |
+| =ssm-path:=      | SSM parameter paths           | Bulk parameter retrieval              |
+| =random:=        | Random value generation       | Generate unique identifiers           |
 
-## Remote-Allowed Import Types
+* Relative Import Behavior
+When a template uses a relative import (no explicit type prefix), the import inherits the type of the parent template:
 
-The following 6 import types are **allowed from any context**, including
-remote templates:
-
-| Import Type       | Description                    | Use Case                              |
-|-------------------|--------------------------------|---------------------------------------|
-| `s3:`             | S3 objects                     | Access other S3-stored configurations |
-| `http:`/`https:`  | HTTP endpoints                 | Fetch configuration from web APIs     |
-| `cfn:`            | CloudFormation stacks/exports  | Dynamic AWS resource references       |
-| `ssm:`            | SSM parameters                 | Centralized configuration management  |
-| `ssm-path:`       | SSM parameter paths            | Bulk parameter retrieval              |
-| `random:`         | Random value generation        | Generate unique identifiers           |
-
-## Relative Import Behavior
-
-When a template uses a relative import (no explicit type prefix), the import
-inherits the type of the parent template:
-
-```yaml
+#+begin_src yaml
 # From s3://bucket/configs/app.yaml
 $imports:
   database: "database.yaml"  # Resolves to s3://bucket/configs/database.yaml
-```
+#+end_src
 
-Explicit local path indicators are blocked from remote templates. Paths
-starting with `./`, `../`, or `/` are treated as `file:` imports and rejected:
+Explicit local path indicators are blocked from remote templates. Paths starting with =./=, =../=, or =/= are treated as =file:= imports and rejected:
 
-```yaml
+#+begin_src yaml
 # From s3://bucket/config.yaml — these are ALL REJECTED:
 $imports:
   bad1: "./local.yaml"      # Local path from remote
   bad2: "../local.yaml"     # Local path from remote
   bad3: "/abs/local.yaml"   # Absolute local path from remote
-```
+#+end_src
 
-## Base Path Resolution
+* Base Path Resolution
+The system derives base paths from the parent template's location to resolve relative imports across different contexts.
 
-The system derives base paths from the parent template's location to resolve
-relative imports across different contexts.
+** Local File Paths
+- =/home/app/configs/main.yaml= -> =/home/app/configs/=
+- =./configs/app.yaml= -> =./configs/=
+- =config.yaml= -> `` (empty — current directory)
 
-### Local File Paths
+** S3 URLs
+- =s3://bucket/file.yaml= -> =s3://bucket/=
+- =s3://bucket/configs/app.yaml= -> =s3://bucket/configs/=
 
-- `/home/app/configs/main.yaml` -> `/home/app/configs/`
-- `./configs/app.yaml` -> `./configs/`
-- `config.yaml` -> `` (empty — current directory)
+** HTTP/HTTPS URLs
+- =https://example.com/file.yaml= -> =https://example.com/=
+- =https://example.com/configs/app.yaml= -> =https://example.com/configs/=
 
-### S3 URLs
+The =isLocalBase= function decides whether a base location is trusted, and it fails closed: a base is local only when it is positively a local file path. That means =parseTypePrefix= reads it as a plain path (no colon), a =./=, =../= or =/= path, or a =file:= location, or the text before its first colon is not a valid RFC 3986 URI scheme (for example =dir/./c:d.yaml=, which only a local path can produce). Every other base is untrusted: =s3:= in both the short (=s3:bucket/key=) and long (=s3://=) forms, =ssm:=, =ssm-path:=, =cfn:=, =http://=, =https://=, and any unknown scheme-shaped prefix (including a local file named like =a:b.yaml= or a Windows drive path, which must be written with a =./= or =/= prefix to stay local). The =parseTypePrefix= function extracts the type prefix from an import location, treating paths with =./=, =../=, or =/= prefixes as implicit =file:= imports.
 
-- `s3://bucket/file.yaml` -> `s3://bucket/`
-- `s3://bucket/configs/app.yaml` -> `s3://bucket/configs/`
+* Threat Model
+** What This Protects Against
+1. *Credential Theft* — Prevents remote templates from reading environment variables containing AWS keys, tokens, or other secrets via =env:= imports.
 
-### HTTP/HTTPS URLs
+2. *File System Scanning* — Blocks remote templates from reading local files or probing directory structure via =file:=, =filehash:=, and =filehash-base64:= imports.
 
-- `https://example.com/file.yaml` -> `https://example.com/`
-- `https://example.com/configs/app.yaml` -> `https://example.com/configs/`
+3. *Information Disclosure* — Prevents extraction of git repository metadata (branch, commit hash, tags) via =git:= imports.
 
-The `isLocalBase` function decides whether a base location is trusted, and it
-fails closed: a base is local only when it is positively a local file path.
-That means `parseTypePrefix` reads it as a plain path (no colon), a `./`,
-`../` or `/` path, or a `file:` location, or the text before its first colon
-is not a valid RFC 3986 URI scheme (for example `dir/./c:d.yaml`, which only a
-local path can produce). Every other base is untrusted: `s3:` in both the short
-(`s3:bucket/key`) and long (`s3://`) forms, `ssm:`, `ssm-path:`, `cfn:`,
-`http://`, `https://`, and any unknown scheme-shaped prefix (including a local
-file named like `a:b.yaml` or a Windows drive path, which must be written with
-a `./` or `/` prefix to stay local). The `parseTypePrefix` function extracts
-the type prefix from an import location, treating paths with `./`, `../`, or
-`/` prefixes as implicit `file:` imports.
+4. *Privilege Escalation* — Stops remote templates from accessing local resources beyond their intended scope. A template fetched from S3 cannot reach into the deployer's local filesystem.
 
-## Threat Model
+** What This Allows
+1. *Legitimate Composition* — Remote templates can compose from other remote sources (S3-to-S3, HTTPS-to-S3, etc.).
 
-### What This Protects Against
+2. *Relative Imports* — Templates can reference related files in the same remote context without absolute URLs.
 
-1. **Credential Theft** — Prevents remote templates from reading environment
-   variables containing AWS keys, tokens, or other secrets via `env:` imports.
+3. *AWS Integration* — Remote templates can access CloudFormation outputs and SSM parameters for dynamic configuration.
 
-2. **File System Scanning** — Blocks remote templates from reading local files
-   or probing directory structure via `file:`, `filehash:`, and
-   `filehash-base64:` imports.
+4. *Local Flexibility* — Local templates retain full import capabilities for all trusted operations.
 
-3. **Information Disclosure** — Prevents extraction of git repository metadata
-   (branch, commit hash, tags) via `git:` imports.
+* CLI Control: =--no-remote-imports=
+The =--no-remote-imports= flag disables all network-fetching import types at the CLI level. When set, any =http:=, =https:=, or =s3:= import returns an error instead of fetching content.
 
-4. **Privilege Escalation** — Stops remote templates from accessing local
-   resources beyond their intended scope. A template fetched from S3 cannot
-   reach into the deployer's local filesystem.
+*Blocked by =--no-remote-imports=:*
 
-### What This Allows
+- =http:= / =https:= — arbitrary HTTP fetches (SSRF risk)
+- =s3:= — arbitrary S3 object fetches
 
-1. **Legitimate Composition** — Remote templates can compose from other remote
-   sources (S3-to-S3, HTTPS-to-S3, etc.).
+*NOT blocked by =--no-remote-imports=:*
 
-2. **Relative Imports** — Templates can reference related files in the same
-   remote context without absolute URLs.
+- =cfn:=, =ssm:=, =ssm-path:= — these are AWS API calls that go through the AWS SDK with IAM authentication. They require credentials and are bounded by IAM policy, not open HTTP. They are gated by =--profile= / AWS credential configuration, not by the remote imports flag.
+- =env:=, =file:=, =git:=, =filehash:=, =random:= — local operations.
 
-3. **AWS Integration** — Remote templates can access CloudFormation outputs
-   and SSM parameters for dynamic configuration.
+This flag is orthogonal to the remote-base trust model described above. The trust model prevents remote /templates/ from reading local resources. The =--no-remote-imports= flag prevents local /users/ from fetching remote content, useful in air-gapped or egress-restricted environments.
 
-4. **Local Flexibility** — Local templates retain full import capabilities
-   for all trusted operations.
+The default is =--remote-imports= (allowed). Use =--no-remote-imports= to restrict.
 
-## CLI Control: `--no-remote-imports`
+* Implementation Notes
+Security validation is centralized in =parseImportType= in =src/Iidy/Yaml/Imports/Types.hs=. This function:
 
-The `--no-remote-imports` flag disables all network-fetching import types at
-the CLI level. When set, any `http:`, `https:`, or `s3:` import returns an
-error instead of fetching content.
+1. Extracts the type prefix from the import location (=parseTypePrefix=).
+2. Maps the prefix to an =ImportType= constructor.
+3. Checks whether the base location is positively local (=isLocalBase=).
+4. Rejects the import if both conditions hold: the base is not local AND the import type is local-only (=isLocalOnly=).
 
-**Blocked by `--no-remote-imports`:**
+Individual import loaders live under =src/Iidy/Yaml/Imports/Loaders/=:
 
-- `http:` / `https:` — arbitrary HTTP fetches (SSRF risk)
-- `s3:` — arbitrary S3 object fetches
+- =File.hs= — Local filesystem imports
+- =Env.hs= — Environment variable imports
+- =Git.hs= — Git metadata imports
+- =S3.hs= — S3 object imports
+- =Http.hs= — HTTP/HTTPS imports
+- =Cfn.hs= — CloudFormation stack/export imports
+- =Ssm.hs= — SSM parameter imports
+- =Random.hs= — Random value generation
 
-**NOT blocked by `--no-remote-imports`:**
-
-- `cfn:`, `ssm:`, `ssm-path:` — these are AWS API calls that go through the
-  AWS SDK with IAM authentication. They require credentials and are bounded
-  by IAM policy, not open HTTP. They are gated by `--profile` / AWS
-  credential configuration, not by the remote imports flag.
-- `env:`, `file:`, `git:`, `filehash:`, `random:` — local operations.
-
-This flag is orthogonal to the remote-base trust model described above. The
-trust model prevents remote *templates* from reading local resources. The
-`--no-remote-imports` flag prevents local *users* from fetching remote
-content, useful in air-gapped or egress-restricted environments.
-
-The default is `--remote-imports` (allowed). Use `--no-remote-imports` to
-restrict.
-
-## Implementation Notes
-
-Security validation is centralized in `parseImportType` in
-`src/Iidy/Yaml/Imports/Types.hs`. This function:
-
-1. Extracts the type prefix from the import location (`parseTypePrefix`).
-2. Maps the prefix to an `ImportType` constructor.
-3. Checks whether the base location is positively local (`isLocalBase`).
-4. Rejects the import if both conditions hold: the base is not local AND the
-   import type is local-only (`isLocalOnly`).
-
-Individual import loaders live under `src/Iidy/Yaml/Imports/Loaders/`:
-
-- `File.hs` — Local filesystem imports
-- `Env.hs` — Environment variable imports
-- `Git.hs` — Git metadata imports
-- `S3.hs` — S3 object imports
-- `Http.hs` — HTTP/HTTPS imports
-- `Cfn.hs` — CloudFormation stack/export imports
-- `Ssm.hs` — SSM parameter imports
-- `Random.hs` — Random value generation
-
-Base path threading occurs in `src/Iidy/Yaml/Engine.hs`, where `baseLocation`
-is passed through the preprocessing pipeline and propagated to child imports.
-The `TagContext` in `src/Iidy/Yaml/Resolution/Context.hs` carries the
-`tcInputUri` field, which tracks the current template's origin for resolution.
+Base path threading occurs in =src/Iidy/Yaml/Engine.hs=, where =baseLocation= is passed through the preprocessing pipeline and propagated to child imports. The =TagContext= in =src/Iidy/Yaml/Resolution/Context.hs= carries the =tcInputUri= field, which tracks the current template's origin for resolution.
 
 When a security violation is detected, the system returns a clear error:
 
-```
+#+begin_example
 Import type file is not allowed from remote templates
-```
+#+end_example
 
-The implementation follows the principle of secure by default: remote templates
-are restricted unless the import type is explicitly classified as remote-safe.
+The implementation follows the principle of secure by default: remote templates are restricted unless the import type is explicitly classified as remote-safe.

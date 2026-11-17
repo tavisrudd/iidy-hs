@@ -1,189 +1,182 @@
-# Import Types
+#+title: Import Types
+#+options: ^:nil -:nil
 
-Import locations appear as values in the `$imports` section of a preprocessed YAML document. Each value is a string that identifies where to load content from and how to parse it. See [yaml-preprocessing.md](yaml-preprocessing.md) for how `$imports` fits into document structure.
+Import locations appear as values in the =$imports= section of a preprocessed YAML document. Each value is a string that identifies where to load content from and how to parse it. See [[file:yaml-preprocessing.org]] for how =$imports= fits into document structure.
 
----
+--------------
 
-## file
-
+* file
 Load a YAML or JSON file from the local filesystem. Paths are resolved relative to the importing document's location.
 
-**Syntax:** `path/to/file.yaml`, `./relative/path.yaml`, `/absolute/path.yaml`, `file:path/to/file.yaml`
+*Syntax:* =path/to/file.yaml=, =./relative/path.yaml=, =/absolute/path.yaml=, =file:path/to/file.yaml=
 
-The `file:` prefix is optional. File content is parsed as YAML or JSON based on the file extension.
+The =file:= prefix is optional. File content is parsed as YAML or JSON based on the file extension.
 
-**Example:**
+*Example:*
 
-```yaml
+#+begin_src yaml
 $imports:
   vpc: ./vpc-stack-outputs.yaml
   global: /etc/myapp/global-config.yaml
   same_dir: shared/constants.yaml
-```
+#+end_src
 
-**Notes:** This import type is restricted to local templates. Remote templates (loaded from S3, HTTP, or HTTPS) cannot use `file:` imports.
+*Notes:* This import type is restricted to local templates. Remote templates (loaded from S3, HTTP, or HTTPS) cannot use =file:= imports.
 
----
+--------------
 
-## env
-
+* env
 Read a value from an environment variable.
 
-**Syntax:** `env:VAR_NAME`, `env:VAR_NAME:default-value`
+*Syntax:* =env:VAR_NAME=, =env:VAR_NAME:default-value=
 
 If the variable is not set and no default is provided, preprocessing fails with an error. The default value is everything after the second colon, so colons are allowed in the default.
 
-**Examples:**
+*Examples:*
 
-```yaml
+#+begin_src yaml
 $imports:
   deploy_env: env:DEPLOY_ENV
   region: env:AWS_REGION:us-east-1
   db_url: env:DATABASE_URL:postgres://localhost:5432/myapp
-```
+#+end_src
 
-**Notes:** Returns a string. Restricted to local templates; remote templates cannot read environment variables.
+*Notes:* Returns a string. Restricted to local templates; remote templates cannot read environment variables.
 
----
+--------------
 
-## git
-
+* git
 Read information from the current git repository.
 
-**Syntax:** `git:branch`, `git:sha`, `git:describe`
+*Syntax:* =git:branch=, =git:sha=, =git:describe=
 
-| Subtype | Equivalent command | Example output |
-|---|---|---|
-| `git:branch` | `git rev-parse --abbrev-ref HEAD` | `main` |
-| `git:sha` | `git rev-parse HEAD` | `a3d955c8f...` |
-| `git:describe` | `git describe --always --dirty --tags` | `v1.4.2-3-ga3d955c-dirty` |
+| Subtype        | Equivalent command                     | Example output            |
+|----------------+----------------------------------------+---------------------------|
+| =git:branch=   | =git rev-parse --abbrev-ref HEAD=      | =main=                    |
+| =git:sha=      | =git rev-parse HEAD=                   | =a3d955c8f...=            |
+| =git:describe= | =git describe --always --dirty --tags= | =v1.4.2-3-ga3d955c-dirty= |
 
-**Example:**
+*Example:*
 
-```yaml
+#+begin_src yaml
 $imports:
   branch: git:branch
   sha: git:sha
   version: git:describe
-```
+#+end_src
 
-**Notes:** Returns a string. Restricted to local templates.
+*Notes:* Returns a string. Restricted to local templates.
 
----
+--------------
 
-## random
-
+* random
 Generate a random value at preprocessing time.
 
-**Syntax:** `random:dashed-name`, `random:name`, `random:int`
+*Syntax:* =random:dashed-name=, =random:name=, =random:int=
 
-| Subtype | Description | Example output |
-|---|---|---|
-| `random:dashed-name` | adjective-noun pair with a dash | `clever-eagle` |
-| `random:name` | adjective-noun pair without a dash | `clevereagle` |
-| `random:int` | integer between 1 and 999 | `742` |
+| Subtype              | Description                        | Example output |
+|----------------------+------------------------------------+----------------|
+| =random:dashed-name= | adjective-noun pair with a dash    | =clever-eagle= |
+| =random:name=        | adjective-noun pair without a dash | =clevereagle=  |
+| =random:int=         | integer between 1 and 999          | =742=          |
 
-**Example:**
+*Example:*
 
-```yaml
+#+begin_src yaml
 $imports:
   stack_suffix: random:dashed-name
   batch_id: random:int
-```
+#+end_src
 
-**Notes:** A new value is generated each time preprocessing runs. Do not use this in contexts where stable values are required across runs.
+*Notes:* A new value is generated each time preprocessing runs. Do not use this in contexts where stable values are required across runs.
 
----
+--------------
 
-## filehash
-
+* filehash
 Compute a SHA256 hash of a file's contents.
 
-**Syntax:** `filehash:path/to/file`, `filehash-base64:path/to/file`
+*Syntax:* =filehash:path/to/file=, =filehash-base64:path/to/file=
 
-Use `filehash:` for a hex-encoded digest and `filehash-base64:` for a base64-encoded digest. Paths are resolved relative to the importing document.
+Use =filehash:= for a hex-encoded digest and =filehash-base64:= for a base64-encoded digest. Paths are resolved relative to the importing document.
 
-Prefix the path with `?` to allow a missing file without error. A missing file returns the string `FILE_MISSING`.
+Prefix the path with =?= to allow a missing file without error. A missing file returns the string =FILE_MISSING=.
 
-**Examples:**
+*Examples:*
 
-```yaml
+#+begin_src yaml
 $imports:
   lambda_hash: filehash:dist/handler.zip
   asset_hash_b64: filehash-base64:dist/handler.zip
   optional_hash: filehash:?dist/optional-asset.zip
-```
+#+end_src
 
-**Notes:** Useful for detecting when a deployed artifact has changed. Restricted to local templates.
+*Notes:* Useful for detecting when a deployed artifact has changed. Restricted to local templates.
 
----
+--------------
 
-## s3
-
+* s3
 Load a YAML or JSON document from S3. Requires AWS credentials.
 
-**Syntax:** `s3://bucket-name/path/to/object.yaml`
+*Syntax:* =s3://bucket-name/path/to/object.yaml=
 
 Content is parsed as YAML or JSON based on the object key's extension.
 
-**Example:**
+*Example:*
 
-```yaml
+#+begin_src yaml
 $imports:
   shared_config: s3://my-infra-bucket/configs/shared-networking.yaml
   account_limits: s3://my-infra-bucket/accounts/prod/limits.json
-```
+#+end_src
 
-**Notes:** AWS credentials must be available in the environment or via the configured profile. Templates loaded from S3 are considered remote and cannot use local import types.
+*Notes:* AWS credentials must be available in the environment or via the configured profile. Templates loaded from S3 are considered remote and cannot use local import types.
 
----
+--------------
 
-## http / https
-
+* http / https
 Fetch a YAML or JSON document from an HTTP or HTTPS endpoint. Requires a full URL.
 
-**Syntax:** `http://host/path`, `https://host/path`
+*Syntax:* =http://host/path=, =https://host/path=
 
 Content is parsed as YAML or JSON based on the URL path's extension.
 
-**Example:**
+*Example:*
 
-```yaml
+#+begin_src yaml
 $imports:
   service_config: https://config-api.internal.example.com/v1/services/payments.yaml
   feature_flags: https://releases.example.com/flags/prod.json
-```
+#+end_src
 
-**Notes:** Templates loaded from HTTP or HTTPS are considered remote and cannot use local import types. Relative imports within a remote template inherit the parent's base URL. See [SECURITY.md](SECURITY.md) for the full remote template security model.
+*Notes:* Templates loaded from HTTP or HTTPS are considered remote and cannot use local import types. Relative imports within a remote template inherit the parent's base URL. See [[file:SECURITY.org]] for the full remote template security model.
 
----
+--------------
 
-## cfn
-
+* cfn
 Read data from a CloudFormation stack. Requires AWS credentials.
 
-**Syntax:**
+*Syntax:*
 
-| Format | Returns |
-|---|---|
-| `cfn:output:stack-name/OutputKey` | Value of a stack output |
-| `cfn:output:stack-name` | All stack outputs as a YAML mapping |
-| `cfn:export:ExportName` | Value of a named CloudFormation export |
-| `cfn:parameter:stack-name/Key` | Value of a stack parameter |
-| `cfn:parameter:stack-name` | All stack parameters as a YAML mapping |
-| `cfn:tag:stack-name/Key` | Value of a stack tag |
-| `cfn:tag:stack-name` | All stack tags as a YAML mapping |
-| `cfn:resource:stack-name/LogicalId` | Resource object for a logical resource ID |
-| `cfn:resource:stack-name` | All stack resources as a YAML mapping keyed by logical ID |
-| `cfn:stack:stack-name` | Entire stack as a mapping with `Outputs`, `Parameters`, and `Tags` keys |
+| Format                              | Returns                                                                 |
+|-------------------------------------+-------------------------------------------------------------------------|
+| =cfn:output:stack-name/OutputKey=   | Value of a stack output                                                 |
+| =cfn:output:stack-name=             | All stack outputs as a YAML mapping                                     |
+| =cfn:export:ExportName=             | Value of a named CloudFormation export                                  |
+| =cfn:parameter:stack-name/Key=      | Value of a stack parameter                                              |
+| =cfn:parameter:stack-name=          | All stack parameters as a YAML mapping                                  |
+| =cfn:tag:stack-name/Key=            | Value of a stack tag                                                    |
+| =cfn:tag:stack-name=                | All stack tags as a YAML mapping                                        |
+| =cfn:resource:stack-name/LogicalId= | Resource object for a logical resource ID                               |
+| =cfn:resource:stack-name=           | All stack resources as a YAML mapping keyed by logical ID               |
+| =cfn:stack:stack-name=              | Entire stack as a mapping with =Outputs=, =Parameters=, and =Tags= keys |
 
 When looking up a specific field (output, parameter, tag, or resource), the result is either a string value or a resource object. When no field key is given, the result is a YAML mapping of all values.
 
-Resource objects returned by `cfn:resource:` contain `LogicalResourceId`, `PhysicalResourceId`, `ResourceType`, and `ResourceStatus` fields.
+Resource objects returned by =cfn:resource:= contain =LogicalResourceId=, =PhysicalResourceId=, =ResourceType=, and =ResourceStatus= fields.
 
-**Examples:**
+*Examples:*
 
-```yaml
+#+begin_src yaml
 $imports:
   # Stack outputs
   vpc_id: cfn:output:networking-stack/VpcId
@@ -206,84 +199,81 @@ $imports:
 
   # Entire stack
   full_stack: cfn:stack:networking-stack
-```
+#+end_src
 
-**Notes:** The stack must exist in the current account and region. When looking up a specific field, it must be present in the stack, otherwise preprocessing fails.
+*Notes:* The stack must exist in the current account and region. When looking up a specific field, it must be present in the stack, otherwise preprocessing fails.
 
----
+--------------
 
-## ssm
-
+* ssm
 Read a single parameter from AWS Systems Manager Parameter Store. Requires AWS credentials.
 
-**Syntax:** `ssm:/parameter/path`, `ssm:/parameter/path:json`, `ssm:/parameter/path:yaml`
+*Syntax:* =ssm:/parameter/path=, =ssm:/parameter/path:json=, =ssm:/parameter/path:yaml=
 
-SecureString parameters are always decrypted. Without a format suffix the raw string value is returned. Append `:json` or `:yaml` to parse the value as structured data.
+SecureString parameters are always decrypted. Without a format suffix the raw string value is returned. Append =:json= or =:yaml= to parse the value as structured data.
 
-**Examples:**
+*Examples:*
 
-```yaml
+#+begin_src yaml
 $imports:
   db_password: ssm:/myapp/prod/db/password
   feature_flags: ssm:/myapp/prod/feature-flags:json
   rate_limits: ssm:/myapp/prod/rate-limits:yaml
-```
+#+end_src
 
-**Notes:** The parameter must exist in the current account and region. Requires `ssm:GetParameter` permission and, for SecureString parameters, the relevant KMS decrypt permission.
+*Notes:* The parameter must exist in the current account and region. Requires =ssm:GetParameter= permission and, for SecureString parameters, the relevant KMS decrypt permission.
 
----
+--------------
 
-## ssm-path
-
+* ssm-path
 Read all parameters under an SSM path prefix. Requires AWS credentials.
 
-**Syntax:** `ssm-path:/parameter/path`, `ssm-path:/parameter/path:json`, `ssm-path:/parameter/path:yaml`
+*Syntax:* =ssm-path:/parameter/path=, =ssm-path:/parameter/path:json=, =ssm-path:/parameter/path:yaml=
 
 Returns a mapping where each key is the parameter name relative to the path prefix and each value is the parameter's value. The retrieval is recursive and SecureString parameters are always decrypted.
 
-Append `:json` or `:yaml` to parse each parameter value as structured data.
+Append =:json= or =:yaml= to parse each parameter value as structured data.
 
-**Examples:**
+*Examples:*
 
-```yaml
+#+begin_src yaml
 $imports:
   db_config: ssm-path:/myapp/prod/db
   # results in a mapping like:
   # host: db.internal.example.com
   # port: "5432"
   # name: myapp_prod
-```
+#+end_src
 
-```yaml
+#+begin_src yaml
 $imports:
   service_configs: ssm-path:/myapp/prod/services:json
   # each parameter value is parsed as JSON before being placed in the mapping
-```
+#+end_src
 
-**Notes:** Requires `ssm:GetParametersByPath` permission on the path prefix. For KMS-encrypted parameters, the relevant decrypt permission is also required.
+*Notes:* Requires =ssm:GetParametersByPath= permission on the path prefix. For KMS-encrypted parameters, the relevant decrypt permission is also required.
 
----
+--------------
 
-## Security Restrictions
-
+* Security Restrictions
 Local templates (loaded from the filesystem) can use any import type. Remote templates (loaded from S3, HTTP, or HTTPS) are restricted.
 
-**Blocked in remote templates:**
+*Blocked in remote templates:*
 
-- `file:` -- local filesystem access
-- `env:` -- environment variable access
-- `git:` -- local git repository access
-- `filehash:` / `filehash-base64:` -- local file hashing
+- =file:= -- local filesystem access
+- =env:= -- environment variable access
+- =git:= -- local git repository access
+- =filehash:= / =filehash-base64:= -- local file hashing
 
-**Allowed in remote templates:**
+*Allowed in remote templates:*
 
-- `s3:`, `http:`, `https:` -- remote content
-- `cfn:` -- CloudFormation outputs and exports
-- `ssm:`, `ssm-path:` -- Parameter Store
-- `random:` -- random value generation
+- =s3:=, =http:=, =https:= -- remote content
+- =cfn:= -- CloudFormation outputs and exports
+- =ssm:=, =ssm-path:= -- Parameter Store
+- =random:= -- random value generation
 
-Relative imports within a remote template resolve using the parent's scheme. A relative path `./sibling.yaml` inside an S3 template resolves to an S3 object in the same bucket prefix, not a local file. Explicit local path indicators (`./`, `../`, or an absolute path starting with `/`) are blocked when used from remote templates.
+Relative imports within a remote template resolve using the parent's scheme. A relative path =./sibling.yaml= inside an S3 template resolves to an S3 object in the same bucket prefix, not a local file. Explicit local path indicators (=./=, =../=, or an absolute path starting with =/=) are blocked when used from remote templates.
 
-Additionally, the `--no-remote-imports` CLI flag blocks `http:`, `https:`, and `s3:` imports entirely (regardless of whether the importing template is local or remote). This is useful in air-gapped or egress-restricted environments. AWS API-based imports (`cfn:`, `ssm:`, `ssm-path:`) are NOT blocked by this flag — they are gated by AWS credentials and IAM policy instead.
+Additionally, the =--no-remote-imports= CLI flag blocks =http:=, =https:=, and =s3:= imports entirely (regardless of whether the importing template is local or remote). This is useful in air-gapped or egress-restricted environments. AWS API-based imports (=cfn:=, =ssm:=, =ssm-path:=) are NOT blocked by this flag — they are gated by AWS credentials and IAM policy instead.
 
-For the full security model, see [SECURITY.md](SECURITY.md).
+For the full security model, see [[file:SECURITY.org]].

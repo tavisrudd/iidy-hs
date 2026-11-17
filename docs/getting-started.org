@@ -1,42 +1,35 @@
-# Getting Started
+#+title: Getting Started
+#+options: ^:nil -:nil
 
-iidy ("Is it done yet?", [pronounced "eye-dee"](https://www.youtube.com/watch?v=8mq4UT4VnbE&t=50s))
-gives you fast, readable feedback on CloudFormation deployments so you never
-have to wonder whether things are working or stare at a wall of red text when
-they aren't.
+iidy ("Is it done yet?", [[https://www.youtube.com/watch?v=8mq4UT4VnbE&t=50s][pronounced "eye-dee"]]) gives you fast, readable feedback on CloudFormation deployments so you never have to wonder whether things are working or stare at a wall of red text when they aren't.
 
-## Prerequisites
+* Prerequisites
+- *GHCUp*: install via [[https://www.haskell.org/ghcup/][GHCup]]
+- *AWS credentials*: configured via =~/.aws/credentials=, environment variables, or IAM role
+- *A CloudFormation template*: any valid YAML or JSON template
 
-- **GHCUp**: install via [GHCup](https://www.haskell.org/ghcup/)
-- **AWS credentials**: configured via `~/.aws/credentials`, environment variables, or IAM role
-- **A CloudFormation template**: any valid YAML or JSON template
-
-## Installation
-
+* Installation
 Build from source with cabal:
 
-```
+#+begin_example
 git clone https://github.com/unbounce/iidy-hs
 cd iidy-hs
 cabal install
-```
+#+end_example
 
 Verify the installation:
 
-```
+#+begin_example
 iidy --version
-```
+#+end_example
 
-## Your First Deployment
+* Your First Deployment
+This walkthrough deploys a minimal S3 bucket, inspects it, updates it, and deletes it. No special template syntax -- just a stock CloudFormation template.
 
-This walkthrough deploys a minimal S3 bucket, inspects it, updates it, and
-deletes it. No special template syntax -- just a stock CloudFormation template.
+** 1. Create a CloudFormation template
+Save this as =cfn-template.yaml=:
 
-### 1. Create a CloudFormation template
-
-Save this as `cfn-template.yaml`:
-
-```yaml
+#+begin_src yaml
 AWSTemplateFormatVersion: '2010-09-09'
 Description: A simple S3 bucket managed by iidy
 
@@ -55,13 +48,12 @@ Outputs:
     Value: !Ref Bucket
   BucketArn:
     Value: !GetAtt Bucket.Arn
-```
+#+end_src
 
-### 2. Create stack-args.yaml
-
+** 2. Create stack-args.yaml
 This file tells iidy what to deploy and how:
 
-```yaml
+#+begin_src yaml
 StackName: iidy-getting-started
 Template: ./cfn-template.yaml
 Region: us-east-1
@@ -72,24 +64,18 @@ Parameters:
 Tags:
   Team: platform
   Purpose: getting-started
-```
+#+end_src
 
-That is the entire configuration. `stack-args.yaml` replaces CLI flags,
-parameter files, and wrapper scripts -- everything iidy needs to call the
-CloudFormation API is in one readable file. Every field is explained in the
-[stack-args.yaml reference](#stack-argsyaml-reference) below.
+That is the entire configuration. =stack-args.yaml= replaces CLI flags, parameter files, and wrapper scripts -- everything iidy needs to call the CloudFormation API is in one readable file. Every field is explained in the [[*stack-args.yaml Reference][stack-args.yaml reference]] below.
 
-### 3. Deploy the stack
-
-```
+** 3. Deploy the stack
+#+begin_example
 iidy create-stack stack-args.yaml
-```
+#+end_example
 
-iidy submits the template and parameters to CloudFormation, then streams
-events in real time until the operation completes or fails. Output is
-color-coded in the terminal; here is what it looks like (abbreviated):
+iidy submits the template and parameters to CloudFormation, then streams events in real time until the operation completes or fails. Output is color-coded in the terminal; here is what it looks like (abbreviated):
 
-```
+#+begin_example
 Command Metadata:
  CFN Operation:        create-stack
  iidy Environment:     development
@@ -130,22 +116,18 @@ Stack Outputs:
 Current Stack Status: CREATE_COMPLETE
 
 SUCCESS: (10s)
-```
+#+end_example
 
-The first thing you see is what was sent to the API -- stack name, region,
-parameters, tags -- so you can verify at a glance that the right values were
-used. Then events stream in real time as CloudFormation creates resources.
+The first thing you see is what was sent to the API -- stack name, region, parameters, tags -- so you can verify at a glance that the right values were used. Then events stream in real time as CloudFormation creates resources.
 
-### 4. Inspect the stack
-
-```
+** 4. Inspect the stack
+#+begin_example
 iidy describe-stack iidy-getting-started
-```
+#+end_example
 
-Shows the stack status, parameters, outputs, resources, and recent events
-(abbreviated):
+Shows the stack status, parameters, outputs, resources, and recent events (abbreviated):
 
-```
+#+begin_example
 Stack Details:
  Name:                 iidy-getting-started
  Status:               CREATE_COMPLETE
@@ -174,66 +156,57 @@ Stack Outputs:
  BucketArn            arn:aws:s3:::iidy-getting-started-demo-assets
 
 Current Stack Status: CREATE_COMPLETE
-```
+#+end_example
 
-### 5. Update the stack
+** 5. Update the stack
+Change =BucketSuffix= in =stack-args.yaml= to =demo-assets-v2=, then:
 
-Change `BucketSuffix` in `stack-args.yaml` to `demo-assets-v2`, then:
-
-```
+#+begin_example
 iidy update-stack stack-args.yaml
-```
+#+end_example
 
-iidy submits the update and watches the operation to completion, showing live
-events as resources are modified.
+iidy submits the update and watches the operation to completion, showing live events as resources are modified.
 
-For production updates where you want to review changes before committing, use
-`--changeset` to route through a CloudFormation changeset. iidy creates the
-changeset, shows exactly what will be added, modified, or replaced, then
-prompts for confirmation:
+For production updates where you want to review changes before committing, use =--changeset= to route through a CloudFormation changeset. iidy creates the changeset, shows exactly what will be added, modified, or replaced, then prompts for confirmation:
 
-```
+#+begin_example
 iidy update-stack stack-args.yaml --changeset
-```
+#+end_example
 
-```
+#+begin_example
 ? Do you want to execute this changeset now? (y/N)
-```
+#+end_example
 
-Answer `y` to proceed or `n` to cancel (exit code 130). Use `--yes` to skip
-the prompt in CI pipelines.
+Answer =y= to proceed or =n= to cancel (exit code 130). Use =--yes= to skip the prompt in CI pipelines.
 
-### 6. List stacks
-
-```
+** 6. List stacks
+#+begin_example
 iidy list-stacks
-```
+#+end_example
 
 Shows all stacks in the current region:
 
-```
+#+begin_example
 Creation/Update Time,    Status,          Name
 Wed Jan 14 2026 11:15:30 CREATE_COMPLETE  iidy-getting-started
 Fri Jan 09 2026 09:22:00 UPDATE_COMPLETE  vpc-core
 Sat Jan 03 2026 14:05:12 CREATE_COMPLETE  monitoring-stack
-```
+#+end_example
 
 Filter by tags to find stacks owned by a particular team:
 
-```
+#+begin_example
 iidy list-stacks --tag-filter Team=platform
-```
+#+end_example
 
-### 7. Delete the stack
-
-```
+** 7. Delete the stack
+#+begin_example
 iidy delete-stack iidy-getting-started
-```
+#+end_example
 
-iidy prompts for confirmation, then deletes the stack and watches until
-deletion completes:
+iidy prompts for confirmation, then deletes the stack and watches until deletion completes:
 
-```
+#+begin_example
 ? Are you sure you want to DELETE the stack iidy-getting-started? (y/N) y
 
 Live Stack Events (2s poll):
@@ -242,17 +215,14 @@ Live Stack Events (2s poll):
  Wed Jan 14 2026 11:20:35 DELETE_COMPLETE     AWS::CloudFormation::Stack   iidy-getting-started (35s)
 
 SUCCESS: (35s)
-```
+#+end_example
 
----
+--------------
 
-## Environment-Based Configuration
+* Environment-Based Configuration
+A single =stack-args.yaml= can target multiple environments. Fields like =Region=, =Profile=, =Parameters=, and =AssumeRoleARN= accept environment maps -- a mapping of environment names to values:
 
-A single `stack-args.yaml` can target multiple environments. Fields like
-`Region`, `Profile`, `Parameters`, and `AssumeRoleARN` accept environment maps
--- a mapping of environment names to values:
-
-```yaml
+#+begin_src yaml
 StackName: my-app-{{ environment }}
 Template: ./cfn-template.yaml
 
@@ -271,52 +241,42 @@ Parameters:
     development: t3.micro
     staging: t3.small
     production: m5.large
-```
+#+end_src
 
-Deploy to different environments with the `-e` flag:
+Deploy to different environments with the =-e= flag:
 
-```
+#+begin_example
 iidy -e development create-stack stack-args.yaml
 iidy -e staging create-stack stack-args.yaml
 iidy -e production create-stack stack-args.yaml
-```
+#+end_example
 
-The environment name is also available as `{{ environment }}` in string values,
-which is how the `StackName` above gets the environment suffix.
+The environment name is also available as ={{ environment }}= in string values, which is how the =StackName= above gets the environment suffix.
 
----
+--------------
 
-## Output Modes
-
+* Output Modes
 iidy has three output modes:
 
-- **interactive** (default in terminals): Color-coded output with themes,
-  spinners for in-progress operations, and confirmation prompts.
-- **plain**: No ANSI codes, suitable for CI logs.
-- **json**: Machine-parseable newline-delimited JSON, one object per event.
+- *interactive* (default in terminals): Color-coded output with themes, spinners for in-progress operations, and confirmation prompts.
+- *plain*: No ANSI codes, suitable for CI logs.
+- *json*: Machine-parseable newline-delimited JSON, one object per event.
 
-iidy detects whether it is connected to a TTY. In interactive mode it uses
-color and confirmation prompts; in a CI pipeline it automatically adjusts.
-Use `--yes` to skip confirmation prompts in scripts, and `--color never` to
-force ANSI codes off.
+iidy detects whether it is connected to a TTY. In interactive mode it uses color and confirmation prompts; in a CI pipeline it automatically adjusts. Use =--yes= to skip confirmation prompts in scripts, and =--color never= to force ANSI codes off.
 
-```
+#+begin_example
 iidy --output-mode plain create-stack stack-args.yaml
 iidy --output-mode json describe-stack my-stack
 iidy update-stack stack-args.yaml --changeset --yes
-```
+#+end_example
 
----
+--------------
 
-## Importing Values into stack-args.yaml
+* Importing Values into stack-args.yaml
+=stack-args.yaml= is always preprocessed by iidy, even without any special template syntax. This means you can import values from external sources and use them in your parameters and tags.
 
-`stack-args.yaml` is always preprocessed by iidy, even without any special
-template syntax. This means you can import values from external sources and
-use them in your parameters and tags.
-
-### Pulling from shared files
-
-```yaml
+** Pulling from shared files
+#+begin_src yaml
 $imports:
   shared: ./shared-config.yaml
 
@@ -328,19 +288,18 @@ Parameters:
 Tags:
   Team: !$ shared.team
   CostCenter: !$ shared.cost_center
-```
+#+end_src
 
-where `shared-config.yaml` contains:
+where =shared-config.yaml= contains:
 
-```yaml
+#+begin_src yaml
 team: platform
 cost_center: CC-1234
 database_host: db.internal.example.com
-```
+#+end_src
 
-### Pulling from SSM Parameter Store
-
-```yaml
+** Pulling from SSM Parameter Store
+#+begin_src yaml
 $imports:
   clusterSize: ssm:/myapp/config/cluster-size
   domainName: ssm:/myapp/config/domain-name
@@ -350,11 +309,10 @@ Template: ./cfn-template.yaml
 Parameters:
   ClusterSize: !$ clusterSize
   DomainName: !$ domainName
-```
+#+end_src
 
-### Pulling from other CloudFormation stacks
-
-```yaml
+** Pulling from other CloudFormation stacks
+#+begin_src yaml
 $imports:
   vpc: cfn:vpc-stack.VpcId
   subnet: cfn:vpc-stack.PrivateSubnetA
@@ -364,13 +322,12 @@ Template: ./cfn-template.yaml
 Parameters:
   VpcId: !$ vpc
   SubnetId: !$ subnet
-```
+#+end_src
 
-### Defining local variables
+** Defining local variables
+Use =$defs= to define reusable values within the file:
 
-Use `$defs` to define reusable values within the file:
-
-```yaml
+#+begin_src yaml
 $defs:
   app: my-app
   env: staging
@@ -381,78 +338,66 @@ Region: us-east-1
 Tags:
   Application: !$ app
   Environment: !$ env
-```
+#+end_src
 
-Use `iidy render stack-args.yaml` to preview the resolved output. This shows
-the final YAML after all imports and variables are substituted.
+Use =iidy render stack-args.yaml= to preview the resolved output. This shows the final YAML after all imports and variables are substituted.
 
-See [import-types.md](import-types.md) for the full list of import sources
-(file, env, git, s3, http/https, ssm, cfn, random, filehash).
+See [[file:import-types.org]] for the full list of import sources (file, env, git, s3, http/https, ssm, cfn, random, filehash).
 
----
+--------------
 
-## Preprocessing CloudFormation Templates
+* Preprocessing CloudFormation Templates
+Everything above works with plain CloudFormation templates. When your templates themselves need abstraction -- reducing repetitive resource definitions, conditionally including sections, or generating resources from data -- add the =render:= prefix to enable iidy preprocessing on the template:
 
-Everything above works with plain CloudFormation templates. When your templates
-themselves need abstraction -- reducing repetitive resource definitions,
-conditionally including sections, or generating resources from data -- add the
-`render:` prefix to enable iidy preprocessing on the template:
-
-```yaml
+#+begin_src yaml
 Template: render:./cfn-template.yaml    # preprocessed by iidy first
 Template: ./cfn-template.yaml           # sent to CloudFormation as-is
-```
+#+end_src
 
-With `render:`, the template file can use the same `$imports`, `$defs`, and
-preprocessing tags available in stack-args.yaml.
+With =render:=, the template file can use the same =$imports=, =$defs=, and preprocessing tags available in stack-args.yaml.
 
 Preview any template's preprocessed output without deploying:
 
-```
+#+begin_example
 iidy render cfn-template.yaml
-```
+#+end_example
 
-See [yaml-preprocessing.md](yaml-preprocessing.md) for the full preprocessing
-reference.
+See [[file:yaml-preprocessing.org]] for the full preprocessing reference.
 
----
+--------------
 
-## stack-args.yaml Reference
+* stack-args.yaml Reference
+All fields are optional except =StackName= and =Template=.
 
-All fields are optional except `StackName` and `Template`.
+| Field                         | Type              | Description                                                                        |
+|-------------------------------+-------------------+------------------------------------------------------------------------------------|
+| =StackName=                   | string            | CloudFormation stack name (required)                                               |
+| =Template=                    | string            | Path to the template file. Prefix with =render:= for iidy preprocessing (required) |
+| =Region=                      | string or env map | AWS region                                                                         |
+| =Profile=                     | string or env map | AWS CLI profile name                                                               |
+| =AssumeRoleARN=               | string or env map | IAM role to assume before operations                                               |
+| =ServiceRoleARN=              | string            | IAM service role for CloudFormation to use                                         |
+| =RoleARN=                     | string            | Fallback for ServiceRoleARN (used if ServiceRoleARN is not set)                    |
+| =Parameters=                  | mapping           | CloudFormation stack parameters (key: value, or env maps)                          |
+| =Tags=                        | mapping           | Stack tags (key: value). An =environment= tag is added automatically               |
+| =Capabilities=                | list              | Required capabilities, e.g., =[CAPABILITY_IAM, CAPABILITY_NAMED_IAM]=              |
+| =NotificationARNs=            | list              | SNS topic ARNs for stack event notifications                                       |
+| =TimeoutInMinutes=            | integer           | Stack creation timeout                                                             |
+| =OnFailure=                   | string            | Action on creation failure: =ROLLBACK=, =DELETE=, or =DO_NOTHING=                  |
+| =DisableRollback=             | boolean           | Disable automatic rollback on failure                                              |
+| =EnableTerminationProtection= | boolean           | Prevent accidental stack deletion                                                  |
+| =StackPolicy=                 | mapping           | Stack policy document (inline YAML)                                                |
+| =ResourceTypes=               | list              | Allowed resource types for the template                                            |
+| =UsePreviousTemplate=         | boolean           | Reuse the existing template during update                                          |
+| =UsePreviousParameterValues=  | list              | Parameter keys to carry forward from previous values                               |
+| =ApprovedTemplateLocation=    | string            | S3 location for the template approval workflow                                     |
+| =CommandsBefore=              | list              | Shell commands to run before the CloudFormation operation                          |
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `StackName` | string | CloudFormation stack name (required) |
-| `Template` | string | Path to the template file. Prefix with `render:` for iidy preprocessing (required) |
-| `Region` | string or env map | AWS region |
-| `Profile` | string or env map | AWS CLI profile name |
-| `AssumeRoleARN` | string or env map | IAM role to assume before operations |
-| `ServiceRoleARN` | string | IAM service role for CloudFormation to use |
-| `RoleARN` | string | Fallback for ServiceRoleARN (used if ServiceRoleARN is not set) |
-| `Parameters` | mapping | CloudFormation stack parameters (key: value, or env maps) |
-| `Tags` | mapping | Stack tags (key: value). An `environment` tag is added automatically |
-| `Capabilities` | list | Required capabilities, e.g., `[CAPABILITY_IAM, CAPABILITY_NAMED_IAM]` |
-| `NotificationARNs` | list | SNS topic ARNs for stack event notifications |
-| `TimeoutInMinutes` | integer | Stack creation timeout |
-| `OnFailure` | string | Action on creation failure: `ROLLBACK`, `DELETE`, or `DO_NOTHING` |
-| `DisableRollback` | boolean | Disable automatic rollback on failure |
-| `EnableTerminationProtection` | boolean | Prevent accidental stack deletion |
-| `StackPolicy` | mapping | Stack policy document (inline YAML) |
-| `ResourceTypes` | list | Allowed resource types for the template |
-| `UsePreviousTemplate` | boolean | Reuse the existing template during update |
-| `UsePreviousParameterValues` | list | Parameter keys to carry forward from previous values |
-| `ApprovedTemplateLocation` | string | S3 location for the template approval workflow |
-| `CommandsBefore` | list | Shell commands to run before the CloudFormation operation |
+Fields marked "env map" accept either a string or a mapping of environment names to strings. The =--environment= flag selects which value to use.
 
-Fields marked "env map" accept either a string or a mapping of environment
-names to strings. The `--environment` flag selects which value to use.
+--------------
 
----
-
-## Next Steps
-
-- [command-reference.md](command-reference.md) -- all commands and options
-- [yaml-preprocessing.md](yaml-preprocessing.md) -- the preprocessing language
-  for variables, conditionals, and collection transforms
-- [import-types.md](import-types.md) -- import source types for `$imports`
+* Next Steps
+- [[file:command-reference.org]] -- all commands and options
+- [[file:yaml-preprocessing.org]] -- the preprocessing language for variables, conditionals, and collection transforms
+- [[file:import-types.org]] -- import source types for =$imports=

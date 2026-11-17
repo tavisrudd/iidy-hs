@@ -1,13 +1,13 @@
-# docs/
+#+title: docs/
+#+options: ^:nil -:nil
 
 User-facing documentation for iidy.
 
-- [Getting Started](getting-started.md) -- installation, first deployment, stack-args.yaml reference
-- [YAML Preprocessing](yaml-preprocessing.md) -- tags, imports, Handlebars helpers, debugging
-- [Command Reference](command-reference.md) -- all commands, options, and exit codes
-- [Import Types](import-types.md) -- file, env, git, s3, ssm, cfn, and other import sources
-- [Security](SECURITY.md) -- import system security model for remote templates
-- [Formal Language Spec](../spec/README.md) -- PLT Redex executable semantics for the preprocessing language
+- [[file:getting-started.org][Getting Started]] -- installation, first deployment, stack-args.yaml reference
+- [[file:yaml-preprocessing.org][YAML Preprocessing]] -- tags, imports, Handlebars helpers, debugging
+- [[file:command-reference.org][Command Reference]] -- all commands, options, and exit codes
+- [[file:import-types.org][Import Types]] -- file, env, git, s3, ssm, cfn, and other import sources
+- [[file:SECURITY.org][Security]] -- import system security model for remote templates
+- [[file:../spec/README.md][Formal Language Spec]] -- PLT Redex executable semantics for the preprocessing language
 
-`dev/` contains internal developer and agent reference material (architecture,
-ADRs, coverage tooling, etc.) that is not intended for end users.
+=dev/= contains internal developer and agent reference material (architecture, ADRs, coverage tooling, etc.) that is not intended for end users.
