@@ -15,8 +15,9 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
 import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateApprovalReview)
-import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), emptyStackArgs)
+import Iidy.Cfn.Types (CfnOperation (..))
 import Iidy.Output.Types (OutputData (..), TemplateValidation (..))
+import Test.ApprovalFixtures (approvalArgs, simpleApprovedKey, simplePendingKey, simpleTemplate, validationError)
 import Test.MockAws
 import Test.MockCfnContext (MockCfn (..), mockCfnOutputs, newMockCfnContext)
 
@@ -76,7 +77,7 @@ lintTests =
         validations outputs @?= []
     , testCase "lint on, already approved: no ValidateTemplate call" $ do
         mock <- newMockAws
-        mockRespond mock (OnObject "HeadObject" "approvals" approvedKey) (mockStatus 200)
+        mockRespond mock (OnObject "HeadObject" "approvals" simpleApprovedKey) (mockStatus 200)
         (result, _) <- runLint mock True simpleTemplate
         result @?= Right 0
         operations mock >>= (@?= ["HeadObject"])
@@ -86,7 +87,7 @@ lintTests =
 runLint :: MockAws -> Bool -> Text -> IO (Either Text Int, [OutputData])
 runLint mock lint template = do
     mcfn <- newMockCfnContext mock OpTemplateApprovalRequest "test"
-    result <- templateApprovalRequest (mcContext mcfn) (approvalArgs template) lint Nothing
+    result <- templateApprovalRequest (mcContext mcfn) (approvalArgs (Just template)) lint Nothing
     outputs <- mockCfnOutputs mcfn
     pure (result, outputs)
 
@@ -114,12 +115,6 @@ validResponse =
     "<ValidateTemplateResponse xmlns=\"http://cloudformation.amazonaws.com/doc/2010-05-15/\">"
         <> "<ValidateTemplateResult/><ResponseMetadata><RequestId>r</RequestId></ResponseMetadata>"
         <> "</ValidateTemplateResponse>"
-
--- | A ValidateTemplate error reply.
-validationError :: BS.ByteString
-validationError =
-    "<ErrorResponse><Error><Type>Sender</Type><Code>ValidationError</Code>"
-        <> "<Message>Template format error</Message></Error></ErrorResponse>"
 
 sizeLimitTests :: [TestTree]
 sizeLimitTests =
@@ -161,33 +156,33 @@ headErrorTests :: [TestTree]
 headErrorTests =
     [ testCase "request: HeadObject 403 on the approved key fails with no PutObject" $ do
         mock <- newMockAws
-        mockRespond mock (OnObject "HeadObject" "approvals" approvedKey) (mockStatus 403)
+        mockRespond mock (OnObject "HeadObject" "approvals" simpleApprovedKey) (mockStatus 403)
         result <- runRequest mock
-        result @?= Left (accessDenied approvedKey)
+        result @?= Left (accessDenied simpleApprovedKey)
         operations mock >>= (@?= ["HeadObject"])
     , testCase "request: HeadObject 500 fails naming the region" $ do
         mock <- newMockAws
-        mockRespond mock (OnObject "HeadObject" "approvals" approvedKey) (mockStatus 500)
+        mockRespond mock (OnObject "HeadObject" "approvals" simpleApprovedKey) (mockStatus 500)
         result <- runRequest mock
-        let prefix = "Failed to check s3://approvals/" <> approvedKey <> " in region us-east-1: "
+        let prefix = "Failed to check s3://approvals/" <> simpleApprovedKey <> " in region us-east-1: "
         assertBool ("failure names the region: " <> show result) (either (T.isPrefixOf prefix) (const False) result)
         operations mock >>= (@?= ["HeadObject"])
     , testCase "review: HeadObject 403 on the pending key is access denied" $ do
         mock <- newMockAws
-        mockRespond mock (OnObject "HeadObject" "approvals" pendingKey) (mockStatus 403)
+        mockRespond mock (OnObject "HeadObject" "approvals" simplePendingKey) (mockStatus 403)
         result <- runReview mock
-        result @?= Left (accessDenied pendingKey)
+        result @?= Left (accessDenied simplePendingKey)
     , testCase "review: HeadObject 403 on the approved key fails before any download" $ do
         mock <- newMockAws
-        mockRespond mock (OnObject "HeadObject" "approvals" pendingKey) (mockStatus 200)
-        mockRespond mock (OnObject "HeadObject" "approvals" approvedKey) (mockStatus 403)
+        mockRespond mock (OnObject "HeadObject" "approvals" simplePendingKey) (mockStatus 200)
+        mockRespond mock (OnObject "HeadObject" "approvals" simpleApprovedKey) (mockStatus 403)
         result <- runReview mock
-        result @?= Left (accessDenied approvedKey)
+        result @?= Left (accessDenied simpleApprovedKey)
         operations mock >>= (@?= ["HeadObject", "HeadObject"])
     , testCase "review: a missing pending object is still 'not found'" $ do
         mock <- newMockAws
         result <- runReview mock
-        result @?= Left ("Pending template not found at s3://approvals/" <> pendingKey)
+        result @?= Left ("Pending template not found at s3://approvals/" <> simplePendingKey)
     ]
 
 -- | The access-denied message for an object in the @approvals@ bucket.
@@ -202,38 +197,18 @@ accessDenied key =
 runRequest :: MockAws -> IO (Either Text Int)
 runRequest mock = runRequestFor mock simpleTemplate
 
--- | The local template fixture whose keys the tests use.
-simpleTemplate :: Text
-simpleTemplate = "test-fixtures/template-loader/simple.yaml"
-
 -- | Run the request for a template under @s3://approvals/app@.
 runRequestFor :: MockAws -> Text -> IO (Either Text Int)
 runRequestFor mock template = do
     mcfn <- newMockCfnContext mock OpTemplateApprovalRequest "test"
-    templateApprovalRequest (mcContext mcfn) (approvalArgs template) False Nothing
+    templateApprovalRequest (mcContext mcfn) (approvalArgs (Just template)) False Nothing
 
 -- | Run the review of the fixture's pending object.
 runReview :: MockAws -> IO (Either Text Int)
 runReview mock = do
     mcfn <- newMockCfnContext mock OpTemplateApprovalReview "test"
-    templateApprovalReview (mcContext mcfn) ("s3://approvals/" <> pendingKey) 3
+    templateApprovalReview (mcContext mcfn) ("s3://approvals/" <> simplePendingKey) 3
 
 -- | The S3 operations the mock received, in order.
 operations :: MockAws -> IO [Text]
 operations mock = map (maybe "?" callOperation . reqCall) <$> mockRequestLog mock
-
--- | Stack args with approval on for a template.
-approvalArgs :: Text -> StackArgs
-approvalArgs template =
-    emptyStackArgs
-        { saTemplate = Just template
-        , saApprovedTemplateLocation = Just "s3://approvals/app"
-        }
-
--- | The fixture's approved key under @s3://approvals/app@.
-approvedKey :: Text
-approvedKey = "app/4e4e06e485ce06aabba82ff4af435f0e58425b8ea1ecdfee2f52709ea663c4fa.yaml"
-
--- | The fixture's pending key.
-pendingKey :: Text
-pendingKey = approvedKey <> ".pending"

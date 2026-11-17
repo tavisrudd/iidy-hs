@@ -10,6 +10,7 @@ import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
 import Iidy.Cfn.ApprovedTemplate (ApprovedTemplate (..), approvedKeyFromPending, approvedTemplateFor, latestKeyFromPending, pendingKeyFor)
 import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest)
 import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), emptyStackArgs)
+import Test.ApprovalFixtures (approvalArgs, simpleApprovedKey, simplePendingKey, simpleRootKey, simpleTemplate)
 import Test.MockAws
 import Test.MockCfnContext (MockCfn (..), newMockCfnContext)
 
@@ -51,7 +52,7 @@ locationTests =
         calls <- map reqCall <$> mockRequestLog mock
         calls
             @?= [ Just (MockCall "s3" "HeadObject" (Just "approvals") (Just simpleApprovedKey))
-                , Just (MockCall "s3" "PutObject" (Just "approvals") (Just (simpleApprovedKey <> ".pending")))
+                , Just (MockCall "s3" "PutObject" (Just "approvals") (Just simplePendingKey))
                 ]
     ]
 
@@ -80,20 +81,8 @@ rootKeyFor location = do
     calls <- map reqCall <$> mockRequestLog mock
     calls
         @?= [ Just (MockCall "s3" "HeadObject" (Just "approvals") (Just simpleRootKey))
-            , Just (MockCall "s3" "PutObject" (Just "approvals") (Just (simpleRootKey <> ".pending")))
+            , Just (MockCall "s3" "PutObject" (Just "approvals") (Just (pendingKeyFor simpleRootKey)))
             ]
-
--- | The fixture's approved key at the bucket root.
-simpleRootKey :: Text
-simpleRootKey = "4e4e06e485ce06aabba82ff4af435f0e58425b8ea1ecdfee2f52709ea663c4fa.yaml"
-
--- | A local template fixture.
-simpleTemplate :: Text
-simpleTemplate = "test-fixtures/template-loader/simple.yaml"
-
--- | Its approved key under @s3://approvals/app@ (SHA256 of the file).
-simpleApprovedKey :: Text
-simpleApprovedKey = "app/4e4e06e485ce06aabba82ff4af435f0e58425b8ea1ecdfee2f52709ea663c4fa.yaml"
 
 requestRefusalTests :: [TestTree]
 requestRefusalTests =
@@ -126,11 +115,3 @@ refusedBeforeS3 template expected = do
     result @?= Left expected
     logged <- mockRequestLog mock
     logged @?= []
-
--- | Stack args with approval on and the given Template.
-approvalArgs :: Maybe Text -> StackArgs
-approvalArgs template =
-    emptyStackArgs
-        { saTemplate = template
-        , saApprovedTemplateLocation = Just "s3://approvals/app"
-        }

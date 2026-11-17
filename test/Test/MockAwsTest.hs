@@ -15,6 +15,7 @@ import Iidy.Cfn.Operations.LintTemplate (lintTemplate)
 import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateApprovalReview)
 import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), emptyStackArgs)
 import Iidy.Output.Types (ApprovalResult (..), ApprovalStatus (..), OutputData (..), TemplateValidation (..))
+import Test.ApprovalFixtures (approvalArgs, simpleTemplate, validationError)
 import Test.MockAws
 import Test.MockCfnContext (MockCfn (..), mockCfnOutputs, newMockCfnContext)
 
@@ -67,11 +68,7 @@ mockAwsTests =
     , testCase "PutObject in eu-west-1: raw log keeps host, method and body" $ do
         mock <- newMockAwsIn (Amazonka.Region' "eu-west-1")
         mcfn <- newMockCfnContext mock OpTemplateApprovalRequest "test"
-        let sa =
-                emptyStackArgs
-                    { saTemplate = Just "test-fixtures/template-loader/simple.yaml"
-                    , saApprovedTemplateLocation = Just "s3://approvals/app"
-                    }
+        let sa = approvalArgs (Just simpleTemplate)
         result <- templateApprovalRequest (mcContext mcfn) sa False Nothing
         result @?= Right 0
         logged <- mockRequestLog mock
@@ -94,7 +91,7 @@ mockAwsTests =
             (OnOperation "cloudformation" "ValidateTemplate")
             (MockResponse 400 validationError)
         mcfn <- newMockCfnContext mock OpLintTemplate "test"
-        let sa = emptyStackArgs{saTemplate = Just "test-fixtures/template-loader/simple.yaml"}
+        let sa = emptyStackArgs{saTemplate = Just simpleTemplate}
         result <- lintTemplate (mcContext mcfn) sa Nothing
         result @?= Right 1
         outputs <- mockCfnOutputs mcfn
@@ -146,9 +143,3 @@ isApproved :: OutputData -> Bool
 isApproved = \case
     OdApprovalResult r -> arApproved r
     _ -> False
-
--- | A CloudFormation query-protocol error body.
-validationError :: BS.ByteString
-validationError =
-    "<ErrorResponse><Error><Type>Sender</Type><Code>ValidationError</Code>"
-        <> "<Message>Template format error</Message></Error></ErrorResponse>"
