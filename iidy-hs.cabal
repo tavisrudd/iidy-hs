@@ -102,6 +102,7 @@ library
     Iidy.Cfn.StackOperations
     Iidy.Cfn.GlobalConfig
     Iidy.Cfn.StackArgsBootstrap
+    Iidy.Cfn.StackArgs.Credentials
     Iidy.Cfn.StackArgsLoader
     Iidy.Cfn.Operations.Changeset
     Iidy.Cfn.Operations.ConvertStack
