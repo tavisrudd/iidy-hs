@@ -163,7 +163,8 @@ is committed.
 
 ## Landing
 
-1. On `main` in `~/src/iidy-hs`: `git merge --ff-only <branch>` (workers
+1. On `main` in `~/src/iidy-hs`: `git merge --ff-only <branch>` (never
+   piped through `tail`: the pipe hides its failure) (workers
    rebase before reporting `ready`, and the hook ran the full suite on each
    commit). If main moved, ask the worker to rebase and rerun the suite
    rather than merging.
