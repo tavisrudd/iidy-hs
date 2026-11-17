@@ -4,7 +4,8 @@ import Data.Text qualified as T
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
-import Iidy.Cfn.TemplateHash (calculateTemplateHash, generateVersionedLocation, parseS3Url)
+import Iidy.Cfn.ApprovedTemplate (generateVersionedLocation)
+import Iidy.Cfn.TemplateHash (calculateTemplateHash, parseS3Url)
 
 templateHashTests :: [TestTree]
 templateHashTests =

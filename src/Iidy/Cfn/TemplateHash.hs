@@ -1,9 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
--- | Template hashing and S3 URL utilities for template approval workflows.
+-- | Template hashing and S3 URL parsing for template approval workflows.
 module Iidy.Cfn.TemplateHash (
     calculateTemplateHash,
-    generateVersionedLocation,
     parseS3Url,
 ) where
 
@@ -13,7 +12,6 @@ import Data.ByteString qualified as BS
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
-import System.FilePath (takeExtension)
 
 ------------------------------------------------------------------------
 -- Hashing
@@ -49,37 +47,3 @@ parseS3Url url
                     | T.null bucket -> Left ("Invalid S3 URL (no bucket): " <> url)
                     | T.null keyWithSlash -> Left ("Invalid S3 URL (no key): " <> url)
                     | otherwise -> Right (bucket, T.drop 1 keyWithSlash)
-
-{- | Generate a versioned S3 location for a template.
-Returns (bucket, versioned_key) where key = basePath/hash.extension, or
-hash.extension when the base location names only the bucket
-(@s3://bucket@ or @s3://bucket/@), as iidy-js (@path.join@).
--}
-generateVersionedLocation ::
-    -- | base S3 location (e.g., s3://bucket/templates/)
-    Text ->
-    -- | template content (for hashing)
-    Text ->
-    -- | template file path (for extension)
-    Text ->
-    Either Text (Text, Text)
-generateVersionedLocation baseLocation content templatePath = do
-    -- A bucket-only location has no key for parseS3Url; give it an empty one.
-    let withKey =
-            if T.any (== '/') (T.drop 5 baseLocation)
-                then baseLocation
-                else baseLocation <> "/"
-    (bucket, baseKey) <- parseS3Url withKey
-    let hash = calculateTemplateHash content
-        ext = T.pack (takeExtension (T.unpack templatePath))
-        -- Ensure trailing slash is handled
-        basePath =
-            if T.isSuffixOf "/" baseKey
-                then T.dropEnd 1 baseKey
-                else baseKey
-        fileName = hash <> ext
-        versionedKey =
-            if T.null basePath
-                then fileName
-                else basePath <> "/" <> fileName
-    Right (bucket, versionedKey)

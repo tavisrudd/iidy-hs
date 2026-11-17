@@ -12,13 +12,15 @@ module Iidy.Cfn.ApprovedTemplate (
     pendingKeyFor,
     approvedKeyFromPending,
     latestKeyFromPending,
+    generateVersionedLocation,
 ) where
 
 import Data.Text (Text)
 import Data.Text qualified as T
+import System.FilePath (takeExtension)
 
 import Iidy.Cfn.Context (CfnContext (..), cfnImportConfig)
-import Iidy.Cfn.TemplateHash (generateVersionedLocation)
+import Iidy.Cfn.TemplateHash (calculateTemplateHash, parseS3Url)
 import Iidy.Cfn.TemplateLoader (TemplateResult (..), approvalTemplateLimit, isTemplateUrl, loadCfnTemplateWithLimit)
 import Iidy.Cfn.Types (StackArgs (..))
 
@@ -79,6 +81,40 @@ approvedTemplateFor ctx sa argsfilePath = case saApprovedTemplateLocation sa of
                     Right (Just (ApprovedTemplate bucket key body))
   where
     hashesLocalTemplate = "template approval hashes the rendered local template"
+
+{- | Generate a versioned S3 location for a template.
+Returns (bucket, versioned_key) where key = basePath/hash.extension, or
+hash.extension when the base location names only the bucket
+(@s3://bucket@ or @s3://bucket/@), as iidy-js (@path.join@).
+-}
+generateVersionedLocation ::
+    -- | base S3 location (e.g., s3://bucket/templates/)
+    Text ->
+    -- | template content (for hashing)
+    Text ->
+    -- | template file path (for extension)
+    Text ->
+    Either Text (Text, Text)
+generateVersionedLocation baseLocation content templatePath = do
+    -- A bucket-only location has no key for parseS3Url; give it an empty one.
+    let withKey =
+            if T.any (== '/') (T.drop 5 baseLocation)
+                then baseLocation
+                else baseLocation <> "/"
+    (bucket, baseKey) <- parseS3Url withKey
+    let hash = calculateTemplateHash content
+        ext = T.pack (takeExtension (T.unpack templatePath))
+        -- Ensure trailing slash is handled
+        basePath =
+            if T.isSuffixOf "/" baseKey
+                then T.dropEnd 1 baseKey
+                else baseKey
+        fileName = hash <> ext
+        versionedKey =
+            if T.null basePath
+                then fileName
+                else basePath <> "/" <> fileName
+    Right (bucket, versionedKey)
 
 -- | Suffix of a pending object's key.
 pendingSuffix :: Text
