@@ -68,6 +68,7 @@ loadStackArgsBootstrapped mkEnv argsfile environment operation cliAws policy = d
     ranWith <- newIORef Nothing
     loaded <-
         loadStackArgsWith
+            policy
             (bootstrapLoader ranWith mkEnv argsfileText environment cliAws policy)
             argsfile
             environment

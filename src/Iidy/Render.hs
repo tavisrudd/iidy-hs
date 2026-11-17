@@ -22,11 +22,9 @@ import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.Engine (
     PreprocessError,
     PreprocessResult (..),
-    preprocessYaml,
-    preprocessYaml11,
  )
 import Iidy.Yaml.Errors.Conversion (formatParseErrorEnhanced, formatPreprocessErrorEnhanced)
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig, mkFullDispatcher, mkImportConfig)
+import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig, mkImportConfig, preprocessWithConfig)
 import Iidy.Yaml.JMESPath (JMESPathError, applyJmesPath)
 import Iidy.Yaml.Location (Position)
 import Iidy.Yaml.OValue (OValue, fromValue, toValue)
@@ -73,8 +71,7 @@ runRender emit args gopts = do
                 YamlV11 -> True
                 YamlV12 -> False
                 YamlAuto -> shouldUseYaml11Compatibility (detectYamlSpec source)
-            preprocess = if useYaml11 then preprocessYaml11 else preprocessYaml
-        result <- preprocess (mkFullDispatcher importCfg) ast (raTemplate args)
+        result <- preprocessWithConfig importCfg useYaml11 ast (raTemplate args)
         pure $ case result of
             Left err -> Left (PreprocessFailed err)
             Right (PreprocessResult val _manifest) -> Right val

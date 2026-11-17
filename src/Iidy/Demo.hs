@@ -47,9 +47,9 @@ import System.Process (
 import Text.Regex.TDFA ((=~))
 
 import Iidy.Types (ColorChoice (..))
-import Iidy.Yaml.Engine (PreprocessResult (..), preprocessYaml11)
+import Iidy.Yaml.Engine (PreprocessResult (..))
 import Iidy.Yaml.Errors.Conversion (formatParseErrorEnhanced, formatPreprocessErrorEnhanced)
-import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkImportConfig, preprocessWithConfig)
 import Iidy.Yaml.Imports.Types (ImportPolicy (..), RemoteImports (..), trustedSourceList, trustedSourceText)
 import Iidy.Yaml.OValue (toValue)
 import Iidy.Yaml.Parser (ParseError (..), parseYaml)
@@ -85,7 +85,7 @@ runDemo scriptPath timescaling maskSecrets policy = do
             pure 1
         Right ast -> do
             let importCfg = mkImportConfig Nothing policy
-            result <- preprocessYaml11 (mkFullDispatcher importCfg) ast baseLocation
+            result <- preprocessWithConfig importCfg True ast baseLocation
             case result of
                 Left err -> do
                     let source = TE.decodeUtf8 (BL.toStrict content)

@@ -68,9 +68,8 @@ import Iidy.Yaml.Ast (YamlAst (..))
 import Iidy.Yaml.Engine (
     LoadImportFn,
     PreprocessResult (..),
-    preprocessYaml11,
  )
-import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig, preprocessWithPolicy)
 import Iidy.Yaml.Imports.Types (ImportPolicy)
 import Iidy.Yaml.OValue (toValue)
 import Iidy.Yaml.Parser (ParseError (..), parseYaml)
@@ -116,6 +115,7 @@ loadStackArgs ::
     IO (Either Text LoadedStackArgs)
 loadStackArgs argsfile environment operation cliAws policy mAwsEnv =
     loadStackArgsWith
+        policy
         (\_ast -> pure (mkFullDispatcher (mkImportConfig mAwsEnv policy)))
         argsfile
         environment
@@ -123,9 +123,12 @@ loadStackArgs argsfile environment operation cliAws policy mAwsEnv =
         cliAws
 
 {- | Like 'loadStackArgs', with the import loader built from the parsed file
-(see "Iidy.Cfn.StackArgsBootstrap").
+(see "Iidy.Cfn.StackArgsBootstrap"); the loader must wrap
+'mkFullDispatcher' built from the given policy.
 -}
 loadStackArgsWith ::
+    -- | import policy the loader applies
+    ImportPolicy ->
     -- | import loader for the parsed argsfile
     (YamlAst -> IO LoadImportFn) ->
     -- | argsfile path
@@ -137,7 +140,7 @@ loadStackArgsWith ::
     -- | CLI-provided AWS settings
     AwsSettings ->
     IO (Either Text LoadedStackArgs)
-loadStackArgsWith mkLoader argsfile environment operation cliAws =
+loadStackArgsWith policy mkLoader argsfile environment operation cliAws =
     runExceptT $ do
         content <- lift $ BL.readFile argsfile
         let baseLocation = T.pack argsfile
@@ -151,7 +154,7 @@ loadStackArgsWith mkLoader argsfile environment operation cliAws =
         -- Preprocess (YAML 1.1 for CFN compatibility)
         loader <- lift (mkLoader ast)
         preprocessResult <- ExceptT $ do
-            r <- preprocessYaml11 loader ast baseLocation
+            r <- preprocessWithPolicy policy loader True ast baseLocation
             pure $ case r of
                 Left err ->
                     Left $

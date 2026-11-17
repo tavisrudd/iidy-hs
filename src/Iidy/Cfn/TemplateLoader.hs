@@ -29,9 +29,8 @@ import Iidy.Yaml.Ast (SrcMeta (..), YamlAst (..))
 import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.Engine (
     PreprocessResult (..),
-    preprocessYaml11,
  )
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), mkFullDispatcher)
+import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), preprocessWithConfig)
 import Iidy.Yaml.Location (zeroPosition)
 import Iidy.Yaml.Parser (ParseError (..), parseYaml)
 
@@ -116,7 +115,7 @@ loadCfnTemplateWithLimit limit (Just tmplSpec) argsfilePath env importCfg
             Right ast -> do
                 -- Inject $envValues before preprocessing (matches Rust template_loader.rs:117-131)
                 let astWithEnv = injectEnvValuesIntoAst ast env
-                result <- preprocessYaml11 (mkFullDispatcher importCfg) astWithEnv baseLocation
+                result <- preprocessWithConfig importCfg True astWithEnv baseLocation
                 case result of
                     Left err ->
                         pure (Left ("Preprocess error in rendered template " <> baseLocation <> ": " <> T.pack (show err)))

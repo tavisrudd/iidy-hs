@@ -1279,6 +1279,7 @@ mkTemplateInfo body params =
         { tiParams = params
         , tiRawBody = body
         , tiLocation = "<test-template>"
+        , tiInheritsParentVars = True
         }
 
 -- | A ParamDef with a default value and no constraints.

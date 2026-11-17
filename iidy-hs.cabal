@@ -240,6 +240,7 @@ test-suite iidy-hs-test
     Test.AwsImportGateTest
     Test.ImportFixtures
     Test.HttpGuardTest
+    Test.CustomTemplateTrustTest
     Test.ParamsClientTest
     Test.TemplateLoaderTest
     Test.GlobalConfigTest

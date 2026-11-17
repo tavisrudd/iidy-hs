@@ -11,6 +11,7 @@ import Test.ChangesetHelpersTest (changesetHelpersTests)
 import Test.ChangesetTest (changesetTests)
 import Test.CliParserTest (cliParserTests)
 import Test.ConvertStackTest (convertStackTests)
+import Test.CustomTemplateTrustTest (customTemplateTrustTests)
 import Test.DeleteStackTest (deleteStackTests)
 import Test.DemoTest (demoTests)
 import Test.DescribeStackTest (describeStackTests)
@@ -119,6 +120,7 @@ main = do
             , testGroup "TrustedSource" trustedSourceTests
             , testGroup "AwsImportGate" awsImportGateTests
             , testGroup "HttpGuard" httpGuardTests
+            , testGroup "CustomTemplateTrust" customTemplateTrustTests
             , testGroup "ParamsClient" paramsClientTests
             , testGroup "TemplateLoader" templateLoaderTests
             , testGroup "GlobalConfig" globalConfigTests

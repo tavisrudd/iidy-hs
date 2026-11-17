@@ -281,7 +281,7 @@ resolveMappingWithExpansion ctx pairs = do
                                     )
                             else
                                 let expandCtx = ctx{tcActiveExpansions = Set.insert typeName (tcActiveExpansions ctx)}
-                                    reparseF = buildReparse expandCtx
+                                    reparseF = buildReparse expandCtx tmplInfo
                                  in case expandCustomResource resName resVal tmplInfo reparseF parentNames of
                                         Left err -> Left (ResolveError zeroPosition ("Custom resource expansion error: " <> err) REGeneric)
                                         Right expansionResult ->
@@ -317,14 +317,14 @@ deduplicateResources kvs =
 {- | Build the reparse function for expandCustomResource.
 Returns OValue to preserve key ordering from the template.
 -}
-buildReparse :: TagContext -> Map.Map Text OValue -> Text -> Either Text OValue
-buildReparse parentCtx params rawBody =
+buildReparse :: TagContext -> TemplateInfo -> Map.Map Text OValue -> Text -> Either Text OValue
+buildReparse parentCtx tmplInfo params rawBody =
     case parseYaml (BL.fromStrict (TE.encodeUtf8 rawBody)) (fromMaybe "<template>" (tcInputUri parentCtx)) of
         Left (ParseError _ msg) -> Left ("Parse error: " <> msg)
         Right templateAst ->
             let subCtx =
                     parentCtx
-                        { tcVariables = Map.union params (tcVariables parentCtx)
+                        { tcVariables = templateVariables tmplInfo params parentCtx
                         }
              in case resolveAst subCtx templateAst of
                     Left (ResolveError _ msg _) -> Left msg
@@ -890,7 +890,7 @@ resolveExpand ctx meta (ExpandTag templateRefAst paramsAst) = do
                     --    Add templateName to active expansions for cycle detection
                     let subCtx =
                             ctx
-                                { tcVariables = Map.union merged (tcVariables ctx)
+                                { tcVariables = templateVariables tmplInfo merged ctx
                                 , tcInputUri = Just (tiLocation tmplInfo)
                                 , tcActiveExpansions = Set.insert templateName (tcActiveExpansions ctx)
                                 }

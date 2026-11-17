@@ -41,6 +41,11 @@ data TemplateInfo = TemplateInfo
     { tiParams :: ![ParamDef]
     , tiRawBody :: !Text
     , tiLocation :: !Text
+    , tiInheritsParentVars :: !Bool
+    {- ^ whether the template body sees the importing template's variables:
+    true for a template loaded from a trusted document (local, or under a
+    trusted prefix through a trusted chain), false otherwise (card C15)
+    -}
     }
     deriving stock (Show, Eq)
 

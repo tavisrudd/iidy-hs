@@ -8,11 +8,15 @@ module Iidy.Yaml.Imports.Loaders.Dispatch (
     mkFullDispatcher,
     ImportConfig (..),
     mkImportConfig,
+    preprocessWithConfig,
+    preprocessWithPolicy,
 ) where
 
 import Amazonka qualified
+import Data.Text (Text)
 
-import Iidy.Yaml.Engine (LoadImportFn)
+import Iidy.Yaml.Ast (YamlAst)
+import Iidy.Yaml.Engine (LoadImportFn, PreprocessError, PreprocessResult, preprocessYamlWith)
 import Iidy.Yaml.Imports.Loaders.Cfn (loadCfnImport)
 import Iidy.Yaml.Imports.Loaders.Env (loadEnvImport)
 import Iidy.Yaml.Imports.Loaders.File (loadFileImport, loadFilehashImport)
@@ -47,6 +51,26 @@ data ImportConfig = ImportConfig
 -- | The one 'ImportConfig' constructor; fields added later get defaults here.
 mkImportConfig :: Maybe Amazonka.Env -> ImportPolicy -> ImportConfig
 mkImportConfig mEnv policy = ImportConfig{icAwsEnv = mEnv, icPolicy = policy, icHttpSeam = realHttpSeam}
+
+------------------------------------------------------------------------
+-- Preprocessing with one policy
+------------------------------------------------------------------------
+
+{- | Preprocess a template (@True@: YAML 1.1 compatibility) with the
+dispatcher built from this config, giving the engine the same trusted
+sources, so the dispatcher's gate and the engine's custom-template
+decision use one policy.
+-}
+preprocessWithConfig :: ImportConfig -> Bool -> YamlAst -> Text -> IO (Either PreprocessError PreprocessResult)
+preprocessWithConfig cfg = preprocessWithPolicy (icPolicy cfg) (mkFullDispatcher cfg)
+
+{- | 'preprocessWithConfig' for a loader that wraps 'mkFullDispatcher'
+built from this policy (the stack-args bootstrap, which picks the AWS
+environment per import).
+-}
+preprocessWithPolicy ::
+    ImportPolicy -> LoadImportFn -> Bool -> YamlAst -> Text -> IO (Either PreprocessError PreprocessResult)
+preprocessWithPolicy policy loader yaml11Compat = preprocessYamlWith (ipTrustedSources policy) yaml11Compat loader
 
 ------------------------------------------------------------------------
 -- Full dispatcher
