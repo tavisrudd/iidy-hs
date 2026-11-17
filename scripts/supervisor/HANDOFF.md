@@ -1,84 +1,77 @@
-# Supervisor handoff (iidy-hs) — written 2026-11-16 by the setup session
+# Supervisor handoff (iidy-hs) — written 2026-11-16 by the first supervised session
 
-## Mode for this batch
+## Mode
 
-Tavis, 2026-11-16: work today's batch with Claude sub-agents, Opus and
-Sonnet, no Codex panes. No mailbox and no tmux; sub-agents report in their
-final reply, and you steer them with SendMessage. Launch each with
-`scripts/supervisor/CARD-BRIEF.md` filled in.
+Tavis, 2026-11-16: Claude sub-agents only (Opus for security, design and
+refactor cards and their reviews; Sonnet for bounded fixes, tests, docs,
+card refinement and their reviews). No Codex panes, no mailbox: sub-agents
+report in their final reply and are steered with SendMessage. Brief
+template: `scripts/supervisor/CARD-BRIEF.md`; the briefs used today (in
+this session's transcript) add the rules below.
 
-- Opus: security cards, design and concurrency work, and reviews of those.
-- Sonnet: bounded fixes, test additions, docs, card refinement, and reviews
-  of Sonnet work.
-- Never `isolation: worktree` on the Agent tool (CLAUDE.md). Worktrees are
-  made by you under `~/.cache/iidy-hs/worktrees/claude-C<ID>`.
+## Rules that bite (all in RUNBOOK.md or PROTOCOL.md now)
 
-## Limits that bite
-
-- RAM (Tavis): every build through `scripts/guarded-build` (one at a time,
-  refuses below 6 GiB). At most two coding subs building at once, plus up to
-  two notes-only research subs (no builds) and one reviewer. Check
-  `scripts/supervisor/status.sh` before launching a wave.
-- Toolchain: GHC 9.12.3 since C3. A shell started before C3 still finds
-  9.10.3 (this setup session's hook runs did); start fresh or
-  `direnv reload` in `~/src/iidy-hs` before your own builds and landings.
-  Each worktree needs `direnv allow` at creation.
-- Flaky hang (C6): tests can hang and ignore SIGTERM; the pre-commit hook
-  now has a 60 s per-test timeout. `kill -9` a stuck `iidy-hs-test`.
-- Cards filed before C23 lack the worker format (`Allowed paths:`,
-  `Out of scope:`, `Done when:` checklist, `Stop and record if:`). Refine
-  each before assigning; a Sonnet sub can draft a batch on main (notes
-  only, named cards only, no `c set`), and you vet, `c stamp`, `c check`
-  and commit.
+- Never `rm` (Tavis). Read first; move to
+  `.supervisor/trash/<date>/<card>/` with `mv`. Workers do the same.
+- direnv only accepts the resolved path: use
+  `/cache/tavis/iidy-hs/worktrees/<worker>` with `direnv exec`.
+- Landing: `git merge --ff-only` (never piped through `tail`); otherwise
+  replay with `git cherry-pick --no-commit SHA` + `git commit -C SHA` (a
+  single-commit pick leaves no `CHERRY_PICK_HEAD`). On a conflict, undo only
+  the pick's code paths and have the worker rebase; `rerere` is on and its
+  cache is shared by all worktrees.
+- Before `c set done`: check for an open `CLOCK:` line and unfinished task
+  headings; resume the worker to clock out (a `C_SESSION_ID` override does
+  not accept sub-agent IDs).
+- The memory guard refuses builds below 6 GiB; another project (peregrine)
+  on this host sometimes runs big Rust builds. Wait, never bypass.
+- Workers kill hung tests by PID only (one used `pkill -f`); never
+  `--no-verify` (one amended with it during a rebase).
+- Parity rule (Tavis): Rust parity by default; where Rust and TypeScript
+  disagree, Tavis chooses. His answers so far:
+  `notes/C23/report--decisions-vs-originals.org` and the runbook.
 
 ## State at handoff
 
-- Nothing started; no worktrees; `c next` lists 17 TODO cards. Main is
-  clean at the C23 closeout.
-- C15 and C16 begin with work for Tavis: C15 an options write-up for the
-  remote-template trust model, C16 a review of the TypeScript approval flow
-  (`~/src/iidy-js`, `src/cfn/approval/index.ts`,
-  `src/cfn/AbstractCloudFormationStackCommand.ts`,
-  `src/cfn/loadStackArgs.ts`) and a discussion with Tavis. Assign only
-  their first task; no code until he decides. C22 waits on C15.
-- C11 adds tests for get-import, which C13 also changes: run C13 first.
-- Open question for Tavis from C7: should `render` also get an AWS
-  environment (Rust's does not)? Not filed as a card yet.
-- Held-back libraries from C3 (microlens, http-client-tls, crypton,
-  optparse-applicative): recommendation was to leave them; Tavis has not
-  answered.
+Landed and closed today: C5, C8, C9, C10, C11, C13, C14, C15, C17, C24,
+C25, C26, C27, C28, C29, C31, C33, C34, C36, C37.
 
-## Proposed batch (supervisor's call; adjust to `c next` and file overlap)
+In flight:
+- C38 (Sonnet, `claude/C38`): merge `mergeExpandParams` into
+  `mergeParams`; behaviour-neutral; land on the supervisor's diff check.
+- A Sonnet refiner is rewriting C12, C21 and C22 (notes only); vet and
+  commit its edits.
+- C16 (Opus worker, `claude/C16` worktree; tasks 1-3, round 2 and its fix
+  round landed). Stopped before "Approval bucket region has one owner";
+  remaining: region, presign, deploy builders, estimate-cost, empty-diff
+  prompt, docs. Resume the same worker (its brief and card notes have the
+  plan) once Tavis answers the region question.
 
-Wave 1
-- C14 trust check fails open (A, security): Opus coder, Opus reviewer.
-- C13 get-import --query, newline, JSON layout: Sonnet coder, Sonnet
-  reviewer.
-- C15 task 1, options write-up: Opus, notes only.
-- C16 task 1, TypeScript approval review: Opus, notes only.
-- First, a Sonnet refinement sub for C14, C13, C6, C9, C8, C10.
+Waiting (parked):
+- C6 test-suite hang: second budget reproduced 3 hangs under load in the
+  TemplateLoader group; thread dump shows test threads blocked on a shared
+  thunk, masked; suspects the GHC RTS. Evidence in
+  `notes/C6/evidence-2026-11-16/`. Needs Tavis's choice.
+- C35 emitter floats and control characters: needs rescoping (floats need
+  a number-representation change; Rust's targets differ by command).
 
-Wave 2
-- C6 test-suite hang: Opus (concurrency). Reproduce in about 30 full runs;
-  if not reproduced on GHC 9.12.3, park it with what to record next time.
-- C9 terminal width: Sonnet.
+TODO with no blocker: C12, C21, C22 (after refinement), C32 (priority C).
 
-Wave 3 (refine first)
-- C8 parseYaml key order (Sonnet), C10 dummy StackArgs (Sonnet), C11 tests
-  after C13 (Sonnet), C19 token redaction (Sonnet coder, Opus reviewer),
-  C18 control characters after C9 (Sonnet coder, Opus reviewer), C20
-  resource limits (Opus), C17 stack-args credentials (Opus), C5 docs to Org
-  (Sonnet; touches docs only).
-- Later: C12, C21 (priority C), C22 after C15.
+## Decisions waiting on Tavis (with the supervisor's recommendation)
 
-File overlap to avoid running together: C14/C20/C19 (all under
-`src/Iidy/Yaml/Imports/`), C9/C18 (`src/Iidy/Output/`), C13/C11
-(get-import tests), C17/C12 (`StackArgsLoader.hs`), C10/C17
-(`app/Main.hs` possibly).
-
-## Next steps
-
-1. Start the session with `/supervise`; read RUNBOOK, PROTOCOL, REVIEW.
-2. Launch the refinement sub for wave 1 and 2 cards; vet and commit.
-3. Start wave 1 per the runbook's Assigning section.
-4. Tell Tavis the plan in a few sentences and the two open questions above.
+1. C16 approval bucket region: ask S3 (`GetBucketLocation`), falling back
+   to the stack's region.
+2. C17 (landed): computed credential fields refused only in files that
+   make AWS imports (narrower than TypeScript): keep.
+3. C34 follow-up: top-level templates and stack-args also reject duplicate
+   keys (TypeScript) rather than accept them (Rust): reject; it is a
+   one-flag change (`parseYamlStrict`).
+4. C6 next step: (a) standalone reproducer and upstream report.
+5. C18 escaping, C19 error wording, C20 limit values (alias cap 250,000
+   rather than 1,000,000), `!$toYamlString` trailing newline (keep Rust's
+   strip, record the TypeScript difference): accept the card proposals.
+6. C30: keep iidy-hs's `explain` layout; keep demo sleep rounding.
+7. Deploy-time lint (iidy-js lints at deploy; Rust and iidy-hs do not):
+   file a low-priority card.
+8. C35 rescope, and the plain bug that iidy-hs drops `\x01` in YAML
+   output.
