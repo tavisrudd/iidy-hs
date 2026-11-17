@@ -25,6 +25,7 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Iidy.Yaml.Ast
 import Iidy.Yaml.CustomResources.Expansion (ExpansionResult (..), expandCustomResource)
+import Iidy.Yaml.CustomResources.Params (mergeParams)
 import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.Handlebars.Engine (InterpolateError (..), defaultHelpers, interpolate)
 import Iidy.Yaml.JMESPath (JMESPathError (..), applyJmesPath)
@@ -881,7 +882,7 @@ resolveExpand ctx meta (ExpandTag templateRefAst paramsAst) = do
                     OObject kvs -> Map.fromList kvs
                     _nonObject -> Map.empty
             -- 5. Merge with defaults from $params (defaults are Value, convert to OValue)
-            let merged = mergeExpandParams (tiParams tmplInfo) provided
+            let merged = mergeParams (tiParams tmplInfo) provided
             -- 6. Re-parse the raw template YAML
             case parseYaml (BL.fromStrict (TE.encodeUtf8 (tiRawBody tmplInfo))) (tiLocation tmplInfo) of
                 Left (ParseError _ msg) -> parseSyntaxError meta "!$expand parse error: " msg
@@ -896,16 +897,6 @@ resolveExpand ctx meta (ExpandTag templateRefAst paramsAst) = do
                                 }
                     -- 8. Resolve the template body
                     resolveAst subCtx templateAst'
-
-mergeExpandParams :: [ParamDef] -> Map.Map Text OValue -> Map.Map Text OValue
-mergeExpandParams defs provided = List.foldl' addParam provided defs
-  where
-    addParam acc pd =
-        case Map.lookup (pdName pd) acc of
-            Just _ -> acc
-            Nothing -> case pdDefault pd of
-                Just defVal -> Map.insert (pdName pd) defVal acc
-                Nothing -> acc
 
 ------------------------------------------------------------------------
 -- Raw AST to Value (for !$escape — no resolution)

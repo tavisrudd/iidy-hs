@@ -10,6 +10,7 @@ import Data.Aeson (Value (..))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
+import Data.Foldable (traverse_)
 import Data.List qualified as List
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -212,7 +213,3 @@ mergeParams defs provided =
         Nothing -> case pdDefault pd of
             Just def -> Map.insert (pdName pd) def acc
             Nothing -> acc
-
-traverse_ :: (a -> Either e ()) -> [a] -> Either e ()
-traverse_ _ [] = Right ()
-traverse_ f (x : xs) = f x >> traverse_ f xs
