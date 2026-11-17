@@ -126,3 +126,4 @@
 2026-11-16 19:01 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C15 tasks 2-4 + fix round landed (trust policy, --trust-import-source, AWS imports blocked from untrusted, requester chain); C16 fix round landed
 2026-11-16 19:16 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C15 task 5 landed (HTTP filter for untrusted requester chains)
 2026-11-16 19:28 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C29 landed (get-import --format yaml|json only)
+2026-11-16 19:31 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C15 task 6 landed (untrusted custom templates isolated) plus fd00:ec2::/32 and default-port fixes

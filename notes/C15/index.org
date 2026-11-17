@@ -16,6 +16,7 @@ CLOCK: [2026-11-16 Mon 18:06]--[2026-11-16 Mon 18:26] => 0:20
 CLOCK: [2026-11-16 Mon 18:33]--[2026-11-16 Mon 18:50] => 0:17
 CLOCK: [2026-11-16 Mon 18:53]--[2026-11-16 Mon 18:54] => 0:01
 CLOCK: [2026-11-16 Mon 19:02]--[2026-11-16 Mon 19:11] => 0:09
+CLOCK: [2026-11-16 Mon 19:16]--[2026-11-16 Mon 19:25] => 0:09
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:11]
@@ -43,6 +44,12 @@ CLOCK: [2026-11-16 Mon 19:02]--[2026-11-16 Mon 19:11] => 0:09
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
 - Clock-out [2026-11-16 Mon 19:11]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
+- Clock-in [2026-11-16 Mon 19:16]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
+- Clock-out [2026-11-16 Mon 19:25]
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
 :END:
@@ -101,7 +108,7 @@ Done when:
 - [X] Every imported document, local or remote, is resolved without the
   importing document's variables (Rust =src/yaml/engine.rs:409=); a test
   shows a parent variable is not visible and the error names it.
-- [ ] Custom resource templates loaded from untrusted locations expand
+- [X] Custom resource templates loaded from untrusted locations expand
   with their parameters only, for both resource-type use and =!$expand=;
   local and trusted-source templates keep the parent's variables (Rust
   parity); tests cover all three cases at both sites.
@@ -1230,10 +1237,35 @@ Defects:
    reject an explicit default port in =parseTrustedSource=, with a
    =TrustedSourceTest= row.
 
-* TODO Isolate custom templates loaded from untrusted locations
+** Fix round 2 (review of task 5) 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e753-3595-737d-ad8c-41c25045d86c
+:ADDED: [2026-11-16 Mon 19:25]
+:END:
+By worker claude-C15, on the supervisor's calls.
+- (1) Card text: the four residual-risk bullets added to the docs task
+  list (SOCKS, unfiltered local and trusted requesters, proxies without
+  external DNS, unfiltered IPv6 forms).
+- (2) =blockedV6= blocks all of =fd00:ec2::/32=. New =blockedCases= rows
+  =fd00:ec2::23= and =fd00:ec2:ffff::1= (blocked) and =fd00:ec3::254=
+  (not); before the fix the first two failed ("expected: True, but got:
+  False", 2 of 20).
+
+- (3) =parseTrustedSource= rejects an explicit default port (=:80= on
+  =http://=, =:443= on =https://=) with "drop the default port ... (request
+  URLs leave it out, so no location would match)"; =:80= on =https://= and
+  =:443= on =http://= stay valid. New reject rows and a message test in
+  =TrustedSourceTest=; before the fix 4 of 64 failed.
+
+* DONE Isolate custom templates loaded from untrusted locations
 :PROPERTIES:
 :ID: org:01a1e6fe-2be7-72bd-983a-90c9f90ef3ee
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 19:25] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
 :END:
 New divergence from Rust (matches TypeScript). Add a field to
 =TemplateInfo= (=src/Iidy/Yaml/CustomResources/Params.hs:40-44=) saying
@@ -1255,6 +1287,138 @@ Tests (=ResolverTest= =mkTemplateInfo= at =:1275=, and =EngineTest= or an
 engine-level test through =mkFullDispatcher= with a test config): local,
 untrusted and flag-built trusted templates, each through a resource type
 and through =!$expand=.
+
+** Implementation 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e753-3595-737d-ad8c-41c145c2904a
+:ADDED: [2026-11-16 Mon 19:25]
+:END:
+By worker claude-C15. Owners extended:
+- =Iidy.Yaml.CustomResources.Params=: =TemplateInfo= gains
+  =tiInheritsParentVars=.
+- =Iidy.Yaml.Engine=: the template's flag is =isTrustedRequester= of the
+  template document's =ImportBase= (=childBase= of the importer), so the
+  requester chain decides, as for the AWS gate and the HTTP filter. The
+  engine gets the trusted sources through a new entry point,
+  =preprocessYamlWith= (trusted sources, YAML 1.1 flag, loader);
+  =preprocessYaml= / =preprocessYaml11= keep their signatures with no
+  trusted sources. Internally the loader and the trusted sources travel
+  together (=Importer=).
+- =Iidy.Yaml.Imports.Loaders.Dispatch=: =preprocessWithConfig= builds the
+  dispatcher from an =ImportConfig= and gives the engine the same
+  policy's trusted sources; =Render.hs=, =Cfn/TemplateLoader.hs= and
+  =Demo.hs= call it. The stack-args path builds its loader per file (the
+  C17 bootstrap picks the AWS environment per import), so
+  =Cfn/StackArgsLoader.loadStackArgsWith= now takes the =ImportPolicy=
+  with the loader and calls =preprocessWithPolicy= (the base of
+  =preprocessWithConfig=); both its callers build the loader from that
+  same policy.
+- =Iidy.Yaml.Resolution.Context=: =templateVariables= (the parameters,
+  over the caller's variables only when the template inherits them).
+  =Resolver.hs= passes the =TemplateInfo= into =buildReparse= and both
+  sites (resource type, =!$expand=) call =templateVariables=; the
+  resolver stays at 999 lines (5 lines changed).
+Tests: =ResolverTest.mkTemplateInfo= sets the flag (existing behaviour);
+new =test/Test/CustomTemplateTrustTest.hs= runs local, untrusted
+(=https://evil.example/=) and flag-trusted (=https://t.example.com/=)
+templates, each as a resource type and through =!$expand=, via
+=preprocessWithPolicy= and the real dispatcher behind a document stub.
+Failing runs:
+- inheritance forced on (as on main): 2 of 6 failed, the untrusted
+  template "read the parent's secret" (=given-s3cr3t=) at both sites;
+- helper passing no trusted sources to the engine: 2 of 6 failed, the
+  flag-trusted template got "Variable not found: secret" at both sites.
+Full suite: 2035 passed.
+
+** Ready 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e753-3595-737d-ad8c-41c07cd814b3
+:ADDED: [2026-11-16 Mon 19:25]
+:END:
+Rebased onto =64c2894= (notes-only changes since the hook runs). Commits:
+=ed51a7a= (fd00:ec2::/32), =23dd836= (default port), =ea4a930= (task 6).
+Full suite through the pre-commit hook on the task 6 commit: 2035 passed.
+
+** Review 2026-11-16 (task 6)
+:PROPERTIES:
+:ID: org:01a1e756-225c-75fc-bfd5-90c3cf5dc6a3
+:ADDED: [2026-11-16 Mon 19:29]
+:END:
+By the review worker. Branch =claude/C15= at =ea4a930=, base =64c2894=.
+
+Verdicts: =ed51a7a= land; =23dd836= land; =ea4a930= land, with one
+low test-duplication defect that any later C15 commit may carry.
+
+Checks run:
+- =ed51a7a=: the guard is now =(w0, w1) == (0xfd00, 0x0ec2)=. With the
+  old single-address line restored, the =fd00:ec2::23= and
+  =fd00:ec2:ffff::1= rows FAIL; =fd00:ec3::254= stays unblocked.
+- =23dd836=: the check compares the authority's suffix with =:80= /
+  =:443= for the matching scheme only, so =:8080= and =http://h:443/=
+  are accepted. With the guard disabled, the three default-port rows and
+  "the default-port error says to drop the port" FAIL. =:080= is not
+  caught, but it fails closed (no location matches), so it is not worth
+  a rule.
+- =ea4a930=, both failure modes reproduced:
+  - inheritance forced on in =templateVariables=: the untrusted template
+    FAILS at both sites (resource type and =!$expand=);
+  - =preprocessWithPolicy= giving the engine =noTrustedSources=: the
+    flag-trusted template FAILS at both sites with "Variable not found:
+    secret".
+  Restored. fourmolu and hlint are clean. =Resolver.hs= is 999 lines
+  before and after (5 lines changed); =Engine.hs= 373, =Types.hs= 374.
+- Entry points: every =src/= preprocess goes through
+  =preprocessWithConfig= (Render, TemplateLoader, Demo; lint,
+  estimate-cost, approval and the request builders reach it through
+  =loadCfnTemplate= / =loadCfnTemplateWithLimit= with =cfnImportConfig=)
+  or =preprocessWithPolicy= (=loadStackArgsWith=, whose two callers pass
+  the same policy to the loader and the engine). get-import does not
+  preprocess. =preprocessYaml= / =preprocessYaml11= are now used only by
+  tests.
+- Attempts to leak parent variables into an untrusted template, all
+  held:
+  - Template records: =tiInheritsParentVars= is decided when the record
+    is made, with =isTrustedRequester= on =childBase= of the importer,
+    so the chain decides (my earlier note on records keeping only a
+    location is resolved).
+  - Templates defined by a child document: the child's template map is
+    still dropped (=_docTmplDefs=), so they never reach the root.
+  - Nested templates: a body resolves with =templateVariables= over the
+    calling context's variables. An untrusted template inside a trusted
+    one gets its parameters only; a trusted template expanded inside an
+    untrusted one inherits the untrusted body's variables, which are
+    that template's parameters, so no root variable comes through.
+  - =$params= defaults: =mergeParams= / =mergeExpandParams= insert the
+    default values unresolved, and a variable's value is not
+    re-interpolated, so a default ="{{secret}}"= yields that literal text.
+  - Explicit passing: =!$expand= params and resource =Properties= are
+    resolved in the caller's context (allowed, as decided); =Overrides=
+    are merged after expansion and also come from the caller.
+  - Stack-args: =loadStackArgsWith= takes the policy, so templates
+    imported by an argsfile follow the same rule.
+  - =tcCustomTemplateDefs= and =tcInputUri= still flow into an untrusted
+    body; neither carries variable values.
+
+Defect:
+1. Low (test duplication), =test/Test/CustomTemplateTrustTest.hs= =check=
+   parses the root inline (=parseYaml=, =BL=, =TE=) instead of using
+   =Test.ImportFixtures.preprocessText=, which exists for this but calls
+   =preprocessYaml= (no policy). Fix: give =preprocessText= the policy
+   (or add a policy-taking variant over =preprocessWithPolicy=) and use
+   it here.
+
+Notes, not defects:
+- =preprocessWithPolicy= and =loadStackArgsWith= take the policy and the
+  loader separately, so a future caller could pass a loader built from a
+  different policy. Both current callers agree, and the docstrings state
+  the rule.
+- A new production caller of the exported =preprocessYaml= would ignore
+  =--trust-import-source= for custom templates (fail closed: trusted
+  templates lose parent variables; the loader's gates still apply).
+- Pre-existing duplication, not from this commit:
+  =Resolver.mergeExpandParams= (=Resolver.hs:900=) is a copy of
+  =Params.mergeParams= (=Params.hs:206=). Merging them would shrink
+  =Resolver.hs=; worth a separate card.
 
 * TODO Regression test for the C4 exfiltration scenario
 :PROPERTIES:
@@ -1303,6 +1467,18 @@ remaining risks:
   example =$imports: {c: https://x/c.yaml, v: "{{c.loc}}"}= in a local
   template) loads with the requester's trust (closing it needs taint
   tracking, out of scope).
+- SOCKS proxy URLs in =http_proxy= / =https_proxy= are no longer used for
+  HTTP imports (matches Rust, whose =reqwest= has no =socks= feature);
+- HTTP imports requested by local or trusted documents are not filtered,
+  redirects included, so a public URL a local template imports can
+  redirect to =169.254.169.254= (as decided);
+- behind a proxy on a network without external DNS, HTTP imports from
+  untrusted documents fail with "cannot resolve", since the target is
+  resolved locally before the request goes to the proxy;
+- IPv6 forms not filtered: 6to4 =2002::/16=, Teredo =2001::/32=,
+  local-use NAT64 =64:ff9b:1::/48= and IPv4-translated =::ffff:0:0/96=
+  (reaching loopback through them needs a relay or translator on the
+  path, so the risk is low).
 
 Also =docs/import-types.org= (around =:151=, =:275-277=, and the
 =ssm:=, =cfn:= and =s3:= sections), =docs/custom-resource-templates.org=
