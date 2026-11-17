@@ -478,3 +478,18 @@ Exempt: the two document outputs, `OdRawOutput` and the template body of
 print for redirecting into files), keep their bytes exact. The JSON renderer
 already escapes control characters. Error text printed outside the renderer
 (for example `dieTxt`) is not yet covered.
+
+## YAML Output of Strings with Non-Printable Characters
+
+**Cause**: Rust `render` bug, fixed in iidy-hs first (Rust fix: card C42).
+
+iidy-hs prints a string containing a non-printable character (C0 controls
+other than tab and newline, DEL, C1 controls including U+0085, U+2028,
+U+2029, U+FEFF) double-quoted with YAML escapes, in every command that emits
+YAML, so the output parses back to the same value. Short escapes are used
+where YAML has them (`\0 \a \b \t \n \v \f \r \e \N \L \P`), otherwise `\xHH`
+or `\uHHHH` with upper-case hex digits. Until C42 lands, Rust `render` prints
+such strings differently (single-quoted or plain text with literal
+backslash sequences, or the raw character), and the Rust parser keeps the
+escapes as literal text, so its output is not valid for the original value.
+Rust `get-import` (serde_yaml) already prints the same double-quoted form.
