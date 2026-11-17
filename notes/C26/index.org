@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C26
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   C15 side finding: plain imported document with unresolved !$ tag renders as '!$escaped' in iidy-hs, Rust keeps the tag
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
 :ID: org:01a1e6a8-aa6a-74a5-9461-67b08b2b8768
 :ADDED: [2026-11-16 Mon 16:19]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 17:06]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C26 — Keep unresolved !$ tags in plain imported documents (Rust parity)
 #+date: 2026-11-16
