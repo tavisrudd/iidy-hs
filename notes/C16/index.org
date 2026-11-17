@@ -12,6 +12,8 @@
 :END:
 :CLOCK:
 CLOCK: [2026-11-16 Mon 18:07]--[2026-11-16 Mon 18:21] => 0:14
+CLOCK: [2026-11-16 Mon 18:28]--[2026-11-16 Mon 18:41] => 0:13
+CLOCK: [2026-11-16 Mon 18:51]--[2026-11-16 Mon 18:58] => 0:07
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:11]
@@ -21,6 +23,18 @@ CLOCK: [2026-11-16 Mon 18:07]--[2026-11-16 Mon 18:21] => 0:14
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 - Clock-out [2026-11-16 Mon 18:21]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
+- Clock-in [2026-11-16 Mon 18:28]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
+- Clock-out [2026-11-16 Mon 18:41]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
+- Clock-in [2026-11-16 Mon 18:51]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
+- Clock-out [2026-11-16 Mon 18:58]
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
@@ -706,6 +720,29 @@ bucket parsing at the last S3 host label, plus path-style and
 commit with tests for =s3://bucket/= and =s3://bucket=. P2 is filed as
 [[file:../C36/index.org][C36]].
 
+** Result 2026-11-16 (review defects 1, 2 and P1)
+:PROPERTIES:
+:ID: org:01a1e72a-d145-73c7-bda1-d9321a7ee8b2
+:ADDED: [2026-11-16 Mon 18:41]
+:END:
+Branch =claude/C16=, rebased onto main =d6207c1=.
+- Defect 1, =4458266=: =test/Test/MockAws.hs= now splits the host at the
+  last S3 label, and exports =parseRequest= for the self-tests. Failing
+  run first (=-p "/S3 request recognition/"=, old parser): 2 of 6 failed,
+  =s3-approvals.s3.amazonaws.com= gave bucket =app= and
+  =my.s3.bkt.s3.eu-west-1.amazonaws.com= gave bucket =my=. New tests also
+  cover path style (=s3.eu-west-1.amazonaws.com/approvals/...=, key
+  URL-decoded) and =GET /?location= in both styles.
+- Defect 2, =601e90e=: =latestKeyFromPending= in =ApprovedTemplate.hs=
+  (same logic the review had, moved verbatim); the review calls it. Tests
+  for a key with a directory (=app/env/latest=) and without (=latest=).
+- P1, =56c012c=: =generateVersionedLocation= (=TemplateHash.hs=) gives
+  =<sha256>.yaml= for =s3://bucket/= and =s3://bucket=; =parseS3Url= is
+  unchanged (the review still needs a key in the pending URL). Failing run
+  first: 4 of 23 failed (=s3://bucket/= gave =/<hash>.yaml=, =s3://bucket=
+  gave "Invalid S3 URL (no key)"), in =TemplateHashTest= and in a request
+  test for each form in =ApprovedTemplateTest=.
+
 * TODO Approval bucket region has one owner
 :PROPERTIES:
 :ID: org:01a1e708-49cb-7228-b2c7-c99a3c50b801
@@ -725,10 +762,15 @@ presign tasks use it too. Tests with the mock in =eu-west-1= and the bucket
 location answered as us-east-1, as eu-west-1, as empty, and denied
 (fallback): the logged S3 host region matches.
 
-* TODO Classify HeadObject results; request fails on errors other than 404
+* DONE Classify HeadObject results; request fails on errors other than 404
 :PROPERTIES:
 :ID: org:01a1e708-49cb-7228-b2c7-c99917e3d9e3
 :ADDED: [2026-11-16 Mon 18:04]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:41] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
 
 First add a request test that fails on the old code: =HeadObject= 403 on
@@ -741,10 +783,36 @@ proceeds as today, anything else fails the command (iidy-js
 =approval/index.ts:38-63= rethrows). A failure that is neither 404 nor 403
 names the bucket region used. Tests for the four outcomes through the mock.
 
-* TODO Approval path uses the 1 MB limit
+** Result 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e72a-d144-717e-9ee4-42af02a9c74e
+:ADDED: [2026-11-16 Mon 18:41]
+:END:
+Commit =ea4ce64=. =S3Objects.hs= has =headObject= returning
+=HeadResult= (present, missing 404, access denied 403, failed with text);
+=s3ObjectExists= now returns =Either Text Bool= from it and is used by the
+request and both review checks: missing proceeds as before, 403 fails with
+"Access denied (403) checking s3://B/K: the current credentials cannot
+read the template approval bucket", anything else with "Failed to check
+s3://B/K in region R: <error>" (R is the env's region, today's region).
+Failing run first (=-p "/HeadObject errors/"=, old code): 4 of 5 failed;
+the request 403 got =Right 0= (it uploaded), the review 403 on pending got
+"Pending template not found", the review 403 on approved went on to a
+download. Tests: =test/Test/TemplateApprovalTest.hs= (request 403 with no
+=PutObject=, request 500 naming us-east-1, review 403 on pending and on
+approved, missing pending still "not found") and
+=test/Test/S3ObjectsTest.hs= (the four outcomes, the region named in
+eu-west-1).
+
+* DONE Approval path uses the 1 MB limit
 :PROPERTIES:
 :ID: org:01a1e708-49cb-7228-b2c7-c99860777adb
 :ADDED: [2026-11-16 Mon 18:04]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:41] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
 
 Give =loadCfnTemplate= a variant taking the size limit, keeping the current
@@ -757,10 +825,31 @@ instead" (=TemplateLoader.hs:212=), since URL templates are refused there.
 Tests at 999999 and 1000000 rendered bytes for the request now, and for
 one deploy builder in the deploy task.
 
-* TODO Request: bucket-owner-full-control ACL on the pending upload
+** Result 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e72a-d144-717e-9ee4-42ae6cb2ca5f
+:ADDED: [2026-11-16 Mon 18:41]
+:END:
+Commit =9b11f2a=. =TemplateLoader.hs= has =loadCfnTemplateWithLimit= and
+=TemplateSizeLimit= (=inlineTemplateLimit=, the old 51199 limit with the
+"Upload to S3" advice; =approvalTemplateLimit=, 999999 with no advice);
+=loadCfnTemplate= is the inline variant, so =TemplateLoaderTest= is
+unchanged. =approvedTemplateFor= uses the approval limit. Failing run
+first: both failed (999999 bytes got the 51199 error; 1000000 got the
+51199 error with the S3 advice). Now 999999 bytes uploads, 1000000 is
+refused with "Template body exceeds maximum size of 999999 bytes (got
+1000000 bytes)." and no AWS call. The deploy-builder boundary test is left
+to the deploy task.
+
+* DONE Request: bucket-owner-full-control ACL on the pending upload
 :PROPERTIES:
 :ID: org:01a1e6fd-8bb4-76f0-af12-17ee9ca199bf
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:41] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
 
 Pass =bucket-owner-full-control= on the pending =PutObject=
@@ -768,10 +857,27 @@ Pass =bucket-owner-full-control= on the pending =PutObject=
 Rust (=template_approval_request.rs:124=) do; the approve writes keep no
 ACL, as iidy-js. Test: the raw logged =PutObject= carries the header.
 
-* TODO Request: honour the lint flag
+** Result 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e72a-d144-717e-9ee4-42adfa5eb4a0
+:ADDED: [2026-11-16 Mon 18:41]
+:END:
+Commit =dd79485=. =uploadToS3= takes an =ObjectAcl= (=DefaultAcl= or
+=BucketOwnerFullControl=); the pending upload uses the latter, the approve
+writes the former. Failing run first: the logged =x-amz-acl= was
+=Nothing=; now =bucket-owner-full-control=. The approve writes' lack of an
+ACL has no test yet: reaching them needs the review prompt seam (empty-diff
+task).
+
+* DONE Request: honour the lint flag
 :PROPERTIES:
 :ID: org:01a1e6fd-8bb4-76f0-af12-17ed646532b6
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 18:41] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
 
 =templateApprovalRequest= ignores =_lintTmpl= (=TemplateApproval.hs:59=).
@@ -788,6 +894,137 @@ this follows Rust and goes in =DIVERGENCES.md= (docs task). Tests: lint on
 and valid uploads; lint on and invalid emits errors and makes no
 =PutObject=; a body over the inline limit skips validation with the
 warning and uploads; lint off makes no =ValidateTemplate= call.
+
+** Result 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e72a-d144-717e-9ee4-42ac8683fa4d
+:ADDED: [2026-11-16 Mon 18:41]
+:END:
+Commit =58d2f44=. =validateTemplateBody= extracted from =lintTemplate=
+(=LintTemplate.hs=), which calls it; it now measures UTF-8 bytes. The
+request calls it on the rendered body after the =HeadObject= check and
+before the upload, only when not yet approved (Rust order), emits the
+validation, and exits 1 without uploading on errors. Failing run first
+(=-p "/request lint/"=): 3 of 5 failed (no =ValidateTemplate= call, exit 0
+on an invalid template, no warning for 60 KB of two-byte characters).
+Tests: valid (=HeadObject=, =ValidateTemplate= with the body,
+=PutObject=), invalid (exit 1, no =PutObject=), over the limit in bytes
+though under it in characters (warning, upload), lint off and already
+approved (no =ValidateTemplate=). Corrected per the round 2 review: the
+only =lint-template= change is for an inline =Template= value (text that
+is not a file path or URL) over 51199 UTF-8 bytes but under that many
+characters, which is now skipped with the warning instead of sent to
+=ValidateTemplate=. A file or =render:= template over 51199 bytes is
+refused by =lint-template='s loader (=loadCfnTemplate=, inline limit in
+bytes) before the skip check, as before.
+
+** Review 2026-11-16 (round 2)
+:PROPERTIES:
+:ID: org:01a1e72f-88b1-7795-941f-e39f430d3898
+:ADDED: [2026-11-16 Mon 18:46]
+:END:
+Reviewer: review worker (Claude Opus 5.5). Branch =claude/C16= on main
+=d6207c1=, commits =4458266= to =58d2f44=.
+
+Verdict: land all seven; the defects below are small and can go in a
+follow-up commit before the deploy tasks.
+
+Revert proofs (each behaviour commit checked out, its production change
+undone, the new tests run with the test binary, then restored; worktree
+clean):
+- =56c012c= (=TemplateHash.hs= at parent): 4 of 28 failed (=/<hash>.yaml=
+  and "Invalid S3 URL (no key)").
+- =ea4ce64= (=s3ObjectExists= reads every error as missing): 5 of 11
+  failed (request 403 uploaded, review 403 read as "not found" or went on
+  to a download, region not named).
+- =9b11f2a= (approval path on the inline limit): 2 of 2 failed.
+- =dd79485= (pending upload with no ACL): 1 of 1 failed (=x-amz-acl=
+  absent).
+- =58d2f44= (request at parent): 3 of 5 failed; with only the byte
+  measure reverted to =T.length=, the 60 KB two-byte test failed (exit 1).
+- =4458266= (test only) and =601e90e= (verbatim move) need none; the
+  worker's failing-first run for =4458266= is recorded above.
+
+Parity with iidy-js (all as iidy-js unless stated):
+- 403: request and review rethrow anything but =NotFound=
+  (=approval/index.ts:38-62=, =87-95=); the ports now fail too, with a
+  named message.
+- ACL: only the pending =putObject= carries =bucket-owner-full-control=
+  (=index.ts:52-56=); the approve writes carry none (=index.ts:124-136=).
+- Lint order: HEAD, then (not approved) lint, then upload; exit 1 with no
+  upload on errors (=index.ts:36-50=); lint on by default in both
+  (=approval/cli.ts:25=, =src/Iidy/Cli/Parser.hs:699=). The request now
+  needs =cloudformation:ValidateTemplate= by default; say so in the docs.
+- Size: iidy-js refuses at =body.length >= maxSize= in UTF-16 units
+  (=loadCFNTemplate.ts:48=), so it rejects 999999; iidy-hs accepts
+  999999 UTF-8 bytes and refuses 1000000, as the card asks. Record the
+  boundary and the unit in =DIVERGENCES.md= (docs task).
+- =latest= at the bucket root: iidy-js writes =${bucketDir}/latest=, which
+  is =/latest= for a root key (=index.ts:85=, =104=); iidy-hs uses
+  =latest=. Reachable now that =56c012c= allows root keys; record it.
+- Key derivation: nothing outside =ApprovedTemplate.hs= builds or strips
+  pending, approved or =latest= keys (=grep= for =.pending=, =latest=,
+  =generateVersionedLocation=, =calculateTemplateHash=), except as in
+  defect 4.
+
+Defects:
+1. Low, card text (the lint task's Result above). The claim that
+   =lint-template= now skips templates over 51199 bytes is wrong: its
+   loader (=loadCfnTemplate=, inline limit in UTF-8 bytes, called at
+   =LintTemplate.hs:45=) refuses such a file or =render:= template before
+   =validateTemplateBody= runs, so the skip branch is reached from
+   =lint-template= only for an inline =Template= value. No code change;
+   fix the note so the docs task does not document a =lint-template=
+   change.
+2. Low, =src/Iidy/Cfn/S3Objects.hs:68=. S3 answers =HeadObject= on a
+   missing key with 403, not 404, when the caller lacks =s3:ListBucket=.
+   A deploy role with only =s3:GetObject= on the approved keys (the access
+   the decision names) will then see "cannot read the template approval
+   bucket" for a template that is simply not approved. Add to the
+   message: "(S3 also answers 403 for a missing object when s3:ListBucket
+   is not granted)", and say the same in the docs task.
+3. Low, duplicated test setup, =test/Test/TemplateApprovalTest.hs=.
+   =simpleTemplate=, =approvalArgs= and the fixture's approved key
+   (=approvedKey= here, =simpleApprovedKey= in
+   =test/Test/ApprovedTemplateTest.hs=) are copies, and =validationError=
+   is a copy of the one in =test/Test/MockAwsTest.hs=. Move them to one
+   shared test module (for example =test/Test/ApprovalFixtures.hs=) and
+   import it in all three.
+4. Low, =src/Iidy/Cfn/TemplateHash.hs:58-80=. The approved-key layout
+   (base path, root key, hash and extension) lives in
+   =generateVersionedLocation= in =TemplateHash.hs=, and =56c012c= added
+   the bucket-only rule there; the first "Done when" item puts the
+   approved key in =ApprovedTemplate.hs=. Its only caller is
+   =ApprovedTemplate.hs=. Move it there (with its =TemplateHashTest=
+   cases), leaving =TemplateHash.hs= the hash and =parseS3Url=.
+
+** Result 2026-11-16 (round 2 review fixes)
+:PROPERTIES:
+:ID: org:01a1e739-f096-7484-bc65-bafe0cdca972
+:ADDED: [2026-11-16 Mon 18:58]
+:END:
+Branch =claude/C16=, rebased onto main =30b8709=; full suite 1896 passed
+on the tip, =-Werror=, fourmolu, hlint and the nix-deps check clean.
+- Defect 1 (card text): the lint result note above is corrected; no code.
+- Defect 2, =c7e9e06=: the 403 message now ends "(S3 also answers 403
+  for a missing object when s3:ListBucket is not granted)". Failing run
+  first (expected text updated, old code): 3 of 5 =HeadObject errors=
+  tests failed.
+- Defect 3, =03edaad=: new =test/Test/ApprovalFixtures.hs= holds
+  =simpleTemplate=, =approvalArgs= (=Maybe Text -> StackArgs=), the
+  fixture's approved, pending and root keys and =validationError=;
+  =TemplateApprovalTest=, =ApprovedTemplateTest= and =MockAwsTest= import
+  it and drop their copies. Same tests, same expectations.
+- Defect 4, =6b64198=: =generateVersionedLocation= moved verbatim from
+  =TemplateHash.hs= to =ApprovedTemplate.hs= (bodies differ only in blank
+  lines); =TemplateHash.hs= keeps =calculateTemplateHash= and
+  =parseS3Url=. The =TemplateHashTest= cases are unchanged; only their
+  import moved. The rebase onto main conflicted on that import block with
+  C15's =cfnImportConfig= change; both kept.
+- Hook flake: the first hook run for =c7e9e06= failed in the test step
+  with no test output (as for the ACL commit in round 2); three full runs,
+  one with the git environment set and stdin closed, all passed, and the
+  retried commit passed the hook. Cause unknown.
 
 * TODO Presign the approved object's URL
 :PROPERTIES:
@@ -877,6 +1114,7 @@ call =requestConfirmation= directly), and a =CfnContext= field would reach
 =latest= and deletes pending; no writes nothing and returns the existing
 decline code; a non-empty diff still prompts.
 
+
 * TODO Docs and divergences
 :PROPERTIES:
 :ID: org:01a1e6fd-8bb4-76f0-af12-17e98dfe42b1
@@ -903,3 +1141,22 @@ empty-diff prompt (Rust has neither), SHA256 keys versus iidy-js MD5, the
 request lint using =ValidateTemplate= rather than iidy-js's local
 laundry-cfn lint (=lint.ts:11-16=), and the bucket region rule versus
 iidy-js (us-east-1) and Rust (stack region; review us-east-1).
+
+** Notes for the docs task (from the round 2 review)
+:PROPERTIES:
+:ID: org:01a1e739-f094-72bc-a2a1-3af9b982f373
+:ADDED: [2026-11-16 Mon 18:58]
+:END:
+- =DIVERGENCES.md=: iidy-js counts the approval-path limit in UTF-16 units
+  and refuses at =length >= 999999= (=loadCFNTemplate.ts:48=); iidy-hs
+  counts UTF-8 bytes and accepts 999999, refusing 1000000.
+- =DIVERGENCES.md=: for a root key iidy-js writes =/latest= at the bucket
+  root (=${bucketDir}/latest=, =approval/index.ts:85=, =104=); iidy-hs
+  writes =latest=.
+- Docs: the request needs =cloudformation:ValidateTemplate= by default
+  (lint is on by default).
+- Docs: a 403 on =HeadObject= may mean a missing object when
+  =s3:ListBucket= is not granted; the message says so.
+- Docs: =lint-template= changes only for an inline =Template= value over
+  51199 UTF-8 bytes but under that many characters (now skipped with the
+  warning).
