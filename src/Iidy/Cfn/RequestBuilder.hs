@@ -38,8 +38,9 @@ import Amazonka.CloudFormation.Types.Parameter qualified as Param
 import Amazonka.CloudFormation.UpdateStack qualified as US
 
 import Iidy.Aws.ClientReqToken (TokenInfo (..))
-import Iidy.Cfn.Context (CfnContext (..), cfnImportConfig, ctxDeriveToken)
-import Iidy.Cfn.TemplateLoader (TemplateResult (..), loadCfnTemplate)
+import Iidy.Cfn.ApprovedTemplate (resolveDeployTemplate)
+import Iidy.Cfn.Context (CfnContext (..), ctxDeriveToken)
+import Iidy.Cfn.TemplateLoader (TemplateResult (..))
 import Iidy.Cfn.Types (Capability (..), OnFailure (..), StackArgs (..))
 
 ------------------------------------------------------------------------
@@ -59,13 +60,11 @@ buildCreateStackRequest ::
     IO (Either Text (CF.CreateStack, TokenInfo))
 buildCreateStackRequest ctx args usePrimary argsfilePath = do
     let sName = saStackName args
-        env = cfnEnvironment ctx
-        importCfg = cfnImportConfig ctx
     token <-
         if usePrimary
             then pure (cfnPrimaryToken ctx)
             else ctxDeriveToken ctx "create-stack"
-    tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env importCfg
+    tmplEither <- resolveDeployTemplate ctx args argsfilePath
     case tmplEither of
         Left err -> pure (Left err)
         Right tmplResult -> do
@@ -100,13 +99,11 @@ buildUpdateStackRequest ::
     IO (Either Text (CF.UpdateStack, TokenInfo))
 buildUpdateStackRequest ctx args usePrimary argsfilePath = do
     let sName = saStackName args
-        env = cfnEnvironment ctx
-        importCfg = cfnImportConfig ctx
     token <-
         if usePrimary
             then pure (cfnPrimaryToken ctx)
             else ctxDeriveToken ctx "update-stack"
-    tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env importCfg
+    tmplEither <- resolveDeployTemplate ctx args argsfilePath
     case tmplEither of
         Left err -> pure (Left err)
         Right tmplResult -> do
@@ -152,10 +149,8 @@ buildCreateChangeSetRequest ::
     IO (Either Text (CF.CreateChangeSet, TokenInfo))
 buildCreateChangeSetRequest ctx args csName csType argsfilePath = do
     let sName = saStackName args
-        env = cfnEnvironment ctx
-        importCfg = cfnImportConfig ctx
     token <- ctxDeriveToken ctx "create-changeset"
-    tmplEither <- loadCfnTemplate (saTemplate args) argsfilePath env importCfg
+    tmplEither <- resolveDeployTemplate ctx args argsfilePath
     case tmplEither of
         Left err -> pure (Left err)
         Right tmplResult -> do

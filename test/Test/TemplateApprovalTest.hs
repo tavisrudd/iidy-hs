@@ -5,19 +5,25 @@ the lint step.
 module Test.TemplateApprovalTest (templateApprovalTests) where
 
 import Data.ByteString qualified as BS
-import Data.ByteString.Char8 qualified as BC
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
-import System.FilePath ((</>))
-import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
 import Iidy.Cfn.Operations.TemplateApproval (templateApprovalRequest, templateApprovalReview)
 import Iidy.Cfn.Types (CfnOperation (..))
 import Iidy.Output.Types (OutputData (..), TemplateValidation (..))
-import Test.ApprovalFixtures (approvalArgs, simpleApprovedKey, simplePendingKey, simpleTemplate, validationError)
+import Test.ApprovalFixtures (
+    approvalArgs,
+    simpleApprovedKey,
+    simplePendingKey,
+    simpleTemplate,
+    templateHeader,
+    validationError,
+    withSizedTemplate,
+    withTemplateBytes,
+ )
 import Test.MockAws
 import Test.MockCfnContext (MockCfn (..), mockCfnOutputs, newMockCfnContext)
 
@@ -131,26 +137,6 @@ sizeLimitTests =
             result @?= Left "Template body exceeds maximum size of 999999 bytes (got 1000000 bytes)."
             operations mock >>= (@?= [])
     ]
-
-{- | Run an action with a local template file of exactly this many bytes
-(a YAML document padded with a comment).
--}
-withSizedTemplate :: Int -> (Text -> IO a) -> IO a
-withSizedTemplate size =
-    withTemplateBytes
-        (templateHeader <> BC.replicate (size - BS.length templateHeader - 1) 'x' <> "\n")
-
--- | Run an action with a local template file holding these bytes.
-withTemplateBytes :: BS.ByteString -> (Text -> IO a) -> IO a
-withTemplateBytes bytes action =
-    withSystemTempDirectory "iidy-approval-template" $ \dir -> do
-        let path = dir </> "big.yaml"
-        BS.writeFile path bytes
-        action (T.pack path)
-
--- | A minimal template ending in an open comment, for padding.
-templateHeader :: BS.ByteString
-templateHeader = "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n# "
 
 headErrorTests :: [TestTree]
 headErrorTests =

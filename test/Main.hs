@@ -15,6 +15,7 @@ import Test.ConvertStackTest (convertStackTests)
 import Test.CustomTemplateTrustTest (customTemplateTrustTests)
 import Test.DeleteStackTest (deleteStackTests)
 import Test.DemoTest (demoTests)
+import Test.DeployTemplateTest (deployTemplateTests)
 import Test.DescribeStackTest (describeStackTests)
 import Test.EmitterTest (emitterTests)
 import Test.EngineTest (engineTests)
@@ -109,6 +110,7 @@ main = do
             , testGroup "MockAws" mockAwsTests
             , testGroup "ApprovedTemplate" approvedTemplateTests
             , testGroup "ApprovalRegion" approvalRegionTests
+            , testGroup "DeployTemplate" deployTemplateTests
             , testGroup "Explain" explainTests
             , testGroup "Demo" demoTests
             , testGroup "Render" renderTests

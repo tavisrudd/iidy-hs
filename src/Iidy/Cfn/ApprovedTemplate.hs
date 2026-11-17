@@ -3,8 +3,10 @@
 The one owner of the approved object's bucket and key (derived from
 @ApprovedTemplateLocation@ and the hash of the rendered local template),
 the pending key a request uploads to, and the approved and @latest@ keys a
-review derives from that pending key. Template approval request and review use
-it; no other code builds or strips these keys.
+review derives from that pending key, and of the approval bucket's region.
+Template approval request and review use it, and the deploy builders get
+their template from 'resolveDeployTemplate'; no other code builds or strips
+these keys or picks that region.
 -}
 module Iidy.Cfn.ApprovedTemplate (
     ApprovedTemplate (..),
@@ -14,18 +16,22 @@ module Iidy.Cfn.ApprovedTemplate (
     latestKeyFromPending,
     generateVersionedLocation,
     approvalS3Env,
+    resolveDeployTemplate,
 ) where
 
+import Data.Maybe (listToMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Time (getCurrentTime)
 import System.FilePath (takeExtension)
 
 import Amazonka qualified
 
+import Iidy.Aws.CredentialSource (CredentialSource (..), CredentialSourceStack (..), ProfileInfo (..), ProfileSource (..))
 import Iidy.Cfn.Context (CfnContext (..), cfnImportConfig)
-import Iidy.Cfn.S3Objects (bucketRegion)
+import Iidy.Cfn.S3Objects (bucketRegion, presignGetObject, s3ObjectExists)
 import Iidy.Cfn.TemplateHash (calculateTemplateHash, parseS3Url)
-import Iidy.Cfn.TemplateLoader (TemplateResult (..), approvalTemplateLimit, isTemplateUrl, loadCfnTemplateWithLimit)
+import Iidy.Cfn.TemplateLoader (TemplateResult (..), approvalTemplateLimit, isTemplateUrl, loadCfnTemplate, loadCfnTemplateWithLimit)
 import Iidy.Cfn.Types (StackArgs (..))
 
 -- | The approved object for a template, and the rendered body it hashes.
@@ -132,6 +138,57 @@ approvalS3Env env bucket = do
     pure $ case located of
         Right region -> env{Amazonka.region = region}
         Left _ -> env
+
+{- | The template a deploy request (create-stack, update-stack,
+create-changeset) sends. With no @ApprovedTemplateLocation@ it is the local
+template as loaded today. With one, the approved object must exist: the
+result is a presigned URL for it (signed for the bucket's region) and no
+body; otherwise a refusal, before any CloudFormation call. Not approved
+(404) suggests the @template-approval request@ command with this deploy's
+region, environment and profile, as iidy-js
+(@AbstractCloudFormationStackCommand.ts:218-230@).
+-}
+resolveDeployTemplate :: CfnContext -> StackArgs -> Maybe FilePath -> IO (Either Text TemplateResult)
+resolveDeployTemplate ctx sa argsfilePath = do
+    approved <- approvedTemplateFor ctx sa argsfilePath
+    case approved of
+        Left err -> pure (Left err)
+        Right Nothing ->
+            loadCfnTemplate (saTemplate sa) argsfilePath (cfnEnvironment ctx) (cfnImportConfig ctx)
+        Right (Just (ApprovedTemplate bucket key _body)) -> do
+            s3Env <- approvalS3Env (cfnEnv ctx) bucket
+            exists <- s3ObjectExists s3Env bucket key
+            case exists of
+                Left err -> pure (Left err)
+                Right False -> pure (Left (notApprovedMessage ctx argsfilePath))
+                Right True -> do
+                    now <- getCurrentTime
+                    url <- presignGetObject s3Env now bucket key
+                    pure (Right (TemplateResult Nothing (Just url)))
+
+{- | The refusal for a template with no approved object. The suggested
+command puts the global options first, where the CLI parser takes them.
+-}
+notApprovedMessage :: CfnContext -> Maybe FilePath -> Text
+notApprovedMessage ctx argsfilePath =
+    "Template version has not been approved or the current IAM principal does not have permission to access it. Run:\n"
+        <> "  iidy-hs --region "
+        <> Amazonka.fromRegion (Amazonka.region (cfnEnv ctx))
+        <> " --environment "
+        <> cfnEnvironment ctx
+        <> maybe "" (" --profile " <>) (namedProfile (cfnCredentialSources ctx))
+        <> " template-approval request "
+        <> maybe "<argsfile>" T.pack argsfilePath
+        <> "\nto begin the approval process."
+
+-- | The profile named by @--profile@ or stack-args, if credentials use one.
+namedProfile :: CredentialSourceStack -> Maybe Text
+namedProfile (CredentialSourceStack sources) =
+    listToMaybe
+        [ piName info
+        | ProfileCredential info <- sources
+        , piSource info `elem` [ProfileCliFlag, ProfileStackArgs]
+        ]
 
 -- | Suffix of a pending object's key.
 pendingSuffix :: Text
