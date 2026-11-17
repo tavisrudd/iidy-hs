@@ -8,6 +8,7 @@ Supports the render: prefix for YAML preprocessing (resolves $imports,
 module Iidy.Cfn.TemplateLoader (
     TemplateResult (..),
     loadCfnTemplate,
+    isTemplateUrl,
     templateMaxBytes,
     s3TemplateMaxBytes,
 ) where
@@ -173,6 +174,12 @@ isS3Url t = T.isPrefixOf "s3://" t || T.isPrefixOf "https://s3" t
 
 isHttpUrl :: Text -> Bool
 isHttpUrl t = T.isPrefixOf "http://" t || T.isPrefixOf "https://" t
+
+{- | True when a @Template@ value is an S3 or HTTP(S) URL, which
+'loadCfnTemplate' passes on as a template URL instead of loading.
+-}
+isTemplateUrl :: Text -> Bool
+isTemplateUrl t = isS3Url t || isHttpUrl t
 
 -- | Resolve a template path relative to the argsfile directory
 resolveTemplatePath :: FilePath -> Maybe FilePath -> FilePath

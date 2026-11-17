@@ -17,15 +17,14 @@ import Data.Either (fromRight)
 import Data.Text (Text)
 import Data.Text qualified as T
 
+import Iidy.Cfn.ApprovedTemplate (ApprovedTemplate (..), approvedKeyFromPending, approvedTemplateFor, pendingKeyFor)
 import Iidy.Cfn.Context (CfnContext (..))
 import Iidy.Cfn.S3Objects (deleteFromS3, downloadFromS3, s3ObjectExists, uploadToS3)
 import Iidy.Cfn.TemplateDiff (generateDiff)
-import Iidy.Cfn.TemplateHash (generateVersionedLocation, parseS3Url)
-import Iidy.Cfn.TemplateLoader (TemplateResult (..), loadCfnTemplate)
-import Iidy.Cfn.Types (StackArgs (..))
+import Iidy.Cfn.TemplateHash (parseS3Url)
+import Iidy.Cfn.Types (StackArgs)
 import Iidy.Confirm (ConfirmResult (..), requestConfirmation)
 import Iidy.Output.Types
-import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..))
 
 ------------------------------------------------------------------------
 -- Template Approval Request
@@ -42,34 +41,11 @@ templateApprovalRequest ::
     IO (Either Text Int)
 templateApprovalRequest ctx sa _lintTmpl argsfilePath = do
     let emit = cfnEmit ctx
-        env = cfnEnvironment ctx
-        remoteImports = cfnRemoteImports ctx
     runExceptT $ do
-        -- Validate required fields
-        baseLocation <-
-            liftMaybe
-                "ApprovedTemplateLocation is required in stack-args.yaml"
-                (saApprovedTemplateLocation sa)
-        _tmplSpec <-
-            liftMaybe
-                "Template is required in stack-args.yaml"
-                (saTemplate sa)
-
-        -- Load template
-        tmplResult <-
-            liftExceptT $
-                loadCfnTemplate
-                    (saTemplate sa)
-                    argsfilePath
-                    env
-                    (ImportConfig (Just (cfnEnv ctx)) remoteImports)
-        body <- liftMaybe "Failed to load template body" (trTemplateBody tmplResult)
-
-        -- Generate versioned location
-        let tmplPath = maybe "template.yaml" T.unpack (saTemplate sa)
-        (bucket, key) <-
-            liftEitherT $
-                generateVersionedLocation baseLocation body (T.pack tmplPath)
+        -- Approved location and rendered body (refuses URL or missing Template)
+        approved <- liftExceptT (approvedTemplateFor ctx sa argsfilePath)
+        ApprovedTemplate bucket key body <-
+            liftMaybe "ApprovedTemplateLocation is required in stack-args.yaml" approved
 
         let s3Loc = "s3://" <> bucket <> "/" <> key
 
@@ -89,7 +65,7 @@ templateApprovalRequest ctx sa _lintTmpl argsfilePath = do
                 pure 0
             else do
                 -- Upload pending template
-                let pendingKey = key <> ".pending"
+                let pendingKey = pendingKeyFor key
                     pendingLoc = "s3://" <> bucket <> "/" <> pendingKey
                 liftExceptT (uploadToS3 (cfnEnv ctx) bucket pendingKey body)
                     `prefixError` "Failed to upload pending template: "
@@ -126,11 +102,9 @@ templateApprovalReview ctx url contextLines = do
         (bucket, pendingKey) <- liftEitherT $ parseS3Url url
 
         -- Validate .pending suffix
-        unless (T.isSuffixOf ".pending" pendingKey) $
-            throwE "URL must end with .pending suffix"
+        approvedKey <- liftEitherT (approvedKeyFromPending pendingKey)
 
-        let approvedKey = T.dropEnd 8 pendingKey -- remove ".pending"
-            parentDir = case T.breakOnEnd "/" pendingKey of
+        let parentDir = case T.breakOnEnd "/" pendingKey of
                 ("", _) -> ""
                 (dir, _) -> T.dropEnd 1 dir
             latestKey =

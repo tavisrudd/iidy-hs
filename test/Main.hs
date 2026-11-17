@@ -3,6 +3,7 @@ module Main (main) where
 import Test.Tasty (defaultMain, testGroup)
 
 import Iidy.Cli.HelpTest qualified as HelpTest
+import Test.ApprovedTemplateTest (approvedTemplateTests)
 import Test.AwsLoaderTest (awsLoaderTests)
 import Test.CfnYamlEmitterTest (cfnYamlEmitterTests)
 import Test.ChangesetHelpersTest (changesetHelpersTests)
@@ -96,6 +97,7 @@ main = do
             , testGroup "AwsLoaders" awsLoaderTests
             , testGroup "GetImport" getImportTests
             , testGroup "MockAws" mockAwsTests
+            , testGroup "ApprovedTemplate" approvedTemplateTests
             , testGroup "Explain" explainTests
             , testGroup "Demo" demoTests
             , testGroup "Render" renderTests

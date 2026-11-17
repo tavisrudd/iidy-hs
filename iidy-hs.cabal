@@ -91,6 +91,7 @@ library
     Iidy.Cfn.CommandMetadata
     Iidy.Cfn.Context
     Iidy.Cfn.RequestBuilder
+    Iidy.Cfn.ApprovedTemplate
     Iidy.Cfn.S3Objects
     Iidy.Cfn.TemplateDiff
     Iidy.Cfn.TemplateHash
@@ -219,6 +220,7 @@ test-suite iidy-hs-test
     Test.ExplainTest
     Test.GetImportTest
     Test.RenderTest
+    Test.ApprovedTemplateTest
     Test.MockAws
     Test.MockAwsTest
     Test.MockCfnContext
