@@ -60,6 +60,12 @@ Rust), =notes/C35/=.
 
 Out of scope: sequence indentation (decided), key order, JSON output.
 
+Also for the rescope (C32 review, 2026-11-16): a tag with a sequence
+argument containing a mapping, such as =c: !Sub [a${B}, {B: x}]= followed
+by another key, prints a blank line after =- B: x=; Rust prints none. Not
+yet checked on a commit before C32, but the C32 change does not touch that
+path.
+
 Done when:
 - [ ] Floats keep a fractional part or exponent as Rust prints them
   (=1.0=, =100000.0=, and the Rust output for =1.5e300=, =-0.0=, =.inf=,

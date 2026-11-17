@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C32
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :CARD_PRIORITY: C
 :MODE:     CONTRACT
 :ORIGIN:   C26 2026-11-16: unresolved tags in plain imported documents print the normalised tag (!$include as !$, !$string as !$toYamlString, one-element sequence args unwrapped, mapping fields reordered); exact Rust output needs AstPreprocessingTag to keep the source spelling (Parser.hs, Ast.hs)
@@ -11,8 +11,21 @@
 :ID: org:01a1e6f2-1a65-77fc-a0bf-5be36756fa87
 :ADDED: [2026-11-16 Mon 17:39]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 21:37]--[2026-11-16 Mon 21:43] => 0:06
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 21:36]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 21:37]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a8048396e2b6e79f1
+- Clock-out [2026-11-16 Mon 21:43]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a8048396e2b6e79f1
+- Card state STARTED → DONE [2026-11-16 Mon 21:45]
+  Note: Landed b66effc, 88f01f8: unresolved !$ tags keep their written name and argument (WrittenTag); tag construction moved to Parser/Tags.hs; get-import keeps one-element sequence arguments as Rust does (emitter change accepted as supervisor's call); Sonnet review land, 0 defects
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -54,24 +67,85 @@ tag arguments (waits on Tavis's indentation decision); key order of
 imported mappings (C28).
 
 Done when:
-- [ ] =AstPreprocessingTag= keeps the written tag name and the raw argument
+- [X] =AstPreprocessingTag= keeps the written tag name and the raw argument
   node, and unresolved-tag output uses them.
-- [ ] Tests, recorded failing first, show the three spellings printed as
+- [X] Tests, recorded failing first, show the three spellings printed as
   Rust prints them (expected bytes from the Rust binary).
-- [ ] The three entries are removed from =DIVERGENCES.md=.
-- [ ] Every other test passes unchanged; build warning-free; commits name
+- [X] The three entries are removed from =DIVERGENCES.md=.
+- [X] Every other test passes unchanged; build warning-free; commits name
   C32.
 
 Stop and record if: the new field forces changes to resolution code beyond
 pattern-match updates, or the parse of any tag changes.
 
-* TODO Keep the written !$ tag name and argument in the AST for unresolved-tag output
+* DONE Keep the written !$ tag name and argument in the AST for unresolved-tag output
 :PROPERTIES:
 :ID: org:01a1e6f2-1a65-77fc-a0bf-5be08817ea58
 :ADDED: [2026-11-16 Mon 17:39]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 21:43] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a8048396e2b6e79f1
 :END:
 
 Reproduce the three spellings with both binaries and record the outputs.
 Add the written name and argument to the node in the parser, use them in
 =preprocessingTagParts=, add the failing tests first, then remove the
 =DIVERGENCES.md= entries.
+
+** Result (claude-C32)
+:PROPERTIES:
+:ID: org:01a1e7d0-e16a-7112-a99c-979ee971fa29
+:ADDED: [2026-11-16 Mon 21:43]
+:END:
+Rust output for the three spellings (=iidy get-import= on a local file) keeps
+the source form: =!$include x=, =!$string x=, =!$not= with the sequence, and
+mapping fields in source order. Failing run on the branch base: the new
+test "alias names, one-element sequence arguments and mapping field order are
+kept" printed =!$ x=, =!$toYamlString x=, =!$not true= and the parser's
+field order. The node now carries =Maybe WrittenTag= (name and raw argument);
+tags built without a parse fall back to the canonical form. Tag construction
+moved to =src/Iidy/Yaml/Parser/Tags.hs= first (Parser.hs was over the
+guideline). One change outside the listed paths: =emitTagArgument= in
+=src/Iidy/Yaml/Emitter.hs= collapsed a one-element sequence for every style;
+it now does so only for the =render= style (=SeqIndented=), as Rust's render
+does and serde_yaml (get-import) does not. The dash indentation of a sequence
+tag argument is unchanged (Tavis's decision pending); the test expects the
+current two-column indent for =c=.
+
+** Review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e7d2-5450-7311-88ca-c18cf109fbe0
+:ADDED: [2026-11-16 Mon 21:44]
+:END:
+Verdicts: b66effc land. 88f01f8 land.
+
+- b66effc is a pure move: every line removed from Parser.hs is present in
+  Parser/Tags.hs; the only additions are the module header, imports and
+  =classifyLocalTag= in the export list.
+- 88f01f8 regression test: with =preprocessingTagParts= forced to ignore the
+  written form, the new case fails (prints =!$ x=, =!$toYamlString x=,
+  =!$not true=, parser field order) and the rest of GetImport passes.
+  Restored; full suite passes on the branch.
+- Emitter change: only =SeqFlush= (used only by =GetImport.hs=) changes;
+  =render= and every other =emitYaml= caller use =SeqIndented=, so their
+  bytes are unchanged (full suite green). Rust =get-import= on =!Ref [x]=,
+  =!GetAZs [""]=, =!$parseYaml ["a: 1"]=, =!$string [x]=, =!$not [true]=
+  keeps the sequence; the branch binary now does too, apart from the known
+  dash indent (pending decision).
+- Resolution: the field is ignored by =resolveAst= and read only in
+  =rawToOValue= (KeepPreprocTags). The parse functions only lost the unused
+  =meta= argument and return =PreprocessingTag=; no tag's parse changed.
+- Cost: =wtArgument= is the same heap node the typed tag holds (or its
+  parent), so the extra is one small record per tag, no copy.
+  Derived =Eq=/=Show= now traverse a tag's argument twice per level (cost
+  doubles per nesting level of tags, tests only).
+- Modules: Parser 239, Parser/Tags 307, Ast 351, Emitter 304 lines. No
+  duplication found.
+
+Defects: none.
+
+Pre-existing (not this card): =get-import= of =c: !Sub [a${B}, {B: x}]=
+followed by another key prints a blank line after =- B: x= where Rust prints
+none (two-element sequence, so the changed emitter line is not involved).
