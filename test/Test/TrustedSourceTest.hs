@@ -42,6 +42,8 @@ validPrefixes =
     , "s3:bucket/"
     , "https://t.example.com/"
     , "http://t.example.com:8080/shared/"
+    , "https://t.example.com:80/"
+    , "http://t.example.com:443/"
     , "ssm:/app/"
     , "ssm-path:/app/"
     , "cfn:export/"
@@ -52,6 +54,9 @@ invalidPrefixes :: [(Text, String)]
 invalidPrefixes =
     [ ("s3://bucket", "no trailing /")
     , ("https://t.example.com", "no trailing /")
+    , ("http://t.example.com:80/", "explicit default port")
+    , ("https://t.example.com:443/", "explicit default port")
+    , ("http://[::1]:80/", "explicit default port")
     , ("s3:///", "no bucket")
     , ("s3:/", "no bucket in the short form")
     , ("https:///", "no host")
@@ -82,6 +87,11 @@ rejectCases =
         assertBool "expected a validation error" (isLeft (parseTrustedSource p))
     | (p, why) <- invalidPrefixes
     ]
+        <> [ testCase "the default-port error says to drop the port" $
+                case parseTrustedSource "https://t.example.com:443/" of
+                    Left err -> assertBool (T.unpack err) ("default port" `T.isInfixOf` err && ":443" `T.isInfixOf` err)
+                    Right _ok -> assertFailure "expected a validation error"
+           ]
 
 ------------------------------------------------------------------------
 -- Trust decision

@@ -314,6 +314,7 @@ trustedSourceList (TrustedSources ts) = ts
 {- | Validate a trusted-source prefix. It must start with a remote scheme
 (@s3://@, @s3:@, @http://@, @https://@, @ssm:@, @ssm-path:@ or @cfn:@,
 lower case), end in @/@, name a bucket or host for the S3 and HTTP forms,
+give no explicit default port (@:80@ for @http:@, @:443@ for @https:@),
 and contain no @.@ or @..@ path segment. Matching is a literal,
 case-sensitive text prefix, so @s3:b/@ and @s3://b/@ are listed
 separately.
@@ -324,15 +325,26 @@ parseTrustedSource p
         bad ("must start with one of " <> T.intercalate ", " remoteSchemes)
     | not ("/" `T.isSuffixOf` p) = bad "must end in /"
     | not namesAuthority = bad "must name a bucket or host"
+    | Just defaultPort <- explicitDefaultPort =
+        bad
+            ( "drop the default port "
+                <> defaultPort
+                <> " (request URLs leave it out, so no location would match)"
+            )
     | any isDotSegment (T.splitOn "/" p) = bad "must not contain . or .. path segments"
     | otherwise = Right (TrustedSource p)
   where
     bad :: Text -> Either Text TrustedSource
     bad why = Left ("invalid trusted import source '" <> p <> "': " <> why)
+    authority :: Maybe Text
+    authority = (\scheme -> T.takeWhile (/= '/') (T.drop (T.length scheme) p)) <$> List.find (`T.isPrefixOf` p) authoritySchemes
     namesAuthority :: Bool
-    namesAuthority = case List.find (`T.isPrefixOf` p) authoritySchemes of
-        Just scheme -> not (T.null (T.takeWhile (/= '/') (T.drop (T.length scheme) p)))
-        Nothing -> True
+    namesAuthority = maybe True (not . T.null) authority
+    explicitDefaultPort :: Maybe Text
+    explicitDefaultPort =
+        List.find
+            (\defaultPort -> maybe False (defaultPort `T.isSuffixOf`) authority)
+            [defaultPort | (scheme, defaultPort) <- [("http://", ":80"), ("https://", ":443")], scheme `T.isPrefixOf` p]
 
 -- | Schemes a trusted-source prefix may use. Longer spellings come first.
 remoteSchemes :: [Text]
