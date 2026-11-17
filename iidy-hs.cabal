@@ -66,6 +66,7 @@ library
     Iidy.Output.Color
     Iidy.Output.Theme
     Iidy.Output.Terminal
+    Iidy.Output.Sanitize
     Iidy.Output.Status
     Iidy.Output.Spinner
     Iidy.Output.Manager
@@ -219,6 +220,7 @@ test-suite iidy-hs-test
     Test.RendererTest
     Test.JsonRendererTest
     Test.TerminalTest
+    Test.SanitizeTest
     Test.ThemeVariantTest
     Test.RendererOutputTest
     Test.IntegrationTest

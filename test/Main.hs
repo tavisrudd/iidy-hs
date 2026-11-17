@@ -53,6 +53,7 @@ import Test.RequestBuilderTest (requestBuilderTests)
 import Test.ResolverTest (resolverTests)
 import Test.ResourceLimitsTest (resourceLimitsTests)
 import Test.S3ObjectsTest (s3ObjectsTests)
+import Test.SanitizeTest (sanitizeTests)
 import Test.SecurityControlsTest (securityControlsTests)
 import Test.SpecConformanceTest (specConformanceTests)
 import Test.StackArgsBootstrapTest (stackArgsBootstrapTests)
@@ -102,6 +103,7 @@ main = do
             , testGroup "JsonRenderer" jsonRendererTests
             , testGroup "ThemeVariants" themeVariantTests
             , terminalTests
+            , sanitizeTests
             , testGroup "RendererOutput" rendererOutputTests
             , testGroup "Integration" integrationTests
             , testGroup "Phase14Fixes" phase14FixTests
