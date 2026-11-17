@@ -458,3 +458,23 @@ The values are named constants in `Iidy.Constants`.
 - **HTTP import total time**: 60 seconds from request to the end of the
   body, on top of the existing 30 second wait for the response headers and
   the 10 MB body cap.
+
+## Control Characters in Terminal Output
+
+**Cause**: Intentional hardening in Haskell (the Rust original has no such filter).
+
+The interactive renderer escapes control characters in text that comes from
+outside the tool (template text and diffs, AWS strings such as event reasons,
+tags, parameters and output values, stack names, error text) before it adds
+its own colour codes or computes column widths. Each escaped character is
+shown as `\uNNNN` (four lower-case hex digits, the spelling Rust's YAML
+emitter uses for control characters). Escaped: C0 controls except newline and
+tab, DEL, C1 controls (U+0080-U+009F), U+2028, U+2029, the bidirectional
+controls U+202A-U+202E and U+2066-U+2069, and a carriage return not directly
+followed by a newline. Rust prints such text unfiltered.
+
+Exempt: the two document outputs, `OdRawOutput` and the template body of
+`OdStackTemplate` (what `render`, `get-import` and `get-stack-template`
+print for redirecting into files), keep their bytes exact. The JSON renderer
+already escapes control characters. Error text printed outside the renderer
+(for example `dieTxt`) is not yet covered.

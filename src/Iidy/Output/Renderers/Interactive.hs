@@ -50,9 +50,9 @@ module Iidy.Output.Renderers.Interactive (
     renderOutputData,
 ) where
 
-import Data.Text.IO qualified as TIO
 import Iidy.Output.Renderers.Interactive.Sections
 import Iidy.Output.Renderers.Interactive.Types
+import Iidy.Output.Sanitize (escapeOutputData)
 import Iidy.Output.Types
 
 ------------------------------------------------------------------------
@@ -60,7 +60,11 @@ import Iidy.Output.Types
 ------------------------------------------------------------------------
 
 renderOutputData :: InteractiveRenderer -> OutputData -> IO ()
-renderOutputData r od = do
+renderOutputData r rawOd = do
+    -- Escape control characters in text from outside the tool once, before any
+    -- rendering, so colour codes are added to (and widths computed from) the
+    -- visible text. Raw document output is exempt (see "Iidy.Output.Sanitize").
+    let od = escapeOutputData rawOd
     -- Clear spinner before rendering any output that isn't spinner-managed
     case od of
         OdNewStackEvents _ -> pure () -- manages its own spinner lifecycle
@@ -94,4 +98,4 @@ renderOutputData r od = do
         OdTemplateDiff diff -> renderTemplateDiff r diff
         OdApprovalResult res -> renderApprovalResult r res
         OdPollingStarted msg -> startSpinner r msg
-        OdRawOutput txt -> TIO.putStr txt
+        OdRawOutput txt -> rPutStr r txt

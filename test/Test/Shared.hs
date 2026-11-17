@@ -6,6 +6,7 @@ module Test.Shared (
     noAwsSettings,
     mkColoredRenderer,
     mkPlainRenderer,
+    renderCaptured,
     mkEvent,
     jsonLookup,
     isObject,
@@ -61,23 +62,28 @@ import Control.Concurrent.STM (newTVarIO)
 import Data.Aeson (Value (..))
 import Data.Aeson.Key qualified as AesonKey
 import Data.Aeson.KeyMap qualified as KM
+import Data.ByteString qualified as BS
 import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
+import Data.Text.Encoding qualified as TE
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..))
-import System.IO (stderr, stdout)
+import System.IO (Handle, hClose, hSetEncoding, stderr, stdout, utf8)
+import System.IO.Temp (withSystemTempFile)
 
 import Iidy.Aws.ClientReqToken (TokenInfo (..), TokenSource (..))
 import Iidy.Aws.CredentialSource (AwsSettings (..))
 import Iidy.Cfn.Status (StackStatus (..))
 import Iidy.Cfn.Types (StackChangeType (..))
 import Iidy.Cli (GlobalOpts (..))
-import Iidy.Output.Color (darkTheme, noColorTheme)
+import Iidy.Output.Color (IidyTheme, darkTheme, noColorTheme)
 import Iidy.Output.Renderers.Interactive (
+    InteractiveOptions,
     InteractiveRenderer (..),
     defaultInteractiveOptions,
     plainInteractiveOptions,
+    renderOutputData,
  )
 import Iidy.Output.Types
 import Iidy.Types (ColorChoice (..), Theme (..))
@@ -103,7 +109,15 @@ isObject _ = False
 
 -- | Create a colored renderer for testing (bypasses terminal detection).
 mkColoredRenderer :: IO InteractiveRenderer
-mkColoredRenderer = do
+mkColoredRenderer = mkRendererOn stdout stderr darkTheme defaultInteractiveOptions
+
+-- | Create a plain renderer for testing (no colors, no spinners).
+mkPlainRenderer :: IO InteractiveRenderer
+mkPlainRenderer = mkRendererOn stdout stderr noColorTheme plainInteractiveOptions
+
+-- | A renderer (not a terminal) writing to the given stdout and stderr handles.
+mkRendererOn :: Handle -> Handle -> IidyTheme -> InteractiveOptions -> IO InteractiveRenderer
+mkRendererOn out err theme opts = do
     hasRendered <- newIORef False
     spinnerRef <- newTVarIO Nothing
     spinnerThreadRef <- newTVarIO Nothing
@@ -111,10 +125,10 @@ mkColoredRenderer = do
     timingThreadRef <- newTVarIO Nothing
     pure
         InteractiveRenderer
-            { irStdout = stdout
-            , irStderr = stderr
-            , irTheme = darkTheme
-            , irOptions = defaultInteractiveOptions
+            { irStdout = out
+            , irStderr = err
+            , irTheme = theme
+            , irOptions = opts
             , irTerminalWidth = 130
             , irIsTty = False
             , irHasRenderedContent = hasRendered
@@ -124,28 +138,20 @@ mkColoredRenderer = do
             , irTimingThread = timingThreadRef
             }
 
--- | Create a plain renderer for testing (no colors, no spinners).
-mkPlainRenderer :: IO InteractiveRenderer
-mkPlainRenderer = do
-    hasRendered <- newIORef False
-    spinnerRef <- newTVarIO Nothing
-    spinnerThreadRef <- newTVarIO Nothing
-    timingStateRef <- newTVarIO Nothing
-    timingThreadRef <- newTVarIO Nothing
-    pure
-        InteractiveRenderer
-            { irStdout = stdout
-            , irStderr = stderr
-            , irTheme = noColorTheme
-            , irOptions = plainInteractiveOptions
-            , irTerminalWidth = 130
-            , irIsTty = False
-            , irHasRenderedContent = hasRendered
-            , irSpinner = spinnerRef
-            , irSpinnerThread = spinnerThreadRef
-            , irTimingState = timingStateRef
-            , irTimingThread = timingThreadRef
-            }
+{- | Render the given output data with the interactive renderer and return
+the text it wrote to stdout and stderr (both go to one handle). The flag selects colour (True) or plain (False).
+-}
+renderCaptured :: Bool -> [OutputData] -> IO Text
+renderCaptured colored ods =
+    withSystemTempFile "iidy-render.txt" $ \path h -> do
+        hSetEncoding h utf8
+        r <-
+            if colored
+                then mkRendererOn h h darkTheme defaultInteractiveOptions
+                else mkRendererOn h h noColorTheme plainInteractiveOptions
+        mapM_ (renderOutputData r) ods
+        hClose h
+        TE.decodeUtf8 <$> BS.readFile path
 
 -- | Create a test StackEvent with the given fields.
 mkEvent :: Text -> Text -> Text -> StackStatus -> Maybe UTCTime -> StackEvent

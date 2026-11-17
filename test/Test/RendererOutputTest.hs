@@ -1,5 +1,6 @@
 module Test.RendererOutputTest (rendererOutputTests) where
 
+import Control.Monad (unless)
 import Data.Aeson (Value (..))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as BL
@@ -11,7 +12,7 @@ import Data.Text.Encoding qualified as TE
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..))
 import Data.Vector qualified as V
-import Test.Tasty (TestTree)
+import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
 import Iidy.Cfn.Status (StackStatus (..))
@@ -142,4 +143,97 @@ rendererOutputTests =
                     Just other -> assertFailure ("Expected object in array, got: " <> show other)
                     Nothing -> assertFailure "expected at least one element"
             Just other -> assertFailure ("Expected array, got: " <> show other)
+    , untrustedTextTests
     ]
+
+------------------------------------------------------------------------
+-- Control characters in untrusted text (card C18)
+------------------------------------------------------------------------
+
+-- | Untrusted text: a terminal erase-line sequence and a bare carriage return.
+payload :: Text
+payload = "X\ESC[2Ky\rZ"
+
+-- | How 'payload' must appear once escaped.
+payloadVisible :: Text
+payloadVisible = "X\\u001b[2Ky\\u000dZ"
+
+failedEvent :: StackEventWithTiming
+failedEvent =
+    testEventWithTiming
+        { sewEvent =
+            testStackEvent
+                { seResourceStatus = CreateFailed
+                , seResourceStatusReason = Just payload
+                }
+        }
+
+-- | One sink per family; each carries 'payload' in the named place.
+untrustedSinks :: [(String, OutputData)]
+untrustedSinks =
+    [ ("template diff", OdTemplateDiff testTemplateDiff{tdDiffOutput = "+ " <> payload <> "\n"})
+    , ("event status reason", OdStackEvents testStackEventsDisplay{sedEvents = [failedEvent]})
+    , ("event section title", OdStackEvents testStackEventsDisplay{sedTitle = payload})
+    , ("stack tag value", OdStackDefinition testStackDef{sdTags = Map.fromList [("Owner", payload)]} False)
+    , ("stack tag key", OdStackDefinition testStackDef{sdTags = Map.fromList [(payload, "v")]} False)
+    , ("stack parameter value", OdStackDefinition testStackDef{sdParameters = Map.fromList [("P", payload)]} False)
+    , ("stack name", OdStackDefinition testStackDef{sdName = payload} False)
+    , ("stack description", OdStackDefinition testStackDef{sdDescription = Just payload} False)
+    , ("stack output value", OdStackContents (withOutput testStackContents "BucketName" payload))
+    , ("stack output key", OdStackContents (withOutput testStackContents payload "v"))
+    , ("error message", OdError testErrorInfo{eiMessage = payload})
+    , ("error details", OdError testErrorInfo{eiErrorDetails = ErrorGeneric (Just payload)})
+    , ("error suggestion", OdError testErrorInfo{eiSuggestions = [payload]})
+    , ("status update", OdStatusUpdate testStatusUpdate{suMessage = payload})
+    , ("command result message", OdCommandResult testCommandResult{crMessage = Just payload})
+    , ("stack list name", OdStackList testStackListDisplay{sldStacks = [testStackListEntry{sleStackName = payload}]})
+    , ("stack list tag", OdStackList testStackListDisplay{sldStacks = [testStackListEntry{sleTags = Map.fromList [("k", payload)]}]})
+    , ("changeset next step", OdChangeSetResult testChangeSetResult{csrNextSteps = [payload]})
+    , ("drift actual value", OdStackDrift (withActual testStackDrift payload))
+    , ("template stderr line", OdStackTemplate testStackTemplate{stStderrLines = [payload]})
+    , ("confirmation message", OdConfirmationPrompt testConfirmationRequest{cfrMessage = payload})
+    ]
+  where
+    withOutput c k v =
+        c{scOutputs = [StackOutputInfo{soiOutputKey = k, soiOutputValue = v, soiDescription = Nothing, soiExportName = Nothing}]}
+    withActual d v =
+        d{sdrDriftedResources = [dr{drPropertyDifferences = [pd{pdActualValue = Just v} | pd <- drPropertyDifferences dr]} | dr <- sdrDriftedResources d]}
+
+untrustedTextTests :: TestTree
+untrustedTextTests =
+    testGroup
+        "untrusted text is escaped"
+        ( concatMap sinkCases untrustedSinks
+            <> [ testCase "columns are aligned on the visible escaped text" $ do
+                    let ev rtype = testEventWithTiming{sewEvent = testStackEvent{seResourceType = rtype}}
+                        display = testStackEventsDisplay{sedEvents = [ev payload, ev "AWS::S3::Bucket"]}
+                    out <- renderCaptured False [OdStackEvents display]
+                    -- the escaped payload is 18 characters wide, so the other type is padded to 18
+                    assertBool ("aligned in: " <> show out) ("AWS::S3::Bucket    MyBucket" `T.isInfixOf` out)
+               , testCase "OdRawOutput passes through unchanged" $ do
+                    out <- renderCaptured True [OdRawOutput rawWithControls]
+                    assertEqual "raw bytes" rawWithControls out
+               , testCase "OdStackTemplate body passes through unchanged" $ do
+                    let tmpl = testStackTemplate{stStderrLines = [], stTemplateBody = rawWithControls}
+                    out <- renderCaptured True [OdStackTemplate tmpl]
+                    assertEqual "template body" (rawWithControls <> "\n") out
+               ]
+        )
+  where
+    rawWithControls = "a: \ESC[2K\rb\x202e\&c\n"
+    sinkCases (name, od) =
+        [ testCase (name <> " (colored)") $ do
+            out <- renderCaptured True [od]
+            assertEscaped out
+            -- these two sinks are written without the renderer's colour
+            unless (name `elem` ["template stderr line", "confirmation message"]) $
+                assertBool "renderer's own colour codes remain" ("\ESC[" `T.isInfixOf` out)
+        , testCase (name <> " (plain)") $ do
+            out <- renderCaptured False [od]
+            assertEscaped out
+            assertBool "no raw ESC at all when colour is off" (not ("\ESC" `T.isInfixOf` out))
+        ]
+    assertEscaped out = do
+        assertBool ("escaped form present in: " <> show out) (payloadVisible `T.isInfixOf` out)
+        assertBool "no raw ESC[2K from the data" (not ("\ESC[2K" `T.isInfixOf` out))
+        assertBool "no raw carriage return" (not ("\r" `T.isInfixOf` out))
