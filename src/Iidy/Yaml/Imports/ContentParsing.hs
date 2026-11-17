@@ -33,7 +33,7 @@ import Data.Text.Encoding qualified as TE
 
 import Iidy.Yaml.Imports.Types (ImportError (..))
 import Iidy.Yaml.Parser (parseYaml)
-import Iidy.Yaml.Resolution.Resolver (astToValueRaw)
+import Iidy.Yaml.Resolution.Resolver (astToValueKeepingTags)
 
 ------------------------------------------------------------------------
 -- Core parsers
@@ -45,7 +45,7 @@ Returns @Left errorMessage@ on parse failure.
 parseYamlContent :: Text -> Either Text Value
 parseYamlContent content =
     case parseYaml (BL.fromStrict (TE.encodeUtf8 content)) "<import>" of
-        Right ast -> Right (astToValueRaw ast)
+        Right ast -> Right (astToValueKeepingTags ast)
         Left err -> Left (T.pack (show err))
 
 {- | Parse JSON raw bytes to a 'Value'.

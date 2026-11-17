@@ -1,6 +1,7 @@
 module Iidy.Yaml.Resolution.Resolver (
     resolveAst,
     astToValueRaw,
+    astToValueKeepingTags,
     mergeOObjects,
     traversePathO,
     ResolveError (..),
@@ -912,31 +913,46 @@ mergeExpandParams defs provided = List.foldl' addParam provided defs
 astToValueRaw :: YamlAst -> Value
 astToValueRaw = toValue . astToOValueRaw
 
+{- | Like 'astToValueRaw', but a preprocessing tag stays a tag (the one-key
+object convention the emitter prints, as for CloudFormation tags) instead of
+becoming the string @!$escaped@. Used for plain imported documents, which Rust
+loads without resolving their tags.
+-}
+astToValueKeepingTags :: YamlAst -> Value
+astToValueKeepingTags = toValue . rawToOValue KeepPreprocTags
+
+-- | What 'rawToOValue' does with a preprocessing tag.
+data PreprocTagMode = EscapePreprocTags | KeepPreprocTags
+
 {- | Raw AST to 'OValue' with mapping keys in source order. A duplicate key
 keeps its first position and takes the last value.
 -}
 astToOValueRaw :: YamlAst -> OValue
-astToOValueRaw = \case
-    AstNull _ -> ONull
-    AstBool b _ -> OBool b
-    AstNumber n _ -> ONumber n
-    AstPlainString s _ -> OString s
-    AstTemplatedString s _ -> OString s
-    AstSequence items _ -> OArray $ map astToOValueRaw items
-    AstMapping pairs _ ->
-        OObject $
-            List.foldl'
-                (\acc (k, v) -> insertO (rawKeyText k) (astToOValueRaw v) acc)
-                []
-                pairs
-    AstPreprocessingTag _ _ -> OString "!$escaped"
-    AstCloudFormationTag tag _ ->
-        let (name, inner) = cfnTagParts tag
-         in OObject [(name, astToOValueRaw inner)]
-    AstUnknownTag (UnknownTag name inner) _ ->
-        OObject [(name, astToOValueRaw inner)]
-    AstImportedDocument (ImportedDocumentNode _ _ content _) _ ->
-        astToOValueRaw content
+astToOValueRaw = rawToOValue EscapePreprocTags
+
+rawToOValue :: PreprocTagMode -> YamlAst -> OValue
+rawToOValue mode = go
+  where
+    go = \case
+        AstNull _ -> ONull
+        AstBool b _ -> OBool b
+        AstNumber n _ -> ONumber n
+        AstPlainString s _ -> OString s
+        AstTemplatedString s _ -> OString s
+        AstSequence items _ -> OArray $ map go items
+        AstMapping pairs _ ->
+            OObject $
+                List.foldl'
+                    (\acc (k, v) -> insertO (rawKeyText k) (go v) acc)
+                    []
+                    pairs
+        AstPreprocessingTag tag meta -> case mode of
+            EscapePreprocTags -> OString "!$escaped"
+            KeepPreprocTags -> tagged (preprocessingTagParts meta tag)
+        AstCloudFormationTag tag _ -> tagged (cfnTagParts tag)
+        AstUnknownTag (UnknownTag name inner) _ -> tagged (name, inner)
+        AstImportedDocument (ImportedDocumentNode _ _ content _) _ -> go content
+    tagged (name, inner) = OObject [(name, go inner)]
 
 rawKeyText :: YamlAst -> Text
 rawKeyText (AstPlainString t _) = t

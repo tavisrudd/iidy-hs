@@ -13,6 +13,8 @@ module Test.Shared (
     collectRawOutput,
     docFixture,
     nestedSeqFixture,
+    preprocTagsFixture,
+    preprocTagsImporterFixture,
     listFixture,
 
     -- * Test data builders
@@ -565,3 +567,11 @@ listFixture = "test-fixtures/get-import/list.yaml"
 -- | get-import / render fixture: sequences nested in mappings, mappings and sequences.
 nestedSeqFixture :: Text
 nestedSeqFixture = "test-fixtures/get-import/nested-seq.yaml"
+
+-- | get-import fixture: a plain document holding unresolved @!$@ tags with scalar and mapping arguments.
+preprocTagsFixture :: Text
+preprocTagsFixture = "test-fixtures/get-import/preproc-tags.yaml"
+
+-- | render fixture: imports plain documents with tag arguments of every shape (scalar, mapping, sequence), so the tags must survive the import.
+preprocTagsImporterFixture :: Text
+preprocTagsImporterFixture = "test-fixtures/get-import/preproc-tags-importer.yaml"

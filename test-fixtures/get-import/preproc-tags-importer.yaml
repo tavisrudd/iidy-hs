@@ -1,0 +1,5 @@
+$imports:
+  plain: preproc-tags.yaml
+  seqdoc: preproc-tags-seq.yaml
+out: !$ plain
+seq: !$ seqdoc

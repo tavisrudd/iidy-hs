@@ -17,7 +17,7 @@ import Iidy.Cli (GetImportArgs (..), RenderFormat (..))
 import Iidy.GetImport (needsAwsEnv, runGetImportWith)
 import Iidy.Yaml.Imports.Types (ImportType (..), RemoteImports (..))
 import Test.MockAws (MockAws (..), newMockAws)
-import Test.Shared (collectRawOutput, docFixture, listFixture, nestedSeqFixture, testGlobalOpts)
+import Test.Shared (collectRawOutput, docFixture, listFixture, nestedSeqFixture, preprocTagsFixture, testGlobalOpts)
 
 getImportTests :: [TestTree]
 getImportTests =
@@ -26,6 +26,7 @@ getImportTests =
     , testGroup "env construction failures" failureTests
     , testGroup "query and output layout" outputTests
     , testGroup "serde_yaml sequence layout" sequenceLayoutTests
+    , testGroup "unresolved tags in plain documents" preprocTagTests
     , testCase "needsAwsEnv classifies every import type" needsAwsEnvTable
     ]
 
@@ -227,4 +228,27 @@ sequenceLayoutTests =
     [ testCase "yaml: dashes sit at the parent key's indent" $
         runFormat RenderYaml Nothing nestedSeqFixture
             >>= (@?= RunResult 0 [nestedSeqRustYaml] 0)
+    ]
+
+------------------------------------------------------------------------
+-- Unresolved !$ tags in a plain imported document (Rust keeps them)
+------------------------------------------------------------------------
+
+-- | Bytes printed by the Rust binary for 'preprocTagsFixture' (C26).
+preprocTagsRustYaml :: Text
+preprocTagsRustYaml =
+    T.unlines
+        [ "a: !$ secret"
+        , "b: !$map"
+        , "  items:"
+        , "  - 1"
+        , "  - 2"
+        , "  template: '{{item}}'"
+        ]
+
+preprocTagTests :: [TestTree]
+preprocTagTests =
+    [ testCase "yaml: scalar and mapping tag arguments are kept" $
+        runFormat RenderYaml Nothing preprocTagsFixture
+            >>= (@?= RunResult 0 [preprocTagsRustYaml] 0)
     ]

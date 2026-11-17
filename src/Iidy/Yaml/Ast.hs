@@ -31,6 +31,7 @@ module Iidy.Yaml.Ast (
     ParseJsonTag (..),
     EscapeTag (..),
     ExpandTag (..),
+    preprocessingTagParts,
 
     -- * Other node types
     UnknownTag (..),
@@ -38,6 +39,8 @@ module Iidy.Yaml.Ast (
     ImportMetadata (..),
 ) where
 
+import Data.Bifunctor (first)
+import Data.Maybe (maybeToList)
 import Data.Scientific (Scientific)
 import Data.Text (Text)
 import Data.Time (UTCTime)
@@ -261,6 +264,50 @@ data ExpandTag = ExpandTag
     , expandParams :: !YamlAst
     }
     deriving stock (Show, Eq)
+
+{- | The tag name and argument a 'PreprocessingTag' was parsed from, with the
+argument rebuilt in the shape the parser accepts (a scalar, a sequence or a
+mapping with the tag's field names). The parser normalises some spellings, so
+the result is the canonical form: aliases (@!$include@, @!$string@) give the
+canonical name, and a one-element sequence argument to a single-argument tag
+is given without the sequence. Every node of the result carries the tag's own
+'SrcMeta'.
+-}
+preprocessingTagParts :: SrcMeta -> PreprocessingTag -> (Text, YamlAst)
+preprocessingTagParts meta = \case
+    PpVarLookup (VarLookupTag path query jmes) -> case jmes of
+        Just j -> ("!$", fields [("path", Just (str path)), ("jmespath", Just (str j))])
+        Nothing -> ("!$", str (maybe path (\q -> path <> "?" <> q) query))
+    PpIf (IfTag test thenV elseV) ->
+        ("!$if", fields [("test", Just test), ("then", Just thenV), ("else", elseV)])
+    PpMap (MapTag items templ var filt) -> ("!$map", mapLike items templ var filt)
+    PpMerge (MergeTag srcs) -> ("!$merge", AstSequence srcs meta)
+    PpConcat (ConcatTag srcs) -> ("!$concat", AstSequence srcs meta)
+    PpLet (LetTag bindings expr) ->
+        ("!$let", AstMapping (map (first str) bindings ++ [(str "in", expr)]) meta)
+    PpEq (EqTag a b) -> ("!$eq", AstSequence [a, b] meta)
+    PpNot (NotTag e) -> ("!$not", e)
+    PpSplit (SplitTag d s) -> ("!$split", AstSequence [d, s] meta)
+    PpJoin (JoinTag d a) -> ("!$join", AstSequence [d, a] meta)
+    PpConcatMap (ConcatMapTag items templ var filt) -> ("!$concatMap", mapLike items templ var filt)
+    PpMergeMap (MergeMapTag items templ var) -> ("!$mergeMap", mapLike items templ var Nothing)
+    PpMapListToHash (MapListToHashTag items templ var filt) -> ("!$mapListToHash", mapLike items templ var filt)
+    PpMapValues (MapValuesTag items templ var) -> ("!$mapValues", mapLike items templ var Nothing)
+    PpGroupBy (GroupByTag items key var templ) ->
+        ("!$groupBy", fields [("items", Just items), ("key", Just key), ("var", str <$> var), ("template", templ)])
+    PpFromPairs (FromPairsTag e) -> ("!$fromPairs", e)
+    PpToYamlString (ToYamlStringTag e) -> ("!$toYamlString", e)
+    PpParseYaml (ParseYamlTag e) -> ("!$parseYaml", e)
+    PpToJsonString (ToJsonStringTag e) -> ("!$toJsonString", e)
+    PpParseJson (ParseJsonTag e) -> ("!$parseJson", e)
+    PpEscape (EscapeTag e) -> ("!$escape", e)
+    PpExpand (ExpandTag templ params) ->
+        ("!$expand", fields [("template", Just templ), ("params", Just params)])
+  where
+    str t = AstPlainString t meta
+    fields kvs = AstMapping [(str k, v) | (k, mv) <- kvs, v <- maybeToList mv] meta
+    mapLike items templ var filt =
+        fields [("items", Just items), ("template", Just templ), ("var", str <$> var), ("filter", filt)]
 
 ------------------------------------------------------------------------
 -- Other AST node types

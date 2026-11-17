@@ -1,0 +1,4 @@
+a: !$ secret
+b: !$map
+  items: [1, 2]
+  template: "{{item}}"

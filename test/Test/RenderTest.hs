@@ -13,7 +13,7 @@ import Test.Tasty.HUnit (testCase, (@?=))
 import Iidy.Cli (RenderArgs (..), RenderFormat (..))
 import Iidy.Render (runRender)
 import Iidy.Types (YamlSpec (..))
-import Test.Shared (collectRawOutput, docFixture, listFixture, nestedSeqFixture, testGlobalOpts)
+import Test.Shared (collectRawOutput, docFixture, listFixture, nestedSeqFixture, preprocTagsImporterFixture, testGlobalOpts)
 
 -- | Render a fixture to stdout as JSON, returning exit code and raw output.
 renderJson :: Text -> IO (Int, [Text])
@@ -49,6 +49,8 @@ renderTests =
             >>= (@?= (0, ["{\n  \"l\": [\n    \"x\",\n    \"y\"\n  ]\n}\n"]))
     , testCase "render --format yaml: sequences stay indented under their key" $
         renderAs RenderYaml nestedSeqFixture >>= (@?= (0, [nestedSeqRenderYaml]))
+    , testCase "render --format yaml: an imported plain document keeps its !$ tags" $
+        renderAs RenderYaml preprocTagsImporterFixture >>= (@?= (0, [preprocTagsRenderYaml]))
     ]
 
 -- | Bytes printed by the Rust binary's @render@ for 'nestedSeqFixture' (C25).
@@ -79,4 +81,22 @@ nestedSeqRenderYaml =
         , "top:"
         , "  - u"
         , "  - v"
+        ]
+
+-- | Bytes printed by the Rust binary's @render@ for 'preprocTagsImporterFixture' (C26).
+preprocTagsRenderYaml :: Text
+preprocTagsRenderYaml =
+    T.unlines
+        [ "out:"
+        , "  a: !$ secret"
+        , "  b: !$map"
+        , "    items:"
+        , "      - 1"
+        , "      - 2"
+        , "    template: '{{item}}'"
+        , "seq:"
+        , "  c: !$join"
+        , "    - ','"
+        , "    - - a"
+        , "      - b"
         ]
