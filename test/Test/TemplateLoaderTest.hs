@@ -303,24 +303,61 @@ failureTests =
                 assertBool
                     "error mentions 'render:'"
                     ("render:" `T.isInfixOf` err)
-    , testCase "missing file treated as inline content (not an error)" $ do
-        -- A non-existent file path that doesn't contain $imports: is treated as
-        -- inline template content, not as a missing-file error.
+    , testCase "missing path returns Left naming the path" $ do
         result <-
             loadCfnTemplate
-                (Just "nonexistent-file-as-inline-content")
+                (Just "no-such-dir/missing.yaml")
                 Nothing
                 "dev"
                 defaultImportCfg
-        case result of
-            Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
-            Right tr ->
-                trTemplateBody tr @?= Just "nonexistent-file-as-inline-content"
+        assertMissingPath "no-such-dir/missing.yaml" result
+    , testCase "missing bare word returns Left naming the path" $ do
+        result <-
+            loadCfnTemplate
+                (Just "missing-template")
+                Nothing
+                "dev"
+                defaultImportCfg
+        assertMissingPath "missing-template" result
+    , testCase "missing path resolves against the argsfile directory" $ do
+        result <-
+            loadCfnTemplate
+                (Just "missing-template")
+                (Just "some-dir/stack-args.yaml")
+                "dev"
+                defaultImportCfg
+        assertMissingPath "some-dir/missing-template" result
+    , testCase "inline JSON object is used as the body" $
+        assertInlineBody "{\"Resources\": {}}"
+    , testCase "inline JSON array is used as the body" $
+        assertInlineBody "[1, 2]"
+    , testCase "inline body with leading whitespace before a brace" $
+        assertInlineBody "  {\"Resources\": {}}"
+    , testCase "inline multi-line YAML is used as the body" $
+        assertInlineBody "AWSTemplateFormatVersion: \"2010-09-09\"\nResources: {}"
     ]
 
 ------------------------------------------------------------------------
 -- Helpers
 ------------------------------------------------------------------------
+
+-- | Assert a 'Left' whose message names the resolved path.
+assertMissingPath :: T.Text -> Either T.Text TemplateResult -> IO ()
+assertMissingPath path result =
+    case result of
+        Right tr -> assertFailure $ "expected Left, got " <> show tr
+        Left err ->
+            assertBool
+                ("error names " <> T.unpack path <> ": " <> T.unpack err)
+                (path `T.isInfixOf` err)
+
+-- | Assert that a spec is used verbatim as the template body.
+assertInlineBody :: T.Text -> IO ()
+assertInlineBody spec = do
+    result <- loadCfnTemplate (Just spec) Nothing "dev" defaultImportCfg
+    case result of
+        Left err -> assertFailure $ "unexpected Left: " <> T.unpack err
+        Right tr -> trTemplateBody tr @?= Just spec
 
 -- | Assert that trTemplateBody is present.
 assertBodyPresent :: TemplateResult -> IO ()

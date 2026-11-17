@@ -151,16 +151,29 @@ loadCfnTemplateWithLimit limit (Just tmplSpec) argsfilePath env importCfg
                             else case checkTemplateSize limit body of
                                 Left sizeErr -> pure (Left sizeErr)
                                 Right () -> pure (Right (TemplateResult (Just body) Nothing))
-            else
-                -- Might be inline content; check for $imports: in inline too
-                if hasImportsKey tmplSpec
-                    then
-                        pure
-                            ( Left
-                                "Your inline cloudformation Template appears to use iidy's yaml pre-processor syntax.\n\
-                                \You need to prefix the template with \"render:\"."
-                            )
-                    else pure (Right (TemplateResult (Just tmplSpec) Nothing))
+            else pure (loadInlineTemplate resolvedPath tmplSpec)
+
+{- | A Template value that names no existing file: inline content when it
+starts with @{@ or @[@ (after trimming) or contains a newline, otherwise
+a missing path, reported with the resolved path.  Rust also treats a
+short value without a slash as inline (template_loader.rs:57-61); that
+accident is dropped here (see DIVERGENCES.md).
+-}
+loadInlineTemplate :: FilePath -> Text -> Either Text TemplateResult
+loadInlineTemplate resolvedPath tmplSpec
+    | not (isInlineContent tmplSpec) =
+        Left ("Failed to load template from: " <> T.pack resolvedPath <> " (no such file)")
+    | hasImportsKey tmplSpec =
+        Left
+            "Your inline cloudformation Template appears to use iidy's yaml pre-processor syntax.\n\
+            \You need to prefix the template with \"render:\"."
+    | otherwise = Right (TemplateResult (Just tmplSpec) Nothing)
+
+-- | Text that cannot be a path: a JSON object or array, or multi-line.
+isInlineContent :: Text -> Bool
+isInlineContent spec =
+    let trimmed = T.strip spec
+     in "{" `T.isPrefixOf` trimmed || "[" `T.isPrefixOf` trimmed || T.any (== '\n') spec
 
 ------------------------------------------------------------------------
 

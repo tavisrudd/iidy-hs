@@ -354,3 +354,17 @@ What differs is the message:
 Top-level templates and stack-args accept repeated keys in both ports.
 Separately, iidy-hs reads a value spelled `01` as the number 1 where Rust
 reads a string; key identity above does not depend on that.
+
+## Template: Missing Path Is an Error, Not Inline Content
+
+**Cause**: deliberate; follows iidy-js (TypeScript), which has no inline
+templates, and drops an accident of the Rust rule.
+
+A `Template:` value that is not a URL and names no existing file is inline
+content only when it starts with `{` or `[` (after trimming) or contains a
+newline. Anything else is a path, and a missing file is an error naming the
+resolved path (`Failed to load template from: PATH (no such file)`). Rust
+(`src/cfn/template_loader.rs:57-61`) also takes any value under 260 bytes
+without `/` or `\` as the body, so a typo such as `Template: templat.yaml`
+is uploaded as a one-line template there. In iidy-hs a bare word naming an
+existing file still loads that file.
