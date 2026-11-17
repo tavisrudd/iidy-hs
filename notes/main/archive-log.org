@@ -21,6 +21,7 @@
 - [2026-11-16 Mon 16:54] [[file:../C27/index.org][C27]] — Landed ec681c4: NTP query parameterised (reliableTimeProviderWith); timing tests use stubs and pass with no network (unshare -rn); landed on supervisor's diff check (narrow single-function refactor, test-only otherwise)
 - [2026-11-16 Mon 16:55] [[file:../C10/index.org][C10]] — Landed (replayed 2c28cc4, 54c8cf9 as 760fb6c, 5cb1512): constructCommandMetadata takes the service role; NormalizedAwsOpts removed; Sonnet review: land, 0 defects
 - [2026-11-16 Mon 16:58] [[file:../C25/index.org][C25]] — Landed fcd3304, 40a3fc0 (replayed f32d21b, 73c86da): get-import emits sequences like serde_yaml via SeqFlush; render unchanged; other callers left for Tavis; Sonnet review: land, minor only; out-of-path test files accepted (supervisor's call)
+- [2026-11-16 Mon 17:06] [[file:../C5/index.org][C5]] — Landed fc94e7d, 7981d70, 085cc10: docs/ converted from Markdown to Org with git mv, links checked, README/WORKPLAN updated; docs-only, landed on supervisor's spot check
 * COMMENT meta
 :PROPERTIES:
 :LANE: main

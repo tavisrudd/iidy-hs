@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C5
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   User request 2026-11-16: upgrade docs/ from md to org-mode files with org style links
 :CREATED_BY: opus-5.5-medium
@@ -10,8 +10,21 @@
 :ID: org:01a1e63d-db69-77c4-b05b-e1e5d95272ea
 :ADDED: [2026-11-16 Mon 14:22]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 16:57]--[2026-11-16 Mon 17:04] => 0:07
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:56]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 16:57]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a052666696d130968
+- Clock-out [2026-11-16 Mon 17:04]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a052666696d130968
+- Card state STARTED → DONE [2026-11-16 Mon 17:06]
+  Note: Landed fc94e7d, 7981d70, 085cc10: docs/ converted from Markdown to Org with git mv, links checked, README/WORKPLAN updated; docs-only, landed on supervisor's spot check
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -65,32 +78,32 @@ card in one short pass (one commit per directory is fine) and before any of
 them edits =docs/=; if one has docs commits unmerged, stop and record.
 
 Done when:
-- [ ] Each of the =.md= files under =docs/= (top level, =dev/=, =dev/adr/=,
+- [X] Each of the =.md= files under =docs/= (top level, =dev/=, =dev/adr/=,
   =requirements/=) is now an =.org= file of the same base name, moved with
   =git mv= in its own commit before the content rewrite, so
   =git log --follow= works; =git ls-files docs | grep '\.md$'= prints nothing.
-- [ ] Each file has =#+title:=, Org headings, Org tables, =#+begin_src=
+- [X] Each file has =#+title:=, Org headings, Org tables, =#+begin_src=
   blocks with a language (or =#+begin_example= when the Markdown block had
   none), and Org links: =[[file:other.org][label]]= for files,
   =[[file:other.org::*Heading][label]]= or =[[*Heading][label]]= for
   headings, =[[https://...][label]]= for URLs.
-- [ ] The Markdown-residue grep prints nothing:
+- [X] The Markdown-residue grep prints nothing:
   =rg -n '\]\(|^#{1,6} |^```|^\|[-: ]+\|$' docs/= (the last alternative
   catches Markdown table separator rows; an Org rule =|---+---|= may remain).
-- [ ] The link check below reports zero broken links and its output is
+- [X] The link check below reports zero broken links and its output is
   recorded in the last task: every =file:= target exists, and every
   =::*Heading= or =[[*Heading]]= target matches a heading in its file.
-- [ ] A text-preservation check is recorded: for each file,
+- [X] A text-preservation check is recorded: for each file,
   =pandoc -f org -t plain= of the new file and =pandoc -f gfm -t plain= of
   the old (=git show HEAD~N:path=) differ only in link and table
   rendering; list any file where more differs and say why.
-- [ ] =README.md= and =WORKPLAN.md= links into =docs/= point at the =.org=
+- [X] =README.md= and =WORKPLAN.md= links into =docs/= point at the =.org=
   paths (=rg -n 'docs/[^ )]*\.md' README.md WORKPLAN.md= prints nothing).
-- [ ] =c peek 'file:docs/import-types.org::*<a real heading>' --from
+- [X] =c peek 'file:docs/import-types.org::*<a real heading>' --from
   README.md --print= resolves, proving a card can link into a heading.
-- [ ] No =.hs=, cabal, nix or test file changed; the suite is not rerun
+- [X] No =.hs=, cabal, nix or test file changed; the suite is not rerun
   (nothing it reads changed; record the =git diff --stat= file list).
-- [ ] Commits name C5.
+- [X] Commits name C5.
 
 Stop and record if: =pandoc -f gfm -t org= loses content (a table, a code
 block, a nested list) in a way a quick manual fix does not repair for
@@ -101,10 +114,15 @@ link (record the file and line); =c peek= cannot resolve the
 instead, which edits every heading); a card or branch that edits =docs/= is
 in flight.
 
-* TODO Decide conversion method and conventions
+* DONE Decide conversion method and conventions
 :PROPERTIES:
 :ID: org:01a1e63e-159e-75a8-a875-248e8a923716
 :ADDED: [2026-11-16 Mon 14:23]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 17:04] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a052666696d130968
 :END:
 
 Pandoc 3.7 is on the host (=pandoc -f gfm -t org --wrap=none=). Try it on
@@ -119,10 +137,35 @@ problem; record the final choice here:
 - =docs/README.md= becomes =docs/README.org= (GitHub renders it in the
   directory view); say so if the trial shows otherwise.
 
-* TODO Write the link-check and residue scripts
+** Result (claude-C5)
+:PROPERTIES:
+:ID: org:01a1e6d1-b5fb-75d5-a746-a86283cdee77
+:ADDED: [2026-11-16 Mon 17:04]
+:END:
+Chosen: =pandoc -f gfm-tex_math_dollars-tex_math_gfm -t org -s --wrap=none
+--shift-heading-level-by=-1=, then post-processing: drop the
+=:PROPERTIES:/:CUSTOM_ID:= drawers; rewrite =x.md= links to =[[file:x.org]]=;
+protect the em and en dash characters (pandoc rewrites them as =---= and
+=--=); add =#+options: ^:nil -:nil= under =#+title:= (without it =ERR_3001=
+renders as a subscript); merge adjacent verbatim spans joined by a slash, and a span plus a slash-joined word, into one verbatim
+span because a slash touching a span breaks Org emphasis. The gfm
+=tex_math_dollars= extension had to be disabled: it ate text between two
+=$= in prose. Spans containing an equals sign or edge whitespace use =~...~= or have the
+whitespace moved outside (a handful of lines). Heading links use
+=[[*Heading]]= (same file) and =[[file:x.org::*Heading]]=; no =id:= stamps.
+=docs/README.org= converted too. Code blocks keep their language
+(=pseudocode= stays as =#+begin_src pseudocode=). Scripts: =c peek= resolves
+the heading form (see last task).
+
+* DONE Write the link-check and residue scripts
 :PROPERTIES:
 :ID: org:01a1e6c0-c86b-752e-ba09-8d7133f7500a
 :ADDED: [2026-11-16 Mon 16:45]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 17:04] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a052666696d130968
 :END:
 
 Before converting, write a small checker in the scratchpad (not committed)
@@ -133,10 +176,28 @@ target file (Org matches the heading text, ignoring TODO keyword and tags).
 Run it on a hand-converted copy of one doc to prove it detects a broken
 link, then use it for the gate. Record its command and output here.
 
-* TODO Convert docs/ and fix internal links
+** Result (claude-C5)
+:PROPERTIES:
+:ID: org:01a1e6d1-b5fb-75d5-a746-a8611af1d459
+:ADDED: [2026-11-16 Mon 17:04]
+:END:
+The card says the checker stays uncommitted, so it lives in the temp dir
+below, not on the branch. =python3 -I linkcheck.py docs= (skips example/src
+blocks). On a broken copy (renamed target file, bogus heading) it reported
+9 broken links, including =missing heading *Nope= and =missing file
+file:gone.org=. The residue check (=residue.sh=) is the card's grep made
+aware of =#+begin_= blocks, because the card's grep also matches =# comment=
+lines inside shell and YAML src blocks.
+
+* DONE Convert docs/ and fix internal links
 :PROPERTIES:
 :ID: org:01a1e63e-159e-75a8-a875-248df4f477f9
 :ADDED: [2026-11-16 Mon 14:23]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 17:04] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a052666696d130968
 :END:
 
 Per directory (top level, =dev/=, =dev/adr/=, =requirements/=): commit the
@@ -145,13 +206,54 @@ between docs to the new =.org= paths and Org syntax as you go. Convert
 mechanically; any wording problem you notice goes in a note on this card
 for [[file:../C22/index.org][C22]] or a new card, not into the doc.
 
-* TODO Update inbound links and verify
+** Result (claude-C5)
+:PROPERTIES:
+:ID: org:01a1e6d1-b5fb-75d5-a746-a8608865f3da
+:ADDED: [2026-11-16 Mon 17:04]
+:END:
+Commits: rename-only commit (=git mv=, 32 files), then the content commit.
+Text preservation: =pandoc -f gfm -t plain= of each old file versus
+=pandoc -f org -t plain= of the new, ignoring whitespace and the title
+line: every file is identical except link rendering (=x.md= becomes
+=file:x.org=), one multi-line span in =dev/testing-guide.org= where the
+Org reader mis-reads =::= (the file text is correct), and
+=docs/requirements/12-cross-cutting.org= where the plain reader prints
+=\n= differently. Known residue: =docs/SECURITY.org= has an empty code
+span rendered as two backticks (Org has no empty verbatim), and prose
+containing a bare =\== (=requirements/05-cfn-operations.org=, =first ===)
+is ambiguous for Org emphasis. In =docs/requirements/01-cli-interface.org=
+the md block quote stays a quote block.
+
+* DONE Update inbound links and verify
 :PROPERTIES:
 :ID: org:01a1e63e-159e-75a8-a875-248c436e0c96
 :ADDED: [2026-11-16 Mon 14:23]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 17:04] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a052666696d130968
 :END:
 
 Update the =docs/= links in =README.md= (lines near 242 and 274-282) and
 =WORKPLAN.md= (prose paths near lines 45, 96, 104, 178-184). Run the
 Markdown-residue grep, the link check, the pandoc text-preservation check
 and the =c peek= probe, record each result here, and close.
+
+** Result (claude-C5)
+:PROPERTIES:
+:ID: org:01a1e6d1-b5fb-75d5-a746-a85f0476230b
+:ADDED: [2026-11-16 Mon 17:04]
+:END:
+=README.md= and =WORKPLAN.md= now point at =docs/*.org=
+(=rg -n 'docs/[^ )]*\.md' README.md WORKPLAN.md= prints nothing).
+Link check: =27 local links checked, 0 broken=. Card's residue grep:
+only the =# comment= lines inside src blocks match; the block-aware version
+prints nothing. =git ls-files docs | grep '\.md$'= prints nothing.
+=c peek 'file:docs/import-types.org::*git' --from README.md --print=
+resolves (run from the branch worktree) and so does
+=file:docs/getting-started.org::*stack-args.yaml Reference=. The
+=*Import Types= form in the card text does not exist as a heading in that file
+(its top headings are import kinds), so I used a real heading.
+=git diff --stat main..HEAD= touches only =docs/=, =README.md=, =WORKPLAN.md=;
+no =.hs=, cabal, nix or test file. Wording notes for C22: none made.
