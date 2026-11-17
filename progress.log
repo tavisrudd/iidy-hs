@@ -129,3 +129,4 @@
 2026-11-16 19:31 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C15 task 6 landed (untrusted custom templates isolated) plus fd00:ec2::/32 and default-port fixes
 2026-11-16 19:45 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C15 landed and closed (remote template trust model)
 2026-11-16 19:56 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C34 landed (duplicate keys rejected in imports)
+2026-11-16 19:57 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C37 landed (demo keeps import flags)

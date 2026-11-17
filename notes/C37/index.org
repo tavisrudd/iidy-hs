@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C37
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C15 re-review 2026-11-16: substituteIidyCommand passes no flags when the running binary is the iidy on PATH, so --no-remote-imports (and --trust-import-source) are silently dropped; fails open
 :CREATED_BY: opus-5.5-medium
@@ -10,8 +10,21 @@
 :ID: org:01a1e736-0207-767b-aa95-cd7f406640e4
 :ADDED: [2026-11-16 Mon 18:53]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 19:47]--[2026-11-16 Mon 19:55] => 0:08
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 19:46]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 19:47]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a00b4f0499da59ce2
+- Clock-out [2026-11-16 Mon 19:55]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a00b4f0499da59ce2
+- Card state STARTED → DONE [2026-11-16 Mon 19:57]
+  Note: Landed 1be8bad (replayed 03f9e35): iidy demo passes --no-remote-imports and --trust-import-source to the iidy on PATH; narrow fix landed on supervisor's diff check
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -50,23 +63,41 @@ Out of scope: masking, sleep timing and the demo temp directory (C30,
 C21).
 
 Done when:
-- [ ] When any import-policy flag is set, every =iidy= command in the
+- [X] When any import-policy flag is set, every =iidy= command in the
   script receives the flags, whether or not the current binary is the one
   on =PATH= (substitute the command name with itself plus the flags);
   without flags the behaviour is unchanged.
-- [ ] A test, recorded failing first, covers the on-=PATH= case with
+- [X] A test, recorded failing first, covers the on-=PATH= case with
   =--no-remote-imports= and with a trusted prefix.
-- [ ] =DIVERGENCES.md= notes the difference from Rust.
-- [ ] Build warning-free, full suite green, commits name C37.
+- [X] =DIVERGENCES.md= notes the difference from Rust.
+- [X] Build warning-free, full suite green, commits name C37.
 
 Stop and record if: the fix needs a change outside the allowed paths.
 
-* TODO iidy demo drops --no-remote-imports when running the iidy on PATH
+* DONE iidy demo drops --no-remote-imports when running the iidy on PATH
 :PROPERTIES:
 :ID: org:01a1e736-0207-767b-aa95-cd7c4be0e665
 :ADDED: [2026-11-16 Mon 18:53]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 19:55] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a00b4f0499da59ce2
 :END:
 
 Make the substitution apply whenever the policy adds flags, using the
 current executable path (or =iidy= itself when it is the one on =PATH=).
 Add the failing test first, then the fix and the =DIVERGENCES.md= entry.
+
+** Result
+:PROPERTIES:
+:ID: org:01a1e76e-02c7-7433-9a2d-243aa2c1cf4a
+:ADDED: [2026-11-16 Mon 19:55]
+:END:
+Failing run first (test added on the branch base, fix absent): the two new
+tests "iidy on PATH still receives --no-remote-imports" and "... trusted
+import sources" failed with =got: "iidy render | iidy lint"= and
+=got: "iidy render"=. With the fix (=substituteIidyCommand= keeps the name
+=iidy= and appends the shared =policyFlags= when the executable is
+=Nothing= and the policy adds flags) all pass; the pre-commit full suite
+passed. =DIVERGENCES.md= notes the difference from Rust. Commit on branch claude/C37 (see git log).
