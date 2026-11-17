@@ -278,6 +278,15 @@ Mechanics learned in peregrine:
 - `c new` leaves a placeholder in the task body and `c set done` refuses
   until it is replaced, so fill the task body when filing. `c set done` and
   `c set cancelled` append the archive-log line themselves.
+- Replaying several commits: `set -e` does not stop a loop inside the
+  Claude Code Bash tool's command wrapper, and a pipe (`| tail`) hides a
+  failed commit. Pick and commit one SHA per command, or test `$?` after
+  every `git commit` and `break`. On 2026-11-17 a commit that failed
+  `-Werror` was silently folded into the next one.
+- `guarded-build` reads MemAvailable, which leaves out the ZFS ARC on this
+  host (13.7 GiB on 2026-11-17); it can refuse builds for half an hour
+  while most of that memory is reclaimable. The hook runs it even with
+  `SKIP_TESTS=1`, so notes-only commits block too. Wait; do not bypass.
 - Stub cards left uncommitted by an ended session are filled with a pointer
   to the real card, cancelled with `c set`, and committed by the supervisor.
 
