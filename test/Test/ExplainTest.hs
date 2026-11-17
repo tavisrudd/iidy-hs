@@ -10,7 +10,7 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 import Text.Read (readMaybe)
 
-import Iidy.Explain (ErrorEntry (..), allErrors, explainOutput)
+import Iidy.Explain (ErrorEntry (..), allErrors, explainErrors, explainOutput)
 import Iidy.Yaml.Errors.Ids (errorIdCode, errorIdFromCode)
 
 explainTests :: [TestTree]
@@ -61,8 +61,12 @@ streamTests =
         let (out, err) = explainOutput ["ERR_1001", "nope", "3006"]
         out @?= stdoutFor "ERR_1001" <> stdoutFor "ERR_3006"
         err @?= ["Unknown error code: nope"]
-    , testCase "no codes: usage line on stderr, nothing on stdout" $
-        explainOutput [] @?= ([], ["Usage: iidy explain <CODE>..."])
+    , testCase "no codes: Rust's prompt on stderr, nothing on stdout" $
+        explainOutput [] @?= ([], ["Please provide one or more error codes to explain (e.g., ERR_2001)"])
+    , testCase "no codes: explainErrors returns normally, so the command exits 0" $
+        -- app/Main.hs dispatches CmdExplain codes -> explainErrors codes and
+        -- then falls off the end of main without calling exitWith.
+        explainErrors []
     ]
 
 ------------------------------------------------------------------------
@@ -87,6 +91,8 @@ consistencyTests =
         mapM_ (checkMapsBack . ecCode) allErrors
     , testCase "entry codes are unique" $
         List.sort (map ecCode allErrors) @?= List.nub (List.sort (map ecCode allErrors))
+    , testCase "every description equals Rust's description() (ids.rs:110-170)" $
+        [(ecCode e, ecDescription e) | e <- allErrors] @?= rustDescriptions
     , testCase "entries and ErrorIds cover the same codes" $
         List.sort (map ecCode allErrors) @?= List.sort idCodes
     ]
@@ -101,3 +107,61 @@ consistencyTests =
         case T.stripPrefix "ERR_" code >>= readMaybe . T.unpack >>= errorIdFromCode of
             Just eid -> "ERR_" <> T.pack (show (errorIdCode eid)) @?= code
             Nothing -> assertFailure (T.unpack code <> ": does not map to an ErrorId")
+
+{- | Rust's @ErrorId::description()@ per code (~/src/iidy/src/yaml/errors/ids.rs:110-170),
+kept as data so no Rust file is read at run time.
+-}
+rustDescriptions :: [(Text, Text)]
+rustDescriptions =
+    [ ("ERR_1001", "Invalid YAML syntax")
+    , ("ERR_1002", "YAML version mismatch")
+    , ("ERR_1003", "Unsupported YAML feature")
+    , ("ERR_1004", "Malformed YAML structure")
+    , ("ERR_1005", "YAML merge key not supported in 1.2")
+    , ("ERR_2001", "Variable not found")
+    , ("ERR_2002", "Variable name collision")
+    , ("ERR_2003", "Invalid variable name")
+    , ("ERR_2004", "Circular variable reference")
+    , ("ERR_2005", "Variable access out of scope")
+    , ("ERR_2006", "Lookup query failed")
+    , ("ERR_3001", "Import file not found")
+    , ("ERR_3002", "Import URL unreachable")
+    , ("ERR_3003", "Import authentication failure")
+    , ("ERR_3004", "Import circular dependency")
+    , ("ERR_3005", "Import format not supported")
+    , ("ERR_3006", "Environment variable not found")
+    , ("ERR_3007", "Git command failure")
+    , ("ERR_3008", "S3 access denied")
+    , ("ERR_3009", "SSM parameter not found")
+    , ("ERR_3010", "CloudFormation stack not found")
+    , ("ERR_4001", "Unknown preprocessing tag")
+    , ("ERR_4002", "Missing required tag field")
+    , ("ERR_4003", "Invalid tag field value")
+    , ("ERR_4004", "Incompatible tag combination")
+    , ("ERR_4005", "Tag syntax error")
+    , ("ERR_5001", "Type mismatch in operation")
+    , ("ERR_5002", "Invalid array operation")
+    , ("ERR_5003", "Invalid object operation")
+    , ("ERR_5004", "Division by zero")
+    , ("ERR_5005", "Invalid comparison")
+    , ("ERR_5006", "String operation on non-string")
+    , ("ERR_6001", "Handlebars syntax error")
+    , ("ERR_6002", "Unknown handlebars helper")
+    , ("ERR_6003", "Handlebars helper argument error")
+    , ("ERR_6004", "Template compilation failure")
+    , ("ERR_6005", "Template execution error")
+    , ("ERR_7001", "Invalid CloudFormation intrinsic function")
+    , ("ERR_7002", "CloudFormation reference error")
+    , ("ERR_7003", "CloudFormation dependency issue")
+    , ("ERR_7004", "CloudFormation template size limit")
+    , ("ERR_8001", "Invalid command line argument")
+    , ("ERR_8002", "Missing required configuration")
+    , ("ERR_8003", "Configuration file not found")
+    , ("ERR_8004", "AWS credentials not configured")
+    , ("ERR_8005", "Unsupported file format")
+    , ("ERR_9001", "Internal processing error")
+    , ("ERR_9002", "Memory allocation failure")
+    , ("ERR_9003", "File system permission denied")
+    , ("ERR_9004", "Network connectivity issue")
+    , ("ERR_9005", "Unexpected system error")
+    ]

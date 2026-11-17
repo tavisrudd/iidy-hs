@@ -35,7 +35,7 @@ Known codes produce stdout lines, unknown codes and an empty list produce
 stderr lines.
 -}
 explainOutput :: [Text] -> ([Text], [Text])
-explainOutput [] = ([], ["Usage: iidy explain <CODE>..."])
+explainOutput [] = ([], ["Please provide one or more error codes to explain (e.g., ERR_2001)"])
 explainOutput codes = mconcat (map explainOne codes)
 
 ------------------------------------------------------------------------
@@ -304,7 +304,7 @@ allErrors =
     , mkEntry
         "ERR_6002"
         "Template & Handlebars"
-        "Unknown Handlebars helper"
+        "Unknown handlebars helper"
         "The Handlebars template references a helper function that iidy does not\n\
         \provide. Check the helper name spelling against the documented helpers."
     , mkEntry
