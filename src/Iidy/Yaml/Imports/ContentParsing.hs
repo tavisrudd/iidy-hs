@@ -69,7 +69,7 @@ keep the text they had.
 describeParseError :: ParseError -> Text
 describeParseError err@(ParseError pos msg)
     | "duplicate entry" `T.isPrefixOf` msg =
-        msg <> " at line " <> T.pack (show (posLine pos)) <> " column " <> T.pack (show (posColumn pos))
+        msg <> " at line " <> T.pack (show (posLine pos)) <> " column " <> T.pack (show (posColumn pos + 1))
     | otherwise = T.pack (show err)
 
 {- | A parsed import document: the aeson value (sorted keys) the engine uses,

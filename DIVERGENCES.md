@@ -325,11 +325,25 @@ accepts `yaml-cloudformation`.
 ## Duplicate Mapping Keys: Error Text
 
 **Cause**: HsYAML and aeson token streams, unlike serde_yaml and serde_json,
-do not give a key path or byte column.
+do not give a key path or byte column, and floats are displayed by iidy-hs.
 
 A repeated key in an imported YAML or JSON document (file, HTTP, S3, SSM) or
-in a `!$parseYaml` string is rejected, as in Rust, with
-`Failed to parse YAML from F: duplicate entry with key "k"`. Rust adds the
-enclosing key path for nested YAML (`b: duplicate entry ...`) and a line and
-column for JSON; iidy-hs adds ` at line L column C` for YAML and nothing for
-JSON. Top-level templates and stack-args accept repeated keys in both ports.
+in a `!$parseYaml` string is rejected, as in Rust. Which keys count as
+repeated follows serde_yaml (`a` and `"a"`, `1` and `0x1`, `true` and `True`,
+`1.0` and `1e0` and `01.0`, and equal sequences or mappings in any entry
+order are the same key; `1` and `1.0`, `1` and `01` and `1` and `"1"` are not).
+What differs is the message:
+- Rust adds the enclosing key path for nested YAML (`b: duplicate entry ...`)
+  and a line and column for JSON. iidy-hs adds ` at line L column C` (both
+  1-based, at the repeated key) for YAML and nothing for JSON.
+- JSON key identity is the decoded string only; a repeated key is reported as
+  `duplicate entry with key "k"` and no position.
+- Float keys are displayed by iidy-hs (`1.0`, `0.5`), which can differ from
+  Rust for very large or very small values; infinities are `.inf` and `-.inf`.
+- A repeated sequence or mapping key reads `duplicate entry in YAML map` (as
+  Rust), a boolean key `` `true` `` and a null key `duplicate entry with null
+  key`.
+
+Top-level templates and stack-args accept repeated keys in both ports.
+Separately, iidy-hs reads a value spelled `01` as the number 1 where Rust
+reads a string; key identity above does not depend on that.
