@@ -13,9 +13,12 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 import Amazonka qualified
+import Amazonka.SSM.GetParameter qualified as GP
 import Amazonka.Types qualified as AT
 import Data.Text.Encoding qualified as TE
 import Iidy.Aws.Errors (formatAwsError, formatHttpException)
+import Iidy.Cfn.S3Objects (HeadResult (..), headObject, s3ObjectExists)
+import Iidy.Yaml.Imports.Loaders.LazyEnv (tryBuildEnv)
 import Iidy.Yaml.Imports.Loaders.S3 (loadS3Import)
 import Iidy.Yaml.Imports.Loaders.Ssm (loadSsmImport)
 import Iidy.Yaml.Imports.Types (ImportError (..))
@@ -37,6 +40,22 @@ awsErrorTests =
         , testCase "S3 import error names the host and holds no credential" $ do
             env <- newRefusingMockAws
             loadS3Import env "s3://some-bucket/config.yaml" >>= assertImportLeak "s3.us-east-1.amazonaws.com"
+        , testCase "S3 head-object failure names no credential" $ do
+            env <- newRefusingMockAws
+            headObject env "approvals" "t.yaml" >>= \case
+                ObjectHeadFailed msg -> assertClean "approvals.s3.us-east-1.amazonaws.com" msg
+                other -> assertFailure ("expected ObjectHeadFailed, got " <> show other)
+        , testCase "S3 existence check failure names no credential" $ do
+            env <- newRefusingMockAws
+            s3ObjectExists env "approvals" "t.yaml" >>= \case
+                Left msg -> assertClean "approvals.s3.us-east-1.amazonaws.com" msg
+                Right _ -> assertFailure "expected a failure"
+        , testCase "an env provider that fails with a transport error names no credential" $ do
+            env <- newRefusingMockAws
+            let failing = Amazonka.runResourceT (Amazonka.send env (GP.newGetParameter "/x")) >> pure env
+            tryBuildEnv failing >>= \case
+                Left msg -> assertClean "ssm.us-east-1.amazonaws.com" msg
+                Right _ -> assertFailure "expected a failure"
         ]
     ]
 
@@ -70,8 +89,8 @@ formatAwsErrorTests :: [TestTree]
 formatAwsErrorTests =
     [ testCase "ServiceError prints code: message" $
         formatAwsError (serviceError (Just "Stack does not exist")) @?= "ValidationError: Stack does not exist"
-    , testCase "ServiceError without a message prints the code and a colon" $
-        formatAwsError (serviceError Nothing) @?= "ValidationError: "
+    , testCase "ServiceError without a message prints the code alone" $
+        formatAwsError (serviceError Nothing) @?= "ValidationError"
     , testCase "ServiceError leaves out its response headers" $ do
         let err = Amazonka.ServiceError (AT.ServiceError' "SSM" status400 [("X-Secret", "hdr-secret")] (Amazonka.ErrorCode "Oops") Nothing Nothing)
         assertBool "no header value" (not ("hdr-secret" `T.isInfixOf` formatAwsError err))

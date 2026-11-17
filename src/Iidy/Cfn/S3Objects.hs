@@ -35,6 +35,8 @@ import Amazonka.S3.HeadObject qualified as HO
 import Amazonka.S3.PutObject qualified as PO
 import Data.Conduit.List qualified as CL
 
+import Iidy.Aws.Errors (formatAwsError)
+
 -- | The outcome of a @HeadObject@ request.
 data HeadResult
     = ObjectPresent
@@ -56,7 +58,7 @@ headObject awsEnv bucket key = do
         Left (Amazonka.ServiceError se)
             | statusCode se.status == 404 -> ObjectMissing
             | statusCode se.status == 403 -> ObjectAccessDenied
-        Left ex -> ObjectHeadFailed (T.pack (show ex))
+        Left ex -> ObjectHeadFailed (formatAwsError ex)
 
 {- | Whether an object exists: 'True' when present, 'False' when missing
 (404), and an error naming the object for access denied (403) or any other
@@ -109,7 +111,7 @@ bucketRegion awsEnv bucket = do
         Left (Amazonka.ServiceError se) ->
             let Amazonka.ErrorCode code = se.code
              in Left (T.pack (show (statusCode se.status)) <> " " <> code)
-        Left ex -> Left (T.pack (show ex))
+        Left ex -> Left (formatAwsError ex)
         Right resp -> Right (S3.constraintRegion resp.locationConstraint)
 
 {- | How long a presigned URL stays valid: 900 seconds, the aws-sdk v2
@@ -137,7 +139,7 @@ uploadToS3 awsEnv acl bucket key content = do
         req = (PO.newPutObject (S3.BucketName bucket) (S3.ObjectKey key) body){PO.acl = cannedAcl}
     result <- try @Amazonka.Error $ runResourceT $ Amazonka.send awsEnv req
     case result of
-        Left ex -> pure (Left (T.pack (show ex)))
+        Left ex -> pure (Left (formatAwsError ex))
         Right _ -> pure (Right ())
 
 -- | Download content from S3.
@@ -149,7 +151,7 @@ downloadFromS3 awsEnv bucket key = do
         chunks <- AmazonkaData.sinkBody resp.body CL.consume
         pure (BS.concat chunks)
     case result of
-        Left ex -> pure (Left (T.pack (show ex)))
+        Left ex -> pure (Left (formatAwsError ex))
         Right bs -> case TE.decodeUtf8' bs of
             Left ex -> pure (Left (T.pack (show ex)))
             Right t -> pure (Right t)
@@ -160,5 +162,5 @@ deleteFromS3 awsEnv bucket key = do
     let req = DO.newDeleteObject (S3.BucketName bucket) (S3.ObjectKey key)
     result <- try @Amazonka.Error $ runResourceT $ Amazonka.send awsEnv req
     case result of
-        Left ex -> pure (Left (T.pack (show ex)))
+        Left ex -> pure (Left (formatAwsError ex))
         Right _ -> pure (Right ())

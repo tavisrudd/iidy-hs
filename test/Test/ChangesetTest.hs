@@ -113,7 +113,7 @@ changesetTests =
                 @?= "ValidationError: Stack does not exist"
         , testCase "handles ServiceError with no message" $
             formatAwsError (mkServiceErrorNoMsg "InternalFailure")
-                @?= "InternalFailure: "
+                @?= "InternalFailure"
         , testCase "describes a non-ServiceError" $ do
             let err = formatAwsError (mkSerializeError "parse failure")
             assertBool "should contain error info" (T.length err > 0)

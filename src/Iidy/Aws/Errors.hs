@@ -8,7 +8,7 @@
 query string (a presigned URL's signature) and the proxy. Nothing that
 reaches a terminal or a log may use it; format the exception here instead.
 
-* 'Amazonka.ServiceError': @\<code\>: \<message\>@.
+* 'Amazonka.ServiceError': @\<code\>: \<message\>@ (the code alone when there is no message).
 * 'Amazonka.TransportError': the request host and what went wrong, never
   the request.
 * 'Amazonka.SerializeError': the service and the parse failure, never the
@@ -34,8 +34,7 @@ formatAwsError :: Amazonka.Error -> Text
 formatAwsError = \case
     Amazonka.ServiceError se ->
         let Amazonka.ErrorCode code = se.code
-            msg = maybe "" Amazonka.fromErrorMessage se.message
-         in code <> ": " <> msg
+         in maybe code (\m -> code <> ": " <> Amazonka.fromErrorMessage m) se.message
     Amazonka.TransportError he -> formatHttpException he
     Amazonka.SerializeError se ->
         AmazonkaData.toText se.abbrev <> ": could not parse the response (" <> T.pack se.message <> ")"

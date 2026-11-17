@@ -79,7 +79,7 @@ headTests =
     , testCase "500 is a failure with the error text" $ do
         result <- headWith 500
         case result of
-            ObjectHeadFailed err -> assertBool ("names the status: " <> show err) ("500" `T.isInfixOf` err)
+            ObjectHeadFailed err -> assertBool ("names the status text: " <> show err) ("Internal Server Error" `T.isInfixOf` err)
             other -> assertBool ("expected a failure, got " <> show other) False
     , testCase "s3ObjectExists: a failure names the env's region" $ do
         mock <- newMockAwsIn (Amazonka.Region' "eu-west-1")
