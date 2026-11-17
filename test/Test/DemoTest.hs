@@ -5,10 +5,11 @@ scripts. Only @bash -c@ one-liners that touch a test temp directory are run.
 module Test.DemoTest (demoTests) where
 
 import Control.Exception (IOException, try)
-import Data.Aeson (Value, object, toJSON, (.=))
+import Data.Aeson (Value, eitherDecodeStrict, object, toJSON, (.=))
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.Text.IO qualified as TIO
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
@@ -77,6 +78,16 @@ parseTests =
     , testCase "a negative sleep value is rejected" $
         parseDemoScript (object ["demo" .= [object ["sleep" .= (-1 :: Int)]]])
             @?= Left "demo sleep must not be negative"
+    , testCase "sleep values above a day are rejected (1e13, 1e300, 1e400, 1e1000000000)" $
+        mapM_
+            ( \lit -> do
+                v <- either assertFailure pure (eitherDecodeStrict (TE.encodeUtf8 ("{\"demo\":[{\"sleep\":" <> lit <> "}]}")))
+                parseDemoScript v @?= Left "demo sleep must not exceed 86400 seconds"
+            )
+            ["1e13", "1e300", "1e400", "1e1000000000"]
+    , testCase "a sleep of exactly one day is accepted" $
+        fmap snd (parseDemoScript (object ["demo" .= [object ["sleep" .= (86400 :: Int)]]]))
+            @?= Right [DemoSleep 86400]
     , testCase "files are optional" $
         parseDemoScript (object ["demo" .= ([] :: [Value])]) @?= Right (Map.empty, [])
     , testCase "not a mapping" $

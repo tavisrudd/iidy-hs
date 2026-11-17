@@ -24,7 +24,7 @@ import Data.ByteString.Lazy qualified as BL
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe, isNothing)
-import Data.Scientific (toRealFloat)
+import Data.Scientific (Scientific, toRealFloat)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -153,6 +153,11 @@ parseCommand (Object obj)
     | Just (Number n) <- KM.lookup "sleep" obj
     , n < 0 =
         Left "demo sleep must not be negative"
+    -- Compared as a Scientific, before any conversion to Double or Integer,
+    -- so a huge exponent such as 1e1000000000 is never expanded.
+    | Just (Number n) <- KM.lookup "sleep" obj
+    , n > maxSleepSeconds =
+        Left "demo sleep must not exceed 86400 seconds"
     | Just (Number n) <- KM.lookup "sleep" obj = Right (DemoSleep (toRealFloat n))
     | Just (String txt) <- KM.lookup "banner" obj = Right (DemoBanner txt)
     | Just (Object env') <- KM.lookup "setenv" obj =
@@ -253,6 +258,10 @@ execWithMasking cmd workDir envList = do
 ------------------------------------------------------------------------
 -- Display
 ------------------------------------------------------------------------
+
+-- | Longest accepted @sleep:@ value: one day. Keeps the microsecond count far inside 'Int'.
+maxSleepSeconds :: Scientific
+maxSleepSeconds = 86400
 
 {- | Microseconds a @sleep:@ step waits: seconds scaled by the timescaling,
 rounded to the nearest microsecond. Rust truncates to whole seconds
