@@ -1,0 +1,62 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C41
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   C16 final review 2026-11-16: with stdin closed, template-approval review (and every confirmation prompt) crashes with an end-of-file error before writing anything; mapping EOF to declined would make it explicit
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e804-0787-76b6-b506-acdeafb16077
+:ADDED: [2026-11-16 Mon 22:39]
+:END:
+#+title: C41 — Confirmation prompts decline on end of input instead of crashing
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e804-0787-76b6-b506-acdd44848f96
+:ADDED: [2026-11-16 Mon 22:39]
+:END:
+
+Every yes/no confirmation reads the answer with =getLine= in
+=src/Iidy/Confirm.hs= (around line 43). With stdin closed or at end of
+input, =getLine= throws an end-of-file error, so the command crashes rather
+than declining. Found by the C16 final review: =template-approval review=
+run with stdin closed crashes before writing anything, which is safe but
+reports an exception instead of "declined". Check what Rust (=~/src/iidy=)
+and TypeScript (=~/src/iidy-js=) do on end of input, and match them unless
+both crash.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e804-0787-76b6-b506-acdc91d96a6a
+:ADDED: [2026-11-16 Mon 22:39]
+:END:
+
+Allowed paths: =src/Iidy/Confirm.hs=, its test module, =DIVERGENCES.md=,
+=notes/C41/=.
+
+Out of scope: prompt wording; which commands prompt.
+
+Done when:
+- [ ] End of input at any confirmation is treated as "no" (the command
+  exits as it does on a typed "n"), with a test recorded failing first.
+- [ ] Rust and TypeScript behaviour on end of input recorded in the card,
+  with file:line; a =DIVERGENCES.md= entry if iidy-hs differs.
+- [ ] Build warning-free, full suite green, commits name C41.
+
+Stop and record if: an originals' behaviour differs from "decline" in a way
+that is clearly deliberate (question for Tavis).
+
+* TODO Confirmation prompts decline on end of input instead of crashing
+:PROPERTIES:
+:ID: org:01a1e804-0786-769f-a872-eb83d051ac2b
+:ADDED: [2026-11-16 Mon 22:39]
+:END:
+
+Record the originals' behaviour, add the failing test (feed a closed or
+empty handle to the confirmation), then catch end of file in the one
+=getLine= call and return "declined".

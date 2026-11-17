@@ -36,6 +36,7 @@
 - [2026-11-16 Mon 21:17] [[file:../C38/index.org][C38]] — Landed ac90793: !$expand uses Params.mergeParams; standard traverse_; behaviour-neutral, landed on supervisor's diff check
 - [2026-11-16 Mon 21:35] [[file:../C12/index.org][C12]] — Landed 4e722e8 (backstop seam, tested) and fc5c44c..69359cb: StackArgsLoader split into StackArgs/{Credentials,Fields,Validate}, one-pass field parser, error texts pinned byte-identical; Sonnet review land, 0 defects
 - [2026-11-16 Mon 21:45] [[file:../C32/index.org][C32]] — Landed b66effc, 88f01f8: unresolved !$ tags keep their written name and argument (WrittenTag); tag construction moved to Parser/Tags.hs; get-import keeps one-element sequence arguments as Rust does (emitter change accepted as supervisor's call); Sonnet review land, 0 defects
+- [2026-11-16 Mon 22:39] [[file:../C16/index.org][C16]] — Landed af704cc..d3600cb plus doc fixes: approved template enforced at deploy (create/update/changeset/create-or-update/estimate-cost send a presigned approved URL or refuse), bucket region via GetBucketLocation with stack-region fallback (Tavis), HeadObject classes, 1 MB, ACL, request lint, review always prompts; Opus plan review and four Opus reviews (land)
 * COMMENT meta
 :PROPERTIES:
 :LANE: main

@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C16
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
 :CREATED_BY: opus-5.5-medium
@@ -15,6 +15,7 @@ CLOCK: [2026-11-16 Mon 18:07]--[2026-11-16 Mon 18:21] => 0:14
 CLOCK: [2026-11-16 Mon 18:28]--[2026-11-16 Mon 18:41] => 0:13
 CLOCK: [2026-11-16 Mon 18:51]--[2026-11-16 Mon 18:58] => 0:07
 CLOCK: [2026-11-16 Mon 22:03]--[2026-11-16 Mon 22:14] => 0:11
+CLOCK: [2026-11-16 Mon 22:21]--[2026-11-16 Mon 22:35] => 0:14
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:11]
@@ -44,6 +45,16 @@ CLOCK: [2026-11-16 Mon 22:03]--[2026-11-16 Mon 22:14] => 0:11
 - Clock-out [2026-11-16 Mon 22:14]
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
+- Clock-in [2026-11-16 Mon 22:21]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
+- Clock-out [2026-11-16 Mon 22:35]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
+- Card state STARTED → DONE [2026-11-16 Mon 22:39]
+  Note: Landed af704cc..d3600cb plus doc fixes: approved template enforced at deploy (create/update/changeset/create-or-update/estimate-cost send a presigned approved URL or refuse), bucket region via GetBucketLocation with stack-region fallback (Tavis), HeadObject classes, 1 MB, ACL, request lint, review always prompts; Opus plan review and four Opus reviews (land)
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C16 — Enforce the approved template at deploy time
 #+date: 2026-11-16
@@ -99,58 +110,58 @@ review command's decline exit code; =lint-template= itself beyond
 extracting its validation call and measuring its size limit in bytes.
 
 Done when:
-- [ ] One module, =src/Iidy/Cfn/ApprovedTemplate.hs=, owns the approved key,
+- [X] One module, =src/Iidy/Cfn/ApprovedTemplate.hs=, owns the approved key,
   the pending key, the approved key derived from a pending key, and the
   approval bucket's region; request, review, create-stack, update-stack,
   create-changeset and estimate-cost all call it, and no other code builds
   or strips these keys or picks that region.
-- [ ] Mock-AWS tests (=test/Test/MockAws.hs=, no real AWS) show, for each
+- [X] Mock-AWS tests (=test/Test/MockAws.hs=, no real AWS) show, for each
   of =buildCreateStackRequest=, =buildUpdateStackRequest=,
   =buildCreateChangeSetRequest= and the estimate-cost request: with the
   approved object present, =templateURL= is a presigned HTTPS URL for
   =bucket/key= (=X-Amz-Signature= present) and =templateBody= is
   =Nothing=; with no =ApprovedTemplateLocation=, the request is unchanged
   and no S3 call is made.
-- [ ] Presign tests with a fixed signing time assert =X-Amz-Date=,
+- [X] Presign tests with a fixed signing time assert =X-Amz-Date=,
   =X-Amz-Expires=900=, the credential scope region, and with session keys
   =X-Amz-Security-Token=.
-- [ ] A test with the stack in one region and the approval bucket in
+- [X] A test with the stack in one region and the approval bucket in
   another (mock region =eu-west-1=, bucket location set by the mock) shows
   =HeadObject= and the presigned host and scope use the bucket's region,
   for a deploy builder and for the request.
-- [ ] Mock-AWS tests show the missing-approval refusal (HeadObject 404: the
+- [X] Mock-AWS tests show the missing-approval refusal (HeadObject 404: the
   error text, including the suggested =template-approval request= command
   with =--region= and =--environment=, is asserted, and no mutating
   CloudFormation call is made; =DescribeStacks= before the builder, as in
   iidy-js, is allowed), a distinct access-denied message (HeadObject 403),
   and for other HEAD failures a message naming the region used.
-- [ ] Mock-AWS tests show refusals, with approval on, by both the request
+- [X] Mock-AWS tests show refusals, with approval on, by both the request
   command and a deploy builder, before any S3 call: a =Template= that is an
   =s3://= or =https://= URL, and no =Template= at all. Each test asserts
   the new message text and fails on the old code.
-- [ ] Approval-path size tests: a rendered template of 999999 bytes is
+- [X] Approval-path size tests: a rendered template of 999999 bytes is
   accepted and one of 1000000 bytes refused, by the request and by one
   deploy builder, and that refusal does not suggest uploading to S3.
-- [ ] A request test written first and failing on the old code: HeadObject
+- [X] A request test written first and failing on the old code: HeadObject
   403 on the approved key fails the request with no =PutObject=.
-- [ ] Mock-AWS tests for =template-approval review= with an empty diff: the
+- [X] Mock-AWS tests for =template-approval review= with an empty diff: the
   prompt is asked; on yes the approved and =latest= objects are written and
   the pending object is deleted; on no nothing is written.
-- [ ] Mock-AWS tests for =template-approval request=: the pending
+- [X] Mock-AWS tests for =template-approval request=: the pending
   =PutObject= carries =x-amz-acl: bucket-owner-full-control=; with lint on,
   =ValidateTemplate= runs on the local body and a validation failure exits
   1 without uploading; a body over the inline validation limit (measured in
   bytes) is skipped with the existing warning; with =--no-lint-template= no
   =ValidateTemplate= call is made.
-- [ ] Docs describe the new behaviour (list under the decision); the false
+- [X] Docs describe the new behaviour (list under the decision); the false
   "step 5" and the "known gap" notes are gone; =DIVERGENCES.md= has entries
   for the deploy-time enforcement and empty-diff prompt (both differ from
   Rust), for SHA256 versus the iidy-js MD5 keys, for the request lint using
   =ValidateTemplate= rather than iidy-js's local laundry-cfn lint, and for
   the approval bucket region rule.
-- [ ] =TemplateApproval.hs= stays under 500 lines (S3 helpers and the diff
+- [X] =TemplateApproval.hs= stays under 500 lines (S3 helpers and the diff
   moved out).
-- [ ] Each task is its own commit naming C16; build warning-free; full suite
+- [X] Each task is its own commit naming C16; build warning-free; full suite
   green on every commit.
 
 Stop and record if: presigning needs a dependency not already in
@@ -1311,10 +1322,42 @@ Defects:
    =test/Test/TemplateApprovalTest.hs:199=. Move it to
    =test/Test/MockAws.hs= (beside =s3HostRegion=) and import it in both.
 
-* TODO estimate-cost uses the approved URL
+** Result 2026-11-16 (round 3 review fixes)
+:PROPERTIES:
+:ID: org:01a1e800-53b5-739e-aea8-4b90fc27607b
+:ADDED: [2026-11-16 Mon 22:34]
+:END:
+Branch =claude/C16= rebased onto main =0289e9e=; final tip below.
+Supervisor's call (2026-11-16): falling back to the stack's region on any
+=GetBucketLocation= failure, not only "denied" as in Tavis's option 3, is
+accepted, since every wrong-region result fails closed; recorded in
+=DIVERGENCES.md= and the docs.
+- Defect 1, =ce41842=: =approvalS3Env= returns =ApprovalS3= (env and the
+  lookup error); =approvalObjectExists= adds "(bucket region lookup
+  failed: <status> <code>; used the stack's region)" to an access-denied
+  or other =HeadObject= failure. Request, review and the deploy check use
+  it. Failing run first (=-p "/failed lookup named/"=): 3 of 4 failed (no
+  note); the successful-lookup case passes with no note.
+- Defect 2, =c0b62b5=: =mockOperations= in =test/Test/MockAws.hs=; the
+  copies in =DeployTemplateTest= and =TemplateApprovalTest= are gone.
+- Item 3, =bf00458=: =test/Test/DeployCommandsTest.hs= runs
+  create-or-update (direct and =--changeset=) and =update-stack
+  --changeset= over the mock (stack exists via the =DescribeStacks=
+  fixture): unapproved is refused with no =UpdateStack= or
+  =CreateChangeSet= call and =DescribeStacks= first; approved sends a
+  signed =TemplateURL= and no =TemplateBody=. With =RequestBuilder.hs=
+  set back to =402011c= the 6 tests failed; restored. The refusal text
+  helper moved into =test/Test/ApprovalFixtures.hs=.
+
+* DONE estimate-cost uses the approved URL
 :PROPERTIES:
 :ID: org:01a1e6fd-8bb4-76f0-af12-17eb107e4890
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 22:34] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
 
 =estimateCost= loads the local template inline
@@ -1325,10 +1368,28 @@ sends the approved URL here without its own check
 (=estimateStackCost.ts:9-11=); iidy-hs refuses early, which is the same
 outcome with a clearer message.
 
-* TODO Review prompts on an empty diff
+** Result 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e800-53b5-739e-aea8-4b8fa4405be4
+:ADDED: [2026-11-16 Mon 22:34]
+:END:
+Commit =affaedc=. =buildEstimateCostRequest= (in =EstimateCost.hs=) calls
+=resolveDeployTemplate=; =estimateCost= uses it. Failing run first
+(=-p "/estimate-cost/"=, old code): 2 of 3 failed (the local body was
+sent with approval on, and an unapproved template was estimated). Tests in
+=DeployCommandsTest=: approved (signed =TemplateURL=, no body), unapproved
+(refusal, only =GetBucketLocation= and =HeadObject=), approval off (body,
+no S3 call).
+
+* DONE Review prompts on an empty diff
 :PROPERTIES:
 :ID: org:01a1e6fd-8bb4-76f0-af12-17ea2b6fd35e
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 22:34] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
 
 Remove the no-diff branch (=TemplateApproval.hs:226-238=) so the diff, the
@@ -1346,10 +1407,34 @@ call =requestConfirmation= directly), and a =CfnContext= field would reach
 decline code; a non-empty diff still prompts.
 
 
-* TODO Docs and divergences
+** Result 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e800-53b4-736e-b126-9d49953e4ccc
+:ADDED: [2026-11-16 Mon 22:34]
+:END:
+Commit =fbdc1f9=. =templateApprovalReviewWith= takes the prompt (=Text ->
+IO ConfirmResult=); =templateApprovalReview= is it applied to
+=requestConfirmation=, so =app/Main.hs= is unchanged. The no-diff branch
+is gone: the review always prompts. Failing run first (seam added, branch
+still in place, =-p "/review prompt/"=): 3 of 4 failed (no prompt, no
+writes, exit 0 on decline); the non-empty-diff case passed. Tests: empty
+diff and yes writes approved then =latest= and deletes pending, the two
+approve writes carry no =x-amz-acl=, empty diff and no writes nothing
+and exits 1, non-empty diff asks. One existing expected value changed for
+this removal (allowed by the stop rule): the =MockAwsTest= override test
+reviewed identical bodies and expected an approval result without a
+prompt; it now declines at the stub prompt, expects exit 1 and an empty
+diff, and keeps its call list.
+
+* DONE Docs and divergences
 :PROPERTIES:
 :ID: org:01a1e6fd-8bb4-76f0-af12-17e98dfe42b1
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 22:34] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
 
 Apply the user-visible changes listed under the decision.
@@ -1391,3 +1476,116 @@ iidy-js (us-east-1) and Rust (stack region; review us-east-1).
 - Docs: =lint-template= changes only for an inline =Template= value over
   51199 UTF-8 bytes but under that many characters (now skipped with the
   warning).
+
+** Result 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e800-53b4-736e-b126-9d480680cead
+:ADDED: [2026-11-16 Mon 22:34]
+:END:
+Commit =d3600cb= (tip of =claude/C16=). =docs/command-reference.org=:
+"How it works" step 5 is the real deploy-time check (presigned URL,
+refusal text), plus local-Template, 1 MB, disable parameter, bucket-region
+("any failure" fallback) and SHA256-versus-MD5 notes; the security model
+names the deploying principal's =s3:GetObject=, the =s3:ListBucket= 403
+case, optional =s3:GetBucketLocation= and the overwrite race; request
+(ACL, lint, =ValidateTemplate= errors fail, =HeadObject= errors fail) and
+review (empty-diff prompt) updated.
+=docs/requirements/10-template-approval.org=:
+known-gap notes on the ACL and lint removed, auto-approve replaced in text
+and pseudo-code, new US-10-006 (deploy-time enforcement), region and size
+rules, the refusal texts. =05-cfn-operations.org= and
+=01-cli-interface.org= describe the deploy-time check. =DIVERGENCES.md=:
+a "Template Approval" section with deploy-time enforcement, refusal text,
+empty-diff prompt, SHA256 versus MD5, =ValidateTemplate= versus
+laundry-cfn, bucket region (and the supervisor's "any failure" call),
+presigned host, size unit and boundary, =latest= at the root, refusal
+wording, =HeadObject= errors and the ACL. =README.md= is outside the
+allowed paths and makes no claim these changes contradict.
+
+Final: rebased onto main =0289e9e=; full suite 2193 passed on the tip
+(=-Werror=, fourmolu, hlint clean).
+
+** Final review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e803-07b0-721d-9d9b-47f32d3590bf
+:ADDED: [2026-11-16 Mon 22:37]
+:END:
+Reviewer: review worker (Claude Opus 5.5). Branch =claude/C16=, commits
+=ce41842=, =c0b62b5=, =bf00458=, =affaedc=, =fbdc1f9=, =d3600cb=.
+
+Verdict: land. The code commits are right; three low defects in the
+docs can go in one follow-up commit and do not block landing.
+
+Revert proofs (commit checked out, production change undone, tests run
+with the test binary, restored; worktree clean on =d3600cb=):
+- =ce41842= (=approvalObjectExists= ignores the lookup error): 3 of 10
+  =ApprovalRegion= tests failed (request, review and deploy messages lack
+  the failed lookup).
+- =affaedc= (=buildEstimateCostRequest= back on =loadCfnTemplate=): 2 of
+  3 estimate-cost tests failed (body sent; the unapproved case returned
+  =Right 0=).
+- =fbdc1f9= (empty-diff shortcut restored): 4 of 15 failed, including the
+  =MockAwsTest= case whose expected value changed (=Right 0= before,
+  =Right 1= now). That change is the no-diff shortcut removal the card
+  allows.
+- =c0b62b5= and =bf00458= are test-only. The =bf00458= tests pass on the
+  =0289e9e= builders, as coverage tests for paths that already went
+  through them should.
+
+Checks:
+- estimate-cost cannot send an unapproved body: =estimateCost= builds its
+  request only through =buildEstimateCostRequest= and so
+  =resolveDeployTemplate=; with approval on, every =Right= carries the
+  URL and no body (tested). No other command sends a template to
+  CloudFormation except =lint-template= (=ValidateTemplate=, read-only)
+  and the =update-stack --diff= preview (out of scope).
+- Review prompt wiring: =app/Main.hs= is unchanged since =0289e9e= and
+  calls =templateApprovalReview= (=Main.hs:254=), which is
+  =templateApprovalReviewWith requestConfirmation=, the terminal prompt.
+  With stdin closed, =requestConfirmation='s =getLine= throws an EOF
+  =IOException= before =approveTemplate= runs: nothing is written and the
+  command exits non-zero with a raw "end of file" error, so it declines in
+  effect (pre-existing for every prompt; see below). Input "y" piped in
+  approves, as iidy-js.
+- Approve writes: approved and =latest= =PutObject= carry no
+  =x-amz-acl= (tested), as iidy-js =approval/index.ts:124-136=.
+- Docs against the reviewed code: "any failure" region fallback with the
+  lookup note, refusal text and option order, 1 MB (999999 UTF-8 bytes,
+  no S3 advice), URL and missing =Template= refused, =exec-changeset=
+  unchecked (=10-template-approval.org=, US-10-006), and the overwrite
+  race ("Deny =s3:PutObject= on approved keys", =command-reference.org=)
+  all match. No counts. The card's required =DIVERGENCES.md= items are all
+  there: deploy-time enforcement, empty-diff prompt, SHA256 versus MD5,
+  =ValidateTemplate= versus laundry-cfn, bucket region. The round-two
+  items are there too: size unit and boundary, =latest= at the root. Also
+  present: refusal wording, presigned host, =HeadObject= errors, ACL.
+
+Defects (all low, docs):
+1. =docs/requirements/10-template-approval.org:24=, =165=, =531=. Line
+   24 still says =ApprovedTemplateLocation= "must be a valid
+   =s3://bucket/path= URL", and lines 165 and 531 call a base location
+   with "no bucket, no key" invalid. Since =56c012c=, =s3://bucket= and
+   =s3://bucket/= are valid, as line 161 of the same file says. Fix: say
+   =s3://bucket[/path]=, and make only a missing bucket an error.
+2. =docs/requirements/10-template-approval.org:570= (Known Gaps) says
+   "the current implementation discards upload errors during promotion".
+   It does not: each of the three writes aborts the review with its error
+   (=TemplateApproval.hs:280-285=). The real gap is a partial state:
+   approved written, then =latest= or the delete fails. Reword.
+3. =docs/requirements/05-cfn-operations.org:960= (US-05-016,
+   =lint-template=) says a body over 51199 bytes gets the skip warning
+   and exit 0. For a file or =render:= template the loader refuses it
+   first ("Template body exceeds maximum size of 51199 bytes ... Upload
+   to S3 ..."), so only an inline =Template= value reaches the warning.
+   This is the round-two note for the docs task, not yet applied. State
+   both cases.
+
+Optional: =docs/command-reference.org='s template-approval security
+notes could repeat the =exec-changeset= gap from US-10-006, since that
+is the page users read.
+
+Pre-existing (not C16): =Iidy.Confirm.requestConfirmation= does not
+handle EOF. =iidy-hs template-approval review s3://B/K.pending
+</dev/null= (and every other confirmation prompt) ends with an uncaught
+=getLine= end-of-file error instead of "declined". It fails closed. A
+small card could map EOF to =Declined=.
