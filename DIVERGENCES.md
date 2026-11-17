@@ -493,3 +493,53 @@ such strings differently (single-quoted or plain text with literal
 backslash sequences, or the raw character), and the Rust parser keeps the
 escapes as literal text, so its output is not valid for the original value.
 Rust `get-import` (serde_yaml) already prints the same double-quoted form.
+
+## Explain: Output Layout
+
+**Cause**: deliberate; kept by Tavis (2026-11-16, card C30).
+
+Rust `iidy explain` (`src/explain.rs:14-30`) prints, per known code, the
+embedded markdown file for four codes only (ERR_1001, 2001, 4002, 5001;
+`src/yaml/errors/ids.rs:182-188`, text in `src/docs/errors/`, which says
+`IY2001` rather than `ERR_2001`). Every other code gets a generic block
+(`ids.rs:334-356`): `Error ERR_NNNN: description`, `Category: ...`, the
+description again, and "This error code doesn't have detailed documentation
+yet." iidy-hs prints one layout for all codes: `Error ERR_NNNN`,
+`Category:`, `Description:`, a blank line and a hand-written details
+paragraph. The descriptions themselves equal Rust's `description()`
+(pinned by a test); the no-argument message and its exit status (0) also
+match Rust. The TypeScript original has no `explain` command.
+
+## Demo: Sleep and Typing Delay Rounding
+
+**Cause**: deliberate; kept by Tavis (2026-11-16, card C30).
+
+Rust truncates the scaled `sleep:` duration to whole seconds
+(`src/demo.rs:134-136`) and the typing delay to whole milliseconds
+(`demo.rs:363-366`). iidy-hs rounds the scaled value to the nearest
+microsecond (`sleepMicros`, `typingDelayMicros`), so `sleep: 1` at
+`--timescaling 0.5` waits 0.5 s here and 0 s in Rust, and at 1.5 waits 1.5 s
+against Rust's 1 s. The TypeScript original scales exactly
+(`src/demo.ts:123,144`), so iidy-hs is nearer to it.
+
+## Demo: Fractional sleep Values
+
+**Cause**: follows the TypeScript original (card C30 decision).
+
+`sleep: 0.5` is accepted and waits the scaled fractional time. Rust types
+the field as `u64` (`src/demo.rs:43`) and rejects a fractional value;
+TypeScript accepts it (`src/demo.ts:123`). A negative value is rejected at
+parse time with `demo sleep must not be negative` (the earlier iidy-hs
+silently skipped the sleep; Rust rejects it through `u64`).
+
+## Demo: Masking Is Not Streamed
+
+**Cause**: structural; out of scope of card C30.
+
+Rust masks account numbers only in PTY mode, line by line, as output
+arrives (`src/demo.rs:303-340`). iidy-hs masks the whole captured stdout and
+stderr of each step separately after the step ends. Output is identical for
+the Rust ARN cases (`demo.rs:490-530`, pinned by tests): Rust's second ARN
+pass can never change what its first `\b\d{12}\b` pass left, so iidy-hs
+uses the single pass. The TypeScript original has no masking and no
+`--mask-secrets` option.
