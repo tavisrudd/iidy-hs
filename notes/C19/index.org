@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C19
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
 :CREATED_BY: opus-5.5-medium
@@ -10,9 +10,36 @@
 :ID: org:01a1e691-48b6-7547-9669-e53b8867a05a
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
+:CLOCK:
+CLOCK: [2026-11-17 Tue 11:30]--[2026-11-17 Tue 11:56] => 0:26
+CLOCK: [2026-11-17 Tue 11:56]--[2026-11-17 Tue 12:10] => 0:14
+CLOCK: [2026-11-17 Tue 12:37]--[2026-11-17 Tue 13:33] => 0:56
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-17 Tue 11:28]
   Note: Assigned to Sonnet sub-agent claude-C19 (Tavis 2026-11-17)
+  Agent: opus-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
+- Clock-in [2026-11-17 Tue 11:30]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:a5fa2f6fd2756881e
+- Clock-out [2026-11-17 Tue 11:56]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:a5fa2f6fd2756881e
+- Clock-in [2026-11-17 Tue 11:56]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:a5fa2f6fd2756881e
+- Clock-out [2026-11-17 Tue 12:10]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:a5fa2f6fd2756881e
+- Clock-in [2026-11-17 Tue 12:37]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:a5fa2f6fd2756881e
+- Clock-out [2026-11-17 Tue 13:33]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:a5fa2f6fd2756881e
+- Card state STARTED → DONE [2026-11-17 Tue 13:39]
+  Note: Landed 41e4f23..5ec8f28 (replayed; worker's b37def5+aa65d10 squashed, b37def5 alone failed -Werror): one AWS/HTTP error formatter, three duplicates removed, every site routed incl. S3Objects, LazyEnv, StackArgsBootstrap; S3 errors keep HTTP status; Opus review + fix round 1
   Agent: opus-5.5-medium
   Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
 :END:
@@ -64,7 +91,7 @@ other limit ([[file:../C20/index.org][C20]]: it also edits
 messages that do not come from an AWS or HTTP exception type.
 
 Done when:
-- [ ] =Iidy.Aws.Errors= holds one pure function for each of
+- [X] =Iidy.Aws.Errors= holds one pure function for each of
   =Amazonka.Error= and =HttpException= (for example
   =formatAwsError :: Amazonka.Error -> Text=) that never prints request
   headers, the query string, the signed request or credentials. The three
@@ -72,7 +99,7 @@ Done when:
   =Iidy.Cfn.GlobalConfig.formatAwsError=,
   =Iidy.Cfn.Operations.Changeset.formatAmazonkaError=) are replaced by it,
   not left beside it.
-- [ ] Decision (Tavis, 2026-11-16): accept the shorter =code: message=
+- [X] Decision (Tavis, 2026-11-16): accept the shorter =code: message=
   =ServiceError= wording. Settled by this card (Opus reviews it): a
   =ServiceError= prints
   =<code>: <message>= exactly as =formatAmazonkaError= does today (a missing
@@ -82,7 +109,7 @@ Done when:
   request or response headers. Call sites that now print =show= of a
   =ServiceError= therefore get a shorter message, and each such change is
   listed in the first task note.
-- [ ] Every site in the inventory uses it. The recorded grep
+- [X] Every site in the inventory uses it. The recorded grep
   (=rg -n 'show (e|ex|err)\b' src app= and a search for =displayException=)
   is attached with each remaining hit marked as not an AWS or HTTP error
   and why. Starting list, checked 2026-11-16: =Loaders/Ssm.hs= lines 60 and
@@ -94,7 +121,7 @@ Done when:
   =GetImport.hs= line 116, =Changeset.hs= line 296, =GlobalConfig.hs= line
   132 and the fall-through in =Errors.hs= lines 57-58 and 39-41. The C4 review
   names only part of this list.
-- [ ] Test with fake credentials: =Test.MockAws= gains a session token in
+- [X] Test with fake credentials: =Test.MockAws= gains a session token in
   its fake keys and a mode whose connection fails, so a real =TransportError=
   is produced by =Amazonka.send=. The test asserts the formatted message
   (and the =Left= from an SSM import and an S3 import run against that env)
@@ -103,11 +130,11 @@ Done when:
   =TransportError= with a connection failure, a response-timeout and a
   status-code =HttpException=, =SerializeError=). Recorded failing before
   the change.
-- [ ] A presigned-URL style query (=?X-Amz-Signature=...=) in an HTTP import
+- [X] A presigned-URL style query (=?X-Amz-Signature=...=) in an HTTP import
   location does not appear in the message for an =HttpException=.
-- [ ] Existing =formatAmazonkaError= tests in =ChangesetTest= still pass
+- [X] Existing =formatAmazonkaError= tests in =ChangesetTest= still pass
   (moved or retargeted, expected values unchanged).
-- [ ] Build warning-free, full suite green, commits name C19.
+- [X] Build warning-free, full suite green, commits name C19.
 
 Stop and record if: a call site needs the full exception text to work
 (a retry decision that matches on the text, or a documented debug flag;
@@ -115,7 +142,79 @@ Stop and record if: a call site needs the full exception text to work
 allowed list; or the transport error cannot be reproduced through the mock
 env (describe what was tried).
 
-* TODO Inventory every AWS and HTTP error site
+* DONE Inventory every AWS and HTTP error site
+:PROPERTIES:
+:ID: org:01a1eadd-5805-739d-9d26-ffe8ecb38d5f
+:ADDED: [2026-11-17 Tue 11:55]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 11:56] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:a5fa2f6fd2756881e
+:END:
+
+** Inventory (checked on the branch base a1d763d)
+:PROPERTIES:
+:ID: org:01a1eadd-5803-77ad-98ac-58fd768006c2
+:ADDED: [2026-11-17 Tue 11:55]
+:END:
+Grep: =rg -n '(show|displayException) \(?(e|ex|err|exc)\b' src app=. The
+starting list's line numbers had drifted, and =TemplateApproval.hs= and
+=GetImport.hs= no longer =show= an exception (they reach AWS through
+=Cfn/S3Objects.hs=). Sites that print an =Amazonka.Error= (all showed the
+whole request for a =TransportError=, headers and session token included):
+
+| Site                                          | Before            | After                       |
+|-----------------------------------------------+-------------------+-----------------------------|
+| Loaders/Ssm.hs 60, 94                         | show              | formatAwsError              |
+| Loaders/S3.hs 72                              | show              | formatAwsError              |
+| Loaders/Cfn.hs 159, 243, 371                  | show              | formatAwsError              |
+| Params/Client.hs 393, 414, 428, 459, 498, 550 | show              | formatAwsError              |
+| Params/Review.hs 93, 109, 115                 | show              | formatAwsError              |
+| Operations/ConvertStack.hs 510, 521, 698      | show              | formatAwsError              |
+| Operations/LintTemplate.hs 79                 | show              | formatAwsError              |
+| Aws/Sts.hs 34                                 | show              | formatAwsError              |
+| Cfn/GlobalConfig.hs 132                       | local duplicate   | formatAwsError (deleted)    |
+| Operations/Changeset.hs 296                   | local duplicate   | formatAwsError (deleted)    |
+| Errors.hs 57-58 (handleAwsError)              | displayException  | formatAwsError              |
+| Errors.hs 39-41 (fall-through)                | displayException  | an HttpException branch     |
+| Loaders/Http.hs 91                            | show HttpException| formatHttpException         |
+
+Messages that become shorter (a =ServiceError= used to print the whole
+record: status, headers, request id): every =Left ex= in =Params/Client.hs=,
+=Params/Review.hs=, =Loaders/Ssm.hs=, =Loaders/S3.hs=, =Loaders/Cfn.hs=,
+=ConvertStack.hs= (3 sites), =LintTemplate.hs=, =Aws/Sts.hs=. They now read
+=<code>: <message>=.
+
+Grep hits that are not AWS or HTTP errors: =TemplateLoader.hs= 121 and 248,
+=StackArgsLoader.hs= 181, =ContentParsing.hs= 73, =ConvertStack.hs= 193 (YAML
+and UTF-8 parse errors), =File.hs= (IO and UTF-8), =Git.hs= 69 (process
+IOException), =S3.hs= 56, =Http.hs= 78 (UTF-8 decode), =S3.hs= 74 and
+=Http.hs= 100 (our own size-limit exceptions), =Errors.hs= 45 (a generic
+=SomeException=), =StackArgsBootstrap.hs= 223 (C17 owns it).
+
+No Amazonka logger is configured: =rg 'setLogger|newLogger|envLogger'
+src app= finds nothing.
+
+Duplicate search: the three formatters named in the card were the only
+formatters of =Amazonka.Error=; no other implementation exists.
+
+*** Question for supervisor
+Sites that print an =Amazonka.Error= but sit in files outside the allowed
+list, so I left them (stop rule: the change needs a file outside the list):
+- =src/Iidy/Cfn/S3Objects.hs= 59, 112, 140, 152, 154, 163 (=show ex=). These
+  are the approval-template S3 calls and still leak the session token.
+- =src/Iidy/Yaml/Imports/Loaders/LazyEnv.hs= 61 ("AWS configuration failed",
+  an =Amazonka.Error= from the env provider; a transport failure there is
+  an IMDS call, so it carries no signed request, but it is still an
+  unformatted =Error=).
+Please add both files to the allowed paths (the edit is the same
+one-line swap to =formatAwsError=), or tell me to leave them.
+
+Also: the card says a =ServiceError= without a message prints the code
+alone, but the existing =ChangesetTest= (which must stay unchanged) and
+"exactly as =formatAmazonkaError= does today" give ="InternalFailure: "=.
+I kept the existing behaviour (code, colon, space).
 :PROPERTIES:
 :ID: org:01a1e692-1422-7188-ba5f-c088ca32791b
 :ADDED: [2026-11-16 Mon 15:54]
@@ -127,21 +226,228 @@ card. Note the sites whose message becomes shorter. Check that no Amazonka
 logger is configured (none was found on 2026-11-16, so debug flags cannot
 print headers).
 
-* TODO Reproduce the leak with the mock env, as a failing test
+* DONE Reproduce the leak with the mock env, as a failing test
 :PROPERTIES:
 :ID: org:01a1e6c6-5247-7342-bc95-a68b25e02d33
 :ADDED: [2026-11-16 Mon 16:51]
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 11:56] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:a5fa2f6fd2756881e
+:END:
+
+Reproduced with =Test.AwsErrorTest= against the base production code (new
+tests and mock env only). Both import tests failed:
+
+#+begin_example
+S3 import error names the host and holds no credential:  FAIL
+  session token leaked in: S3 fetch error for //some-bucket/config.yaml:
+  TransportError (HttpExceptionRequest Request {
+    host = "some-bucket.s3.us-east-1.amazonaws.com" ...
+    requestHeaders = [("X-Amz-Security-Token","<fake token>"),
+      ("X-Amz-Content-SHA256",...),("X-Amz-Date",...),("Host",...),
+      ("Authorization","<REDACTED>")]
+    path = "/config.yaml" ... }
+  (ConnectionFailure user error (connection refused (mock))))
+2 out of 2 tests failed
+#+end_example
+
+The SSM import failed the same way. (http-client already redacts the
+=Authorization= value; the session token and the query string are not.)
+=Test.MockAws= got =newRefusingMockAws= (every connection refused; signs with
+a fake session token), plus exported fake key constants. The default mock
+envs keep static keys only, because =S3ObjectsTest= pins exact presigned
+signatures.
 
 Extend =Test.MockAws= (fake session token; a connection that fails) and
 write =test/Test/AwsErrorTest.hs= with the token assertions against the
 current behaviour of the SSM and S3 loaders. Record the failing run.
 
-* TODO Add the formatter and route every site through it
+* DONE Add the formatter and route every site through it
 :PROPERTIES:
 :ID: org:01a1e6c6-5247-7342-bc95-a68ac6e968ec
 :ADDED: [2026-11-16 Mon 16:51]
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 12:10] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:a5fa2f6fd2756881e
+:END:
+
+Commits on =claude/C19= (rebased onto main): 553af01 (formatter, the three
+duplicates deleted, sites, tests) and 3f30429 (S3Objects and LazyEnv, the
+no-message wording). Full suite green on the rebased tip, warning-free.
+
+Supervisor's answers (the supervisor's call, not Tavis's):
+- =Cfn/S3Objects.hs= and =Loaders/LazyEnv.hs= joined the allowed paths for
+  routing their AWS-error =show= sites through =formatAwsError=. Done:
+  =S3Objects.hs= (five =Amazonka.Error= sites; the UTF-8 decode =show= at
+  the end of =getFromS3= is not an AWS error and stays) and =LazyEnv.hs=
+  (the =Amazonka.Error= handler; the =AuthError= handler shows an
+  =AuthError=, which holds no request). New tests in =AwsErrorTest= (head
+  object, existence check, env provider) failed before this change
+  (3 of 15 failed against the unfixed files) and pass now.
+- A =ServiceError= with no message prints the code alone.
+
+Deliberate expected-value changes (reason: the settled =code: message=
+wording and the supervisor's answer):
+- =ChangesetTest=: ="InternalFailure: "= became ="InternalFailure"= (the
+  supervisor's answer 2).
+- =S3ObjectsTest= "500 is a failure with the error text": it asserted the
+  message contained ="500"= because =show= printed the status record. A
+  =ServiceError= now prints =<code>: <message>=, and for a HEAD 500 the
+  code is ="Internal Server Error"=, so the test now asserts that text.
+  The status number itself is no longer printed; flagged for review.
+Presigned-signature pins are untouched.
+
+Final grep (=rg -n '(show|displayException) \(?(e|ex|err|exc)\b' src app=):
+the only remaining hits are the "not AWS or HTTP" list in the inventory,
+plus nothing else. (Correction, review 2: the =AuthError= handler in
+=LazyEnv.hs= is not free of requests; it is fixed in the fix round below.)
 
 Create =Iidy.Aws.Errors=, delete the three duplicates, replace each
 inventory site, and make the failing tests pass. Attach the final grep.
+
+** Review 2026-11-17
+:PROPERTIES:
+:ID: org:01a1eb02-c9ce-7628-9c52-1579fef9466d
+:ADDED: [2026-11-17 Tue 12:36]
+:END:
+Reviewer: review worker. =553af01= and =3f30429= on =7d9ab05=: *fix first*
+(two leak sites remain). Build checks were NOT run: =scripts/guarded-build=
+refused every attempt for about 30 minutes (MemAvailable 4.6-5.1 GiB, below
+the 6 GiB floor). Pending: the full suite at the tip, and the proof that the
+=AwsErrorTest= cases fail with the production files reverted (the worker
+reports both import tests and 3 of 15 later ones). Everything below is from
+reading.
+
+Checked and fine: =Amazonka.Error= has three constructors, all matched.
+=formatHttpException= prints only =Client.host=. =InvalidUrlException=
+drops the URL (so a presigned query is hidden) and =StatusCodeException=
+drops the headers and body. The catch-all (=other -> show other=) covers
+only =HttpExceptionContent= constructors that carry no =Request=. The inner
+=ConnectionFailure=/=InternalException= text is =displayException= of the
+inner exception, not of the =HttpExceptionRequest=, so it carries no
+request. The three duplicates are deleted, not left beside the new one
+(=formatAmazonkaError= and the =GlobalConfig= copy are gone; =handleAwsError=
+delegates). There are no other references to them. Every call site that
+catches with =try @Amazonka.Error= / =catch= was checked: each one formats
+through =formatAwsError=, ignores the error (=ConvertStack.hs:564=, policy
+fallback) or rethrows into =handleUncaughtException=. No Amazonka logger is
+set. =newRefusingMockAws= shares the new =mockEnvFor= with
+=newMockAwsIn=: no duplicated mock setup.
+
+1. Medium, =src/Iidy/Cfn/StackArgsBootstrap.hs:223=: =buildImportEnv=
+   prints =displayException= of any env-build exception. Building the
+   stack-args import env can call STS (=AssumeRoleARN=), so an
+   =Amazonka.TransportError= there prints the whole signed request with
+   =X-Amz-Security-Token=. The inventory marks it "C17 owns it", but C17 is
+   done and nothing owns it now. Fix: when the exception is an
+   =Amazonka.Error= or =AuthError=, use =formatAwsError= (and item 2's
+   formatter). The file is outside the allowed paths: supervisor to widen
+   them, as for =S3Objects.hs=.
+2. Low, =src/Iidy/Yaml/Imports/Loaders/LazyEnv.hs:58=: the =AuthError=
+   handler still prints =show e=. The final grep note says "an =AuthError=
+   holds no request", which is wrong. Amazonka's
+   =data AuthError = RetrievalError HttpException | ...= derives =Show=, so
+   a credential-retrieval transport failure (instance metadata, container
+   credentials) prints the =Request= and its headers. http-client redacts
+   only =Authorization=, so the IMDSv2 =X-aws-ec2-metadata-token= is
+   printed. Fix: format =RetrievalError he= with =formatHttpException he=
+   and keep =show= for the other constructors (they hold only text and
+   paths). Add a pure test.
+3. Low, =src/Iidy/Cfn/S3Objects.hs:110-113=: =bucketRegion= keeps its own
+   =ServiceError= formatting (=<status> <code>=) beside =formatAwsError=, a
+   fourth variant. Fix: see the status recommendation below, which merges
+   it.
+4. Low, =test/Test/AwsErrorTest.hs= =serviceError= and the first two cases
+   repeat =ChangesetTest='s =mkServiceError=/=mkServiceErrorNoMsg= and its
+   retargeted =formatAwsError= group (the same two assertions in both
+   modules). Fix: keep the =ServiceError= cases in one module and reuse one
+   builder.
+
+On the HTTP status (supervisor's question): do not add it inside
+=formatAwsError=. Tavis settled the =<code>: <message>= wording, and adding
+the status would change the =ChangesetTest= values the card keeps. The
+loss matters only where the code is a synthesized status phrase (a body-less
+HEAD, where S3 has no error document). Restore it at that call site: in
+=headObject= (and =bucketRegion=), print ="HTTP " <> status <> " "= before
+=formatAwsError= for a =ServiceError=. That brings back the original
+=S3ObjectsTest= assertion (="500"=) unchanged and merges item 3.
+
+Overlap: C20 also edits =Loaders/Http.hs= (new =timeout= handler in the
+same =catches= block); the second to land needs a trivial rebase.
+
+** Fix round 1 (supervisor's calls)
+:PROPERTIES:
+:ID: org:01a1eb37-0cd4-7046-9976-1e728b637bef
+:ADDED: [2026-11-17 Tue 13:33]
+:END:
+Commits on =claude/C19= rebased onto fb1edb2: c4f8429, dda1006, b37def5.
+- =StackArgsBootstrap.hs= (added to the allowed paths by the supervisor):
+  =buildImportEnv= now uses =formatBuildException=, which routes an
+  =Amazonka.Error=, =AuthError= or =HttpException= through its formatter.
+- =LazyEnv.hs=: the =AuthError= handler uses =formatAuthError=
+  (=RetrievalError he= goes through =formatHttpException=; the other
+  constructors keep =show=). My earlier note that an =AuthError= holds no
+  request was wrong.
+- =S3Objects.hs=: =headObject= and =bucketRegion= share =formatS3Error=
+  (=HTTP <status>: <formatAwsError text>=); =formatAwsError= is unchanged.
+  The =S3ObjectsTest= "500" assertion is restored as it was.
+- Tests: =mkServiceError=, =mkServiceErrorNoMsg= and =mkSerializeError= now
+  live in =Test.Shared= (ChangesetTest's local copies are gone);
+  =AwsErrorTest= dropped its duplicated ServiceError cases. WatchStackTest
+  still has its own copies (not touched; outside the allowed paths).
+- Failing first (production files reverted): the new stack-args bootstrap
+  test, the credential-retrieval test, the restored 500 assertion and the
+  =bucketRegion= status test all failed; they pass now.
+- Hang seen once (card C6): the first full run stopped at
+  "directory hash is deterministic" for ten minutes in spite of
+  =--timeout=60s=; I killed the =iidy-hs-test= process by PID and the rerun
+  passed.
+- The only deliberate expected-value change left is ChangesetTest
+  ="InternalFailure: "= to ="InternalFailure"=.
+
+*** Re-review 2026-11-17
+:PROPERTIES:
+:ID: org:01a1eb39-68ca-77c0-a845-5b789ee3467d
+:ADDED: [2026-11-17 Tue 13:36]
+:END:
+Rebased on =fb1edb2=: =git range-diff= shows =dda1006= identical to
+=3f30429=. =c4f8429= differs from =553af01= only in import context (C35's
+emitter import in =ConvertStack.hs=, C20's =timeout= in =Loaders/Http.hs=);
+the =Http.hs= resolution keeps both changes. Fix round =b37def5=,
+=aa65d10=: *land*, 0 defects.
+
+- (1) Resolved. =formatBuildException= routes =Amazonka.Error=,
+  =AuthError= and =HttpException= to their formatters; only other types reach
+  =displayException=. No code in =src/Iidy/Aws/= or the bootstrap rethrows
+  one of these inside another type, and Amazonka throws them directly. A
+  wrapper such as async's =ExceptionInLinkedThread= would still fall
+  through, but nothing on this path uses one (residual, not a defect).
+- (2) Resolved. =formatAuthError= formats =RetrievalError= through
+  =formatHttpException=. The other constructors (=MissingEnvError=,
+  =MissingFileError=, =InvalidFileError=, =InvalidIAMError=,
+  =CredentialChainExhausted=) hold only a path or text built by Amazonka:
+  an INI or JSON parse message, a profile loop trace, or a variable name.
+  None of them carries a request or a credential.
+- (3) Resolved. One helper, =formatS3Error=, prints =HTTP <status>: = and
+  then =formatAwsError= for a =ServiceError=, used by =headObject= and
+  =bucketRegion=. =bucketRegion='s own wording is gone, and the
+  =S3ObjectsTest= "500" assertion is back to its original text.
+- (4) Resolved. =mkServiceError=, =mkServiceErrorNoMsg= and
+  =mkSerializeError= live in =Test.Shared=, and the copies in
+  =ChangesetTest= and =AwsErrorTest= are gone. Follow-up (outside the
+  paths): =WatchStackTest.hs:363,376= keeps its own copies.
+- Checks: the full suite at =aa65d10= passes (2329 tests, no warnings).
+  With the four fix-round files (=Aws/Errors.hs=, =S3Objects.hs=,
+  =StackArgsBootstrap.hs=, =LazyEnv.hs=) at =dda1006=, the four new tests
+  fail (bootstrap transport, credential retrieval, HEAD 500 status,
+  =bucketRegion= status). Pending check from the first review, now run:
+  with every C19 production file except =Aws/Errors.hs= at =fb1edb2=, 8 of
+  52 tests in =AwsError=/=S3Objects=/=StackArgsBootstrap= fail (SSM and S3
+  imports, head-object, existence check, env provider, credential
+  retrieval, bootstrap, =bucketRegion=). "500 is a failure" passes there,
+  as it should, because the restored assertion matches the old =show=
+  output.

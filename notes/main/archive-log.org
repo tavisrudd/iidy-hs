@@ -40,6 +40,7 @@
 - [2026-11-17 Tue 12:12] [[file:../C20/index.org][C20]] — Landed ada10c8..0e15639: alias node cap, 50 MiB expanded-size cap, import depth 32 and count 1000, helper output 1 MiB on every helper, HTTP total 60 s; Opus review + 2 fix rounds; follow-ups C44 C45 C46
 - [2026-11-17 Tue 13:27] [[file:../C18/index.org][C18]] — Landed 82f48c8..c433818: escapeControl + one escapeOutputData pass in the renderer, raw outputs exempt; Opus review, fix round 1 (derived token); follow-ups C47 C48
 - [2026-11-17 Tue 13:29] [[file:../C35/index.org][C35]] — Landed ..de2fb83: non-printable strings and keys double-quoted with YAML escapes in every emitter incl. convert-stack (shared escaping, own quote policy kept), U+FFFE/FFFF, key with line feed, blank-line fix; Opus review + 2 fix rounds; C42 now unblocked
+- [2026-11-17 Tue 13:39] [[file:../C19/index.org][C19]] — Landed 41e4f23..5ec8f28 (replayed; worker's b37def5+aa65d10 squashed, b37def5 alone failed -Werror): one AWS/HTTP error formatter, three duplicates removed, every site routed incl. S3Objects, LazyEnv, StackArgsBootstrap; S3 errors keep HTTP status; Opus review + fix round 1
 * COMMENT meta
 :PROPERTIES:
 :LANE: main

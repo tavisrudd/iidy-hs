@@ -144,3 +144,4 @@
 2026-11-17 12:12 — 2026-11-17--1 (c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e): C20 landed and closed (resource limits); filed C44-C46
 2026-11-17 13:27 — 2026-11-17--1 (c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e): C18 landed and closed (terminal control-character escaping); filed C47, C48
 2026-11-17 13:29 — 2026-11-17--1 (c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e): C35 landed and closed (YAML emitter escapes non-printable characters)
+2026-11-17 13:39 — 2026-11-17--1 (c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e): C19 landed and closed (AWS error messages no longer print requests or credentials)
