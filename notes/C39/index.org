@@ -60,6 +60,9 @@ Call sites of the lenient =parseYaml=, verified 2026-11-16 with
   AWS for =convert-stack-to-iidy=: rejecting would make a stack
   unconvertible rather than flag the user's own mistake). Until the
   supervisor answers, leave both lenient.
+  Decision (Tavis, 2026-11-17): =Demo.hs= switches to =parseYamlStrict=
+  (demo scripts reject a repeated key, as TypeScript does);
+  =ConvertStack.hs= stays lenient, because that text comes from AWS.
 - Not a call site of concern: =parseYamlFile= (=Parser.hs= line 55) has no
   caller in =src/= or =app/=; leave it or remove it only if it stays
   unused.

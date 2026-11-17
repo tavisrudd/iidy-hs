@@ -88,6 +88,12 @@ rejected" needs six levels (or a fan-out that passes 250,000). If Tavis
 wants the review's own bomb rejected, the cap would have to be below
 111,111; that is a new decision, not this card's.
 
+Decision (Tavis, 2026-11-17): keep the 250,000-node alias cap and also cap
+the size of the expanded output at about 50 MB, so the review's five-level
+bomb (253 MB) is rejected by the size cap. The size cap is a user-visible
+limit like the others: name it, test just under and just over it, and
+record it in the security docs.
+
 Values (the review gives none; confirmed by Tavis 2026-11-16 as proposed,
 except the alias cap above; each is a user-visible limit). They are named
 constants in =Iidy.Constants=, with the reason recorded beside each:

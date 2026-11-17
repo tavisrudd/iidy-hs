@@ -75,3 +75,10 @@ recommended.
 4. C35 rescope, and the bug that iidy-hs drops `\x01` in YAML output.
 5. Deploy-time lint (iidy-js lints at deploy; Rust and iidy-hs do not):
    file a low-priority card.
+
+Answered by Tavis 2026-11-17: C16 accepted (approval changes apply only
+with `ApprovedTemplateLocation` set). C20 adds an expanded-output size cap
+of about 50 MB (recorded on the card). C39 as recommended (recorded on the
+card). Deploy-time lint: no card; leaving it out is deliberate, because
+iidy-js's lint rules went stale and caused problems. Still open: C17 (Tavis
+asked for examples) and C35 (rescope).
