@@ -239,7 +239,7 @@ preprocessing language -- variables, conditionals, and collection transforms
 that generate repetitive template sections. The language operates on YAML data
 structures, not strings: it is purely functional (side-effect-free once imports
 are loaded) data transformations layered on top of valid YAML. See
-[yaml-preprocessing.md](docs/yaml-preprocessing.md) for the full reference.
+[yaml-preprocessing.org](docs/yaml-preprocessing.org) for the full reference.
 
 Teams that become comfortable with the preprocessor also use `iidy render`
 outside of CloudFormation to generate Kubernetes manifests, CI configurations,
@@ -271,15 +271,15 @@ and other YAML-based artifacts.
 
 ## Documentation
 
-- **[Getting Started](docs/getting-started.md)** -- installation, first
+- **[Getting Started](docs/getting-started.org)** -- installation, first
   deployment, stack-args.yaml reference
-- **[Command Reference](docs/command-reference.md)** -- all commands, options,
+- **[Command Reference](docs/command-reference.org)** -- all commands, options,
   and exit codes
-- **[YAML Preprocessing](docs/yaml-preprocessing.md)** -- the preprocessing
+- **[YAML Preprocessing](docs/yaml-preprocessing.org)** -- the preprocessing
   language for imports, variables, conditionals, and collection transforms
-- **[Import Types](docs/import-types.md)** -- file, env, git, s3, ssm, cfn,
+- **[Import Types](docs/import-types.org)** -- file, env, git, s3, ssm, cfn,
   and other import sources
-- **[Security](docs/SECURITY.md)** -- import system security model for remote
+- **[Security](docs/SECURITY.org)** -- import system security model for remote
   templates
 - **[Formal Language Spec](spec/README.md)** -- PLT Redex executable semantics
   for the preprocessing language, with snapshot-based conformance tests
