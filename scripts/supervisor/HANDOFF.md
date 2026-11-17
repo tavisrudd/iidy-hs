@@ -80,5 +80,9 @@ Answered by Tavis 2026-11-17: C16 accepted (approval changes apply only
 with `ApprovedTemplateLocation` set). C20 adds an expanded-output size cap
 of about 50 MB (recorded on the card). C39 as recommended (recorded on the
 card). Deploy-time lint: no card; leaving it out is deliberate, because
-iidy-js's lint rules went stale and caused problems. Still open: C17 (Tavis
-asked for examples) and C35 (rescope).
+iidy-js's lint rules went stale and caused problems. C17: keep the
+narrower rule. C35 rescoped (non-printable strings double-quoted, blank-line
+fix; floats dropped) and back to TODO. New Rust-side cards, which edit
+`~/src/iidy` with Tavis's authorisation: C42 (Rust parser keeps `\x`, `\u`,
+`\e` escapes as literal text; render quoting; after C35) and C43 (port the
+C17 stack-args rule to Rust).

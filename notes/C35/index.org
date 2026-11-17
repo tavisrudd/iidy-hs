@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C35
 :LANE:     main
-:TODO_STATE: WAITING
+:TODO_STATE: TODO
 :MODE:     CONTRACT
 :ORIGIN:   C28 review 2026-11-16: the emitter prints 1.0 as 1, 1e5 as 100000 and 'a\tb\x01' as a quoted raw tab while dropping \x01; Rust prints 1.0, 100000.0 and "a\tb\x01"
 :CREATED_BY: opus-5.5-medium
@@ -27,8 +27,12 @@ CLOCK: [2026-11-16 Mon 18:14]--[2026-11-16 Mon 18:14] => 0:00
   Note: Parked: floats need a number-representation change in the parser (1.0 vs 1, .inf/.nan); Rust's targets differ by command (get-import serde_yaml vs render emitter); findings under the card's question; needs rescoping and a decision
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Card state WAITING → TODO [2026-11-17 Tue 11:15]
+  Note: Rescoped by Tavis 2026-11-17: non-printable strings double-quoted, blank-line fix; floats dropped
+  Agent: opus-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
 :END:
-#+title: C35 — YAML emitter: print floats and control characters as Rust does
+#+title: C35 — YAML emitter: double-quote strings with non-printable characters
 #+date: 2026-11-16
 #+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
 
@@ -39,14 +43,29 @@ CLOCK: [2026-11-16 Mon 18:14]--[2026-11-16 Mon 18:14] => 0:00
 :END:
 
 Found by the C28 review ([[file:../C28/index.org][C28]], "Review
-2026-11-16", pre-existing items). The YAML emitter
-(=src/Iidy/Yaml/Emitter.hs=) prints the float =1.0= as =1= and =1e5= as
-=100000=, so a float turns into an integer on output, and prints a string
-holding a tab and the control character U+0001 as a quoted raw tab with the
-U+0001 dropped, which loses data. Rust prints =1.0=, =100000.0= and
-="a\tb\x01"=. Applies to every command that emits YAML (=render=,
-=get-import=). Distinct from [[file:../C18/index.org][C18]], which is about
-terminal output, not YAML documents.
+2026-11-16", pre-existing items); rescoped by Tavis 2026-11-17.
+
+The original description was wrong about data loss. Re-run 2026-11-17 with
+the iidy-hs binary on =a: "a\tb\x01"=: =render= writes
+='a<TAB>b<U+0001>'=, single-quoted with the real U+0001 byte, which is
+invisible in a terminal (so the review read it as dropped). A single-quoted
+YAML scalar cannot hold a non-printable character, so the output is not
+valid YAML: rendering it again fails with "Tag error: Unexpected ''"
+(ERR_4005), the character invisible in the message too. Unquoted output is
+also affected: =c: "\e"= renders as =c: <ESC>= and =d: "x\ay"= as
+=d: x<BEL>y=, both plain and raw.
+
+Rust is no reference here. Its parser keeps =\x=, =\u=, =\e=, =\a= and
+other escapes as literal text, so its =render= prints ='a<TAB>b\x01'= with
+four literal characters: valid YAML, wrong value. That is filed as
+[[file:../C42/index.org][C42]] (fix Rust). Rust =get-import= (serde_yaml)
+prints ="a\tb\x01"=. Rust and iidy-hs should end up printing the same
+text; C42 takes its escape spelling from this card.
+
+Floats are out (Tavis, 2026-11-17): =render= prints =1.0= as =1= as Rust
+and TypeScript do; only Rust =get-import= prints =1.0=, and matching it
+needs a parser number-representation change for no CloudFormation benefit.
+The findings are kept below under "Question for supervisor".
 
 * Scope and gate
 :PROPERTIES:
@@ -55,41 +74,45 @@ terminal output, not YAML documents.
 :END:
 
 Allowed paths: =src/Iidy/Yaml/Emitter.hs=, =test/Test/EmitterTest.hs=,
-=test-fixtures/= (expected outputs only where they were wrong against
-Rust), =notes/C35/=.
+=test-fixtures/= (expected outputs only), =DIVERGENCES.md= (one entry),
+=notes/C35/=.
 
-Out of scope: sequence indentation (decided), key order, JSON output.
-
-Also for the rescope (C32 review, 2026-11-16): a tag with a sequence
-argument containing a mapping, such as =c: !Sub [a${B}, {B: x}]= followed
-by another key, prints a blank line after =- B: x=; Rust prints none. Not
-yet checked on a commit before C32, but the C32 change does not touch that
-path.
+Out of scope: floats, sequence indentation (decided), key order, JSON
+output, the parser.
 
 Done when:
-- [ ] Floats keep a fractional part or exponent as Rust prints them
-  (=1.0=, =100000.0=, and the Rust output for =1.5e300=, =-0.0=, =.inf=,
-  =.nan=), recorded from the Rust binary in the card; tests recorded
+- [ ] A string containing a non-printable character (C0 controls other
+  than TAB and LF, DEL, C1 controls including U+0085, U+2028, U+2029,
+  U+FEFF) is printed double-quoted with YAML escapes, by every command that
+  emits YAML. Prefer the short YAML escapes where they exist (=\0 \a \b
+  \t \v \f \r \e \N \L \P=) and =\xHH= or =\uHHHH= otherwise; record
+  the chosen spelling here for C42.
+- [ ] Tests, recorded failing first: each character class above, plus
+  =a\tb\x01=, =\e[0m=, =x\ay=; each output re-renders to the same value
+  through iidy-hs (round trip). Strings with only TAB keep their current
+  output.
+- [ ] A tag with a sequence argument containing a mapping, such as
+  =c: !Sub [a${B}, {B: x}]= followed by another key, prints no blank line
+  after =- B: x= (C32 review, 2026-11-16; Rust prints none); test recorded
   failing first.
-- [ ] Strings with control characters are double-quoted with escapes and
-  lose no character (=\t=, =\x01=, =\x7f=, =\u0085=, U+2028), matching
-  Rust; tests recorded failing first.
-- [ ] Every fixture expected output changed by the fix is listed in the
-  card with the Rust output that justifies it.
+- [ ] =DIVERGENCES.md= notes that Rust =render= prints such strings
+  differently until C42 lands.
+- [ ] Every fixture expected output changed by the fix is listed here with
+  the reason.
 - [ ] Build warning-free, full suite green, commits name C35.
 
-Stop and record if: an expected output that came from Rust changes; the
-fix needs the parser to keep the original number text.
+Stop and record if: an expected output that came from Rust changes for a
+string without non-printable characters; the fix needs the parser.
 
-* TODO YAML emitter: print floats and control characters as Rust does
+* TODO YAML emitter: double-quote strings with non-printable characters
 :PROPERTIES:
 :ID: org:01a1e700-105d-7600-affb-617b3144f247
 :ADDED: [2026-11-16 Mon 17:55]
 :END:
 
-Record the Rust and iidy-hs output for each case in the gate with local
-files only. Add the failing emitter tests, then fix the float and string
-rendering in the emitter's one scalar path.
+Add the failing emitter tests, then route strings with non-printable
+characters to a double-quoted path in the emitter's one scalar path, then
+the blank-line fix.
 
 ** Question for supervisor
 :PROPERTIES:

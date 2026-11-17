@@ -1,0 +1,114 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C42
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   Tavis 2026-11-17, from C35: Rust's parser keeps \x, \u, \e, \a escapes as literal text
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
+:ID: org:01a1eab7-447d-733b-8f86-f05264b0098e
+:ADDED: [2026-11-17 Tue 11:14]
+:DEPENDS_ON: C35
+:END:
+:LOGBOOK:
+- DEPENDS_ON (none) → C35 [2026-11-17 Tue 11:15]
+  Agent: opus-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
+:END:
+#+title: C42 — Rust iidy: decode all YAML double-quoted escapes and quote control characters in render
+#+date: 2026-11-17
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1eab7-447d-733b-8f86-f051745b57ac
+:ADDED: [2026-11-17 Tue 11:14]
+:END:
+
+Found 2026-11-17 while rescoping [[file:../C35/index.org][C35]]. The Rust
+YAML parser decodes only =\n=, =\t=, =\r=, =\\=, =\"=, =\'= and =\0= in a
+double-quoted scalar (=unescape_string=,
+=~/src/iidy/src/yaml/parsing/parser.rs:1763-1792=). Every other escape is
+kept as literal text: an unknown escape pushes the backslash and the
+character. So =render= changes values silently. Recorded 2026-11-17 with
+=~/src/iidy/target/debug/iidy render= on local files:
+
+| input           | Rust render       | correct value (iidy-hs render) |
+|-----------------+-------------------+--------------------------------|
+| ="\x41"=        | =\x41=            | =A=                            |
+| ="B"=      | =B=          | =B=                            |
+| ="\e"=          | =\e=              | ESC (U+001B)                   |
+| ="x\ay"=        | =x\ay=            | =x=, BEL (U+0007), =y=         |
+| ="a\tb\x01"=    | ='a<TAB>b\x01'=   | =a=, TAB, =b=, U+0001          |
+
+The same holds for =é= and every other =\x=, =\u=, =\U= escape, so
+non-ASCII text written as an escape reaches CloudFormation as backslash
+text. The parser also accepts =\'=, which YAML 1.2 does not define in a
+double-quoted scalar. =get-import= is not affected: it parses with
+serde_yaml.
+
+The emitter has a second, smaller problem once the parser is fixed:
+=emit_str_iidy= (=~/src/iidy/src/yaml/emitter.rs:396-416=) prefers single
+quotes, and =emit_single_quoted_string_iidy= (lines 452-464) writes control
+characters raw. A single-quoted scalar cannot hold a non-printable
+character, so the output would not be valid YAML. iidy-hs has the same
+emitter bug (C35 fixes it there by double-quoting such strings with YAML
+escapes); this card makes Rust do the same, so both print the same text.
+
+This card edits the Rust repository, =~/src/iidy/=, which is otherwise
+read-only for this project. Tavis authorised that on 2026-11-17 for this
+card.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1eab7-447d-733b-8f86-f050ecab437b
+:ADDED: [2026-11-17 Tue 11:14]
+:END:
+
+Allowed paths: =~/src/iidy/src/yaml/parsing/parser.rs= (=unescape_string=
+and its callers only), =~/src/iidy/src/yaml/emitter.rs= (string quoting
+only), the Rust tests next to them or under =~/src/iidy/tests/=, and
+=notes/C42/= here. Build and test inside =nix develop ~/src/iidy=.
+
+Out of scope: floats (decided in C35: Rust =render= already prints =1.0= as
+=1=, and that stays), key order, sequence indentation, the iidy-hs side
+(C35).
+
+Done when:
+- [ ] Double-quoted scalars decode every YAML 1.2 escape: =\0 \a \b \t
+  \n \v \f \r \e \  \" \/ \\ \N \_ \L \P=, =\xHH=, =\uHHHH=, =\UHHHHHHHH=,
+  and an escaped line break. An undefined escape is a parse error with the
+  scalar's position, not literal text. Decide =\'= in the first task: it is
+  undefined in YAML; record whether any test or example uses it before
+  making it an error.
+- [ ] =render= prints a string containing a non-printable character
+  (C0 controls other than TAB and LF, DEL, C1 controls, U+2028, U+2029,
+  U+FEFF) double-quoted, with the same escapes iidy-hs C35 chooses. Agree
+  the escape spelling with C35 before coding (for example =\x01= or
+  =\u0001=, =\e=), and record it in both cards.
+- [ ] Each row of the table in Context has a test, recorded failing first;
+  rendering the output again gives the same value.
+- [ ] Every Rust test fixture whose expected output changes is listed here
+  with the reason.
+- [ ] =cargo test= green and =cargo clippy= clean in the Rust repo.
+  Commit in =~/src/iidy/= on its current branch with messages naming
+  C42; never push.
+
+Stop and record if: a Rust example or fixture depends on the literal-text
+behaviour; the parser change needs more than =unescape_string= and its
+callers; the C35 escape spelling is not decided yet.
+
+* TODO Rust iidy: decode all YAML double-quoted escapes and quote control characters in render
+:PROPERTIES:
+:ID: org:01a1eab7-447c-7618-85b0-96e88fc5c0c4
+:ADDED: [2026-11-17 Tue 11:14]
+:END:
+
+Depends on C35 for the escape spelling. Steps: re-run the Context table
+on the Rust binary and record it; add failing tests for the parser and the
+emitter; rewrite =unescape_string= against the YAML 1.2 escape list; route
+strings with non-printable characters to =emit_double_quoted_string= and
+make its escapes match C35; list changed fixtures. Stop when the gate is
+met or a stop rule fires.

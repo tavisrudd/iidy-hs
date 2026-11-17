@@ -214,6 +214,8 @@ follow TypeScript. Fix shape, confirmed against TypeScript:
 - Narrower than TypeScript on purpose, to meet the gate's "computed =Region=
   with no AWS import loads as before": the refusal applies only when the file
   performs an AWS import. A file without AWS imports loads as today.
+  Decision (Tavis, 2026-11-17): keep this narrower rule. Porting it to
+  Rust is [[file:../C43/index.org][C43]].
 - A factory failure at that point is reported with its cause instead of
   being swallowed.
 

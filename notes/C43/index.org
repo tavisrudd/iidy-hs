@@ -1,0 +1,109 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C43
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   Tavis 2026-11-17, from C17: Rust fails every stack-args AWS import
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
+:ID: org:01a1eab7-449c-779d-a37f-eabb948ba87e
+:ADDED: [2026-11-17 Tue 11:14]
+:END:
+#+title: C43 — Rust iidy: allow stack-args AWS imports and refuse computed credential fields, as iidy-hs C17
+#+date: 2026-11-17
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1eab7-449c-779d-a37f-eabad3293af7
+:ADDED: [2026-11-17 Tue 11:14]
+:END:
+
+Rust has no working AWS imports in stack-args. =load_stack_args=
+(=~/src/iidy/src/cfn/stack_args.rs:181=) preprocesses the file first
+(line 199, =preprocess_yaml=), and =preprocess_yaml= builds
+=ProductionImportLoader::new()= (=~/src/iidy/src/yaml/engine.rs:578=) with
+no AWS configuration, so an =ssm:=, =ssm-path:=, =cfn:= or =s3:= import
+fails with "AWS configuration required"
+(=~/src/iidy/src/yaml/imports/loaders/mod.rs:72-93=). Only afterwards are
+=Profile=, =Region= and =AssumeRoleARN= read from the preprocessed value and
+the AWS configuration built (lines 215-255); the comment there, "Configure
+AWS BEFORE preprocessing (enables $imports with AWS calls)", does not
+describe what the code does.
+
+iidy-hs [[file:../C17/index.org][C17]] (landed 2026-11-16) settled the
+behaviour; this card ports it to Rust so both agree. The rule, from
+=DIVERGENCES.md= ("Stack-args AWS imports" entry) and the C17 card:
+- AWS imports in stack-args run under an AWS configuration built from
+  =Profile=, =Region= and =AssumeRoleARN= as written in the file, with
+  =--profile=, =--region= and =--assume-role-arn= taking precedence.
+- When the file makes an AWS import, each of those fields must be absent,
+  a plain string, or an environment map whose entry for the current
+  environment is a plain string, unless the command line sets it. A field
+  computed by a tag, a handlebars template or an environment map without
+  that entry refuses the first AWS import before any AWS call, naming the
+  field, the import, and the option that sets it. iidy-hs's wording is in
+  the C17 card ("Sample refusal").
+- A file without AWS imports may still compute these fields (Tavis,
+  2026-11-17: keep this narrower rule rather than TypeScript's, which
+  refuses computed fields always). Rust's current behaviour for such files
+  is unchanged.
+- The import configuration is built lazily at the first AWS import; a
+  failure to build it is reported with its cause.
+
+This card edits the Rust repository, =~/src/iidy/=, which is otherwise
+read-only for this project. Tavis authorised that on 2026-11-17 for this
+card.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1eab7-449c-779d-a37f-eab974ae32a0
+:ADDED: [2026-11-17 Tue 11:14]
+:END:
+
+Allowed paths: =~/src/iidy/src/cfn/stack_args.rs=,
+=~/src/iidy/src/yaml/engine.rs= and =~/src/iidy/src/yaml/imports/loaders/=
+(only to pass an AWS configuration, or a lazy builder for one, into the
+stack-args preprocessing), Rust tests and fixtures for stack-args, the Rust
+repo's divergence or docs entry if it has one, and =notes/C43/= here. Build
+and test inside =nix develop ~/src/iidy=. All tests use mocks or local
+fixtures; no real AWS calls.
+
+Out of scope: =CommandsBefore= (iidy-hs refuses it, C22 and C40); how
+credentials are created; the import trust gate; =get-import=.
+
+Done when:
+- [ ] The first task note records Rust's current behaviour for the four
+  cases below, run on the Rust binary with local files.
+- [ ] Tests, recorded failing first where behaviour changes: literal
+  =Profile= and =Region= with an =ssm:= import load, and the import used
+  those settings; a computed =Profile= (=!$= from =$defs=) with an =ssm:=
+  import is refused before any AWS call; the same file with
+  =--profile= set loads; =Region: "{{r}}"= with an =ssm:= import is
+  refused; a computed =Region= with no AWS import loads as today; a failure
+  to build the import configuration reports its cause.
+- [ ] Refusal messages match iidy-hs's wording, apart from the binary name.
+- [ ] The misleading "Configure AWS BEFORE preprocessing" comment is fixed.
+- [ ] =cargo test= green and =cargo clippy= clean in the Rust repo.
+  Commit in =~/src/iidy/= on its current branch with messages naming C43;
+  never push.
+
+Stop and record if: passing an AWS configuration into preprocessing needs
+changes beyond the allowed paths; the lazy build cannot be done without
+restructuring the import loader (describe the smallest eager alternative
+and ask); any existing Rust test depends on stack-args AWS imports
+failing.
+
+* TODO Rust iidy: allow stack-args AWS imports and refuse computed credential fields, as iidy-hs C17
+:PROPERTIES:
+:ID: org:01a1eab7-449c-779d-a37f-eab8a91b6ad2
+:ADDED: [2026-11-17 Tue 11:14]
+:END:
+
+Read the iidy-hs implementation first (=src/Iidy/Cfn/StackArgsBootstrap.hs=,
+=readRawField= in =src/Iidy/Cfn/StackArgsLoader.hs=, and
+=test/Test/StackArgsBootstrapTest.hs=) and port its rule, not its structure.
+Record the current Rust behaviour, add the failing tests, then implement.
+Stop when the gate is met or a stop rule fires.
