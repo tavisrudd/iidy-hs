@@ -26,6 +26,7 @@ library
     Iidy.Yaml.Location
     Iidy.Yaml.DuplicateKeys
     Iidy.Yaml.Parser
+    Iidy.Yaml.Parser.Tags
     Iidy.Yaml.PathTracker
     Iidy.Yaml.Errors.Ids
     Iidy.Yaml.Errors.Enhanced
