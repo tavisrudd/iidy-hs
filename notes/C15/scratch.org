@@ -7,3 +7,15 @@
 :END:
 - /home/tavis/src/iidy-hs/.supervisor/tmp/claude-C15.DYTCS6
   (local render comparison of variable inheritance, iidy-hs vs Rust); deleted when the write-up task was reported ready.
+- /home/tavis/src/iidy-hs/.supervisor/tmp/claude-C15.LUADct
+  (implementation build and test logs); deleted when tasks 1-4 were reported ready.
+- /home/tavis/src/iidy-hs/.supervisor/tmp/claude-C15.LawQMS
+  (fix round 1 build and test logs); deleted when fix round 1 was reported ready.
+- /home/tavis/src/iidy-hs/.supervisor/tmp/claude-C15.OekK2c
+  (re-review rebase test log); deleted when reported ready.
+- /home/tavis/src/iidy-hs/.supervisor/tmp/claude-C15.TlBsIC
+  (task 5 build and test logs); deleted when task 5 was reported ready.
+- /home/tavis/src/iidy-hs/.supervisor/tmp/claude-C15.3aWFf5
+  (fix round 2 and task 6 logs); deleted when task 6 was reported ready.
+- /home/tavis/src/iidy-hs/.supervisor/tmp/claude-C15.RChPGX
+  (fix round 3 and tasks 7-8 logs; no scratch worktree was needed); moved to .supervisor/trash/2026-11-16/claude-C15/ when reported ready.

