@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C34
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C28 2026-11-16: Rust fails with 'duplicate entry with key' for YAML and JSON files; js-yaml (TypeScript) rejects duplicated mapping keys; iidy-hs accepts them silently (last value wins)
 :CREATED_BY: opus-5.5-medium
@@ -10,8 +10,35 @@
 :ID: org:01a1e6fd-7d6c-773c-9a4e-30c18f1dd646
 :ADDED: [2026-11-16 Mon 17:52]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 19:33]--[2026-11-16 Mon 19:34] => 0:01
+CLOCK: [2026-11-16 Mon 19:34]--[2026-11-16 Mon 19:37] => 0:03
+CLOCK: [2026-11-16 Mon 19:39]--[2026-11-16 Mon 19:46] => 0:07
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 19:32]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 19:33]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a3e8dd4d2f2c571dd
+- Clock-out [2026-11-16 Mon 19:34]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a3e8dd4d2f2c571dd
+- Clock-in [2026-11-16 Mon 19:34]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a3e8dd4d2f2c571dd
+- Clock-out [2026-11-16 Mon 19:37]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a3e8dd4d2f2c571dd
+- Clock-in [2026-11-16 Mon 19:39]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a3e8dd4d2f2c571dd
+- Clock-out [2026-11-16 Mon 19:46]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a3e8dd4d2f2c571dd
+- Card state STARTED → DONE [2026-11-16 Mon 19:56]
+  Note: Landed be544ae..46f8d0e: duplicate mapping keys rejected in imported YAML/JSON and !$parseYaml with Rust's key identity (spelling class, complex keys); top-level templates and stack-args left lenient pending Tavis; Sonnet review land, fix round 1, re-review land
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -52,27 +79,234 @@ token builder) no longer needs to scan for an earlier key, which is O(n²)
 per object today; drop the scan or reject at that point.
 
 Done when:
-- [ ] A YAML or JSON document with a repeated key at any depth fails to
+- [X] (scoped to imports and !$parseYaml per supervisor answer) A YAML or JSON document with a repeated key at any depth fails to
   load with an error naming the file and the key, matching Rust's message
   where the error-display conventions allow; tests recorded failing first
   for a template, a nested mapping and a =.json= import.
-- [ ] Rust's exact message for each case is recorded in the card from the
+- [X] Rust's exact message for each case is recorded in the card from the
   Rust binary (local files only, never anything that can reach AWS).
-- [ ] No existing fixture has duplicate keys, or each one found is listed
+- [X] No existing fixture has duplicate keys, or each one found is listed
   in the card and fixed in the fixture (not in the expected output).
-- [ ] Build warning-free, full suite green, commits name C34.
+- [X] Build warning-free, full suite green, commits name C34.
 
 Stop and record if: a fixture whose expected output came from Rust relies
 on duplicate keys; the check needs a change outside the allowed paths;
 merge keys (=<<=) interact with it in a way Rust handles differently.
 
-* TODO Reject duplicate mapping keys as Rust and TypeScript do
+* DONE Reject duplicate mapping keys as Rust and TypeScript do
 :PROPERTIES:
 :ID: org:01a1e6fd-7d6c-773c-9a4e-30beeb9e6182
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 19:37] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a3e8dd4d2f2c571dd
 :END:
 
 Reproduce with both binaries (template, nested mapping, =.json= import,
 merge key) and record the outputs. Find where mappings are built during
 parsing (search for the one owner; do not add a second check per loader),
 add the failing tests, then reject the duplicate there.
+** Question for supervisor
+:PROPERTIES:
+:ID: org:01a1e75a-d71d-72f3-88b5-86b47a86222a
+:ADDED: [2026-11-16 Mon 19:34]
+:END:
+Rust does not reject duplicate keys everywhere the card assumes. Checked
+with ~/src/iidy/target/debug/iidy render, local files only:
+- Top-level template with =z: 1= then =z: 2=: accepted, last value wins
+  (output =z: 2=). Same for a nested mapping and a stack-args file, and
+  the template's own =Resources:= repeated. Rust's template parser is
+  tree-sitter based; only serde_yaml/serde_json reject.
+- Imported YAML file (=$imports: d: dup.yaml=): rejected with
+  =Failed to parse YAML from dup.yaml: duplicate entry with key "z"=.
+- Nested in an imported YAML: =Failed to parse YAML from nest2.yaml: b:
+  duplicate entry with key "c" at line 2 column 4=.
+- Imported =.json=: =Failed to parse JSON from dup.json: duplicate entry
+  with key "z" at line 1 column 16=.
+- Imported YAML repeating =<<=: rejected as duplicate key "<<". A single
+  =<<= in a top-level template is rejected with the "merge keys are not
+  supported in YAML 1.2" message (separate rule).
+- Imported YAML with ="a"= after =a= (same string): rejected; =1= and
+  ="1"= are distinct keys: accepted.
+- =!$parseYaml= with duplicate keys: fails (message just "resolving
+  !$parseYaml tag"). =!$parseJson '{"a":1,"a":2}'= is accepted, last wins.
+So "Parser.hs rejects everywhere" would make iidy-hs stricter than Rust for
+top-level templates and stack-args (the TypeScript js-yaml behaviour, but
+Rust parity is the project default). Question: (a) match Rust: reject only
+in imports (YAML and JSON files, SSM yaml/json) and =!$parseYaml=, leaving
+top-level templates and stack-args lenient (needs a strict flag on
+parseYaml, still one owner); or (b) reject everywhere as the card says,
+recording the divergence in DIVERGENCES.md (outside allowed paths)? I
+recommend (a). No code changed; nothing committed. Temp dir:
+.supervisor/tmp/claude-C34.Qn3o96 (Rust repro files).
+*** Answer (supervisor)
+:PROPERTIES:
+:ID: org:01a1e75e-3002-75f8-aef7-ed0544f55aae
+:ADDED: [2026-11-16 Mon 19:37]
+:END:
+Option (a): reject duplicate keys in imported YAML and JSON documents
+(files, http, s3, SSM yaml/json) and in =!$parseYaml=, via a strict flag on
+parseYaml; top-level templates and stack-args stay lenient (Rust vs
+TypeScript disagreement, goes to Tavis). Key identity as Rust. Plus the
+setKey follow-on. DIVERGENCES.md allowed only if the result differs.
+
+** Result (claude-C34)
+:PROPERTIES:
+:ID: org:01a1e75e-3002-75f8-aef7-ed041ff4389f
+:ADDED: [2026-11-16 Mon 19:37]
+:END:
+Commit e3cc5e5 on claude/C34. Strict flag: =parseYamlStrict= in
+Parser.hs (one owner, the yMapping callback); =parseYaml= stays lenient for
+templates and stack-args. Used by imported YAML (=parseYamlOrdered=: file,
+http, s3, SSM yaml) and =!$parseYaml=. JSON: =jsonToOValue= rejects at the
+token builder (setKey scan dropped, O(n log n) with a Set). Key identity as
+Rust: =a= and ="a"= same, =1= and ="1"= distinct (tested).
+- Failing run first (before the fix, 11 of 12 new tests failed; the only
+  pass is the 1 vs "1" distinct test): log =red.log= in the worker temp dir,
+  moved to .supervisor/trash/2026-11-16/claude-C34/.
+- Fixtures: the full suite (2054 tests) passes unchanged; the only test that
+  asserted last-wins was ResolverTest "!$parseYaml duplicate keys: the last
+  value wins", flipped (Rust fails there). No fixture needed changes.
+- Messages: =Failed to parse YAML from F: duplicate entry with key "z" at
+  line L column C=; JSON =... key "z"= without position. See DIVERGENCES.md
+  entry (nested path prefix and JSON position are not reproduced).
+- Observed, out of scope: =iidy-hs render= of a top-level template with
+  =a: 1\na: 2= prints both entries; Rust prints only =a: 2=.
+
+** Review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e75f-be59-7567-878a-60af521a3071
+:ADDED: [2026-11-16 Mon 19:39]
+:END:
+Verdict (e3cc5e5): land, with 3 low or medium defects that can follow as a
+card. Gate (as narrowed to imports and !$parseYaml) is met.
+
+Checks run:
+- Red proof: kept the tests, disabled only the two rejection guards
+  (Parser.hs =| rejectDuplicates=, ContentParsing.hs =Set.member seen=);
+  14 of 21 "uplicate" tests failed (every rejects test, JSON, nested JSON, SSM
+  json and yaml, repeated =<<=, both !$parseYaml tests); the =1= vs ="1"=
+  distinct test passes as expected. Restored; worktree clean.
+- One owner: =parseYamlStrict= and =parseYaml= are both =parseYamlWith Bool=
+  (the yMapping callback); no copied parser. JSON has its own single check in
+  =jsonToOValue= (aeson tokens, a different parser; unavoidable).
+- Strict paths: File, Http, S3 loaders via =parseByExtensionStrict= (yaml,
+  yml, json); SSM single via =parseByFormatSuffix= (yaml, json);
+  !$parseYaml (Resolver.hs:842). Lenient on purpose: =parseYaml= in Render,
+  Demo, TemplateLoader, StackArgsLoader, ConvertStack, buildReparse and
+  =!$expand= re-parse (all re-read already-accepted text), Engine.hs:273
+  (re-parse of an import that already passed the strict parse), and SSM path
+  =parseByFormatSuffixLenient= (falls back to a string on error, which is what
+  Rust ssm.rs does). !$parseJson stays lenient, as Rust.
+- JSON: Set check is per object (nested objects get their own set; sibling
+  objects reusing a key are fine), O(n log n); aeson decodes escapes first so
+  ={"a":1,"a":2}= is rejected (verified by running a local render).
+- Key identity, run against the Rust binary and iidy-hs (local imports only):
+  agree: =a= vs ="a"= (reject), =1= vs ="1"= (accept), =true= vs ="true"=
+  (accept), =true= twice, =null= vs =~= (reject), =null= vs ="null"= (accept),
+  =1.5= vs =1.50=, alias key reused (reject), flow mapping duplicate, ={}=
+  =? a= explicit key, repeated =<<=.
+
+Defects:
+1. Medium. Numeric key identity is by value, Rust's is by spelling class.
+   =1= with =1.0=, =1= with =1e0= are accepted by Rust and rejected here;
+   =1= with =01= is accepted by Rust (=01= is a string) and rejected here
+   (HsYAML resolves =01= to the number 1). Only =1= with =0x1= is rejected by
+   both. Failure: a valid import with keys =1= and =1.0= or =01= stops
+   loading. Smallest fix: key the number case on the scalar's source text
+   class (integer vs float) or document it; the =01= case may be a
+   pre-existing scalar-resolution difference worth its own card.
+2. Low. Complex (sequence or mapping) keys are skipped (=keyIdentity=
+   returns Nothing); Rust rejects =? [1]= twice ("duplicate entry in YAML
+   map"). Rare; add a structural key to KeyIdentity or note it.
+3. Low. DIVERGENCES.md entry is accurate for what it says (message prefix,
+   nested path, JSON position) but omits defect 1 and 2 behaviour and that
+   labels differ (Rust: =null key=, =`true`=; here =null=, =true=). Also the
+   YAML column in the message is 0-based ("line 2 column 0" for a key at the
+   start of line 2); Rust's columns are 1-based. Add both to the entry or
+   print posColumn + 1.
+Also changed without mention: every imported YAML syntax error now reads
+"<msg> at line L column C" instead of =show ParseError= (describeParseError);
+fine, but is a visible message change for non-duplicate errors.
+
+Pre-existing (not this commit): a key =true= and a key ="true"= in one
+mapping import as one output key (OValue keys are Text), so
+=true: a / "true": b= renders only ='true': b=. Reproduce:
+=$imports: d: f.yaml= with those two lines. Also noted by the worker: a
+top-level template with =a: 1\na: 2= renders both entries (Rust renders
+one).
+Rules: Parser.hs is 517 lines (limit about 500; split candidate, not
+introduced wholesale by this commit). No attribution lines, warning-free
+build, signatures present.
+
+** Fix round 1 (claude-C34)
+:PROPERTIES:
+:ID: org:01a1e765-efa1-7507-b692-af788112835c
+:ADDED: [2026-11-16 Mon 19:46]
+:END:
+Commits on claude/C34 (rebased on main 048d9a3): 0185dcd (defect 4),
+db4bcd9 (defect 1), d5629c1 (defect 2), 01fb9d5 (defect 3). Each test was
+recorded failing first (logs in the worker temp dir, moved to trash).
+- Key identity lives in the new module =Iidy.Yaml.DuplicateKeys=; the loader
+  in Parser.hs carries a lazy key identity per node (one owner). Rules were
+  probed against the Rust binary: int by value (=0x1=, =0o1=, =0b1=, =+1=,
+  =-0= same as =1=, =0=), =01= =001= =+01= =1_0= are strings, floats by value
+  (=1.0= =1.= =1e0= =1E0= =01.0= same; =-0.0= = =0.0=), int and float
+  distinct, =true= = =True=, =null= = =~=, quoted = text, sequences and
+  mappings structurally (mapping entry order ignored), messages =duplicate
+  entry with key `true`=, =... with null key=, =duplicate entry in YAML map=.
+- 1 vs 0x1: rejected, as Rust (value comparison within ints).
+- Syntax errors keep their =show ParseError= text; only duplicates carry
+  =at line L column C= (1-based).
+- DIVERGENCES.md lists the remaining differences.
+
+** Re-review 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e766-f81f-7028-b1c5-8639166946d9
+:ADDED: [2026-11-16 Mon 19:47]
+:END:
+Verdict (claude/C34 at 01fb9d5, rebased on 048d9a3): land, 0 blocking
+defects, 2 notes.
+
+1. Disable proof (db4bcd9 and d5629c1 together; worktree restored clean).
+   Replaced =scalarKeyId= by plain text identity and
+   =sequenceKeyId=/=mappingKeyId= by =Nothing=: 29 of 64 "uplicate" tests
+   fail, including every numeric "rejected:" row (0x1, +1, -0, 1.00, 1.,
+   .5/0.5, .Inf, True, ~, 01.5, 1E0), the "accepted: 1 with ..." rows that
+   depend on typing ("1", "true", "null"), every complex-key row, and the
+   "a repeated complex key says so" test. Rows that still pass are the ones
+   where text identity coincides (e.g. 1 with 1.0 accepted).
+2. Rust spot checks (local imports, Rust binary vs iidy-hs, same verdict
+   and, for rejects, same message text apart from the position suffix):
+   1 with 1.0 accepted; 1 with 1_0 accepted; 1 with +1 rejected "key 1";
+   0 with -0 rejected; 1.0 with 1. rejected "key 1.0"; 1.5 with 01.5
+   rejected; .5 with 0.5 rejected "key 0.5"; =? [1]= twice with [ 1 ]
+   rejected "duplicate entry in YAML map"; [1] with ["1"] accepted; flow
+   mappings with the same entries in another order rejected; True after
+   true rejected with the backquoted form; .inf with .Inf rejected. All
+   agree.
+3. 0185dcd: =describeParseError= returns =T.pack (show err)= (the exact
+   pre-C34 expression, ContentParsing.hs:61 on 048d9a3) for anything not
+   starting "duplicate entry"; test asserts the =ParseError {= form. The
+   loader prefix is not byte-identical: it was "Failed to parse YAML: " and
+   is now "Failed to parse YAML from <location>: " (Rust's wording; same
+   for JSON). Intentional; the error body is unchanged. Note (not a
+   defect): the DIVERGENCES entry could say the prefix gained the location.
+4. One owner: =DuplicateKeys.hs= holds identity, the first-duplicate scan
+   and the message; Parser.hs's yMapping callback is the only YAML call
+   site; loaders (File, Http, S3, SSM) only call =parseYamlOrdered= and do
+   no key checks. JSON has its own token-level set check (different parser).
+   Module is in iidy-hs.cabal.
+   Parser.hs is 550 lines. The new =Node= plumbing (Node type, the
+   key-carrying Loader callbacks) is tied to =YamlAst= and the loader
+   closure, so it cannot move wholesale into DuplicateKeys.hs without
+   parameterising it; what could move is =isResolved= and the
+   per-callback key construction (about 15 lines), which would not bring
+   Parser.hs under 500. Pre-existing size (517 before the fix round);
+   a separate split card (scalar resolution at the bottom of Parser.hs is
+   the natural extraction) is the right fix.
+Note (pre-existing, unchanged): accepted pairs such as 1 and 1.0 or 1 and
+"1" load, but iidy-hs renders them as one output key (OValue keys are
+Text) where Rust prints two entries.

@@ -29,6 +29,7 @@
 - [2026-11-16 Mon 18:19] [[file:../C17/index.org][C17]] — Landed c93293d..763b189 and the docs fix: stack-args AWS imports refused when Profile/Region/AssumeRoleARN is computed (fail-closed raw reading plus post-preprocessing backstop); Opus review fix first, fix round 1, re-review land; backstop wiring test noted on C12; scoping vs iidy-js pending Tavis
 - [2026-11-16 Mon 19:28] [[file:../C29/index.org][C29]] — Landed bf6a9a0 (replayed 88de7b7): get-import --format accepts exactly yaml and json at parse time (Tavis: follow TypeScript); own format type; DIVERGENCES entry; landed on supervisor's diff check
 - [2026-11-16 Mon 19:45] [[file:../C15/index.org][C15]] — Landed d6207c1..f6726c6 plus doc fix: imported documents isolated; requester-chain trust policy with --trust-import-source; AWS-backed imports and loopback/link-local/metadata HTTP blocked for untrusted chains; untrusted custom templates isolated; exfiltration regression test; docs and DIVERGENCES. Opus plan review, five Opus reviews (land)
+- [2026-11-16 Mon 19:56] [[file:../C34/index.org][C34]] — Landed be544ae..46f8d0e: duplicate mapping keys rejected in imported YAML/JSON and !$parseYaml with Rust's key identity (spelling class, complex keys); top-level templates and stack-args left lenient pending Tavis; Sonnet review land, fix round 1, re-review land
 * COMMENT meta
 :PROPERTIES:
 :LANE: main
