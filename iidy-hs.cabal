@@ -91,6 +91,8 @@ library
     Iidy.Cfn.CommandMetadata
     Iidy.Cfn.Context
     Iidy.Cfn.RequestBuilder
+    Iidy.Cfn.S3Objects
+    Iidy.Cfn.TemplateDiff
     Iidy.Cfn.TemplateHash
     Iidy.Cfn.TemplateLoader
     Iidy.Cfn.StackOperations

@@ -6,7 +6,7 @@ import Data.Text qualified as T
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit (testCase, (@?=))
 
-import Iidy.Cfn.Operations.TemplateApproval (generateDiff)
+import Iidy.Cfn.TemplateDiff (generateDiff)
 
 templateDiffTests :: [TestTree]
 templateDiffTests =
