@@ -125,6 +125,12 @@ failureTests =
     , testCase "cfn: without credentials exits 1 with no output" $ do
         r <- runWith True noCredentials "cfn:output:network-stack/VpcId"
         r @?= RunResult 1 [] 1
+    , testCase "nonexistent local file exits 1 with no stdout" $
+        runWith False noCredentials "test-fixtures/get-import/no-such-file.yaml"
+            >>= (@?= RunResult 1 [] 0)
+    , testCase "env: with no default and the variable unset exits 1 with no stdout" $
+        runWith False noCredentials "env:IIDY_C11_UNSET_VAR"
+            >>= (@?= RunResult 1 [] 0)
     , testCase "missing region exits 1 with no output" $ do
         r <- runWith True (throwIO (userError "No AWS region configured.")) "ssm-path:/app"
         r @?= RunResult 1 [] 1
