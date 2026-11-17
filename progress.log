@@ -139,3 +139,4 @@
 2026-11-16 22:39 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C16 landed and closed (approved template enforced at deploy); filed C41; pausing per Tavis
 2026-11-17 11:09 — 2026-11-17--1 (c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e): recorded Tavis decisions on C20 (50 MB output cap), C39 (demo strict, convert-stack lenient); deploy-time lint stays out
 2026-11-17 11:15 — 2026-11-17--1 (c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e): C17 narrower rule kept; C35 rescoped to TODO; filed C42 (Rust escapes and render quoting) and C43 (Rust stack-args AWS imports)
+2026-11-17 11:22 — 2026-11-17--1 (c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e): .envrc keeps ./iidy-hs linked to the current GHC's build
