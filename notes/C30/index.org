@@ -98,9 +98,30 @@ over 400 lines because of the data table; move the table to
 =src/Iidy/Explain/Errors.hs= only if an edit needs it, and then keep each
 module under about 300 lines of logic).
 
+Decisions (Tavis, 2026-11-16):
+- Decision (Tavis, 2026-11-16): keep iidy-hs's explain layout (uniform
+  header plus the hand-written details for all codes) and record it in
+  =DIVERGENCES.md=; change only the no-argument message and the ERR_6002
+  wording to Rust's.
+- Decision (Tavis, 2026-11-16): keep the demo's rounding of sleep and
+  typing delays (the divergence from Rust's truncation is recorded in
+  =DIVERGENCES.md=).
+- Fractional =sleep:= values: Tavis's decision did not cover them, so this
+  card follows TypeScript, which accepts them (=timeout(seconds * 1000 *
+  timescaling)=, =demo.ts:123=). The script parser accepts a fractional
+  =sleep:= value (for example =0.5=) instead of truncating or rejecting it,
+  and the delay stays =round (secs * timescaling * 1e6)= microseconds. A
+  negative value is rejected as before or with a clear error (record which
+  in the task note). This extends =DemoSleep= from =Int= to a fractional
+  type in =Demo.hs=; the allowed paths below cover it.
+
 Done when:
-- [ ] Questions 1 and 2 under the Stop rule are recorded in the card with
-  Tavis's answers before the code tasks that depend on them.
+- [X] The two questions are answered by Tavis (above); no further question
+  is open.
+- [ ] A fractional =sleep:= value in a demo script is accepted and sleeps
+  the scaled fractional time; a test pins =sleep: 0.5= and an integer
+  value, and the divergence from Rust (which rejects or floors it) is in
+  =DIVERGENCES.md=.
 - [ ] =iidy explain= with no codes prints Rust's text
   =Please provide one or more error codes to explain (e.g., ERR_2001)= to
   stderr and exits 0 (confirm Haskell's current exit status first and record
@@ -115,40 +136,28 @@ Done when:
   =arn:aws:iam::111222333444:user/admin=) and a standalone case with
   surrounding spaces; no code change is expected, and if a case fails,
   stop and record it.
-- [ ] If Tavis chose Rust truncation for sleep (question 2), the sleep and
-  typing-delay tests show whole-second truncation and a failing-first
-  record; if he kept rounding, the choice is written in =DIVERGENCES.md=.
+- [ ] Tests pin the kept rounding of sleep and typing delays at
+  timescaling 0.5 and 1.5, and the choice is written in =DIVERGENCES.md=.
+- [ ] =DIVERGENCES.md= records the kept explain layout (header plus details
+  paragraph for all codes, against Rust's generic block for most codes and
+  long markdown for four) with its cause and the Rust reference.
 - [ ] Every difference that remains is listed in =DIVERGENCES.md= with its
   cause; build warning-free, full suite green, commits name C30.
 
-Stop and record if, and ask Tavis (do not choose):
-1. explain layout. Rust prints a generic block for 42 of 46 codes and long
-   markdown (with an =IY2001= typo) for four; Haskell prints a uniform
-   header plus a hand-written details paragraph for all 46, which is more
-   useful than Rust's fallback. TypeScript has no explain. Recommendation:
-   keep the Haskell layout and details, record it in =DIVERGENCES.md=, and
-   align only the no-argument message and ERR_6002 wording. Aligning the
-   layout would delete the details text.
-2. Sleep and typing-delay rounding. Rust truncates to whole seconds and
-   whole milliseconds, which turns =sleep: 1= at =--timescaling 0.5= into no
-   sleep; TypeScript scales exactly. Recommendation: keep Haskell's
-   rounding (it is nearer TypeScript and Rust's truncation looks accidental)
-   and record it in =DIVERGENCES.md=. Also decide whether a fractional
-   =sleep:= value in a script is accepted (Rust and Haskell's =truncate=
-   both reject or floor it; TypeScript accepts it).
-3. A masking test fails, or a task needs a change outside the allowed
+Stop and record if:
+1. A masking test fails, or a task needs a change outside the allowed
    paths, or C21 has changed =Demo.hs= in a way that conflicts.
+2. Accepting fractional =sleep:= values needs a change to the script
+   format beyond the number type (record and ask).
 
-* TODO Ask Tavis the two questions and record the answers
+* DONE Ask Tavis the two questions and record the answers
 :PROPERTIES:
 :ID: org:01a1e6d8-1a69-7466-b044-90e9d0073ede
 :ADDED: [2026-11-16 Mon 17:11]
 :END:
 
-Put questions 1 and 2 from the Stop rule to Tavis through the supervisor,
-with the recommendations, and write his answers under this heading. Do not
-start the tasks marked as depending on an answer until then. The
-masking and no-argument tasks do not depend on an answer.
+Answered by Tavis on 2026-11-16; see "Decisions (Tavis, 2026-11-16)" in
+Scope and gate. Nothing to do.
 
 * TODO Explain: no-argument message, exit status and ERR_6002 wording
 :PROPERTIES:
@@ -161,9 +170,8 @@ after =explainErrors=, so expect 0) and pin it in the test with the stderr
 text. Fix ERR_6002's description. Add a test that holds Rust's full
 description list (=ids.rs:110-170=) and compares it with =allErrors=; write
 the list in the test as data so no Rust file is read at run time. Record the
-failing-first run for the 6002 case. If question 1 is answered "align the
-layout", do that in a separate task added under this one, with the layout
-taken from =ids.rs:334-356= and the four long texts decided with Tavis.
+failing-first run for the 6002 case. The layout stays as it is (Tavis,
+2026-11-16): do not port Rust's layout.
 
 * TODO Demo masking: pin the Rust ARN cases
 :PROPERTIES:
@@ -175,22 +183,21 @@ Add the ARN and standalone cases from =demo.rs:490-530= to the
 expected (see Context). Record one mutation (for example removing the
 leading =\b=) that fails them.
 
-* TODO Demo sleep rounding (after question 2)
+* TODO Demo sleep rounding and fractional sleep values
 :PROPERTIES:
 :ID: org:01a1e6df-6b76-715a-9d49-20e52bb91f6b
 :ADDED: [2026-11-16 Mon 17:19]
 :END:
-If Tavis chose truncation: make the =sleep:= and typing delays truncate to
-whole seconds and whole milliseconds in =Demo.hs= (lines 149, 197, 261) with
-tests at timescaling 0.5 and 1.5, failing first. If he kept rounding: add
-tests that pin the current rounding and write the divergence. Do not edit
-the temp-dir lines (C21).
+Tavis kept rounding: add tests that pin the current rounding at
+timescaling 0.5 and 1.5 and write the divergence. Make =sleep:= accept
+fractional values (=Demo.hs= line 149 today truncates), with a failing-first
+test for =sleep: 0.5=. Do not edit the temp-dir lines (C21).
 
 * TODO Record remaining differences in DIVERGENCES.md
 :PROPERTIES:
 :ID: org:01a1e6df-6b76-715a-9d49-20e4ebc8109a
 :ADDED: [2026-11-16 Mon 17:19]
 :END:
-Add one entry per kept difference (explain layout if kept, sleep rounding if
-kept, masking streaming), each with cause and the Rust and TypeScript
+Add one entry per kept difference (explain layout, sleep rounding, fractional
+sleep values, masking streaming), each with cause and the Rust and TypeScript
 references from Context. Run the full suite, then close the card.

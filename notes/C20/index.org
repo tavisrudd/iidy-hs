@@ -74,16 +74,30 @@ CloudFormation (already in =Iidy.Cfn.TemplateLoader=), local file import size,
 S3/SSM response sizes, the response-size cap and per-response timeout that
 the HTTP loader already has, and any change to behaviour below the limits.
 
-Values (the review gives none; proposed 2026-11-16 for Tavis to confirm or
-change before the card is assigned; each is a user-visible limit). They
-are named constants in =Iidy.Constants=, with the reason recorded beside each:
-- Alias expansion: at most 1,000,000 nodes after expanding aliases
+Decision (Tavis, 2026-11-16): accept the proposed limits below, with the
+alias-expansion cap at 250,000 nodes instead of 1,000,000. Check against
+the C4 report (=notes/C4/report--security-review.org= lines 354-356): the
+review's bomb has five alias levels of fan-out 10, which is 1 + 10 + 100 +
+1,000 + 10,000 + 100,000 = 111,111 nodes (19,753,104 bytes rendered, 253 MB,
+1.45 s). 111,111 is below 250,000, so the cap of 250,000 does NOT reject
+that bomb: it still loads at those costs. A sixth level (1,111,111 nodes)
+is rejected under either cap. Tavis chose 250,000 anyway; a worker keeps it
+and does not change it. Consequence for the tests: "just under the limit
+loads" can use the review's five-level bomb, and "over the limit is
+rejected" needs six levels (or a fan-out that passes 250,000). If Tavis
+wants the review's own bomb rejected, the cap would have to be below
+111,111; that is a new decision, not this card's.
+
+Values (the review gives none; confirmed by Tavis 2026-11-16 as proposed,
+except the alias cap above; each is a user-visible limit). They are named
+constants in =Iidy.Constants=, with the reason recorded beside each:
+- Alias expansion: at most 250,000 nodes after expanding aliases
   (scalars, sequences and mappings each count one). A 1 MB CloudFormation
-  template (=s3TemplateMaxBytes= is 999,999) holds well under 500,000 nodes,
-  so real documents have a wide margin. The review's bomb (five levels of
-  fan-out 10, about 111,000 nodes) still loads under this limit, at the
-  253 MB and 1.5 s the review measured; a sixth level (about 1.1 million
-  nodes) is rejected. Tavis may prefer a lower figure such as 250,000.
+  template (=s3TemplateMaxBytes= is 999,999) holds well under 500,000 nodes
+  by the earlier estimate, but that estimate was made for the 1,000,000
+  cap: the worker measures the largest example template and fixture in
+  the repository (node count after expansion) and records it, and stops if
+  any existing document exceeds 250,000.
 - Import depth: at most 32 nested imports on one chain; at most 1,000
   imports resolved in one run. The review's chain ran past 4,000 hops;
   real projects nest a handful of levels.
@@ -98,7 +112,9 @@ Rust has none of these, so each is a divergence to record.
 Done when:
 - [ ] The Rust comparison above is re-checked (grep of =~/src/iidy/src/yaml/=
   and =cfn/= for limits) and recorded in the first task note, together with
-  Tavis's confirmed values.
+  the confirmed values (alias cap 250,000 nodes).
+- [ ] The measured node count of the largest existing fixture or example
+  template is recorded and is below 250,000.
 - [ ] Each limit is enforced with a clear error naming the limit, the value
   and what hit it (for example "YAML alias expansion exceeds 1000000 nodes
   in <location>"; "import depth 33 exceeds 32: a.yaml -> b.yaml -> ..."),
@@ -120,24 +136,23 @@ Done when:
   values.
 - [ ] Build warning-free, full suite green, commits name C20.
 
-Stop and record if: Tavis has not confirmed or changed the values above (do
-not pick other values, and do not start the implementation task); the alias
+Stop and record if: a limit would need a value other than the confirmed
+ones above (do not pick other values); the alias
 count cannot be done in the parser without the resolver (record the options
 and ask); enforcing a limit rejects an existing fixture; the HTTP total
 time cannot be tested without a real network; or the work needs a change
 outside the allowed paths. Budget: if a limit takes more than two
 implement-and-test rounds, stop and record the state.
 
-* TODO Re-check Rust and get the limit values confirmed
+* TODO Re-check Rust and record the confirmed limit values
 :PROPERTIES:
 :ID: org:01a1e692-142a-7666-9ade-4c5468fd30cb
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-Grep the Rust tree for limits, record the finding, and write the values
-above (or Tavis's replacements) into this card. Add the constants to
-=Iidy.Constants= with a one-line reason each. Do nothing else until the
-values are recorded as confirmed.
+Grep the Rust tree for limits, record the finding, and copy the confirmed
+values above into this card's task note. Add the constants to
+=Iidy.Constants= with a one-line reason each.
 
 * TODO Cap import depth and total imports
 :PROPERTIES:

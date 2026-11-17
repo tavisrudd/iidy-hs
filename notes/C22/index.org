@@ -95,14 +95,24 @@ the approval workflow docs (C16), the lines other hardening cards own until
 they are done (last task), =docs/import-types.org= and
 =docs/custom-resource-templates.org= (C15 already made them current).
 
+Decisions (Tavis, 2026-11-16):
+- Decision (Tavis, 2026-11-16): =CommandsBefore= is rejected with a clear
+  error for =create-stack=, =update-stack=, =create-changeset= and
+  =create-or-update= (option (a) below). Implementing it is a separate
+  card with its own trust design: it is
+  [[file:../C40/index.org][C40]].
+- Decision (Tavis, 2026-11-16): =--debug= stays accepted and is documented
+  as having no effect (option (a) below), shared with Rust and not a
+  divergence from it.
+
 Done when:
-- [ ] Tavis's answers to the two questions in the Stop rule are recorded in
-  the card, before any code for either is written.
+- [X] Tavis's answers to the two questions are recorded in the card (above).
 - [ ] No file under =docs/= or =README.md= names =docs/SECURITY.md= or a
   root =SECURITY.md=, and =docs/SECURITY.org= is the only security
   document (a =grep -rn 'SECURITY\.md'= over =docs/= and =README.md= shows
   only the upstream GitHub link, if that link was kept).
-- [ ] =CommandsBefore= and =--debug= are each handled as Tavis chose, with
+- [ ] =CommandsBefore= is refused and =--debug= is documented as having no
+  effect, with
   tests (for =CommandsBefore=: a stack-args file with it, loaded for
   =create-stack=, =update-stack=, =create-changeset= and =create-or-update=,
   returns the new error and runs nothing; the same file loaded for
@@ -114,12 +124,11 @@ Done when:
   its line folded in (or the card lists which are still open).
 - [ ] Build warning-free, full suite green, each commit names C22.
 
-Stop and record if: the =CommandsBefore= or =--debug= choice has not been
-answered; the refusal needs a change outside the allowed paths; a doc claim
+Stop and record if: the refusal needs a change outside the allowed paths; a doc claim
 cannot be checked against the code in under a few minutes (list it in the
-card as unverified rather than guess). Questions to put to Tavis before
-the third and fourth tasks (the second task asks them), each with a
-recommendation:
+card as unverified rather than guess). The two questions below were
+answered by Tavis on 2026-11-16 (see the decisions above); they are kept
+for the reasoning:
 
 1. =CommandsBefore= (user-visible: a stack-args file that parses today stops
    loading). What Rust and TypeScript do: both run the commands, through
@@ -175,19 +184,15 @@ mention the security model or =--no-remote-imports= against
 =docs/SECURITY.org= and the code (=src/Iidy/Yaml/Imports/Types.hs=,
 =Loaders/Dispatch.hs=); fix or list what differs. No code changes.
 
-* TODO Ask Tavis the CommandsBefore and --debug questions and record the answers
+* DONE Ask Tavis the CommandsBefore and --debug questions and record the answers
 :PROPERTIES:
 :ID: org:01a1e692-143c-70db-935c-e1c326f89cfd
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-Put the two questions in the Stop rule to Tavis (through the supervisor)
-with the recommendations, and record the answers here, with the date. Do
-not write any code for the next two tasks until both are recorded. If the
-answer to question 1 is (b), stop this card's =CommandsBefore= work, file a
-card with =c new= naming the Rust references above and the trust question,
-and do the next task (the refusal) as in option (a) until the new card
-lands.
+Answered 2026-11-16, see the decisions in Scope and gate: =CommandsBefore=
+option (a), =--debug= option (a). The follow-up card for running
+=CommandsBefore= is C40 (created with =c new= from this decision).
 
 * TODO Reject CommandsBefore for the operations that would run it
 :PROPERTIES:
@@ -195,7 +200,7 @@ lands.
 :ADDED: [2026-11-16 Mon 21:21]
 :END:
 
-Only if the answer was (a) or (b). The loader knows the operation
+The loader knows the operation
 (=loadStackArgsWith= has =operation=); =valueToStackArgs= does not. After
 the stack-args are converted, if =saCommandsBefore= is =Just= and the
 operation is =OpCreateStack=, =OpUpdateStack=, =OpCreateChangeset= or
@@ -216,14 +221,13 @@ references. Land after C12 if that card is not yet done.
 :ADDED: [2026-11-16 Mon 21:21]
 :END:
 
-Per the answer to question 2 (recommended (a)): change the =--debug= rows
+Per Tavis's decision (option (a)): change the =--debug= rows
 in =docs/command-reference.org= (line 19) and
 =docs/requirements/01-cli-interface.org= (line 33) to say the flag is
 accepted and has no effect, as in the Rust CLI, which only reads
 =RUST_LOG= for logging. Add a short =DIVERGENCES.md= note naming the
 TypeScript behaviour. =test/Test/CliParserTest.hs= line 77 already tests
-that the flag parses; leave it. If Tavis chose (b) or (c), write the task
-body from his answer here and split it before starting.
+that the flag parses; leave it. The help text stays as it is.
 
 * TODO Fold in the security notes from the other hardening cards
 :PROPERTIES:

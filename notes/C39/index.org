@@ -1,0 +1,139 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C39
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   Tavis 2026-11-16, C34 follow-up: top-level templates and stack-args reject repeated keys as TypeScript (js-yaml) does; Rust accepts them (last wins) and iidy-hs currently renders both entries
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e7e2-78a8-71e8-b16b-70c542426ff1
+:ADDED: [2026-11-16 Mon 22:02]
+:END:
+#+title: C39 — Reject duplicate mapping keys in templates and stack-args too (Tavis: follow TypeScript)
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e7e2-78a8-71e8-b16b-70c4781505de
+:ADDED: [2026-11-16 Mon 22:02]
+:END:
+
+C34 (landed) added =parseYamlStrict= in =src/Iidy/Yaml/Parser.hs= and the
+key-identity rules in =src/Iidy/Yaml/DuplicateKeys.hs=; imported documents
+(=Imports/ContentParsing.hs=) and =!$parseYaml= strings
+(=Resolution/Resolver.hs= line 843) use it and reject a repeated mapping key
+at any depth. Top-level templates and stack-args still use the lenient
+=parseYaml=, so iidy-hs renders both entries of a repeated key
+(=DIVERGENCES.md= "Duplicate Mapping Keys: Error Text" says both ports
+accept it at top level; that is no longer true for TypeScript, see below).
+Rust accepts a repeated key at top level (last value wins); TypeScript
+(js-yaml) rejects it.
+
+Decision (Tavis, 2026-11-16): reject a repeated mapping key in top-level
+templates and stack-args too, as TypeScript (js-yaml) does, with the same
+message format as for imports. Rust's behaviour (accept, last wins) becomes
+a recorded divergence.
+
+Call sites of the lenient =parseYaml=, verified 2026-11-16 with
+=grep -rn parseYaml src app=:
+- Switch to =parseYamlStrict= (top-level user documents):
+  =src/Iidy/Cfn/StackArgsLoader.hs= line 166 (stack-args file);
+  =src/Iidy/Cfn/TemplateLoader.hs= line 112 (a =render:= template);
+  =src/Iidy/Render.hs= line 80 (the =render= command's input template).
+- Stay lenient, because the text was already parsed strictly when it was
+  imported and a second strict pass adds nothing but cost:
+  =src/Iidy/Yaml/Engine.hs= line 273 (re-parse of an imported document that
+  has imports or defs; =ContentParsing.hs= has already rejected duplicates,
+  and a failed re-parse falls back to the raw value);
+  =src/Iidy/Yaml/Resolution/Resolver.hs= line 323 (=buildReparse=) and line
+  887 (=!$expand=), which re-parse =tiRawBody=, set from an imported
+  document's raw text at =Engine.hs= line 221 and so already checked.
+  Verify the claim for =tiRawBody= when starting: if any path builds it
+  from text that did not pass =parseYamlStrict=, stop and record it.
+- Strictness unclear, goes to the supervisor before any change (stop rule):
+  =src/Iidy/Demo.hs= line 81 (a demo script is a top-level user document
+  but is neither a template nor stack-args; TypeScript's demo loads it with
+  js-yaml, which would reject); =src/Iidy/Cfn/Operations/ConvertStack.hs=
+  line 191 (=templateBodyToYaml=, which parses a template body fetched from
+  AWS for =convert-stack-to-iidy=: rejecting would make a stack
+  unconvertible rather than flag the user's own mistake). Until the
+  supervisor answers, leave both lenient.
+- Not a call site of concern: =parseYamlFile= (=Parser.hs= line 55) has no
+  caller in =src/= or =app/=; leave it or remove it only if it stays
+  unused.
+Re-run the grep when starting, since C12 and others may have moved lines.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e7e2-78a8-71e8-b16b-70c349f042d9
+:ADDED: [2026-11-16 Mon 22:02]
+:END:
+
+Allowed paths: =src/Iidy/Yaml/Parser.hs= (only if a doc comment or the
+unused =parseYamlFile= needs a line), =src/Iidy/Cfn/StackArgsLoader.hs= (and
+the modules C12 splits out of it), =src/Iidy/Cfn/TemplateLoader.hs=,
+=src/Iidy/Render.hs=, =test/Test/StackArgsLoaderTest.hs=,
+=test/Test/TemplateLoaderTest.hs=, =test/Test/RenderTest.hs= (or the
+existing render test module), =test/Test/ParserTest.hs=, =test-fixtures/=,
+=DIVERGENCES.md=, =docs/= (the page that describes YAML parsing or errors,
+found by =grep -rn -i 'duplicate' docs/=), =notes/C39/=.
+
+Out of scope: key-identity rules and error text (C34's =DuplicateKeys.hs=
+stays as it is); the demo and convert-stack call sites (see Context);
+the =Engine.hs= and =Resolver.hs= re-parses; the stack-args bootstrap scan
+(its own duplicate-key rule for literal fields stays); changing any
+behaviour of documents without a repeated key.
+
+Overlap: [[file:../C12/index.org][C12]] splits =StackArgsLoader.hs= and
+[[file:../C22/index.org][C22]] edits the same loader for the
+=CommandsBefore= refusal: land C12 first, then one of C22 and C39 at a
+time, or rebase. C22 and C39 both edit =DIVERGENCES.md=; keep each entry
+separate.
+
+Done when:
+- [ ] A repeated mapping key at any depth in a top-level template (the
+  =render= command and a =render:= template) and in a stack-args file is
+  rejected with the same message format as for imports (=duplicate entry
+  with key "k" at line L column C=; see =DIVERGENCES.md= "Duplicate Mapping
+  Keys: Error Text"), through the existing parse-error display, before
+  preprocessing runs.
+- [ ] Tests, recorded failing first (each currently renders both entries):
+  a repeated key at the top level and nested in a template, in a stack-args
+  file, and in a =render:= template; key spellings that count as the same
+  key (=a= and ="a"=); keys that do not (=1= and ="1"=) still load.
+- [ ] Every existing fixture and example template (=test-fixtures/=,
+  =example-templates/=) is checked for repeated keys: run the suite and
+  also =grep=-check the fixtures; none may be changed to hide a failure
+  except a fixture that deliberately repeats a key, which is recorded in
+  the card with the reason. No expected output changes otherwise.
+- [ ] The call-site list in Context is re-verified and recorded in the
+  task note with the final switch or stay decision per site.
+- [ ] =DIVERGENCES.md= entry updated: the sentence "Top-level templates and
+  stack-args accept repeated keys in both ports" is replaced by what is now
+  true (iidy-hs and TypeScript reject, Rust accepts and keeps the last
+  value), with a cause line that it follows TypeScript.
+- [ ] A docs page that describes YAML parsing or errors mentions that a
+  repeated mapping key is an error in templates, stack-args and imports.
+- [ ] Build warning-free, full suite green, commits name C39.
+
+Stop and record if: a call site whose strictness is unclear (the demo and
+convert-stack sites, or any site found that Context does not list) needs a
+decision: return it to the supervisor and leave it lenient; an existing
+fixture or example template fails the new rule and is not a deliberate
+duplicate; a stricter parse changes the error order for a document that
+also has another error (record it); or the work needs a change outside the
+allowed paths.
+
+* TODO Reject duplicate mapping keys in templates and stack-args too (Tavis: follow TypeScript)
+:PROPERTIES:
+:ID: org:01a1e7e2-78a8-71e8-b16b-70c2d37d6a0d
+:ADDED: [2026-11-16 Mon 22:02]
+:END:
+
+Re-run the call-site grep, switch the three top-level sites listed in
+Context to =parseYamlStrict= after writing the failing tests, check the
+fixtures, update =DIVERGENCES.md= and the docs, run the full suite through
+=scripts/guarded-build=, and record the final per-site table here.
+

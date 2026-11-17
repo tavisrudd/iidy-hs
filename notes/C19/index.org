@@ -66,8 +66,9 @@ Done when:
   =Iidy.Cfn.GlobalConfig.formatAwsError=,
   =Iidy.Cfn.Operations.Changeset.formatAmazonkaError=) are replaced by it,
   not left beside it.
-- [ ] Settled by this card (proposed 2026-11-16 for Tavis to confirm before
-  the card is assigned; Opus reviews it): a =ServiceError= prints
+- [ ] Decision (Tavis, 2026-11-16): accept the shorter =code: message=
+  =ServiceError= wording. Settled by this card (Opus reviews it): a
+  =ServiceError= prints
   =<code>: <message>= exactly as =formatAmazonkaError= does today (a missing
   message prints the code alone); a =TransportError= prints the host and the
   inner exception's own description, never the request; any other
@@ -104,8 +105,7 @@ Done when:
 
 Stop and record if: a call site needs the full exception text to work
 (a retry decision that matches on the text, or a documented debug flag;
-=goDebug= and =goLogFullError= are not read anywhere today); Tavis has not
-confirmed the message shapes above; the change needs a file outside the
+=goDebug= and =goLogFullError= are not read anywhere today); the change needs a file outside the
 allowed list; or the transport error cannot be reproduced through the mock
 env (describe what was tried).
 

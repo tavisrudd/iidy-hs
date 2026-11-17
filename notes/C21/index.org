@@ -96,7 +96,7 @@ Allowed paths: =src/Iidy/Demo.hs=, =src/Iidy/Aws/Timing.hs=,
 =src/Iidy/Yaml/Imports/Loaders/HttpGuard.hs=,
 =src/Iidy/Yaml/Imports/Loaders/Http.hs=, =src/Iidy/Cfn/Runner.hs= (only the
 two =timeProviderForOperation= call sites), =src/Iidy/Cli*= and
-=src/Iidy/Cli/Help.hs= (only if task 5 adds a flag, after Tavis answers),
+=src/Iidy/Cli/Help.hs= (the new =--force= flag of task 5),
 =iidy-hs.cabal= (only for a new test module), =test/Test/DemoTest.hs=,
 =test/Test/TimingTest.hs=, =test/Test/ConvertStackTest.hs=,
 =test/Test/HttpGuardTest.hs=, =test/Test/FakeHttp.hs=, a new
@@ -110,6 +110,16 @@ edits only those lines); the address filter and trust rules of C15;
 what =reliableTimeProvider= does when NTP works (server, retries, timeout);
 digest pinning syntax (declined below unless Tavis asks).
 
+Decisions (Tavis, 2026-11-16):
+- Decision (Tavis, 2026-11-16): NTP answers more than five minutes from the
+  system clock are rejected (a failed query), and NTP is skipped under
+  =--no-remote-imports=. No new flag or environment variable.
+- Decision (Tavis, 2026-11-16): =convert-stack-to-iidy= refuses to
+  overwrite existing output files unless a new =--force= is passed. The SSM
+  overwrite (=overwrite = Just True=) stays unchanged.
+- Decision (Tavis, 2026-11-16): plaintext =http:= stays accepted; an
+  https-to-http redirect is refused for every requester; no digest pinning.
+
 Done when:
 - [ ] =runWithTmpDir= uses a fresh private directory (mode 0700, created
   atomically) and removes only that directory; a test shows two concurrent
@@ -121,8 +131,7 @@ Done when:
   apply); stub-driven tests cover an answer inside the bound, one far in
   the future and one far in the past; =--no-remote-imports= skips the NTP
   query (system time is used); =DIVERGENCES.md= records both, with the Rust
-  and TypeScript references above. No new flag or environment variable
-  unless Tavis chose one (see Stop rule).
+  and TypeScript references above. No new flag or environment variable.
 - [ ] The displayed credential source for =--profile= or a stack-args
   =Profile= lists the profile first and no environment-variable source, a
   test with fake keys and no network shows the displayed source and the
@@ -133,34 +142,20 @@ Done when:
   requester, with tests; the recorded import location names the URL the
   content came from, or the card records why that needs more than the
   guard (see the task); the plaintext-=http:= and unpinned-digest
-  risks are recorded in the card as accepted (parity with Rust and
+  risks are recorded in the card as accepted by Tavis (parity with Rust and
   TypeScript) with the lines for =docs/SECURITY.org= ready for C22.
-- [ ] =convert-stack-to-iidy=: per Tavis's answer to the question in the
-  Stop rule (implemented with tests, or declined with the reason recorded
-  under task 5).
+- [ ] =convert-stack-to-iidy= refuses to overwrite any of the four output
+  files unless =--force= is passed (checked before anything is written and
+  before any SSM request), with tests; the SSM overwrite is unchanged; the
+  flag is in the parser, help and =DIVERGENCES.md=.
 - [ ] Build warning-free, full suite green, each commit names C21.
 
 Stop and record if: a fix needs a change outside the allowed paths;
 reading the Rust or TypeScript source shows a behaviour this card did not
 list (record it and stop that task); the credential test cannot tell which
 credentials amazonka uses without a network call (never make one); or an
-item needs a user-visible choice, in which case put it to Tavis and do not
-implement until he answers. Questions to put, each with a recommendation:
-1. NTP: bound at five minutes and skip under =--no-remote-imports=, with no
-   new flag? Recommend yes; it changes nothing when NTP answers correctly
-   and the system clock is within five minutes, and an operator who wants no egress
-   already passes =--no-remote-imports=.
-2. =convert-stack-to-iidy=: refuse to overwrite existing output files
-   unless a new =--force= is passed (Rust and TypeScript overwrite
-   silently)? Recommend yes for files, checking all four paths before
-   writing any, and leave the SSM =overwrite = Just True= as it is: it is
-   the point of =--move-params-to-ssm=, and a check would need a
-   =GetParameter= per key. This adds a flag, so it is user-visible.
-3. Plaintext =http:=: keep accepting it (as Rust and TypeScript do and
-   =docs/SECURITY.org= implies for local development servers), refusing
-   only the https-to-http downgrade? Recommend yes. Requiring =https:=
-   would break working templates; digest pinning needs new import syntax
-   neither original has, so decline it.
+item needs a user-visible choice not decided above (put it to the
+supervisor and do not implement it).
 
 * TODO Demo uses a private temporary directory
 :PROPERTIES:
@@ -187,8 +182,7 @@ and its imports so C30's sleep-delay edits merge cleanly.
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-Do not start before Tavis has answered question 1. In
-=src/Iidy/Aws/Timing.hs= make =reliableNowWith= (line 90) reject a
+In =src/Iidy/Aws/Timing.hs= make =reliableNowWith= (line 90) reject a
 queried time that differs from =getCurrentTime= by more than five minutes
 (named constant), counting it as a failed attempt, so the retry and
 fallback logic that C27 made testable applies. Failing tests first, with
@@ -230,8 +224,7 @@ behaviour follows Rust) to Tavis with that evidence.
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-Do not start before Tavis has answered question 3. In
-=HttpGuard.hs=, =checkHop= (line 204) already runs on every hop through
+In =HttpGuard.hs=, =checkHop= (line 204) already runs on every hop through
 =managerModifyRequest=, and may run more than once per hop, so it must
 not depend on remembering the previous hop. =HttpGuard= already carries
 per-import data built by =httpGuardFor= (line 119), which receives the
@@ -256,7 +249,7 @@ behaviour, and write the =docs/SECURITY.org= lines for C22.
 :ADDED: [2026-11-16 Mon 15:54]
 :END:
 
-Do not start before Tavis has answered question 2. In =processStack=
+In =processStack=
 (=ConvertStack.hs= lines 574-631), after the output directory is created
 and before anything is written, check the four target paths; if any
 exists and the new flag is not set, return =Left= naming each existing
@@ -267,5 +260,5 @@ only: an existing =stack-args.yaml= is refused with nothing written; with
 the flag all four are overwritten; a clean directory is unchanged. Add the
 flag to the parser and help (parity of help text is not required: Rust has
 no such flag), =DIVERGENCES.md= and the Rust and TypeScript references.
-If Tavis declines, record that under this heading and close the task
-without code.
+Tavis decided on 2026-11-16 to add =--force=; there is no declining
+path.

@@ -60,9 +60,11 @@ but not the renderer; no other open card edits
 =git log -3 -- src/Iidy/Output= before starting, since C9 landed there
 today.
 
-Settled by this card (proposed 2026-11-16 for Tavis to confirm before the
-card is assigned; the worker follows these and asks about anything else
-that changes what the user sees):
+Decision (Tavis, 2026-11-16): accept the proposed escaping defaults below
+as written.
+
+Settled by this card (confirmed by Tavis 2026-11-16; the worker follows
+these and asks about anything else that changes what the user sees):
 - Visible form: every escaped character becomes =\uNNNN= in four lower-case
   hex digits (=ESC= is =\u001b=), the same spelling Rust's YAML emitter
   uses for control characters (=~/src/iidy/src/yaml/emitter.rs:475=).
@@ -109,7 +111,7 @@ Stop and record if: any user-visible output change not listed above is
 needed (for example column widths, a different form for tabs, or filtering
 raw output); an existing expected output would change; the fix needs a
 change outside the allowed paths (for example the diff can only be escaped
-where it is built); or Tavis has not confirmed the settled choices above.
+where it is built).
 A reviewer (Opus) checks the escaped character classes against the list.
 
 * TODO Inventory untrusted-text sinks in the renderer

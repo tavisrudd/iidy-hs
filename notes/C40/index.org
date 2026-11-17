@@ -1,0 +1,88 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C40
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   C22 decision, Tavis 2026-11-16
+:CREATED_BY: sonnet-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac69746c97dc8322d
+:ID: org:01a1e7e5-1a69-7738-a486-69984b7be646
+:ADDED: [2026-11-16 Mon 22:05]
+:END:
+#+title: C40 — Implement CommandsBefore with a trust design for computed stack-args
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e7e5-1a69-7738-a486-69976b3ee1a7
+:ADDED: [2026-11-16 Mon 22:05]
+:END:
+
+Origin: C22 decision (Tavis, 2026-11-16). C22 makes iidy-hs reject a
+stack-args file that has =CommandsBefore= for =create-stack=,
+=update-stack=, =create-changeset= and =create-or-update=, because today the
+field is parsed and silently never run. This card is the work to run it, as
+Rust and TypeScript do, once there is a trust design.
+
+What the originals do: Rust =~/src/iidy/src/cfn/stack_args.rs:277-313=
+(with =process_commands_before= from line 493) and TypeScript
+=~/src/iidy-js/src/cfn/loadStackArgs.ts:137-166= (with
+=src/cfn/runCommandSet.ts:11-67=) run each command through =bash -c= in the
+argsfile's directory, after expanding Handlebars with the =iidy= namespace,
+only for the four operations above. Rust also prints each command, sets
+=iidy_profile=, =iidy_region= and =iidy_environment=, defines three bash
+helper functions and fails the load on a non-zero exit.
+
+Why it needs a trust design: the command text is shell built from stack-args
+values, and stack-args values can come from imports (including remote ones
+allowed for local stack-args, under the trust model C15 added in
+=docs/SECURITY.org=). Running that text through bash would let a remote or
+computed document execute code on the operator's machine. Porting Rust
+unchanged is not acceptable without deciding which sources may contribute to
+a command.
+
+Dependencies: C22 (the refusal this card removes) and the trust model of
+C15.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e7e5-1a69-7738-a486-6996f0e96564
+:ADDED: [2026-11-16 Mon 22:05]
+:END:
+
+Allowed paths: to be set by the design task. Expect
+=src/Iidy/Cfn/StackArgsLoader.hs= (or the modules C12 splits out of it), a
+new module for running commands, =docs/SECURITY.org=, =DIVERGENCES.md=,
+tests and fixtures, =notes/C40/=.
+
+Out of scope until the design is approved by Tavis: any code that runs a
+command.
+
+Done when:
+- [ ] A design note in =notes/C40/= states which values may reach a command
+  (literal in the argsfile only, or imported and computed too), how a
+  non-literal source is refused or confirmed, what environment and working
+  directory the command gets, and what the output and failure behaviour is,
+  with the Rust and TypeScript references above. Tavis approves it.
+- [ ] After approval: the implementation, tests with a harmless command and
+  a refused untrusted source, the removal of C22's refusal for the allowed
+  sources, =docs/SECURITY.org= and =DIVERGENCES.md= entries; full suite
+  green, commits name C40.
+
+Stop and record if: the design cannot separate literal from computed values
+without a change outside the allowed paths; or Tavis has not approved the
+design (do not write command-running code).
+
+* TODO Implement CommandsBefore with a trust design for computed stack-args
+:PROPERTIES:
+:ID: org:01a1e7e5-1a68-70c2-b5b8-7ae34d5be1b9
+:ADDED: [2026-11-16 Mon 22:05]
+:END:
+
+Write the design note described under Done when, with Rust and
+TypeScript behaviour compared line by line, and put it to Tavis through the
+supervisor. Do not implement before he approves.
+

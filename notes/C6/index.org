@@ -89,9 +89,11 @@ stops them with =killThread= inside =mask_= (=stopSpinner= around line 249,
 :ADDED: [2026-11-16 Mon 14:24]
 :END:
 
-Allowed paths: =test/=, =test-fixtures/=, =src/Iidy/Output/Renderers/=
-and =src/Iidy/Aws/Timing.hs= only where the hang is a real concurrency bug
-there, =Makefile=, =.githooks/pre-commit=, =notes/C6/=.
+Allowed paths: =notes/C6/= (including a new =notes/C6/repro/= directory
+for the standalone reproducer), =test/= and =test-fixtures/= only to record
+a diagnostic that is not committed, =Makefile=, =.githooks/pre-commit=. No
+change to =iidy-hs.cabal=, =flake.nix= or =src/=: the cause is outside the
+project.
 
 Out of scope: skipping, deleting or loosening the hanging test instead of
 fixing its cause; changing renderer behaviour that users see; changing
@@ -112,10 +114,41 @@ Done when:
   hook, so a hang anywhere fails fast and names the test.
 - [X] Build warning-free, full suite green, commits name C6.
 
-Stop and record if: about 30 full-suite runs on GHC 9.12.3 with
-=--timeout=20s= (see the first task) show no hang; the cause is outside the
-allowed paths (for example in a dependency or in the RTS); or fixing it
-would change user-visible renderer behaviour (question for Tavis).
+Decision (Tavis, 2026-11-16): take option (a). Build a small standalone
+reproducer of the shared-thunk hang and prepare an upstream GHC report. The
+supervisor or Tavis files the report; the worker does not.
+
+Done when (current, replaces the open items above for this card's next
+step):
+- [ ] =notes/C6/repro/= holds a standalone program (a single =Repro.hs=
+  using only =base=, built with plain =ghc -threaded -O0/-O1= from the
+  directory, no cabal change, no new dependency) in which many threads
+  force one shared thunk or CAF under CPU load with the threads masked, as
+  the evidence in =notes/C6/index.org= and =notes/C6/evidence-2026-11-16/=
+  describes (tasty-style forked test threads, a timeout thrower, 24 busy
+  loops at =nice -n 10=). A =run.sh= beside it runs it in a loop with a
+  watchdog.
+- [ ] The card records the result: the command, GHC version (9.12.3 and
+  9.10.3 if both are at hand), run count, hang count, and the thread-state
+  dump of a hang (=BlockedOnBlackHole= waiters with no live owner). If the
+  reproducer never hangs in a budget of about 2000 loaded runs, record that
+  and the variations tried (masking, =throwTo= from a timer thread,
+  =-N=/=-qg=), and stop.
+- [ ] =notes/C6/repro/report.txt= is a ready-to-file upstream GHC report
+  (title, GHC and OS versions, summary, the reproducer inline or attached,
+  the observed thread states, what was ruled out). The supervisor or Tavis
+  files it.
+- [ ] The capture procedure (task "How to catch the next hang") is updated:
+  drop =-l=, =-olRUN.eventlog= and =--eventlog-flush-interval=1= from step
+  1, because the two loaded runs with those flags hung at process exit, a
+  second problem that the capture flags cause; keep the =/proc= capture and
+  the thread-dump watchdog.
+- [ ] Commits name C6; the full suite stays green and warning-free.
+
+Stop and record if: the reproducer needs a dependency or any file outside
+the allowed paths; the hang appears in the reproducer only with project
+code in the loop (record that and return to the supervisor); or the
+reproducer does not hang in the budget above.
 
 * TODO Reproduce and identify the hanging test
 :PROPERTIES:
@@ -315,6 +348,10 @@ blocked thread IDs to test names.
 :ID: org:01a1e797-ec17-72cf-bb80-c66c1a6e9089
 :ADDED: [2026-11-16 Mon 20:40]
 :END:
+Decision (Tavis, 2026-11-16): option (a). Build a standalone reproducer
+and prepare an upstream GHC report; see the Scope and gate. Options (b) and
+(c) are not taken.
+
 The hang reproduces (about 1 in 300 loaded group runs) and is a black-hole
 wait with no live owner, apparently in the GHC RTS, not in project code.
 The card's stop rule applies. Options: (a) a further budget for a
@@ -347,12 +384,14 @@ next one: run the suite without =tail=, with =+RTS -l= (event log) or
 :END:
 1. Do not pipe the suite through =tail=. Run the built binary directly with
    a log per run, from the repository root:
-   =iidy-hs-test --timeout=20s +RTS -l -olRUN.eventlog --eventlog-flush-interval=1 -RTS > RUN.log 2>&1 < /dev/null=.
-   The flush interval keeps the event log on disk current, so a process
-   that must be killed with =kill -9= still leaves its last seconds.
-   GHC 9.12's default RTS includes the event log, so =-l= needs no
-   rebuild; =-DS= (scheduler debug) needs a =-debug= build and was not
-   used.
+   =iidy-hs-test --timeout=20s > RUN.log 2>&1 < /dev/null=.
+   Worker recommendation 2026-11-16, accepted by Tavis's option (a): do
+   not pass the event log flags (=-l=, =-o=, =--eventlog-flush-interval=1=).
+   Two loaded runs with them hung at process exit, a second problem the
+   flags cause, and the runs without them reproduced the real hang. Use the
+   thread-dump watchdog (=evidence-2026-11-16/watchdog.diff=) and the
+   =/proc= capture below instead. =-DS= (scheduler debug) needs a =-debug=
+   build and was not used.
 2. If tasty prints "Timeout" for a test, the hang was interruptible: the
    test name in the log is the answer, and the event log shows what its
    thread was blocked on.
@@ -372,10 +411,21 @@ next one: run the suite without =tail=, with =+RTS -l= (event log) or
    =sudo cat /proc/PID/task/*/stack= or a =gdb -p PID -batch -ex "thread apply all bt"=
    if the wchan picture is not enough.
 4. Then send SIGINT (=kill -INT=) once and wait a few seconds, in case
-   the hang is interruptible after all; then =kill -9=. Convert the event
-   log with =ghc-events show RUN.eventlog= and look at the last "stopping thread N (blocked on ...)" entries.
+   the hang is interruptible after all; then =kill -9=.
+   No event log is captured (see step 1).
 5. Record the GHC version, =+RTS= flags, host load and whether the run was
    under =cabal test= or the hook.
+
+* TODO Build a standalone reproducer and prepare the upstream report
+:PROPERTIES:
+:ID: org:01a1e7e3-f922-7019-868f-d4f97b179cca
+:ADDED: [2026-11-16 Mon 22:03]
+:END:
+
+Decision (Tavis, 2026-11-16): option (a) above. Work to the Done-when list
+in Scope and gate: =notes/C6/repro/Repro.hs=, =notes/C6/repro/run.sh=,
+=notes/C6/repro/report.txt=, results recorded here, capture procedure
+updated.
 
 * TODO Fix the cause with a failing test first
 :PROPERTIES:
