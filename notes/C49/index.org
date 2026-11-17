@@ -1,0 +1,68 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C49
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   C30 re-review: --timescaling is unbounded, so a large value overflows sleepMicros and a negative one skips every delay
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
+:ID: org:01a1eb7f-07ef-77ac-9757-4ca64a2691c0
+:ADDED: [2026-11-17 Tue 14:52]
+:END:
+#+title: C49 — Reject a non-finite or negative demo --timescaling
+#+date: 2026-11-17
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1eb7f-07ef-77ac-9757-4ca53832d321
+:ADDED: [2026-11-17 Tue 14:52]
+:END:
+
+Found by the C30 re-review (2026-11-17). The demo's =--timescaling=
+option is parsed with =auto= and no bound (=src/Iidy/Cli/Parser.hs=, the
+=timescaling= option of the demo command). C30 bounded =sleep:= to 0..86400
+seconds, but the delay is =sleepMicros secs timescaling=
+(=src/Iidy/Demo.hs=), so =--timescaling 2e8= with =sleep: 86400= overflows
+=Int= and the step does not sleep at all. Infinity, NaN and negative factors
+are accepted; a negative one skips every delay. Rust takes =timescaling= as
+an =f64= (=~/src/iidy/src/demo.rs=, check the CLI definition) and casts the
+scaled value with =as u64=, which saturates; check what Rust does with a
+negative factor before choosing the error text.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1eb7f-07ef-77ac-9757-4ca484878672
+:ADDED: [2026-11-17 Tue 14:52]
+:END:
+
+Allowed paths: =src/Iidy/Cli/Parser.hs= (the demo =--timescaling=
+reader only), =src/Iidy/Demo.hs= (only if a clamp in =sleepMicros= is the
+chosen fix), =test/Test/CliParserTest.hs=, =test/Test/DemoTest.hs=,
+=DIVERGENCES.md=, =docs/requirements/11-utilities.org=, =notes/C49/=.
+
+Out of scope: any other demo behaviour; the =sleep:= bound (C30).
+
+Done when:
+- [ ] A negative, infinite or NaN =--timescaling= (and zero, if Rust
+  rejects it) is rejected by the CLI parser with a clear message, and a
+  factor large enough to overflow the longest sleep is rejected or clamped;
+  failing-first tests for each.
+- [ ] Rust's behaviour for the same values is recorded with file:line, and
+  any difference is in =DIVERGENCES.md=.
+- [ ] Build warning-free, full suite green, commits name C49.
+
+Stop and record if: the fix needs a change to the demo script format, or
+Rust accepts negative factors and matching it would need a decision.
+
+* TODO Reject a non-finite or negative demo --timescaling
+:PROPERTIES:
+:ID: org:01a1eb7f-07ef-77ac-9757-4ca33f8582df
+:ADDED: [2026-11-17 Tue 14:52]
+:END:
+
+Reproduce with a failing parser test, then add a validating reader for
+=--timescaling= (finite, positive, below the overflow bound for an 86400 s
+sleep). Record Rust's handling first.

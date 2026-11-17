@@ -1,0 +1,61 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C50
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   C22 worker: docs/requirements cross-links still use .md extensions after the Org conversion
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
+:ID: org:01a1eb7f-083f-77d8-93ed-59b7f80c40ac
+:ADDED: [2026-11-17 Tue 14:52]
+:END:
+#+title: C50 — Requirements docs name sibling files with .md instead of .org
+#+date: 2026-11-17
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1eb7f-083f-77d8-93ed-59b6d182df36
+:ADDED: [2026-11-17 Tue 14:52]
+:END:
+
+Found by the C22 worker (2026-11-17). The requirements documents under
+=docs/requirements/= were converted from Markdown to Org (C5), but many still
+name their sibling documents with a =.md= extension, for example
+=docs/requirements/11-utilities.org= lines 5 and 532-534
+(=05-cfn-operations.md=, =02-yaml-preprocessing.md=). Files affected at
+filing time: 02, 03, 04, 06, 07, 08, 09, 10, 11 and 12 (=grep -rln '\.md\b'
+docs/requirements/=). Real Markdown files outside =docs/= (=DIVERGENCES.md=,
+=README.md=) keep their names; the upstream GitHub =SECURITY.md= link in
+=00-overview.org= stays (C22).
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1eb7f-083f-77d8-93ed-59b503784a8a
+:ADDED: [2026-11-17 Tue 14:52]
+:END:
+
+Allowed paths: =docs/requirements/=, =notes/C50/=.
+
+Out of scope: any content change beyond the file references; files outside
+=docs/requirements/=.
+
+Done when:
+- [ ] Every reference to a sibling requirements document uses its =.org=
+  name, as an Org =file:= link where the text already reads as a link (one
+  link per line); =grep -rn '[0-9][0-9]-[a-z-]*\.md' docs/requirements/=
+  finds nothing.
+- [ ] References to =DIVERGENCES.md=, =README.md= and the upstream
+  =SECURITY.md= are unchanged.
+- [ ] Commits name C50 (docs-only; the hook still runs).
+
+* TODO Requirements docs name sibling files with .md instead of .org
+:PROPERTIES:
+:ID: org:01a1eb7f-083f-77d8-93ed-59b44345bde9
+:ADDED: [2026-11-17 Tue 14:52]
+:END:
+
+Replace the stale =.md= sibling references in =docs/requirements/= with
+the =.org= names, then run the grep in Done when.
