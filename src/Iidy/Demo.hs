@@ -274,7 +274,7 @@ sleepMicros secs timescaling = round (secs * timescaling * 1000000)
 rounded. Rust truncates to whole milliseconds (demo.rs:363-366).
 -}
 typingDelayMicros :: Double -> Int
-typingDelayMicros timescaling = round (50.0 * timescaling * 1000)
+typingDelayMicros = sleepMicros 0.05
 
 -- | Print a command character by character to simulate typing.
 printCommand :: Text -> Double -> IO ()
