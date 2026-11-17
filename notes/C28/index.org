@@ -10,10 +10,19 @@
 :ID: org:01a1e6cc-bbfb-73fa-9536-c7405324ad68
 :ADDED: [2026-11-16 Mon 16:58]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 17:48]--[2026-11-16 Mon 17:51] => 0:03
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 17:47]
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 17:48]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a095f4dd5d9a09ea0
+- Clock-out [2026-11-16 Mon 17:51]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a095f4dd5d9a09ea0
 :END:
 #+title: C28 — get-import: keep document key order (Rust parity)
 #+date: 2026-11-16
@@ -132,6 +141,29 @@ acceptable).
 
 * TODO Reproduce the order difference with both binaries
 :PROPERTIES:
+:ID: org:01a1e6fd-4600-776f-a2b4-2ca1851aede6
+:ADDED: [2026-11-16 Mon 17:52]
+:END:
+
+Reproduced 2026-11-16. Fixtures =ordered.yaml= (=z: [1]=, =a: 2=),
+=ordered-nested.yaml=, =ordered.json= under =test-fixtures/get-import/=.
+Before the change, =get-import FILE= on the fresh iidy-hs build printed
+sorted keys (=a: 2= then =z:=); the Rust binary (=~/src/iidy/target/debug/iidy=)
+printed =z:= first, nested =z= before =a=, and the =.json= file in document
+order. =--format json= and =--query @= were sorted in both.
+
+** Question for supervisor
+Duplicate keys: Rust rejects duplicate keys in a
+file: =Failed to parse YAML from F: duplicate entry with key "z"= (and for a
+=.json= file the same with "JSON"). iidy-hs accepts them silently (YAML:
+first position, last value; JSON: aeson value). So the card's duplicate-key
+test cannot pin Rust output (Rust prints an error). Making iidy-hs reject
+them is a user-visible change beyond key order, so it was not done and no
+duplicate test was added. Decide: separate card for duplicate-key rejection?
+Answer (supervisor's call, 2026-11-16): yes, filed as C34 (Rust and the
+TypeScript original both reject duplicates); C28 adds no duplicate test.
+The =Resolver.hs= export outside the allowed paths is accepted.
+:PROPERTIES:
 :ID: org:01a1e6cc-bbfb-73fa-9536-c73d9ddbbde5
 :ADDED: [2026-11-16 Mon 16:58]
 :END:
@@ -144,6 +176,11 @@ each with both binaries, default format, =--format json= and =--query=, and
 record the outputs here.
 
 * TODO Failing tests for ordered output
+
+Tests =keyOrderTests= in =test/Test/GetImportTest.hs= (fixtures in
+=Test/Shared.hs=). Failing run on the branch base: the three "keep document
+order" tests failed (got sorted text, e.g. =a: 2\nz:\n- 1\n=); the json,
+query and env tests passed both before and after.
 :PROPERTIES:
 :ID: org:01a1e6cf-add4-7612-9ad4-c77482449b5f
 :ADDED: [2026-11-16 Mon 17:02]
@@ -153,6 +190,24 @@ Add the cases from the gate to =test/Test/GetImportTest.hs= using the
 existing =runFormat= helper and =collectRawOutput=; record the failing run.
 
 * TODO Carry the document order through ImportData
+
+Design: new field =idOrdered :: Maybe OValue= (=Nothing= means use
+=fromValue idDoc=). =ContentParsing= gets =parseYamlOrdered= (one YAML parse;
+=parseYamlContent= is now =toValue= of it) and a =ParsedDoc= result for
+=parseByExtensionStrict= and =parseByFormatSuffix=; JSON text keeps the aeson
+=idDoc= and reads the ordered view through the same YAML parse (as Rust does).
+Reuse: =astToOValueKeepingTags= is the one new export in =Resolver.hs= (a
+named alias of =rawToOValue KeepPreprocTags=, which =astToValueKeepingTags=
+now uses); no second converter. =Resolver.hs= was not on the allowed list;
+C26 had landed, so the edit is one export line. ssm-path objects stay
+unordered (Nothing). Residual: Rust prints an error for =--format json= or
+=--query= on a document with unresolved =!$= tags (=Failed to convert YAML to
+JSON=); iidy-hs prints the one-key tag object. Pre-existing (C26), unchanged.
+Byte comparison vs Rust (=cmp= of stdout+stderr), identical for default,
+=--format json= and =--query @= on ordered.yaml, ordered-nested.yaml,
+ordered.json, doc.yaml, list.yaml, nested-seq.yaml, and default on
+preproc-tags.yaml. Full suite on the rebased tip: all tests passed.
+Commit: b1bb0cf.
 :PROPERTIES:
 :ID: org:01a1e6cf-add4-7612-9ad4-c773c262fd48
 :ADDED: [2026-11-16 Mon 17:02]

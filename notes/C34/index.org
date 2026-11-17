@@ -1,0 +1,68 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C34
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   C28 2026-11-16: Rust fails with 'duplicate entry with key' for YAML and JSON files; js-yaml (TypeScript) rejects duplicated mapping keys; iidy-hs accepts them silently (last value wins)
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
+:ID: org:01a1e6fd-7d6c-773c-9a4e-30c18f1dd646
+:ADDED: [2026-11-16 Mon 17:52]
+:END:
+#+title: C34 — Reject duplicate mapping keys as Rust and TypeScript do
+#+date: 2026-11-16
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1e6fd-7d6c-773c-9a4e-30c06431e02b
+:ADDED: [2026-11-16 Mon 17:52]
+:END:
+
+iidy-hs accepts a mapping with a repeated key silently (the last value
+wins), in templates, stack-args and imported YAML or JSON documents. Rust
+rejects it (=Failed to parse YAML from F: duplicate entry with key "z"=,
+and the same with "JSON" for =.json= files), and the TypeScript original's
+js-yaml rejects duplicated mapping keys too. Found by
+[[file:../C28/index.org][C28]] (see its question). Rust parity is the
+project default and both originals agree, so this is a parity fix; it is
+user-visible because templates with duplicate keys stop rendering.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1e6fd-7d6c-773c-9a4e-30bf3d082e9c
+:ADDED: [2026-11-16 Mon 17:52]
+:END:
+
+Allowed paths: =src/Iidy/Yaml/Parser.hs= and the module that parses JSON
+import content, the error-type module the new error belongs in, their test
+modules, =test-fixtures/=, =notes/C34/=.
+
+Out of scope: any other parse rule; key order (C8, C28, C31 landed).
+
+Done when:
+- [ ] A YAML or JSON document with a repeated key at any depth fails to
+  load with an error naming the file and the key, matching Rust's message
+  where the error-display conventions allow; tests recorded failing first
+  for a template, a nested mapping and a =.json= import.
+- [ ] Rust's exact message for each case is recorded in the card from the
+  Rust binary (local files only, never anything that can reach AWS).
+- [ ] No existing fixture has duplicate keys, or each one found is listed
+  in the card and fixed in the fixture (not in the expected output).
+- [ ] Build warning-free, full suite green, commits name C34.
+
+Stop and record if: a fixture whose expected output came from Rust relies
+on duplicate keys; the check needs a change outside the allowed paths;
+merge keys (=<<=) interact with it in a way Rust handles differently.
+
+* TODO Reject duplicate mapping keys as Rust and TypeScript do
+:PROPERTIES:
+:ID: org:01a1e6fd-7d6c-773c-9a4e-30beeb9e6182
+:ADDED: [2026-11-16 Mon 17:52]
+:END:
+
+Reproduce with both binaries (template, nested mapping, =.json= import,
+merge key) and record the outputs. Find where mappings are built during
+parsing (search for the one owner; do not add a second check per loader),
+add the failing tests, then reject the duplicate there.
