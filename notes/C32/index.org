@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C32
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :CARD_PRIORITY: C
 :MODE:     CONTRACT
 :ORIGIN:   C26 2026-11-16: unresolved tags in plain imported documents print the normalised tag (!$include as !$, !$string as !$toYamlString, one-element sequence args unwrapped, mapping fields reordered); exact Rust output needs AstPreprocessingTag to keep the source spelling (Parser.hs, Ast.hs)
@@ -10,6 +10,11 @@
 :SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
 :ID: org:01a1e6f2-1a65-77fc-a0bf-5be36756fa87
 :ADDED: [2026-11-16 Mon 17:39]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 21:36]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C32 — Keep the written !$ tag name and argument in the AST for unresolved-tag output
 #+date: 2026-11-16
