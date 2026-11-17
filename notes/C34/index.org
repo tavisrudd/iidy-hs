@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C34
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   C28 2026-11-16: Rust fails with 'duplicate entry with key' for YAML and JSON files; js-yaml (TypeScript) rejects duplicated mapping keys; iidy-hs accepts them silently (last value wins)
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
 :ID: org:01a1e6fd-7d6c-773c-9a4e-30c18f1dd646
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 19:32]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C34 — Reject duplicate mapping keys as Rust and TypeScript do
 #+date: 2026-11-16
