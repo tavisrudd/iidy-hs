@@ -4,9 +4,11 @@ import Options.Applicative (ParserResult (..), execParserPure, prefs, showHelpOn
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
-import Iidy.Cli (AwsOpts (..), Cli (..), Commands (..), DeleteArgs (..), DescribeArgs (..), GetImportArgs (..), GlobalOpts (..), RenderArgs (..), RenderFormat (..))
+import Data.Text (Text)
+import Iidy.Cli (AwsOpts (..), Cli (..), Commands (..), DeleteArgs (..), DescribeArgs (..), GetImportArgs (..), GlobalOpts (..), RenderArgs (..), RenderFormat (..), importPolicyFromOpts)
 import Iidy.Cli.Parser (cliParserInfo)
 import Iidy.Types (ColorChoice (..), Theme (..), YamlSpec (..))
+import Iidy.Yaml.Imports.Types (ImportPolicy (..), isTrustedBase, trustedSourceText)
 
 -- | Helper to parse CLI args using optparse-applicative in pure mode
 parseCli :: [String] -> Either String Cli
@@ -133,4 +135,27 @@ cliParserTests =
         case parseCli ["get-import", "some-import", "--format", "yaml-cloudformation"] of
             Left _ -> pure ()
             Right _ -> assertFailure "Expected parse failure for yaml-cloudformation in get-import"
+    , testCase "--trust-import-source is absent by default" $ do
+        case parseCli ["render", "t.yaml"] of
+            Left e -> assertFailure e
+            Right cli -> trustedPrefixes cli @?= []
+    , testCase "repeated --trust-import-source flags accumulate into the policy" $ do
+        let args = ["--trust-import-source", "s3://bucket/", "--trust-import-source=https://t.example.com/x/", "render", "t.yaml"]
+        case parseCli args of
+            Left e -> assertFailure e
+            Right cli -> do
+                trustedPrefixes cli @?= ["s3://bucket/", "https://t.example.com/x/"]
+                let policy = importPolicyFromOpts (cliGlobalOpts cli)
+                isTrustedBase (ipTrustedSources policy) "s3://bucket/t.yaml" @?= True
+                isTrustedBase (ipTrustedSources policy) "https://t.example.com/y/t.yaml" @?= False
+    , testCase "an invalid --trust-import-source prefix is a parse error" $
+        mapM_
+            ( \p -> case parseCli ["--trust-import-source", p, "render", "t.yaml"] of
+                Left _ -> pure ()
+                Right _ -> assertFailure ("Expected parse failure for prefix " <> p)
+            )
+            ["s3://bucket", "ftp://host/", "templates/", "https:///"]
     ]
+  where
+    trustedPrefixes :: Cli -> [Text]
+    trustedPrefixes = map trustedSourceText . goTrustedSources . cliGlobalOpts

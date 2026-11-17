@@ -269,6 +269,7 @@ globalOptionHelpRows =
     , ("    --debug", "Log debug information to stderr.")
     , ("    --log-full-error", "Log full error information to stderr.")
     , ("    --no-remote-imports", "Disallow HTTP and S3 $imports.\nAWS API imports (cfn:, ssm:, ssm-path:) are not affected.")
+    , ("    --trust-import-source <PREFIX>", "Trust remote templates under PREFIX like local ones: they may use\nAWS-backed imports (s3:, ssm:, ssm-path:, cfn:) and reach any HTTP\naddress. PREFIX is a literal location prefix ending in /, such as\ns3://bucket/ or https://host/path/. Repeatable.")
     ]
 
 awsOptionHelpRows :: [(String, String)]

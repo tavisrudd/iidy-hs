@@ -17,6 +17,7 @@ import System.Exit qualified
 import Iidy.Cli
 import Iidy.Cli.Help
 import Iidy.Types (ColorChoice (..), OutputMode (..), Theme (..), YamlSpec (..))
+import Iidy.Yaml.Imports.Types (parseTrustedSource)
 
 ------------------------------------------------------------------------
 -- Entry point
@@ -139,6 +140,14 @@ globalOptsParser =
             False
             ( long "no-remote-imports"
                 <> help "Disallow HTTP and S3 $imports."
+            )
+        <*> many
+            ( option
+                (eitherReader (either (Left . T.unpack) Right . parseTrustedSource . T.pack))
+                ( long "trust-import-source"
+                    <> metavar "PREFIX"
+                    <> help "Trust remote templates under PREFIX like local ones (repeatable)."
+                )
             )
 
 ------------------------------------------------------------------------

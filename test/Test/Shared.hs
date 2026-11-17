@@ -549,6 +549,7 @@ testGlobalOpts remote =
         , goDebug = False
         , goLogFullError = False
         , goRemoteImports = remote
+        , goTrustedSources = []
         }
 
 -- | An emitter that records each 'OdRawOutput' text, and the action reading them.

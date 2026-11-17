@@ -52,7 +52,7 @@ module Iidy.Cli (
 import Data.Text (Text)
 import Iidy.Aws.CredentialSource (AwsSettings (..))
 import Iidy.Types (ColorChoice, OutputMode, Theme, YamlSpec)
-import Iidy.Yaml.Imports.Types (ImportPolicy (..), RemoteImports (..), noTrustedSources)
+import Iidy.Yaml.Imports.Types (ImportPolicy (..), RemoteImports (..), TrustedSource, mkTrustedSources)
 
 ------------------------------------------------------------------------
 -- Top-level CLI types
@@ -73,6 +73,8 @@ data GlobalOpts = GlobalOpts
     , goDebug :: !Bool
     , goLogFullError :: !Bool
     , goRemoteImports :: !Bool
+    , goTrustedSources :: ![TrustedSource]
+    -- ^ @--trust-import-source@ prefixes, validated at parse time
     }
     deriving stock (Show, Eq)
 
@@ -353,7 +355,7 @@ importPolicyFromOpts :: GlobalOpts -> ImportPolicy
 importPolicyFromOpts gopts =
     ImportPolicy
         { ipRemoteImports = if goRemoteImports gopts then AllowRemoteImports else BlockRemoteImports
-        , ipTrustedSources = noTrustedSources
+        , ipTrustedSources = mkTrustedSources (goTrustedSources gopts)
         }
 
 {- | Detect shell type from a shell name string.
