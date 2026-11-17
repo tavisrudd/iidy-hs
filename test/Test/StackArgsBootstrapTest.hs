@@ -71,7 +71,7 @@ stackArgsBootstrapTests =
     , testCase "raw reading: templates, tags and missing map entries are not literal" $ do
         rawField "Region: \"{{r}}\"" CredRegion @?= RawComputed "Region is the handlebars template {{r}}"
         rawField "Profile: !$ prof" CredProfile @?= RawComputed "Profile is a preprocessing tag"
-        rawField "Profile: {dev: !$ prof}" CredProfile @?= RawComputed "Profile is a preprocessing tag"
+        rawField "Profile: {dev: !$ prof}" CredProfile @?= RawComputed "Profile (environment entry 'dev') is a preprocessing tag"
         rawField "Profile: {prod: p}" CredProfile
             @?= RawComputed "Profile is an environment map with no entry for environment dev"
     , testCase "raw reading: duplicate and non-plain keys are not literal" $ do

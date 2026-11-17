@@ -275,7 +275,7 @@ readRawField (AstMapping pairs _) environment field =
             KeyNotPlain -> RawComputed ("the environment map for " <> key <> " has a key that is not a plain string")
             KeyDuplicated -> RawComputed ("the environment map for " <> key <> " has the entry " <> environment <> " more than once")
             KeyMissing -> RawComputed (key <> " is an environment map with no entry for environment " <> environment)
-            KeyFound entry -> plainOrComputed key entry
+            KeyFound entry -> plainOrComputed (key <> " (environment entry '" <> environment <> "')") entry
         KeyFound node -> plainOrComputed key node
   where
     key = credentialFieldKey field
