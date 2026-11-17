@@ -57,6 +57,49 @@ Both run the commands while loading the stack-args, before any
 CloudFormation call, diff or confirmation prompt: answering "no" at an
 =update-stack= prompt comes after the commands already ran.
 
+** Supervisor's check of iidy-js (2026-11-17)
+Re-read for Tavis; corrects the iidy-js column above. Code reading only, not
+run.
+
+- Handlebars context is wider than the table says. =loadStackArgs.ts:125-136=
+  sets =$envValues= to bare =region= and =environment= plus
+  =iidy.{command,environment,region,profile}= before the commands run.
+  Then =transform(argsdataPass1)= (=:152=) shallow-clones the document
+  (=preprocess/index.ts:714=), so =loadImports= writes every =$defs= entry
+  and every =$imports= result into the /same/ =$envValues= object
+  (=preprocess/index.ts:478-485=, =:523=). =CommandsBeforeEnv= (=:154-160=)
+  therefore holds all defs and imports by name, despite the "TODO what about
+  the rest of the $envValues" comment at =:153=. So in iidy-js
+  ={{someSsmImport}}= splices an imported value straight into shell text,
+  not only through =iidy.stackArgs=. The "via =stackArgs=" cells in the
+  next table should read "yes, by name and via =stackArgs=".
+- Helpers: besides =filehash= and =filehashBase64= (resolved against the
+  argsfile directory, =runCommandSet.ts:16-17=), every global iidy helper
+  is available: =tojson=, =toyaml=, =base64=, case helpers
+  (=preprocess/index.ts:36-45=) and the =handlebars-helpers= string group
+  (=:47=). Compilation is =noEscape: true, strict: true=
+  (=preprocess/index.ts:51=): no shell quoting, and an unknown name fails.
+- Entries come from the raw file (=yaml.loadString=, =:83=), so only plain
+  string entries are usable. A tagged entry reaches =handlebars.compile= as
+  an object and throws; there is no environment map for this field (only
+  =Profile=, =AssumeRoleARN= and =Region= get one, =:93-109=).
+- Documentation promises little: the README table says "List of commands to
+  run before create- and update-stack commands", and its example comment
+  says "handlebars templates in the command strings are preprocessed prior
+  to execution". No placeholder list is documented.
+- The main use case is visible in the code comment at =:142-147=: a build
+  command changes a file whose =filehash:= import must be read after it
+  (imports resolve again in the second =transform=). Option A keeps that by
+  running the commands before preprocessing.
+
+Effect on the options: an iidy-js file whose commands use
+={{iidy.environment}}=, ={{iidy.region}}= or ={{iidy.stackName}}= breaks
+under A and keeps working under B. A file that splices a def or an import by
+name (={{bucket}}=) breaks under A and B alike; its owner must write the
+value into the command, or have the command fetch it itself (for example
+with the =aws= CLI), where the operator can see it. Only C keeps every
+iidy-js file working, at the cost of the injection path.
+
 * Which values can reach a shell
 A command is shell text. A value spliced into it is shell code, even when
 the surrounding text is the operator's own: with
