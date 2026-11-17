@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C38
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :CARD_PRIORITY: C
 :MODE:     CONTRACT
 :ORIGIN:   C15 task 6 review 2026-11-16: Resolver.mergeExpandParams duplicates CustomResources.Params.mergeParams
@@ -11,8 +11,21 @@
 :ID: org:01a1e758-cb03-7202-8bcd-76971dfa6b02
 :ADDED: [2026-11-16 Mon 19:31]
 :END:
+:CLOCK:
+CLOCK: [2026-11-16 Mon 21:15]--[2026-11-16 Mon 21:17] => 0:02
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 21:13]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
+- Clock-in [2026-11-16 Mon 21:15]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ad7584cfcd1c4dbc9
+- Clock-out [2026-11-16 Mon 21:17]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ad7584cfcd1c4dbc9
+- Card state STARTED → DONE [2026-11-16 Mon 21:17]
+  Note: Landed ac90793: !$expand uses Params.mergeParams; standard traverse_; behaviour-neutral, landed on supervisor's diff check
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
@@ -45,18 +58,23 @@ Allowed paths: =src/Iidy/Yaml/Resolution/Resolver.hs=,
 Out of scope: any behaviour change.
 
 Done when:
-- [ ] =mergeExpandParams= is gone; =!$expand= calls =mergeParams=.
-- [ ] The local =traverse_= in =Params.hs= is replaced by the standard one
+- [X] =mergeExpandParams= is gone; =!$expand= calls =mergeParams=.
+- [X] The local =traverse_= in =Params.hs= is replaced by the standard one
   if that compiles without other changes; otherwise noted in the card.
-- [ ] Every existing test passes unchanged; build warning-free; commits
+- [X] Every existing test passes unchanged; build warning-free; commits
   name C38.
 
 Stop and record if: the two functions turn out to differ in any case.
 
-* TODO Merge mergeExpandParams into Params.mergeParams
+* DONE Merge mergeExpandParams into Params.mergeParams
 :PROPERTIES:
 :ID: org:01a1e758-cb03-7202-8bcd-7694a1cc7f10
 :ADDED: [2026-11-16 Mon 19:31]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 21:17] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ad7584cfcd1c4dbc9
 :END:
 
 Export =mergeParams= if needed, delete =mergeExpandParams=, call

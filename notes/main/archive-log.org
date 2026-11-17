@@ -33,6 +33,7 @@
 - [2026-11-16 Mon 19:57] [[file:../C37/index.org][C37]] — Landed 1be8bad (replayed 03f9e35): iidy demo passes --no-remote-imports and --trust-import-source to the iidy on PATH; narrow fix landed on supervisor's diff check
 - [2026-11-16 Mon 20:00] [[file:../C36/index.org][C36]] — Landed 70fdf27 (replayed 6b8392d): a Template value that names no file is inline only when it starts with { or [ or is multi-line, otherwise an error naming the resolved path; DIVERGENCES entry; narrow fix landed on supervisor's diff check
 - [2026-11-16 Mon 21:15] [[file:../C33/index.org][C33]] — Landed d1fe7ea (replayed 2806ec5 with a redundant-import fix) and 419efa4 (review test gaps): render builds its AWS environment lazily through LazyEnv shared with get-import (Tavis's decision); Sonnet review land
+- [2026-11-16 Mon 21:17] [[file:../C38/index.org][C38]] — Landed ac90793: !$expand uses Params.mergeParams; standard traverse_; behaviour-neutral, landed on supervisor's diff check
 * COMMENT meta
 :PROPERTIES:
 :LANE: main
