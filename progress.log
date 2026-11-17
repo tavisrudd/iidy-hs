@@ -135,3 +135,4 @@
 2026-11-16 21:17 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C33 closed; C38 landed (mergeParams dedup); handoff written
 2026-11-16 21:35 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C12 landed (StackArgsLoader split, C17 backstop wiring tested)
 2026-11-16 21:45 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C32 landed (written !$ tag spelling kept)
+2026-11-16 22:21 — 2026-11-16--3 (113e42ab-bf76-4434-899c-00879502d398): C16 round 3 landed (bucket region lookup, presigned URL, deploy builders enforce approval)

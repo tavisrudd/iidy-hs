@@ -14,6 +14,7 @@
 CLOCK: [2026-11-16 Mon 18:07]--[2026-11-16 Mon 18:21] => 0:14
 CLOCK: [2026-11-16 Mon 18:28]--[2026-11-16 Mon 18:41] => 0:13
 CLOCK: [2026-11-16 Mon 18:51]--[2026-11-16 Mon 18:58] => 0:07
+CLOCK: [2026-11-16 Mon 22:03]--[2026-11-16 Mon 22:14] => 0:11
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 16:11]
@@ -35,6 +36,12 @@ CLOCK: [2026-11-16 Mon 18:51]--[2026-11-16 Mon 18:58] => 0:07
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 - Clock-out [2026-11-16 Mon 18:58]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
+- Clock-in [2026-11-16 Mon 22:03]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
+- Clock-out [2026-11-16 Mon 22:14]
   Agent: opus-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
@@ -747,10 +754,15 @@ Branch =claude/C16=, rebased onto main =d6207c1=.
   gave "Invalid S3 URL (no key)"), in =TemplateHashTest= and in a request
   test for each form in =ApprovedTemplateTest=.
 
-* TODO Approval bucket region has one owner
+* DONE Approval bucket region has one owner
 :PROPERTIES:
 :ID: org:01a1e708-49cb-7228-b2c7-c99a3c50b801
 :ADDED: [2026-11-16 Mon 18:04]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 22:07] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
 
 Follows the recommended option under "Open points for Tavis" (stop if Tavis
@@ -765,6 +777,36 @@ every S3 call of the request (=HeadObject=, =PutObject=) and the review
 presign tasks use it too. Tests with the mock in =eu-west-1= and the bucket
 location answered as us-east-1, as eu-west-1, as empty, and denied
 (fallback): the logged S3 host region matches.
+
+** Result 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e7e7-6051-73d7-bd39-829511203332
+:ADDED: [2026-11-16 Mon 22:07]
+:END:
+Commit =9351910= (=c802ffd= before the rebase). =S3Objects.bucketRegion=
+sends =GetBucketLocation=;
+=ApprovedTemplate.approvalS3Env= sends it through the env with region
+us-east-1 and returns the env with the bucket's region, or the given env
+(the stack's region) when the call fails. "Fails" covers any error, as the
+plan text says; the decision names "denied", the case the fallback is for.
+Request and review run every S3 call through it (=approvalS3Context= in
+=TemplateApproval.hs=); the request's =ValidateTemplate= keeps the stack's
+env. amazonka maps the empty answer to us-east-1 and =EU= to eu-west-1
+(tested), so that stop rule does not apply. The mock gained
+=s3HostRegion= and =bucketLocationReply= (owner =test/Test/MockAws.hs=).
+
+Failing run first (=test/Test/ApprovalRegionTest.hs=, old code): 5 of 5
+failed (no =GetBucketLocation=, S3 calls in the env's region). Tests: env
+eu-west-1 with location empty, "us-east-1", denied (fallback to
+eu-west-1); env us-east-1 with "eu-west-1" and "EU"; review in eu-west-1
+with a us-east-1 bucket. The logged host region of each call is asserted.
+
+Expected values changed in tests written earlier in this card (no test
+from before C16 changed): the operation lists in =TemplateApprovalTest=,
+=ApprovedTemplateTest= and =MockAwsTest= now start with
+=GetBucketLocation=, and the =MockAwsTest= eu-west-1 upload test now
+answers the location as eu-west-1, since the request makes that call
+first by design of this task.
 
 * DONE Classify HeadObject results; request fails on errors other than 404
 :PROPERTIES:
@@ -1030,10 +1072,15 @@ on the tip, =-Werror=, fourmolu, hlint and the nix-deps check clean.
   one with the git environment set and stdin closed, all passed, and the
   retried commit passed the hook. Cause unknown.
 
-* TODO Presign the approved object's URL
+* DONE Presign the approved object's URL
 :PROPERTIES:
 :ID: org:01a1e708-49ca-7608-afcb-583519b93397
 :ADDED: [2026-11-16 Mon 18:04]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 22:09] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
 
 Add =presignGetObject= to =S3Objects.hs= over =Amazonka.presignURL :: Env ->
@@ -1047,10 +1094,39 @@ static keys assert host, path, =X-Amz-Date=, =X-Amz-Expires=900= and the
 credential scope region; with session keys
 (=Amazonka.Auth.Keys.fromSession=) assert =X-Amz-Security-Token=.
 
-* TODO Deploy builders send the presigned approved URL
+** Result 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e7e9-3377-734c-a4cd-2dd0b4866ced
+:ADDED: [2026-11-16 Mon 22:09]
+:END:
+Commit =402011c= (=d58aa2c= before the rebase).
+=S3Objects.presignGetObject env time bucket key= over
+=Amazonka.presignURL= with =presignExpiry= = 900 seconds; no HTTP call
+(the mock log stays empty). Tests (=test/Test/S3ObjectsTest.hs=, fixed
+time 2026-01-01): host and path
+=https://approvals.s3.us-east-1.amazonaws.com/app/t.yaml?=, exact
+=X-Amz-Algorithm=, =X-Amz-Date=20260101T000000Z=, =X-Amz-Expires=900=,
+=X-Amz-Credential= scope for us-east-1 and for eu-west-1 (host
+=s3.eu-west-1=), =X-Amz-Signature= present, and with session keys
+=X-Amz-Security-Token=. amazonka signs us-east-1 on the regional host
+=s3.us-east-1.amazonaws.com=, not the global =s3.amazonaws.com=.
+
+Stop rule checked (path style on a dotted bucket): a dotted bucket gets
+a path-style URL (=https://s3.us-east-1.amazonaws.com/my.approvals/...=,
+tested). Not a stop: iidy-js sends path style for every bucket
+(=https://s3.amazonaws.com/${Bucket}/${Key}=, =stackArgsToX.ts:35=), so
+CloudFormation accepted path-style template URLs for iidy-js users. Not
+verified against AWS (mock only).
+
+* DONE Deploy builders send the presigned approved URL
 :PROPERTIES:
 :ID: org:01a1e6fd-8bb4-76f0-af12-17ecd92cd5d4
 :ADDED: [2026-11-16 Mon 17:52]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-16 Mon 22:14] \\
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:a32fe837a5c527c1f
 :END:
 
 Add =resolveDeployTemplate :: CfnContext -> StackArgs -> Maybe FilePath ->
@@ -1083,6 +1159,157 @@ template, no =Template=, approval off (body as before, no S3 call). Also,
 for one builder: bucket in a region other than the stack's (presigned host
 and scope use the bucket's region), and the 999999 and 1000000 byte
 boundary from the 1 MB task.
+
+** Result 2026-11-16
+:PROPERTIES:
+:ID: org:01a1e7ed-d391-75bd-a86b-9eee6e319650
+:ADDED: [2026-11-16 Mon 22:14]
+:END:
+Commit =0289e9e= on =claude/C16=, rebased onto main =5e4f072=; full suite
+2176 passed on the tip, =-Werror=, fourmolu and hlint clean.
+
+=ApprovedTemplate.resolveDeployTemplate ctx args argsfile=: no
+=ApprovedTemplateLocation= gives =loadCfnTemplate= as before; with one,
+=approvedTemplateFor= (URL and missing-Template refusals, 1 MB limit),
+=approvalS3Env=, =s3ObjectExists= (=HeadObject=), then a =TemplateResult=
+with no body and the URL from =presignGetObject= signed now for the
+bucket's region. =buildCreateStackRequest=, =buildUpdateStackRequest= and
+=buildCreateChangeSetRequest= call it in place of their three
+=loadCfnTemplate= and import-config lines. The builders run before the
+operation's first CloudFormation call (=CreateStack.hs=, =UpdateStack.hs=
+direct path, =Changeset.hs=); =update-stack --changeset= and
+create-or-update send =DescribeStacks= first, as iidy-js.
+
+Refusal for 404 (exact text, tested):
+#+begin_example
+Template version has not been approved or the current IAM principal does not have permission to access it. Run:
+  iidy-hs --region R --environment E [--profile P] template-approval request <argsfile>
+to begin the approval process.
+#+end_example
+R is the stack's region (the context's env), E =cfnEnvironment ctx=, P
+the profile when the credential stack records one from =--profile= or
+stack-args. The global options come before the command, as iidy-js
+(=iidy --region R --profile P template-approval request ...=), because
+the iidy-hs parser takes them only there (=prefs mempty=, no
+=subparserInline=); the card's text put them after the argsfile. A test
+parses the suggested command with =cliParserInfo= and checks argsfile,
+region, environment and profile. 403 and other failures reuse the
+=s3ObjectExists= messages (access denied, or "Failed to check ... in
+region R").
+
+Failing run first (=test/Test/DeployTemplateTest.hs=, old builders): 22
+of 39 failed (the old builders sent the local body, accepted URL and
+missing templates, and made no S3 call). Tests per builder: approved
+(URL for =bucket/key= with =X-Amz-Signature= and =X-Amz-Expires=900=, no
+body, calls =GetBucketLocation= and =HeadObject= only), not approved (full
+text), access denied, other failure naming the region, URL Template and no
+Template (no AWS call), approval off (body, no AWS call). For create-stack:
+bucket in eu-west-1 with the stack in us-east-1 (URL host and scope
+eu-west-1), the profile in the message, 999999 bytes accepted, 1000000
+refused with no AWS call. The sized-template helpers moved into
+=test/Test/ApprovalFixtures.hs= (shared with =TemplateApprovalTest=).
+
+** Review 2026-11-16 (round 3)
+:PROPERTIES:
+:ID: org:01a1e7f3-3149-769f-9f88-9b62257f6df5
+:ADDED: [2026-11-16 Mon 22:20]
+:END:
+Reviewer: review worker (Claude Opus 5.5). Branch =claude/C16= on main
+=5e4f072=, commits =9351910=, =402011c=, =0289e9e=.
+
+Verdict: land all three; two low defects for a follow-up commit.
+
+Revert proofs (commit checked out, production change undone, tests run
+with the test binary, restored; worktree clean):
+- =9351910= (=approvalS3Env= returns the env unchanged): 6 of 6
+  =ApprovalRegion= tests failed (no =GetBucketLocation=, calls in the
+  stack's region).
+- =402011c= is a new function, so a revert does not compile; with
+  =presignExpiry= mutated to 3600, the static-keys presign test failed.
+- =0289e9e= (=RequestBuilder.hs= at =402011c=): 22 of 26 =DeployTemplate=
+  tests failed (local body sent, URL and missing Template accepted, the
+  1 MB boundary on the 51199 limit); the 4 approval-off tests pass, as
+  they should.
+
+Fallback on every =GetBucketLocation= failure (Tavis's option 3 says "if
+the call is denied"): acceptable, keep it. Every wrong-region outcome
+fails closed: =HeadObject= in the wrong region gets 301 or 400, which
+=s3ObjectExists= reports as "Failed to check ... in region R", never as
+approved and never as 404, so nothing deploys and the request uploads
+nothing. Falling back on any failure also keeps working setups that
+=us-east-1= cannot serve: hosts with only a regional S3 VPC endpoint (no
+route to the us-east-1 endpoint), GovCloud and China partitions (their
+keys are invalid in us-east-1), and cross-account buckets (only the
+owner may call =GetBucketLocation=). Narrowing to 403 would break the
+first. The docs and =DIVERGENCES.md= must say "any failure", and the
+supervisor should note the wording difference against the decision. See
+defect 1 for the message.
+
+Deploying an unapproved template (by code path, mock tests where named):
+- create-stack, update-stack (direct), create-changeset: refused before
+  any CloudFormation call (tested per builder).
+- create-or-update (=CreateOrUpdate.hs:63-71=) and =update-stack
+  --changeset= (=app/Main.hs:88-89=, =UpdateStack.hs:164=) reach the same
+  builders after =DescribeStacks=, as iidy-js; not tested end to end.
+- exec-changeset (=app/Main.hs:117-128=) sends no template and checks
+  nothing, as iidy-js: a changeset created outside iidy-hs, or while
+  =/iidy/disable-template-approval= was on, can be executed. Note only.
+- estimate-cost still sends the local body (=EstimateCost.hs:51=);
+  expected gap, next task.
+- Render drift: request and deploy render through the same
+  =approvedTemplateFor= (environment injected from =--environment=,
+  imports in the env's region, same file loader, no line-ending
+  normalisation). Any difference (another =--environment=, a changed SSM
+  or CloudFormation import value, a CRLF checkout, imports that change
+  per run such as time or random values) changes the hash, so the deploy
+  is refused as not approved: fails closed. The suggested command carries
+  =--region= and =--environment= to reproduce the render. The template
+  render does not see =iidy.command= (only the stack-args do), so the
+  command name does not change the hash.
+- Prefix and bucket-only =ApprovedTemplateLocation=: one function
+  (=generateVersionedLocation=, now in =ApprovedTemplate.hs=) for request
+  and deploy; root keys tested in round 2.
+- =/iidy/disable-template-approval=: clears =saApprovedTemplateLocation=
+  at load (=GlobalConfig.hs:105-113=), so the builders take the
+  approval-off path (tested: body, no AWS call).
+- Race between =HeadObject= and =CreateStack=: a deleted object makes
+  CloudFormation fail to fetch the URL (fails closed); an object
+  overwritten at the approved key by someone with =s3:PutObject= is
+  deployed, as in iidy-js. Note for the docs (deny overwrite of approved
+  keys in the bucket policy). Note only.
+
+Presigned URL: amazonka's =S3AddressingStyleAuto= uses virtual-host style
+only for bucket names that are one DNS label (=Amazonka.Request=,
+=rewritePossible=: no dot, 3-63 characters, =[a-z0-9-]=), otherwise path
+style; dotted names give
+=https://s3.<region>.amazonaws.com/my.approvals/...= (tested). iidy-js
+signs with aws-sdk v2's =getSignedUrl= for us-east-1
+(=maybeSignS3HttpUrl.ts:45-47=), whose default also uses path style for
+dotted names over HTTPS; same behaviour, regional host instead of
+=s3.amazonaws.com=. A session-token URL is long (the token alone can be
+over 1000 characters); CloudFormation's =TemplateURL= length limit could
+not be checked here and iidy-js sends the same URLs. Note only.
+
+Secrets: the URL is never printed. =trTemplateUrl= is read only by the
+three builders and =EstimateCost.hs:51=; no amazonka logger is set
+(=grep newLogger=); CloudFormation is called with POST, and http-client's
+=Show Request= leaves out the body (=requestBody= is commented out of the
+instance), so a =TransportError= shown in an error leaves out the
+=TemplateURL= form field. The refusal messages hold the profile name
+only.
+
+Defects:
+1. Low, =src/Iidy/Cfn/ApprovedTemplate.hs:136-141=. =approvalS3Env= drops
+   the =GetBucketLocation= error. When the fallback region is wrong, the
+   user sees "Failed to check s3://B/K in region eu-west-1: ...
+   PermanentRedirect" with no sign that the region came from a fallback.
+   Return the lookup error with the env (or a note), and add "(bucket
+   region lookup failed: <error>; used the stack's region)" to the
+   =HeadObject= failure and access-denied messages when it applies.
+2. Low, duplicated test helper: =operations= is defined identically in
+   =test/Test/DeployTemplateTest.hs:218= and
+   =test/Test/TemplateApprovalTest.hs:199=. Move it to
+   =test/Test/MockAws.hs= (beside =s3HostRegion=) and import it in both.
 
 * TODO estimate-cost uses the approved URL
 :PROPERTIES:
