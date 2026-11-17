@@ -33,56 +33,45 @@ this session's transcript) add the rules below.
 
 ## State at handoff
 
-Landed and closed today: C5, C8, C9, C10, C11, C13, C14, C15, C17, C24,
-C25, C26, C27, C28, C29, C31, C33, C34, C36, C37.
+Landed and closed 2026-11-16: C5, C8, C9, C10, C11, C12, C13, C14, C15,
+C16, C17, C24, C25, C26, C27, C28, C29, C31, C32, C33, C34, C36, C37, C38.
 
-In flight:
-- C12 landed and closed (loader split; C17 backstop wiring tested).
-- C32 landed and closed. Nothing else can start without Tavis: every
-  remaining TODO card (C18, C19, C20, C21, C22, C30) depends on one of the
-  decisions below.
-- C38 landed and closed. C21 and C22 are refined; tasks that depend on
-  Tavis's answers are marked "do not start before" them.
-- C16 (Opus worker, `claude/C16` worktree; tasks 1-3, round 2 and its fix
-  round landed). Stopped before "Approval bucket region has one owner";
-  remaining: region, presign, deploy builders, estimate-cost, empty-diff
-  prompt, docs. Resume the same worker (its brief and card notes have the
-  plan) once Tavis answers the region question.
+Paused by Tavis after C16 ("pause after c16"). Nothing is started; no
+worker or worktree is live except the shared `review` worktree.
 
-Waiting (parked):
-- C6 test-suite hang: second budget reproduced 3 hangs under load in the
-  TemplateLoader group; thread dump shows test threads blocked on a shared
-  thunk, masked; suspects the GHC RTS. Evidence in
-  `notes/C6/evidence-2026-11-16/`. Needs Tavis's choice.
-- C35 emitter floats and control characters: needs rescoping (floats need
-  a number-representation change; Rust's targets differ by command).
+Ready to assign (decisions recorded on each card, 2026-11-16):
+- C39 reject duplicate keys in templates and stack-args (Sonnet).
+- C6 standalone reproducer of the shared-thunk hang and an upstream GHC
+  report draft (Opus); evidence in `notes/C6/evidence-2026-11-16/`.
+- C18 control-character escaping, C19 session-token redaction (security,
+  Opus review), C20 resource limits, C21 hardening, C22 security docs and
+  the `CommandsBefore` refusal, C30 explain/demo parity.
+- C41 confirmation prompts decline on end of input (priority C).
+- C40 implement `CommandsBefore` (priority C, design first).
+File overlaps: C12-era `StackArgsLoader.hs` is shared by C22 and C39;
+`Loaders/Http.hs` by C19, C20 and C21; `Demo.hs` by C21 and C30;
+`DIVERGENCES.md` by most cards (append conflicts: keep both sides).
 
-TODO with no blocker: C12, C21, C22 (after refinement), C32 (priority C).
+Waiting (parked): C6 until assigned again; C35 (emitter floats and
+control characters) needs rescoping by Tavis.
 
-## Decisions waiting on Tavis (with the supervisor's recommendation)
+## Decisions taken by Tavis on 2026-11-16 (recorded on the cards)
 
-1. C16 approval bucket region: ask S3 (`GetBucketLocation`), falling back
-   to the stack's region.
-2. C17 (landed): computed credential fields refused only in files that
+C16 region via `GetBucketLocation` with stack-region fallback (the
+supervisor accepted fallback on any failure, reviewed as fail-closed);
+C34 follow-up rejects duplicates at top level (C39); C6 option (a);
+C18, C19, C20 (alias cap 250,000), C30 card proposals; C21 and C22 as
+recommended.
+
+## Still open for Tavis (supervisor's recommendation)
+
+1. C17 (landed): computed credential fields refused only in files that
    make AWS imports (narrower than TypeScript): keep.
-3. C34 follow-up: top-level templates and stack-args also reject duplicate
-   keys (TypeScript) rather than accept them (Rust): reject; it is a
-   one-flag change (`parseYamlStrict`).
-4. C6 next step: (a) standalone reproducer and upstream report.
-5. C18 escaping, C19 error wording, C20 limit values (alias cap 250,000
-   rather than 1,000,000), `!$toYamlString` trailing newline (keep Rust's
-   strip, record the TypeScript difference): accept the card proposals.
-6. C30: keep iidy-hs's `explain` layout; keep demo sleep rounding.
-7. Deploy-time lint (iidy-js lints at deploy; Rust and iidy-hs do not):
+2. C20: the 250,000 alias cap does not reject the C4 review's example bomb
+   (about 111,000 nodes, 253 MB): also cap expanded output size (about
+   50 MB).
+3. C39: demo scripts reject duplicate keys (yes); templates fetched by
+   `convert-stack-to-iidy` stay lenient (yes, text comes from AWS).
+4. C35 rescope, and the bug that iidy-hs drops `\x01` in YAML output.
+5. Deploy-time lint (iidy-js lints at deploy; Rust and iidy-hs do not):
    file a low-priority card.
-8. C35 rescope, and the plain bug that iidy-hs drops `\x01` in YAML
-   output.
-9. C22 `CommandsBefore` (Rust and TypeScript run it through bash; iidy-hs
-   skips it silently): reject it with a clear error now, and file a card
-   for implementing it with its own trust design. `--debug`: keep it
-   accepted and document it as having no effect.
-10. C21: NTP answers more than five minutes from the system clock are
-    rejected and NTP is skipped under `--no-remote-imports`; convert-stack
-    refuses to overwrite files without a new `--force`; plaintext `http:`
-    stays accepted, an https-to-http redirect is refused, no digest
-    pinning. Recommend yes to each.
