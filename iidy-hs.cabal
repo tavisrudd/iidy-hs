@@ -95,6 +95,7 @@ library
     Iidy.Cfn.TemplateLoader
     Iidy.Cfn.StackOperations
     Iidy.Cfn.GlobalConfig
+    Iidy.Cfn.StackArgsBootstrap
     Iidy.Cfn.StackArgsLoader
     Iidy.Cfn.Operations.Changeset
     Iidy.Cfn.Operations.ConvertStack
@@ -189,6 +190,7 @@ test-suite iidy-hs-test
     Test.EmitterTest
     Test.FixtureTest
     Test.ErrorFixtureTest
+    Test.StackArgsBootstrapTest
     Test.StackArgsLoaderTest
     Test.ConvertStackTest
     Test.TemplateHashTest

@@ -44,6 +44,7 @@ import Test.RequestBuilderTest (requestBuilderTests)
 import Test.ResolverTest (resolverTests)
 import Test.SecurityControlsTest (securityControlsTests)
 import Test.SpecConformanceTest (specConformanceTests)
+import Test.StackArgsBootstrapTest (stackArgsBootstrapTests)
 import Test.StackArgsLoaderTest (stackArgsLoaderTests)
 import Test.StackOpsConverterTest (stackOpsConverterTests)
 import Test.TemplateDiffTest (templateDiffTests)
@@ -70,6 +71,7 @@ main = do
             , testGroup "Fixtures" fixtureTests
             , testGroup "ErrorFixtures" errorTests
             , testGroup "StackArgsLoader" stackArgsLoaderTests
+            , testGroup "StackArgsBootstrap" stackArgsBootstrapTests
             , testGroup "ConvertStack" convertStackTests
             , testGroup "TemplateHash" templateHashTests
             , testGroup "CliParser" cliParserTests

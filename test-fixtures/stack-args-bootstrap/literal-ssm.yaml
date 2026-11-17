@@ -1,0 +1,8 @@
+$imports:
+  dbHost: ssm:/app/db-host
+StackName: bootstrap-test
+Template: template.yaml
+Profile: literal-profile
+Region: eu-west-1
+Parameters:
+  DbHost: "{{dbHost}}"

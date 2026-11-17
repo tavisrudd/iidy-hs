@@ -8,7 +8,7 @@ module Iidy.Cfn.Runner (
     emitsCommandMetadata,
 ) where
 
-import Control.Exception (SomeException, catch, finally)
+import Control.Exception (finally)
 import Control.Monad (when)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -20,12 +20,8 @@ import Iidy.Aws.Timing (timeProviderForOperation)
 import Iidy.Cfn.CommandMetadata (constructCommandMetadata, createFinalCommandSummary)
 import Iidy.Cfn.Context (CfnContext, createContext, createContextFromEnv, ctxElapsedSeconds)
 import Iidy.Cfn.GlobalConfig (applyGlobalConfiguration)
-import Iidy.Cfn.StackArgsLoader (
-    LoadedStackArgs (..),
-    extractRawAwsFromFile,
-    loadStackArgs,
-    mergeAwsSettings,
- )
+import Iidy.Cfn.StackArgsBootstrap (loadStackArgsBootstrapped)
+import Iidy.Cfn.StackArgsLoader (LoadedStackArgs (..))
 import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), StackInput (..))
 import Iidy.Cli (AwsOpts (..), Cli (..), GlobalOpts (..), cliToAwsSettings)
 import Iidy.Errors (dieTxt)
@@ -56,20 +52,16 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
     dispatch <- mkOutputDispatch (cliGlobalOpts cli)
     let emit = renderOutput dispatch
 
-    -- Bootstrap AWS env for import processing.
-    -- Extracts raw Profile/Region/AssumeRoleARN from the argsfile YAML
-    -- (before preprocessing) and merges with CLI settings to create an env
-    -- that SSM/CFN/S3 import loaders can use during preprocessing.
-    -- Falls back to Nothing on any failure (loadStackArgs will report errors).
-    bootstrapEnv <-
-        ( do
-            rawAws <- extractRawAwsFromFile argsfilePath env
-            let merged = mergeAwsSettings cliAws rawAws
-            Just . fst <$> createAwsEnvFromSettings merged
-        )
-            `catch` (\(_ :: SomeException) -> pure Nothing)
-
-    result <- loadStackArgs argsfilePath env operation cliAws remoteImports bootstrapEnv
+    -- Imports in the argsfile run under an env built by this factory;
+    -- the final env below is built from the preprocessed settings.
+    result <-
+        loadStackArgsBootstrapped
+            (fmap fst . createAwsEnvFromSettings)
+            argsfilePath
+            env
+            operation
+            cliAws
+            remoteImports
     case result of
         Left err -> dieTxt err
         Right (LoadedStackArgs sa mergedAws detectionCtx) -> do

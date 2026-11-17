@@ -18,6 +18,7 @@ module Test.MockAws (
     MockAws (..),
     newMockAws,
     mockAwsFixtureDir,
+    recordingEnvFactory,
 ) where
 
 import Data.ByteString (ByteString)
@@ -33,6 +34,8 @@ import Amazonka qualified
 import Amazonka.Auth.Keys qualified as Keys
 import Network.HTTP.Client qualified as Client
 import Network.HTTP.Client.Internal (Connection, makeConnection)
+
+import Iidy.Aws.CredentialSource (AwsSettings)
 
 {- | A mock env plus the log of fixture file names it served (such as
 @ssm.GetParameter.json@), in request order.
@@ -65,6 +68,17 @@ newMockAws = do
                     (Amazonka.SecretKey "mock-secret-key")
                     noAuth{Amazonka.region = Amazonka.Region' "us-east-1"}
     pure MockAws{mockEnv = env, mockRequests = reqLog}
+
+{- | An env factory that serves the mock env whatever it is asked for, and
+an action reading the settings it was asked for, in call order.
+-}
+recordingEnvFactory :: MockAws -> IO (AwsSettings -> IO Amazonka.Env, IO [AwsSettings])
+recordingEnvFactory mock = do
+    asked <- newIORef []
+    let factory settings = do
+            atomicModifyIORef' asked (\xs -> (xs <> [settings], ()))
+            pure (mockEnv mock)
+    pure (factory, readIORef asked)
 
 {- | One fake connection serves one request: it buffers writes, and on the
 first read builds the full response from the buffered request.
