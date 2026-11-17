@@ -2,13 +2,18 @@
 :PROPERTIES:
 :CARD_ID:  C36
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: STARTED
 :MODE:     CONTRACT
 :ORIGIN:   C16 review 2026-11-16 (P2): TemplateLoader.hs:123 treats a missing Template file's path text as the template body, which template-approval request then uploads
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: 113e42ab-bf76-4434-899c-00879502d398
 :ID: org:01a1e71d-4bb3-7248-8c30-cc6be16cdcfe
 :ADDED: [2026-11-16 Mon 18:26]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-16 Mon 19:46]
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C36 — Refuse a Template path that does not exist instead of using the path as the body
 #+date: 2026-11-16
