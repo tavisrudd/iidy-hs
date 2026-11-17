@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C40
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: WAITING
 :CARD_PRIORITY: C
 :MODE:     CONTRACT
 :ORIGIN:   C22 decision, Tavis 2026-11-16
@@ -11,8 +11,21 @@
 :ID: org:01a1e7e5-1a69-7738-a486-69984b7be646
 :ADDED: [2026-11-16 Mon 22:05]
 :END:
+:CLOCK:
+CLOCK: [2026-11-17 Tue 14:45]--[2026-11-17 Tue 14:49] => 0:04
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-17 Tue 14:35]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
+- Clock-in [2026-11-17 Tue 14:45]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a787ebb0db67e50d3
+- Clock-out [2026-11-17 Tue 14:49]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a787ebb0db67e50d3
+- Card state STARTED → WAITING [2026-11-17 Tue 14:56]
+  Note: Design note ready (notes/C40/report--commands-before-design.org); waiting on Tavis to choose option A-D and the three defaults
   Agent: opus-5.5-medium
   Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
 :END:
@@ -91,3 +104,49 @@ Write the design note described under Done when, with Rust and
 TypeScript behaviour compared line by line, and put it to Tavis through the
 supervisor. Do not implement before he approves.
 
+
+** Design note (worker claude-C22, 2026-11-17)
+:PROPERTIES:
+:ID: org:01a1eb7c-5544-767f-8ea5-ce199fb2644d
+:ADDED: [2026-11-17 Tue 14:49]
+:END:
+[[file:report--commands-before-design.org][report--commands-before-design.org]]
+compares Rust and iidy-js line by line (operations, command text source,
+Handlebars context, shell, working directory, environment, helpers, stdin,
+output, failure, import passes), lists which values can reach a shell and
+their trust under C15, and gives four options with a recommendation. No
+command-running code was written.
+
+Existing owners found (duplication search): the literal-or-computed
+classifier =readRawField= / =plainOrComputed= in
+=src/Iidy/Cfn/StackArgs/Credentials.hs= (to extend to the
+=CommandsBefore= list), and the shell runner =execShell= / =execDirect= in
+=src/Iidy/Demo.hs:208-224= (to share, not copy).
+
+Finding checked against the Rust binary: a ={{iidy.region}}= in a Rust
+=CommandsBefore= entry fails the first preprocess ("Variable error:
+'iidy.region' not found"), so the iidy-js =iidy.*= names do not work in
+Rust today; Rust instead lets =$defs=, =$imports= and tag results into the
+command text.
+
+** Question for supervisor
+:PROPERTIES:
+:ID: org:01a1eb7c-5544-767f-8ea5-ce18e83f1496
+:ADDED: [2026-11-17 Tue 14:49]
+:END:
+For Tavis: which option should C40 implement?
+- A (recommended): only plain-string entries written in the local argsfile
+  run, unexpanded; context reaches the command as environment variables
+  (=iidy_command=, =iidy_environment=, =iidy_region=, =iidy_profile=,
+  =iidy_stack_name=) taken only from the command line or literal fields;
+  any templated, tagged, imported or merged entry is refused before
+  anything runs; commands run before preprocessing so imports run once.
+- B: A plus ={{iidy.command|environment|region|profile|stackName}}=
+  placeholders, substituted only from command-line or literal values that
+  match a safe character set; everything else refused.
+- C: Rust parity, with computed command text shown and confirmed on a
+  terminal or allowed by a new command-line flag.
+- D: keep C22's refusal permanently.
+Also to confirm with the choice: child stdout goes to stderr in
+=--output-mode json=; stdin is =/dev/null=; output is streamed rather than
+buffered.

@@ -1,0 +1,214 @@
+#+title: C40 — CommandsBefore: trust design for running stack-args commands
+#+date: 2026-11-17
+
+Design note for card C40, written by worker claude-C22 for Tavis's
+approval. No command-running code exists or is proposed for landing before
+approval. The frame is the trust model of
+[[file:../../docs/SECURITY.org][docs/SECURITY.org]]
+(card C15): a local document is trusted, a remote one is not unless the
+command line names its source, and trust never comes from a file.
+
+* What the originals do, side by side
+Rust: =~/src/iidy/src/cfn/stack_args.rs=. TypeScript (iidy-js):
+=~/src/iidy-js/src/cfn/loadStackArgs.ts= and =src/cfn/runCommandSet.ts=.
+
+| Aspect                    | Rust                                                     | iidy-js                                                   |
+|---------------------------+----------------------------------------------------------+-----------------------------------------------------------|
+| Operations                | the four (=should_process_commands_before=, 483-490)     | the same four names (=loadStackArgs.ts:139=)              |
+| Other operations          | field removed (=:309-314=)                               | field deleted (=:163-167=)                                |
+| Command text source       | the *preprocessed* document (=:199=, read at =:278=)     | the *raw* parsed file (=argsdata=, =:83=, used at =:161=) |
+| Tags, =$defs=, =$imports= | applied to the text in the first pass                    | not applied; the entry is used as written                 |
+| Second expansion          | Handlebars with =iidy= namespace (=:592=)                | Handlebars (=runCommandSet.ts:20=)                        |
+| Handlebars context        | =iidy.{stackArgs,stackName,command,environment,=         | =iidy.{stackArgs,stackName}= merged with =$envValues=     |
+|                           | =region,profile}=, bare =region=, =environment=          | (=:154-160=); =filehash= and =filehashBase64= helpers     |
+|                           | (=:516-555=)                                             | (=runCommandSet.ts:16-17=)                                |
+| =stackArgs= value         | a first full preprocess without the field (=:282-291=)   | a first =transform= without the field (=:148-152=)        |
+| Non-string entry          | dropped silently (=filter_map=, =:506-513=)              | not checked                                               |
+| Shell                     | =/bin/bash -c= (=:608-609=)                              | =/bin/bash= if present, else the default shell (=:53=)    |
+| Working directory         | argsfile's =parent()= (=:561-563=, =:610=)               | =dirname(argsfile)= (=:161=, =runCommandSet.ts:52=)       |
+| Environment               | inherited, then =iidy_profile=, =iidy_region=,           | =iidy_*= and helpers merged *under* =process.env=, so an  |
+|                           | =iidy_environment=, =PKG_SKIP_EXECPATH_PATCH=,           | inherited =iidy_region= wins (=runCommandSet.ts:32-49=)   |
+|                           | three =BASH_FUNC_*= helpers set over it (=:613-634=)     |                                                           |
+| Bash helpers              | =iidy_filehash=, =iidy_filehash_base64=,                 | the same three (=runCommandSet.ts:33-44=)                 |
+|                           | =iidy_s3_upload= (needs =shasum=, =xxd=, =aws=)          |                                                           |
+| Stdin                     | closed (=Command::output=)                               | inherited (=stdio: [0, 1, 2]=)                            |
+| Output                    | captured, printed after exit: stdout to stdout,          | streamed straight to the terminal                         |
+|                           | stderr to stderr (=:637-648=)                            |                                                           |
+| Banners                   | "== Executing CommandsBefore ...", per command the       | the same, with colour (=runCommandSet.ts:15-30=, =:67=)   |
+|                           | raw and expanded text if they differ (=:565-605=)        |                                                           |
+| Failure                   | non-zero exit or signal: "Error running command          | non-zero exit only; a signal (=status= null) passes       |
+|                           | (exit code N):" and the raw command (=:651-657=)         | (=runCommandSet.ts:61-63=)                                |
+| After the commands        | expanded text stored back; final preprocess (=:316-320=) | stored back; =transform= again (=:161=, =:169=)           |
+| Imports                   | resolved twice (first pass, final pass)                  | resolved twice (comment at =:149-151=)                    |
+
+Checked against the Rust binary (=~/src/iidy/target/debug/iidy=, no AWS
+call is reached): a stack-args file whose =CommandsBefore= entry contains
+={{iidy.region}}= fails =create-stack= in the first preprocess with
+"Variable error: 'iidy.region' not found". So in Rust the =iidy= namespace
+expansion at =:592= is reachable only by text that survived the first pass
+(for example a value imported from another document that itself contains
+={{iidy...}}=): the documented =iidy.*= use from iidy-js does not work in
+Rust today, while Rust does put =$defs=, =$imports= and tag results into the
+command text. Unverified: Rust's working directory for a bare
+=stack-args.yaml= is =Path::parent= = the empty path, which =current_dir=
+may reject.
+
+Both run the commands while loading the stack-args, before any
+CloudFormation call, diff or confirmation prompt: answering "no" at an
+=update-stack= prompt comes after the commands already ran.
+
+* Which values can reach a shell
+A command is shell text. A value spliced into it is shell code, even when
+the surrounding text is the operator's own: with
+=aws s3 cp out.zip s3://{{iidy.stackArgs.Parameters.Bucket}}/= and
+=Bucket= read from =ssm:/team/bucket=, whoever can write that parameter can
+run =x; curl ... | sh= on the operator's machine with the operator's AWS
+credentials. Sources, by trust:
+
+| Source of text in a command                                      | Trust under C15                          | Rust | iidy-js         |
+|------------------------------------------------------------------+------------------------------------------+------+-----------------|
+| A plain string entry in the local argsfile                       | trusted (the operator wrote it)          | yes  | yes             |
+| CLI values: =--environment=, =--region=, =--profile=, stack name | trusted (command line)                   | yes  | yes             |
+| Literal argsfile fields (=Region: us-east-1=)                    | trusted                                  | yes  | yes             |
+| =$defs= literals in the argsfile                                 | trusted                                  | yes  | via =stackArgs= |
+| =env:=, =file:=, =git:= imports                                  | local, but data, not code                | yes  | via =stackArgs= |
+| =ssm:=, =ssm-path:=, =cfn:=, =s3:= imports                       | data anyone with write access to         | yes  | via =stackArgs= |
+|                                                                  | that AWS resource controls               |      |                 |
+| =http:=/=https:= imports, remote documents                       | untrusted unless =--trust-import-source= | yes  | via =stackArgs= |
+| A top-level merge or tag that produces the key                   | computed                                 | yes  | no              |
+
+The C15 model decides which documents may /read/ what; it never let a value
+become code. So no import, however trusted its document, should be able to
+contribute shell text: the line to draw is literal text versus everything
+else, not trusted versus untrusted documents. =docs/SECURITY.org= already
+records that iidy-hs has no taint tracking ("A location a trusted document
+builds from imported remote content ... loads with the requester's
+trust"), so any design that lets computed values through needs either new
+tracking or a value filter.
+
+iidy-hs already has the one owner of "literal or computed" for stack-args
+fields: =readRawField= and =plainOrComputed= in
+=src/Iidy/Cfn/StackArgs/Credentials.hs= classify a raw AST node as a plain
+string or as a handlebars template, tag, imported document or other
+non-literal value, and fail closed on non-plain or duplicated keys. C40
+should extend that classifier to the =CommandsBefore= list, not write a
+second one. The existing process runner is =execShell= / =execDirect= in
+=src/Iidy/Demo.hs:208-224= (=/usr/bin/env bash -c=, =cwd=, explicit
+=env=); a shared runner module should be extracted from it rather than a
+second =createProcess= call written.
+
+* Options
+** A. Literal commands only, context through environment variables (recommended)
+- Each entry must be a plain string in the raw argsfile AST
+  (=AstPlainString=, read with the extended =readRawField= under a plain,
+  non-duplicated =CommandsBefore= key whose value is a plain sequence).
+  Anything else is refused before anything runs, naming the entry index and
+  why ("CommandsBefore[1] is a handlebars template", "... is a
+  preprocessing tag"), with the =plainOrComputed= wording. Since the
+  iidy-hs parser marks any string containing ={{= as =AstTemplatedString=,
+  a ={{...}}= in a command is refused with a pointer to the environment
+  variables below.
+- No Handlebars expansion of command text at all. The context goes in as
+  environment variables, which bash never parses as code: =iidy_command=,
+  =iidy_environment=, =iidy_region=, =iidy_profile= and =iidy_stack_name=
+  (the first three as Rust; the last two new). Each is set only from the
+  command line or a literal argsfile field; if =Region=, =Profile= or
+  =StackName= is computed and not set on the command line, the load is
+  refused, as the stack-args bootstrap already refuses computed credential
+  fields before an AWS import.
+- After preprocessing, the loaded =saCommandsBefore= must equal the literal
+  list; a mismatch (a merge key or tag that rewrote the field) fails the
+  load. What ran is still only the literal text.
+- When: before preprocessing (the raw AST is enough), so the imports run
+  once and after the commands, which keeps the point of the feature (a
+  =filehash:= import sees the build output) without Rust's double pass.
+- Compatibility: works for every Rust file whose commands are plain text;
+  refuses Rust files that build commands from =$defs=, =$imports= or tags,
+  and iidy-js files that use ={{iidy.*}}= or the =filehash= helpers (both
+  get an error saying what to write instead: =$iidy_region=,
+  =iidy_filehash file=).
+- Cost: smallest; one classifier extension, one runner, no taint tracking.
+
+** B. Literal templates with a fixed set of safe placeholders
+As A, plus ={{iidy.command}}=, ={{iidy.environment}}=, ={{iidy.region}}=,
+={{iidy.profile}}= and ={{iidy.stackName}}= are substituted when their value
+is from the command line or a literal field and matches
+=[A-Za-z0-9._:/@+=,-]*= (no quoting, so a value can never close a quote or
+start a command); any other placeholder, =iidy.stackArgs.*= included, is
+refused. =CommandsBefore= is taken out of the document before
+preprocessing (as iidy-js does), since the preprocessor would otherwise fail
+on ={{iidy...}}= as Rust does. Keeps iidy-js files that use those names
+working. Cost: a placeholder parser over the command text (the Handlebars
+engine can be reused with a restricted context, but block helpers and
+partials must be refused), and the value-charset rule to document.
+
+** C. Rust parity with a confirmation gate for computed text
+Port Rust as written (preprocess, Handlebars with =iidy.stackArgs=), then
+compare each final command with its raw literal entry. Equal: run. Different
+(computed): print raw and expanded text and ask for confirmation on a
+terminal; without a terminal refuse unless a command-line flag such as
+=--allow-computed-commands= is passed (never a file key, per C15). Cost:
+largest (two preprocessing passes, prompt plumbing in the loader, a new
+flag); and the gate is weak in practice: CI passes the flag always, at
+which point any writer of an imported value runs code.
+
+** D. Keep C22's refusal permanently
+Document the field as unsupported. No code. Users run their build steps
+before calling iidy-hs. Cost: none; loses the feature.
+
+* Common behaviour for A, B and C
+- Operations: =create-stack=, =update-stack=, =create-changeset=,
+  =create-or-update=; other commands ignore the field (C22 behaviour).
+- Shell and directory: =bash -c= found on =PATH= (=/usr/bin/env bash=, as
+  =Demo.hs=), working directory the argsfile's directory
+  (=takeDirectory=, which gives =.= for a bare file name).
+- Environment: inherited, with the =iidy_*= variables set over it (Rust
+  order, so an inherited =iidy_region= cannot override the real one), and
+  the three =BASH_FUNC_iidy_*= helpers byte-for-byte from Rust. Drop
+  =PKG_SKIP_EXECPATH_PATCH= (a Node packaging workaround) or keep it for
+  parity: either is harmless.
+- Stdin: =/dev/null= (Rust), so a command cannot wait for input in CI.
+- Output: streamed, not buffered until exit (a long build shows progress;
+  a small divergence from Rust's buffering). Banners as Rust's text without
+  colour. Child stderr to stderr. Child stdout to stdout in interactive and
+  plain modes, and to stderr in =--output-mode json= so stdout stays valid
+  JSON. Child output is the operator's own and is not escaped (as =demo=).
+- Failure: a non-zero exit, a signal, or bash missing fails the load before
+  any AWS call with Rust's text, "Error running command (exit code N):" and
+  the command (or "killed by signal N"); later commands do not run. Exit
+  code 1.
+- Ordering stays as the originals: commands run during the load, before
+  the diff and confirmation prompt. Stating it in the docs is enough.
+- Docs: a =docs/SECURITY.org= section replacing "=CommandsBefore= Is Never
+  Run", =docs/getting-started.org=, the init template comment, and the
+  C22 =DIVERGENCES.md= section rewritten for the chosen option.
+
+* Recommendation
+Option A. It is the only option that keeps every non-literal value out of
+shell text by construction, which matches how C15 draws its lines (decided
+by where text comes from, fail closed, nothing widened from a file), and it
+needs no taint tracking, which iidy-hs does not have. What it gives up is
+small: Rust cannot use the ={{iidy.*}}= names today anyway (checked above),
+and the computed command text Rust allows is exactly the injection path.
+Running before preprocessing also removes the double import pass of both
+originals. If Tavis wants iidy-js files with ={{iidy.region}}= and friends to
+keep working, B adds that safely on top of A; it can be a later step.
+
+* Implementation outline (after approval; not started)
+Allowed paths to set on the card: =src/Iidy/Cfn/StackArgsLoader.hs=,
+=src/Iidy/Cfn/StackArgs/Credentials.hs= (classifier),
+=src/Iidy/Cfn/StackArgsBootstrap.hs= (if the raw AST is read there),
+a new =src/Iidy/Cfn/CommandsBefore.hs=, a shared runner extracted from
+=src/Iidy/Demo.hs= (or the runner left in =Demo.hs= and exported),
+=iidy-hs.cabal= (=other-modules=), =docs/SECURITY.org=,
+=docs/getting-started.org=, =src/Iidy/InitStackArgs.hs=, =DIVERGENCES.md=,
+tests (=StackArgsLoaderTest=, a new =CommandsBeforeTest=, =DemoTest=) and
+=test-fixtures/=.
+
+Tests: a harmless command (=touch ran=, =printf "$iidy_region"= into a
+file) runs in the argsfile directory with the expected variables; each
+refused source (handlebars entry, =!$= entry, imported list, merge-key
+override, computed =Region= without =--region=) is refused with nothing run
+(the marker check from C22's tests); a failing command stops the load and
+names the exit code; json mode keeps stdout valid JSON; the four operations
+run it and the others do not.
