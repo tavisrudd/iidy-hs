@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C33
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C7 open question; Tavis 2026-11-16 accepted the recommendation in notes/C23/report--decisions-vs-originals.org item 9 (TypeScript builds one eagerly, Rust has none)
 :CREATED_BY: opus-5.5-medium
@@ -12,6 +12,7 @@
 :END:
 :CLOCK:
 CLOCK: [2026-11-16 Mon 19:58]--[2026-11-16 Mon 20:01] => 0:03
+CLOCK: [2026-11-16 Mon 21:12]--[2026-11-16 Mon 21:13] => 0:01
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 19:57]
@@ -23,6 +24,16 @@ CLOCK: [2026-11-16 Mon 19:58]--[2026-11-16 Mon 20:01] => 0:03
 - Clock-out [2026-11-16 Mon 20:01]
   Agent: sonnet-5.5-medium
   Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac15475fee34eae57
+- Clock-in [2026-11-16 Mon 21:12]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac15475fee34eae57
+- Clock-out [2026-11-16 Mon 21:13]
+  Agent: sonnet-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398/agent:ac15475fee34eae57
+- Card state STARTED → DONE [2026-11-16 Mon 21:15]
+  Note: Landed d1fe7ea (replayed 2806ec5 with a redundant-import fix) and 419efa4 (review test gaps): render builds its AWS environment lazily through LazyEnv shared with get-import (Tavis's decision); Sonnet review land
+  Agent: opus-5.5-medium
+  Session-ID: 113e42ab-bf76-4434-899c-00879502d398
 :END:
 #+title: C33 — Give render an AWS environment, built lazily as get-import does
 #+date: 2026-11-16
