@@ -55,6 +55,7 @@ library
     Iidy.Yaml.Imports.Loaders.Ssm
     Iidy.Yaml.Imports.Loaders.Cfn
     Iidy.Yaml.Imports.Loaders.Http
+    Iidy.Yaml.Imports.Loaders.HttpGuard
     Iidy.Yaml.Imports.Loaders.Git
     Iidy.Yaml.Imports.Loaders.Dispatch
     Iidy.Output.Types
@@ -238,6 +239,7 @@ test-suite iidy-hs-test
     Test.TrustedSourceTest
     Test.AwsImportGateTest
     Test.ImportFixtures
+    Test.HttpGuardTest
     Test.ParamsClientTest
     Test.TemplateLoaderTest
     Test.GlobalConfigTest
@@ -268,6 +270,7 @@ test-suite iidy-hs-test
     , bytestring
     , http-client
     , http-types
+    , network
     , containers
     , directory
     , filepath

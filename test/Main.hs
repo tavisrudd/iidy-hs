@@ -27,6 +27,7 @@ import Test.FixtureTest (buildFixtureTests)
 import Test.GetImportTest (getImportTests)
 import Test.GlobalConfigTest (globalConfigTests)
 import Test.HandlebarsTest (handlebarsTests)
+import Test.HttpGuardTest (httpGuardTests)
 import Test.ImportLoaderTest (importLoaderTests)
 import Test.ImportTrustTest (importTrustTests)
 import Test.IntegrationTest (integrationTests)
@@ -117,6 +118,7 @@ main = do
             , testGroup "ImportTrust" importTrustTests
             , testGroup "TrustedSource" trustedSourceTests
             , testGroup "AwsImportGate" awsImportGateTests
+            , testGroup "HttpGuard" httpGuardTests
             , testGroup "ParamsClient" paramsClientTests
             , testGroup "TemplateLoader" templateLoaderTests
             , testGroup "GlobalConfig" globalConfigTests

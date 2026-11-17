@@ -11,7 +11,6 @@ module Iidy.Yaml.Imports.Loaders.Dispatch (
 ) where
 
 import Amazonka qualified
-import Data.Text (Text)
 
 import Iidy.Yaml.Engine (LoadImportFn)
 import Iidy.Yaml.Imports.Loaders.Cfn (loadCfnImport)
@@ -19,6 +18,7 @@ import Iidy.Yaml.Imports.Loaders.Env (loadEnvImport)
 import Iidy.Yaml.Imports.Loaders.File (loadFileImport, loadFilehashImport)
 import Iidy.Yaml.Imports.Loaders.Git (loadGitImport)
 import Iidy.Yaml.Imports.Loaders.Http (loadHttpImport)
+import Iidy.Yaml.Imports.Loaders.HttpGuard (HttpSeam, httpGuardFor, realHttpSeam)
 import Iidy.Yaml.Imports.Loaders.Random (loadRandomImport)
 import Iidy.Yaml.Imports.Loaders.S3 (loadS3Import)
 import Iidy.Yaml.Imports.Loaders.Ssm (loadSsmImport, loadSsmPathImport)
@@ -40,11 +40,13 @@ import Iidy.Yaml.Imports.Types (
 data ImportConfig = ImportConfig
     { icAwsEnv :: !(Maybe Amazonka.Env)
     , icPolicy :: !ImportPolicy
+    , icHttpSeam :: !HttpSeam
+    -- ^ name resolution and plain connections for HTTP imports
     }
 
 -- | The one 'ImportConfig' constructor; fields added later get defaults here.
 mkImportConfig :: Maybe Amazonka.Env -> ImportPolicy -> ImportConfig
-mkImportConfig mEnv policy = ImportConfig{icAwsEnv = mEnv, icPolicy = policy}
+mkImportConfig mEnv policy = ImportConfig{icAwsEnv = mEnv, icPolicy = policy, icHttpSeam = realHttpSeam}
 
 ------------------------------------------------------------------------
 -- Full dispatcher
@@ -64,23 +66,23 @@ mkFullDispatcher :: ImportConfig -> LoadImportFn
 mkFullDispatcher cfg location base =
     case checkImport (ipTrustedSources (icPolicy cfg)) location base of
         Left err -> pure (Left err)
-        Right importType -> dispatch cfg importType location (ibLocation base)
+        Right importType -> dispatch cfg importType location base
 
--- | Dispatch a classified import type to its loader, given the base location.
+-- | Dispatch a classified import type to its loader.
 dispatch ::
     ImportConfig ->
     ImportType ->
-    Text ->
-    Text ->
-    IO (Either ImportError ImportData)
-dispatch cfg importType location baseLocation = case importType of
-    ImportFile -> loadFileImport location baseLocation
+    LoadImportFn
+dispatch cfg importType location base = case importType of
+    ImportFile -> loadFileImport location (ibLocation base)
     ImportEnv -> loadEnvImport location
-    ImportGit -> loadGitImport location baseLocation
+    ImportGit -> loadGitImport location (ibLocation base)
     ImportRandom -> loadRandomImport location
-    ImportFilehash -> loadFilehashImport location baseLocation False
-    ImportFilehashBase64 -> loadFilehashImport location baseLocation True
-    ImportHttp -> withRemote cfg $ loadHttpImport location
+    ImportFilehash -> loadFilehashImport location (ibLocation base) False
+    ImportFilehashBase64 -> loadFilehashImport location (ibLocation base) True
+    ImportHttp ->
+        withRemote cfg $
+            loadHttpImport (icHttpSeam cfg) (httpGuardFor (ipTrustedSources (icPolicy cfg)) location base) location
     -- cfn/ssm/ssm-path are AWS API calls made with the user's credentials.
     -- They are NOT blocked by --no-remote-imports (they are not open HTTP),
     -- but 'checkImport' refuses them, and s3:, from untrusted documents.

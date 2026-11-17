@@ -4,7 +4,7 @@ module Iidy.Yaml.Imports.Loaders.Http (
     urlPath,
 ) where
 
-import Control.Exception (Exception, Handler (..), catches, throwIO)
+import Control.Exception (Exception, Handler (..), catches, fromException, throwIO)
 import Data.ByteString qualified as BS
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
@@ -12,21 +12,24 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Network.HTTP.Client (
     BodyReader,
-    HttpException,
+    HttpException (..),
+    HttpExceptionContent (..),
     Manager,
     brRead,
+    newManager,
     responseBody,
     responseStatus,
     responseTimeoutMicro,
     withResponse,
  )
-import Network.HTTP.Client.TLS (newTlsManager)
+import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Simple (parseRequest, setRequestResponseTimeout)
 import Network.HTTP.Types.Status (statusCode)
 import System.FilePath (takeExtension)
 
 import Iidy.Constants (httpMaxResponseBytes, httpTimeoutSeconds)
 import Iidy.Yaml.Imports.ContentParsing (ParsedDoc (..), parseByExtensionStrict)
+import Iidy.Yaml.Imports.Loaders.HttpGuard (GuardRefusal (..), HttpGuard, HttpSeam, guardManagerSettings)
 import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..), ImportType (..))
 
 ------------------------------------------------------------------------
@@ -49,11 +52,14 @@ Enforces a response timeout ('httpTimeoutSeconds') and maximum body
 size ('httpMaxResponseBytes'). The size limit is enforced while
 streaming — the response is aborted before the full body is buffered.
 Returns the response body as UTF-8 text on success, or an error message.
+Every hop, redirects included, passes the 'HttpGuard' (see
+"Iidy.Yaml.Imports.Loaders.HttpGuard"); plain connections go through the
+'HttpSeam'. @HTTP_PROXY@ / @HTTPS_PROXY@ are honoured.
 -}
-loadHttpImport :: Text -> IO (Either ImportError ImportData)
-loadHttpImport location = do
+loadHttpImport :: HttpSeam -> HttpGuard -> Text -> IO (Either ImportError ImportData)
+loadHttpImport seam guard location = do
     -- Fresh manager per call; fine for a CLI tool with a handful of HTTP imports.
-    mgr <- newTlsManager
+    mgr <- newManager =<< guardManagerSettings seam guard tlsManagerSettings
     let mkError :: Text -> IO (Either ImportError ImportData)
         mkError msg =
             pure $
@@ -89,9 +95,17 @@ loadHttpImport location = do
                             ImportError $
                                 "HTTP error " <> T.pack (show status) <> " for " <> location
         )
-        `catches` [ Handler $ \(e :: HttpException) -> mkError (T.pack (show e))
+        `catches` [ Handler $ \(e :: HttpException) -> mkError (httpExceptionText e)
                   , Handler $ \(e :: HttpSizeLimitExceeded) -> mkError (T.pack (show e))
+                  , Handler $ \(GuardRefusal why) -> mkError ("refused: " <> why)
                   ]
+
+-- | An http-client exception, with a guard refusal it wrapped spelled out.
+httpExceptionText :: HttpException -> Text
+httpExceptionText = \case
+    HttpExceptionRequest _req (InternalException e)
+        | Just (GuardRefusal why) <- fromException e -> "refused: " <> why
+    other -> T.pack (show other)
 
 ------------------------------------------------------------------------
 -- HTTP fetch (streaming with size limit)
