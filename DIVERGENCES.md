@@ -485,7 +485,7 @@ already escapes control characters. Error text printed outside the renderer
 
 iidy-hs prints a string containing a non-printable character (C0 controls
 other than tab and newline, DEL, C1 controls including U+0085, U+2028,
-U+2029, U+FEFF) double-quoted with YAML escapes, in every command that emits
+U+2029, U+FEFF, U+FFFE, U+FFFF) double-quoted with YAML escapes, in every command that emits
 YAML, so the output parses back to the same value. Short escapes are used
 where YAML has them (`\0 \a \b \t \n \v \f \r \e \N \L \P`), otherwise `\xHH`
 or `\uHHHH` with upper-case hex digits. Until C42 lands, Rust `render` prints
