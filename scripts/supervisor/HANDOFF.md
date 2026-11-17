@@ -38,9 +38,9 @@ C25, C26, C27, C28, C29, C31, C33, C34, C36, C37.
 
 In flight:
 - C12 landed and closed (loader split; C17 backstop wiring tested).
-- C32 (Sonnet, `claude/C32`): keep the written `!$` tag spelling for
-  unresolved-tag output; may first split Parser.hs (550 lines). Review with
-  Sonnet before landing.
+- C32 landed and closed. Nothing else can start without Tavis: every
+  remaining TODO card (C18, C19, C20, C21, C22, C30) depends on one of the
+  decisions below.
 - C38 landed and closed. C21 and C22 are refined; tasks that depend on
   Tavis's answers are marked "do not start before" them.
 - C16 (Opus worker, `claude/C16` worktree; tasks 1-3, round 2 and its fix
