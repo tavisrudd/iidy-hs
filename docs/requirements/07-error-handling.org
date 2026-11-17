@@ -394,7 +394,7 @@ For each code argument: normalise to upper-case, strip the =ERR_= prefix if pres
 
 *Error Scenarios:*
 
-- =iidy explain= with no argument: prints ="Usage: iidy explain <CODE>..."= to stderr and returns (exit code 0). Does not report ERR_8001.
+- =iidy explain= with no argument: prints ="Please provide one or more error codes to explain (e.g., ERR_2001)"= to stderr and returns (exit code 0). Does not report ERR_8001.
 
 *Complexity Notes:*
 

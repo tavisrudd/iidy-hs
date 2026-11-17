@@ -133,7 +133,7 @@ The custom pipeline preserves YAML mapping key insertion order through the full 
   #+end_example
 
 - For each unknown code: print ="Unknown error code: <raw input>"= to stderr; continue processing remaining codes.
-- With no arguments: print ="Usage: iidy explain <CODE>..."= to stderr and return.
+- With no arguments: print ="Please provide one or more error codes to explain (e.g., ERR_2001)"= to stderr and return.
 - Multiple codes are processed left-to-right; known codes write to stdout, unknown codes to stderr. Output is interleaved in argument order.
 - Covered error families:
   - =ERR_1xxx=: YAML Syntax & Parsing (ERR_1001–ERR_1005)
@@ -149,7 +149,7 @@ The custom pipeline preserves YAML mapping key insertion order through the full 
 *Logic Flow:*
 
 #+begin_example
-args = []   → print "Usage: iidy explain <CODE>..." to stderr
+args = []   → print "Please provide one or more error codes to explain (e.g., ERR_2001)" to stderr
 args = codes → for each code:
   normalise: upper → strip "ERR_" → pad to 4 digits → prepend "ERR_"
   lookup in error database
@@ -190,7 +190,7 @@ The error database is a static list compiled into the binary. Lookups are O(n) l
 - Command types (parsed from the =demo= sequence):
   - *String value*: shell command (=DemoShell=). Printed character-by-character with a 50 ms/char delay (scaled by =timescaling=), prefixed with ="\ESC[31mShell Prompt >\ESC[0m "=. Then executed via =/usr/bin/env bash -c=.
   - ={silent: "<cmd>"}=: executes without printing the command (=DemoSilent=).
-  - ={sleep: <N>}=: sleeps =N * timescaling= seconds (=DemoSleep=).
+  - ={sleep: <N>}=: sleeps =N * timescaling= seconds (=DemoSleep=). =N= may be fractional (=0.5=); a negative =N= or one above 86400 is rejected when the script is parsed.
   - ={banner: "<text>"}=: displays text in a bold-yellow-on-dark-grey 80-column banner (=DemoBanner=). Multi-line text is split on =\n=.
   - ={setenv: {KEY: VALUE, ...}}=: merges new variables into the current environment for subsequent commands (=DemoSetEnv=).
 - When =maskSecrets= is true, all stdout and stderr output from shell commands is filtered to replace 12-digit AWS account numbers (=\b[0-9]{12}\b=) with ="************"= using POSIX regex.
@@ -255,7 +255,7 @@ maskAwsAccountNumbers text:
 data DemoCommand
     = DemoShell  Text           -- string value: shell command with typing simulation
     | DemoSilent Text           -- {silent: "<cmd>"}: execute without display
-    | DemoSleep  Int            -- {sleep: N}: delay N * timescaling seconds
+    | DemoSleep  Double         -- {sleep: N}: delay N * timescaling seconds; 0 <= N <= 86400, fractional allowed
     | DemoSetEnv (Map Text Text) -- {setenv: {K: V}}: merge into environment
     | DemoBanner Text           -- {banner: "<text>"}: display formatted banner
 #+end_src
