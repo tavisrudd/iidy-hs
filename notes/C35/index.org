@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C35
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   C28 review 2026-11-16: the emitter prints 1.0 as 1, 1e5 as 100000 and 'a\tb\x01' as a quoted raw tab while dropping \x01; Rust prints 1.0, 100000.0 and "a\tb\x01"
 :CREATED_BY: opus-5.5-medium
@@ -12,6 +12,9 @@
 :END:
 :CLOCK:
 CLOCK: [2026-11-16 Mon 18:14]--[2026-11-16 Mon 18:14] => 0:00
+CLOCK: [2026-11-17 Tue 12:01]--[2026-11-17 Tue 12:11] => 0:10
+CLOCK: [2026-11-17 Tue 12:37]--[2026-11-17 Tue 13:12] => 0:35
+CLOCK: [2026-11-17 Tue 13:16]--[2026-11-17 Tue 13:27] => 0:11
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-16 Mon 18:13]
@@ -33,6 +36,28 @@ CLOCK: [2026-11-16 Mon 18:14]--[2026-11-16 Mon 18:14] => 0:00
   Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
 - Card state TODO → STARTED [2026-11-17 Tue 12:00]
   Note: Assigned to Sonnet sub-agent claude-C18 (worker continues with C35), Tavis 2026-11-17
+  Agent: opus-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
+- Clock-in [2026-11-17 Tue 12:01]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
+- Clock-out [2026-11-17 Tue 12:11]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
+- Clock-in [2026-11-17 Tue 12:37]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
+- Clock-out [2026-11-17 Tue 13:12]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
+- Clock-in [2026-11-17 Tue 13:16]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
+- Clock-out [2026-11-17 Tue 13:27]
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
+- Card state STARTED → DONE [2026-11-17 Tue 13:29]
+  Note: Landed ..de2fb83: non-printable strings and keys double-quoted with YAML escapes in every emitter incl. convert-stack (shared escaping, own quote policy kept), U+FFFE/FFFF, key with line feed, blank-line fix; Opus review + 2 fix rounds; C42 now unblocked
   Agent: opus-5.5-medium
   Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e
 :END:
@@ -85,38 +110,80 @@ Out of scope: floats, sequence indentation (decided), key order, JSON
 output, the parser.
 
 Done when:
-- [ ] A string containing a non-printable character (C0 controls other
+- [X] A string containing a non-printable character (C0 controls other
   than TAB and LF, DEL, C1 controls including U+0085, U+2028, U+2029,
   U+FEFF) is printed double-quoted with YAML escapes, by every command that
   emits YAML. Prefer the short YAML escapes where they exist (=\0 \a \b
   \t \v \f \r \e \N \L \P=) and =\xHH= or =\uHHHH= otherwise; record
   the chosen spelling here for C42.
-- [ ] Tests, recorded failing first: each character class above, plus
+- [X] Tests, recorded failing first: each character class above, plus
   =a\tb\x01=, =\e[0m=, =x\ay=; each output re-renders to the same value
   through iidy-hs (round trip). Strings with only TAB keep their current
   output.
-- [ ] A tag with a sequence argument containing a mapping, such as
+- [X] A tag with a sequence argument containing a mapping, such as
   =c: !Sub [a${B}, {B: x}]= followed by another key, prints no blank line
   after =- B: x= (C32 review, 2026-11-16; Rust prints none); test recorded
   failing first.
-- [ ] =DIVERGENCES.md= notes that Rust =render= prints such strings
+- [X] =DIVERGENCES.md= notes that Rust =render= prints such strings
   differently until C42 lands.
-- [ ] Every fixture expected output changed by the fix is listed here with
+- [X] Every fixture expected output changed by the fix is listed here with
   the reason.
-- [ ] Build warning-free, full suite green, commits name C35.
+- [X] Build warning-free, full suite green, commits name C35.
 
 Stop and record if: an expected output that came from Rust changes for a
 string without non-printable characters; the fix needs the parser.
 
-* TODO YAML emitter: double-quote strings with non-printable characters
+* DONE YAML emitter: double-quote strings with non-printable characters
 :PROPERTIES:
 :ID: org:01a1e700-105d-7600-affb-617b3144f247
 :ADDED: [2026-11-16 Mon 17:55]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 12:11] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: c41b7d35-fc9f-4fc6-90eb-c8e611e3d11e/agent:abc2aab913c73eb97
 :END:
 
 Add the failing emitter tests, then route strings with non-printable
 characters to a double-quoted path in the emitter's one scalar path, then
 the blank-line fix.
+
+** Result (worker claude-C35)
+:PROPERTIES:
+:ID: org:01a1eaeb-ea9e-7353-bbf7-87d05ee2f295
+:ADDED: [2026-11-17 Tue 12:11]
+:END:
+Escape spelling for C42 (YAML double-quoted scalar): =\"= and =\\= as
+usual; =\0= NUL, =\a= BEL, =\b= BS, =\t= TAB, =\n= LF, =\v= VT, =\f= FF,
+=\r= CR, =\e= ESC, =\N= U+0085, =\L= U+2028, =\P= U+2029; any other
+non-printable below U+0100 (C0, DEL, C1) as =\xHH=, and anything above
+(U+FEFF) as =\uHHHH=, hex digits upper case (serde_yaml's spelling, for
+example =\x7F=). Triggers: C0 controls except TAB and LF, DEL, U+0080-U+009F,
+U+2028, U+2029, U+FEFF. A string with only TAB keeps its single-quoted form.
+A multi-line string with such a character is also double-quoted (a block
+scalar cannot hold it). Mapping keys follow the same rule.
+
+Why this differs from C18's =\uNNNN= lower-case form: C18 is terminal
+display, where every control becomes a visible =\uNNNN= and nothing needs to
+be parsed back. YAML has its own escape grammar (short escapes, =\x= form,
+upper-case hex) that a YAML parser must read back to the same value, so the
+YAML emitter has its own function and C18's is not reused.
+
+Implementation: the emitter's single string path =emitStringAt= (used for
+root, mapping values, sequence items and tag arguments) plus =emitMapKey=
+route to the existing =escapeDoubleQuotes=, which was extended with the
+escapes above. Blank-line bug: =emitMappingInline= and =emitArrayInline=
+appended a newline after a lone first entry; they now join first and rest in
+one =intercalate=. This also removes the blank after any single-key mapping
+or single-item sequence inside a sequence.
+
+Tests (=test/Test/EmitterTest.hs=) were written first and run on the base:
+23 failed (every character class, each of the key, value, sequence element,
+tag argument and multi-line cases, the SeqFlush round trip, and the tag
+blank line). Each class also round-trips through =parseYamlOrdered=
+(iidy-hs's own parser) to the same value. Fixture expected outputs changed:
+none. Full suite on the rebased tip 9d44d62: all 2217 tests pass (see
+commit hook and final run).
 
 ** Question for supervisor
 :PROPERTIES:
@@ -166,3 +233,140 @@ allowed paths) so get-import can print =1.0=, and how to represent =.inf=;
 (b) whether the control-character fix targets get-import only (keyed on
 =SeqFlush= or a new style parameter) and whether render's odd output should
 also be copied. Not run: iidy-hs itself (no build made yet).
+
+** Review 2026-11-17
+:PROPERTIES:
+:ID: org:01a1eb03-20ce-7754-946f-1d189660a3dd
+:ADDED: [2026-11-17 Tue 12:36]
+:END:
+Reviewer: review worker. =f240b77= and =9d44d62= on =7d9ab05=: *fix first*
+(one gate item). Build checks were NOT run: =scripts/guarded-build=
+refused every attempt (MemAvailable about 4.7 GiB, below the 6 GiB floor).
+Pending: the 23 tests on the base, the full suite at the tip, and running
+=render= twice over a probe with U+1F600, U+FEFF, U+FFFE/FFFF, an
+escaped key and a CRLF string. Everything below is from reading.
+
+Checked and fine: the escape spelling is valid YAML 1.2 double-quoted
+syntax (=\0 \a \b \t \n \v \f \r \e \N \L \P=, =\xHH=, =\uHHHH=; hex is
+case-insensitive in YAML, and upper case matches serde_yaml). =Text= cannot
+hold surrogates, and astral characters such as U+1F600 are not in
+=isNonPrintable=, so they pass through literally. U+FEFF becomes =﻿=.
+Keys go through =emitMapKey=, and values, sequence items, tag arguments
+and the root through =emitStringAt=. A multi-line string with a trigger is
+double-quoted (a block scalar cannot hold it). The trigger set matches the
+card. =emitString = emitStringAt 2= reproduces the deleted
+=emitMultilineString= exactly. The blank-line fix (=intercalate= over first
+and rest) differs from the old code only when there is no second entry, and
+no fixture expected output changed (the diff touches no =test-fixtures/=).
+=render=, =get-import= (=SeqFlush=), the =toYaml= helper, the resolver's
+YAML-string tag and =TemplateLoader= all call =emitYaml=/=emitYamlWith=;
+=get-stack-template= prints the stored body and emits nothing.
+
+1. Medium (gate), =src/Iidy/Cfn/Operations/ConvertStack.hs:202-203, 246,
+   333-350=: =convert-stack-to-iidy= writes YAML through its own emitter
+   (=emitCfnYaml=), not =Iidy.Yaml.Emitter=. Its =quoteYamlString=
+   double-quotes only for characters below U+0020 (DEL, C1, U+2028/2029 and
+   U+FEFF are written raw), and its =quoteYamlKey= writes a key holding a
+   control character plain (or single-quoted when it also holds =:= and
+   the like), which is not valid YAML either way. The gate says "by
+   every command that emits YAML", and two scalar quoters is the
+   duplication REVIEW.md asks to merge. Fix: export the emitter's string and
+   key quoting and call them from =ConvertStack.hs=, which is outside the
+   allowed paths, so the supervisor must widen them or split this into a
+   card.
+2. Low, =src/Iidy/Yaml/Emitter.hs= =isNonPrintable=: U+FFFE and U+FFFF are
+   outside YAML's printable set (=c-printable= ends at U+FFFD in the BMP)
+   and are not escaped, so a string holding one is written raw and the
+   output is not valid YAML. The card's list omits them too: supervisor to
+   decide whether to add them (=￾=, =￿=).
+3. Low, =test/Test/EmitterTest.hs=: no test pins that a non-BMP character
+   (U+1F600) stays literal, which the supervisor asked about. Fix: add a
+   case asserting =emitYaml (OString "a\x1F600\&b")= is the plain text and
+   round-trips.
+
+Pre-existing (by reading, not reproduced): =emitMapKey= quotes only for
+=isNonPrintable= or =needsQuotes=, and =needsQuotes= does not check for a
+line feed, so a mapping key containing =\n= is written plain and breaks the
+document.
+
+** Fix round 1 (worker claude-C35)
+:PROPERTIES:
+:ID: org:01a1eb24-015b-70e4-8556-9f94306dfd51
+:ADDED: [2026-11-17 Tue 13:12]
+:END:
+Supervisor's calls, applied (commit 5b08be4):
+- Review 2: U+FFFE and U+FFFF are escaped. Spelling for C42 updated: they
+  print as =\uFFFE= and =\uFFFF= (upper-case hex). The trigger set is now C0
+  except TAB and LF, DEL, U+0080-U+009F, U+2028, U+2029, U+FEFF, U+FFFE,
+  U+FFFF.
+- Review 3: a test pins that U+1F600 and an accented letter stay literal
+  and round-trip.
+- Older bug: a mapping key containing a line feed is double-quoted with
+  =\n= (key quoting path only; round-trip test).
+- Review 1, partly: =ConvertStack.hs= no longer has its own escaping
+  (=escapeForDoubleQuote= and =padHex= deleted); =quoteYamlString= and
+  =quoteYamlKey= call the emitter's exported =doubleQuote= and
+  =isNonPrintable=, so DEL, C1, U+2028/2029, U+FEFF, U+FFFE/F in values and
+  any control character or line break in keys are escaped as the emitter does
+  (value and key tests recorded failing first: 9 of 131 failed on the base).
+  I did NOT merge the quoting /policy/ (when to quote), because that changes
+  existing convert-stack outputs for strings without non-printable
+  characters: =key:value= is single-quoted there but plain in the emitter, a
+  tab or newline is double-quoted there but single-quoted or a block scalar
+  in the emitter, and number-like and dash-prefixed strings differ. That is
+  the supervisor's stop rule.
+*** Question for supervisor
+:PROPERTIES:
+:ID: org:01a1eb24-015b-70e4-8556-9f93b73dabfb
+:ADDED: [2026-11-17 Tue 13:12]
+:END:
+Should convert-stack keep its own quoting policy (current state: one owner
+of the escaping, two policies), or switch to the emitter's policy and update
+the existing convert-stack expected outputs (which would change output for
+ordinary strings)? Current expected outputs are unchanged.
+Full suite passed in the pre-commit hook on 5b08be4 and again on the rebased tip 229d1be (main 0e15639).
+
+Supervisor's answer: keep convert-stack's own policy for when to quote; only
+the escaping is unified (what the card requires). No change to existing
+convert-stack outputs for ordinary strings. Nothing further to do.
+
+*** Re-review 2026-11-17
+:PROPERTIES:
+:ID: org:01a1eb27-30d8-707e-842c-89f611a32dbe
+:ADDED: [2026-11-17 Tue 13:16]
+:END:
+Rebased on =0e15639=: =git range-diff= shows =d30683b= identical to
+=f240b77=; =ffba51b= differs from =9d44d62= only in the =DIVERGENCES.md=
+context (C20's entry now precedes it). Fix round =5b08be4=, =229d1be=:
+*land*, 1 low defect.
+
+- (1) Resolved. =ConvertStack.hs= imports =doubleQuote=/=isNonPrintable=;
+  its own escaper and =showHex= are deleted. It still decides when to quote
+  (newline, tab, any =isNonPrintable=; previously any character below
+  U+0020), so strings without control characters print as before.
+  Strings with them now use the shared spelling (=\e=, upper-case =\xHH=).
+  =quoteYamlKey= double-quotes a key with a line feed or non-printable.
+- (2) Resolved: U+FFFE and U+FFFF are escaped as =￾=/=￿=, with
+  tests and the =DIVERGENCES.md= list updated.
+- (3) Resolved: U+1F600 and =é= stay literal and round-trip. The
+  pre-existing line-feed key bug is fixed in both emitters.
+- Pending checks from the first review, now run: the full suite at
+  =229d1be= passes (2247 tests, no warnings). With =Emitter.hs= and
+  =ConvertStack.hs= at =0e15639=, =-p '/non-printable/ || /blank line/'=
+  fails 32 of 35 tests. The three that pass are the TAB-only and non-BMP
+  controls, plus item 1 below. =render= of a probe (U+1F600, U+FEFF,
+  U+FFFE, U+FFFF, =\e= key, line-feed key, =!Sub [x\ay, {B: \e}]=, CRLF,
+  =\x7f \u0085     \0=) prints U+1F600 literally, escapes the
+  rest, and prints no blank line after =- B: "\e"=. Rendering that output
+  again gives identical bytes, and =get-import= output renders back to the
+  same text.
+
+1. Low, =test/Test/CfnYamlEmitterTest.hs= "value with U+0001 uses the
+   emitter's upper-case spelling": it passes on the base too, because
+   =\x01= has no hex letter, so it pins nothing about case. Fix: use a
+   character with a hex letter (U+001F gives =\x1F=; the base gave
+   =\x1f=).
+
+Fix round 2 (test only): the convert-stack hex-spelling test now uses U+001F
+(expects =\x1F=); on the base it failed with =\x1f=. Rebased on main 0335abc;
+full suite passed in the commit hook.
