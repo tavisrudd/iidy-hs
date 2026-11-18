@@ -16,7 +16,6 @@ module Iidy.Cfn.CommandsBefore.Expand (
     expandCommand,
     valueProblem,
     safeValueRule,
-    entryName,
 ) where
 
 import Control.Monad.Trans.Class (lift)

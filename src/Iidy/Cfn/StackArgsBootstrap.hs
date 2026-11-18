@@ -33,6 +33,7 @@ import Amazonka qualified
 
 import Iidy.Aws.CredentialSource (AwsSettings)
 import Iidy.Aws.Errors (formatBuildException)
+import Iidy.Cfn.CommandsBefore (CommandsBeforeSettings)
 import Iidy.Cfn.StackArgsLoader (
     CredentialField,
     LoadedStackArgs (..),
@@ -42,7 +43,7 @@ import Iidy.Cfn.StackArgsLoader (
     credentialFieldSetting,
     credentialFields,
     extractRawAwsFromAst,
-    loadStackArgsWith,
+    loadStackArgsWithSettings,
     mergeAwsSettings,
     readRawField,
  )
@@ -61,6 +62,8 @@ It is exactly 'loadRecordingImportSettings' followed by
 'checkImportSettings', composed by 'loadAndCheckWith'.
 -}
 loadStackArgsBootstrapped ::
+    -- | command-line settings for running @CommandsBefore@
+    CommandsBeforeSettings ->
     -- | AWS env factory
     (AwsSettings -> IO Amazonka.Env) ->
     -- | argsfile path
@@ -72,7 +75,7 @@ loadStackArgsBootstrapped ::
     AwsSettings ->
     ImportPolicy ->
     IO (Either Text LoadedStackArgs)
-loadStackArgsBootstrapped mkEnv = loadAndCheckWith (loadRecordingImportSettings mkEnv)
+loadStackArgsBootstrapped settings mkEnv = loadAndCheckWith (loadRecordingImportSettings settings mkEnv)
 
 {- | A load that also returns the settings its AWS imports ran with, as
 'loadRecordingImportSettings' does.
@@ -105,11 +108,12 @@ loadAndCheckWith load argsfile environment operation cliAws policy = do
 the settings the import environment was built with ('Nothing' when no AWS
 import built one).
 -}
-loadRecordingImportSettings :: (AwsSettings -> IO Amazonka.Env) -> RecordingLoad
-loadRecordingImportSettings mkEnv argsfile environment operation cliAws policy = do
+loadRecordingImportSettings :: CommandsBeforeSettings -> (AwsSettings -> IO Amazonka.Env) -> RecordingLoad
+loadRecordingImportSettings settings mkEnv argsfile environment operation cliAws policy = do
     ranWith <- newIORef Nothing
     loaded <-
-        loadStackArgsWith
+        loadStackArgsWithSettings
+            settings
             policy
             (bootstrapLoader ranWith mkEnv (T.pack argsfile) environment cliAws policy)
             argsfile

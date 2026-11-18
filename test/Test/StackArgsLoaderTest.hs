@@ -468,24 +468,22 @@ loaderTests =
     m :: SrcMeta
     m = SrcMeta "" zeroPosition zeroPosition
 
-{- | CommandsBefore is refused for the operations Rust and iidy-js would run
-it for (Rust @should_process_commands_before@, stack_args.rs:483-490), and
-left alone for every other operation and for render.
+{- | CommandsBefore runs for the operations Rust and iidy-js run it for
+(Rust @should_process_commands_before@, stack_args.rs:483-490), in the
+argsfile's directory, and is left alone for every other operation and for
+render. The run itself is tested in "Test.CommandsBeforeLoadTest".
 -}
 commandsBeforeTests :: [TestTree]
 commandsBeforeTests =
-    [ testCase ("CommandsBefore is refused for " <> T.unpack (cfnOperationStr op)) $
+    [ testCase ("CommandsBefore runs for " <> T.unpack (cfnOperationStr op)) $
         withCommandsBeforeCopy $ \dir argsfile -> do
             result <- loadStackArgs argsfile "dev" op noAwsSettings (importPolicy AllowRemoteImports) Nothing
             case result of
-                Right _ -> assertFailure "expected CommandsBefore to be refused"
-                Left err -> do
-                    let mentions t = assertBool ("error mentions " <> T.unpack t <> ": " <> T.unpack err) (t `T.isInfixOf` err)
-                    mentions (T.pack argsfile)
-                    mentions "CommandsBefore"
-                    mentions (cfnOperationStr op)
-                    mentions "Remove CommandsBefore"
-            assertNoMarker dir
+                Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
+                Right (LoadedStackArgs sa _aws _ctx) ->
+                    saCommandsBefore sa @?= Just ["touch commands-before-ran.marker"]
+            ranInArgsDir <- doesFileExist (dir </> marker)
+            assertBool "the command ran in the argsfile directory" ranInArgsDir
     | op <- [OpCreateStack, OpUpdateStack, OpCreateChangeset, OpCreateOrUpdate]
     ]
         <> [ testCase "an empty CommandsBefore list loads for create-stack" $

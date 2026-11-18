@@ -14,6 +14,7 @@ import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
 import Iidy.Aws.CredentialSource (AwsSettings (..))
+import Iidy.Cfn.CommandsBefore (defaultCommandsBeforeSettings)
 import Iidy.Cfn.StackArgsBootstrap (
     checkImportSettings,
     importSettingsMismatch,
@@ -111,7 +112,7 @@ stackArgsBootstrapTests =
         (factory, _) <- recordingEnvFactory mock
         let elsewhere = literalSettings{awsProfile = Just "import-profile"}
             tampered argsfile env op cli policy = do
-                (result, _) <- loadRecordingImportSettings factory argsfile env op cli policy
+                (result, _) <- loadRecordingImportSettings defaultCommandsBeforeSettings factory argsfile env op cli policy
                 pure (result, Just elsewhere)
         result <- loadAndCheckWith tampered (fixturePath "literal-ssm.yaml") "dev" OpCreateStack noAwsSettings (importPolicy AllowRemoteImports)
         err <- expectLeft result
@@ -121,6 +122,7 @@ stackArgsBootstrapTests =
     , testCase "a factory failure with an ssm: import reports its cause" $ do
         result <-
             loadStackArgsBootstrapped
+                defaultCommandsBeforeSettings
                 (\_ -> ioError (userError "mock: no such profile literal-profile"))
                 (fixturePath "literal-ssm.yaml")
                 "dev"
@@ -135,6 +137,7 @@ stackArgsBootstrapTests =
         let factory _ = Amazonka.runResourceT (Amazonka.send refusing (GP.newGetParameter "/x")) >> pure refusing
         result <-
             loadStackArgsBootstrapped
+                defaultCommandsBeforeSettings
                 factory
                 (fixturePath "literal-ssm.yaml")
                 "dev"
@@ -164,7 +167,7 @@ loadWithMock :: AwsSettings -> FilePath -> IO BootstrapRun
 loadWithMock cliAws fixture = do
     mock <- newMockAws
     (factory, askedFor) <- recordingEnvFactory mock
-    result <- loadStackArgsBootstrapped factory (fixturePath fixture) "dev" OpCreateStack cliAws (importPolicy AllowRemoteImports)
+    result <- loadStackArgsBootstrapped defaultCommandsBeforeSettings factory (fixturePath fixture) "dev" OpCreateStack cliAws (importPolicy AllowRemoteImports)
     BootstrapRun result <$> askedFor <*> readIORef (mockRequests mock)
 
 -- | Load a fixture through the recording step alone, with a mock factory.
@@ -172,7 +175,7 @@ loadRecording :: FilePath -> IO (Either Text LoadedStackArgs, Maybe AwsSettings)
 loadRecording fixture = do
     mock <- newMockAws
     (factory, _) <- recordingEnvFactory mock
-    loadRecordingImportSettings factory (fixturePath fixture) "dev" OpCreateStack noAwsSettings (importPolicy AllowRemoteImports)
+    loadRecordingImportSettings defaultCommandsBeforeSettings factory (fixturePath fixture) "dev" OpCreateStack noAwsSettings (importPolicy AllowRemoteImports)
 
 fixturePath :: FilePath -> FilePath
 fixturePath name = "test-fixtures/stack-args-bootstrap/" <> name

@@ -2,6 +2,7 @@ module Iidy.Yaml.Engine (
     preprocessYaml,
     preprocessYaml11,
     preprocessYamlWith,
+    preprocessYamlWithVariables,
     PreprocessResult (..),
     PreprocessError (..),
     LoadImportFn,
@@ -90,13 +91,26 @@ policy) and the YAML 1.1 compatibility flag.
 preprocessYamlWith ::
     TrustedSources -> Bool -> LoadImportFn -> YamlAst -> Text -> IO (Either PreprocessError PreprocessResult)
 preprocessYamlWith trusted yaml11Compat loader ast baseLocation =
+    fmap fst <$> preprocessYamlWithVariables trusted yaml11Compat loader ast baseLocation
+
+{- | 'preprocessYamlWith', also returning the document's @$defs@ and
+@$imports@ values by name (the stack-args @CommandsBefore@ context).
+-}
+preprocessYamlWithVariables ::
+    TrustedSources ->
+    Bool ->
+    LoadImportFn ->
+    YamlAst ->
+    Text ->
+    IO (Either PreprocessError (PreprocessResult, Map Text OValue))
+preprocessYamlWithVariables trusted yaml11Compat loader ast baseLocation =
     process (Importer{imLoad = loader, imTrusted = trusted}) ast baseLocation yaml11Compat
 
 ------------------------------------------------------------------------
 -- Main processing pipeline
 ------------------------------------------------------------------------
 
-process :: Importer -> YamlAst -> Text -> Bool -> IO (Either PreprocessError PreprocessResult)
+process :: Importer -> YamlAst -> Text -> Bool -> IO (Either PreprocessError (PreprocessResult, Map Text OValue))
 process importer ast baseLocation yaml11Compat = do
     case pushImport baseLocation emptyStack of
         Left err -> pure $ Left $ pushErrorToPreprocess err
@@ -121,11 +135,13 @@ process importer ast baseLocation yaml11Compat = do
                                         then convertYaml11CompatO resolved
                                         else resolved
                             pure $
-                                Right $
-                                    PreprocessResult
+                                Right
+                                    ( PreprocessResult
                                         { prValue = final
                                         , prImportRecords = manifest
                                         }
+                                    , env
+                                    )
 
 -- | A refused import: a cycle, or one of the import limits.
 pushErrorToPreprocess :: PushError -> PreprocessError

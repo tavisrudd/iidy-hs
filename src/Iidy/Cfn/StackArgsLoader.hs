@@ -11,6 +11,7 @@ Mirrors Rust's cfn::stack_args::load_stack_args:
 module Iidy.Cfn.StackArgsLoader (
     loadStackArgs,
     loadStackArgsWith,
+    loadStackArgsWithSettings,
     LoadedStackArgs (..),
 
     -- * Credential fields
@@ -46,6 +47,7 @@ import Data.Aeson (Value (..))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
 import Data.ByteString.Lazy qualified as BL
+import Data.Map.Strict (Map)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -55,9 +57,17 @@ import Iidy.Aws.CredentialSource (
     AwsSettings (..),
     CredentialDetectionContext (..),
  )
+import Iidy.Cfn.CommandsBefore (
+    CommandsBeforeInput (..),
+    CommandsBeforeSettings,
+    defaultCommandsBeforeSettings,
+    runCommandsBefore,
+    runsCommandsBefore,
+ )
 import Iidy.Cfn.StackArgs.Credentials (
     CredentialField (..),
     RawField (..),
+    commandsBeforeKey,
     credentialFieldFlag,
     credentialFieldKey,
     credentialFieldSetting,
@@ -67,6 +77,7 @@ import Iidy.Cfn.StackArgs.Credentials (
     mergeSentinel,
     noProfileSentinel,
     noRoleSentinel,
+    readRawCommands,
     readRawField,
     settingsFromFields,
  )
@@ -81,15 +92,16 @@ import Iidy.Cfn.StackArgs.Fields (
  )
 import Iidy.Cfn.StackArgs.Validate (validateNoUnknownKeys)
 import Iidy.Cfn.Types (CfnOperation (..), StackArgs (..), cfnOperationStr)
-import Iidy.Yaml.Ast (YamlAst)
+import Iidy.Yaml.Ast (YamlAst (..), astMeta)
 import Iidy.Yaml.Engine (
     LoadImportFn,
     PreprocessResult (..),
+    preprocessYamlWithVariables,
  )
 import Iidy.Yaml.Imports.ContentParsing (parseErrorMessage)
-import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig, preprocessWithPolicy)
-import Iidy.Yaml.Imports.Types (ImportPolicy)
-import Iidy.Yaml.OValue (toValue)
+import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
+import Iidy.Yaml.Imports.Types (ImportPolicy (..))
+import Iidy.Yaml.OValue (OValue, toValue)
 import Iidy.Yaml.Parser (parseYamlStrict)
 
 ------------------------------------------------------------------------
@@ -158,7 +170,28 @@ loadStackArgsWith ::
     -- | CLI-provided AWS settings
     AwsSettings ->
     IO (Either Text LoadedStackArgs)
-loadStackArgsWith policy mkLoader argsfile environment operation cliAws =
+loadStackArgsWith = loadStackArgsWithSettings defaultCommandsBeforeSettings
+
+{- | 'loadStackArgsWith' with the command-line settings for running
+@CommandsBefore@ ("Iidy.Cfn.CommandsBefore").
+
+For the four operations that run them, the entries are read from the raw
+file, the document is preprocessed without them (pass 1, the commands'
+context), the commands are dry-run and run, and the document is
+preprocessed again with the expanded commands, so imports of files they
+built are read after them (both originals resolve imports twice:
+@stack_args.rs:282-320@, @loadStackArgs.ts:148-169@).
+-}
+loadStackArgsWithSettings ::
+    CommandsBeforeSettings ->
+    ImportPolicy ->
+    (YamlAst -> IO LoadImportFn) ->
+    FilePath ->
+    Text ->
+    CfnOperation ->
+    AwsSettings ->
+    IO (Either Text LoadedStackArgs)
+loadStackArgsWithSettings settings policy mkLoader argsfile environment operation cliAws =
     runExceptT $ do
         content <- lift $ BL.readFile argsfile
         let baseLocation = T.pack argsfile
@@ -171,27 +204,31 @@ loadStackArgsWith policy mkLoader argsfile environment operation cliAws =
 
         -- Preprocess (YAML 1.1 for CFN compatibility)
         loader <- lift (mkLoader ast)
-        preprocessResult <- ExceptT $ do
-            r <- preprocessWithPolicy policy loader True ast baseLocation
-            pure $ case r of
-                Left err ->
-                    Left $
-                        "Preprocess error in "
-                            <> baseLocation
-                            <> ": "
-                            <> T.pack (show err)
-                Right ok -> Right ok
+        let preprocess doc = ExceptT $ do
+                r <- preprocessYamlWithVariables (ipTrustedSources policy) True loader doc baseLocation
+                pure $ case r of
+                    Left err ->
+                        Left $
+                            "Preprocess error in "
+                                <> baseLocation
+                                <> ": "
+                                <> T.pack (show err)
+                    Right ok -> Right ok
+            -- Resolve environment maps (can fail if env not found in map)
+            document preprocessResult =
+                case resolveEnvMaps (toValue (prValue preprocessResult)) environment of
+                    Left err ->
+                        throwE $ "Environment map error in " <> baseLocation <> ": " <> err
+                    Right v -> pure (ensureEnvironmentTag v environment)
 
-        let jsonVal = toValue (prValue preprocessResult)
+        (finalAst, ran) <-
+            if runsCommandsBefore operation
+                then commandsBeforePass settings preprocess document argsfile ast environment operation cliAws
+                else pure (ast, Nothing)
 
-        -- Resolve environment maps (can fail if env not found in map)
-        resolved <- case resolveEnvMaps jsonVal environment of
-            Left err ->
-                throwE $ "Environment map error in " <> baseLocation <> ": " <> err
-            Right v -> pure v
+        withEnvTag <- document . fst =<< preprocess finalAst
 
-        let withEnvTag = ensureEnvironmentTag resolved environment
-            withEnvValues = injectEnvValues withEnvTag environment operation cliAws
+        let withEnvValues = injectEnvValues withEnvTag environment operation cliAws
 
         -- Extract AWS settings from argsfile
         let argsfileAws = extractAwsSettings withEnvValues
@@ -211,7 +248,9 @@ loadStackArgsWith policy mkLoader argsfile environment operation cliAws =
                     "Failed to parse stack args from " <> baseLocation <> ": " <> err
             Right sa -> pure sa
 
-        refuseCommandsBefore baseLocation operation stackArgs
+        -- A CommandsBefore the written key did not give (a computed key)
+        -- never ran; refuse it.
+        mapM_ (refuseComputedCommands baseLocation (saCommandsBefore stackArgs)) ran
 
         pure
             LoadedStackArgs
@@ -224,33 +263,84 @@ loadStackArgsWith policy mkLoader argsfile environment operation cliAws =
 -- CommandsBefore
 ------------------------------------------------------------------------
 
-{- | Refuse a stack-args file with a non-empty @CommandsBefore@ for the operations that
-would run it in Rust (@should_process_commands_before@,
-@src/cfn/stack_args.rs:483-490@) and iidy-js (@loadStackArgs.ts:137-166@).
-iidy-hs never runs the commands (see DIVERGENCES.md), so going ahead would
-skip them silently. An empty list runs nothing in the originals and loads.
-Other operations accept the field and ignore it.
+{- | Read, dry-run and run the commands for an operation that runs them;
+the document to preprocess finally (the commands replaced by their expanded
+text) and the commands that ran ('Just' them, possibly none).
 -}
-refuseCommandsBefore :: (Monad m) => Text -> CfnOperation -> StackArgs -> ExceptT Text m ()
-refuseCommandsBefore argsfile operation sa = case saCommandsBefore sa of
-    Just (_ : _)
-        | runsCommandsBefore operation ->
+commandsBeforePass ::
+    CommandsBeforeSettings ->
+    (YamlAst -> ExceptT Text IO (PreprocessResult, Map Text OValue)) ->
+    (PreprocessResult -> ExceptT Text IO Value) ->
+    FilePath ->
+    YamlAst ->
+    Text ->
+    CfnOperation ->
+    AwsSettings ->
+    ExceptT Text IO (YamlAst, Maybe [Text])
+commandsBeforePass settings preprocess document argsfile ast environment operation cliAws = do
+    let baseLocation = T.pack argsfile
+    commands <- case readRawCommands ast of
+        Left why ->
             throwE $
-                "CommandsBefore in "
-                    <> argsfile
-                    <> " is not supported: iidy-hs does not run these commands for "
-                    <> cfnOperationStr operation
-                    <> ". Remove CommandsBefore from the file, or run the commands yourself before running iidy-hs."
-    _notRun -> pure ()
+                "In "
+                    <> baseLocation
+                    <> ", "
+                    <> why
+                    <> ": CommandsBefore entries must be strings written in the stack-args file"
+        Right cs -> pure cs
+    if null commands
+        then pure (ast, Just [])
+        else do
+            (pass1, variables) <- preprocess (withCommands Nothing ast)
+            stackArgsPass1 <- document pass1
+            case stackArgsPass1 of
+                Object o | KM.member (Key.fromText commandsBeforeKey) o -> throwE (computedCommandsError baseLocation)
+                _noCommands -> pure ()
+            let merged = mergeAwsSettings cliAws (extractAwsSettings stackArgsPass1)
+            expanded <-
+                ExceptT $
+                    runCommandsBefore
+                        settings
+                        CommandsBeforeInput
+                            { cbiArgsfile = argsfile
+                            , cbiRawAst = ast
+                            , cbiCommands = commands
+                            , cbiOperation = operation
+                            , cbiEnvironment = environment
+                            , cbiProfile = awsProfile merged
+                            , cbiRegion = awsRegion merged
+                            , cbiStackArgs = stackArgsPass1
+                            , cbiVariables = variables
+                            }
+            pure (withCommands (Just expanded) ast, Just expanded)
 
--- | The operations Rust and iidy-js run @CommandsBefore@ for.
-runsCommandsBefore :: CfnOperation -> Bool
-runsCommandsBefore = \case
-    OpCreateStack -> True
-    OpUpdateStack -> True
-    OpCreateChangeset -> True
-    OpCreateOrUpdate -> True
-    _other -> False
+{- | The document with the written @CommandsBefore@ removed ('Nothing') or
+its value replaced by plain strings.
+-}
+withCommands :: Maybe [Text] -> YamlAst -> YamlAst
+withCommands replacement = \case
+    AstMapping pairs meta -> AstMapping (concatMap replace pairs) meta
+    other -> other
+  where
+    replace pair@(key, value) = case key of
+        AstPlainString k _ | k == commandsBeforeKey -> case replacement of
+            Nothing -> []
+            Just texts -> [(key, AstSequence [AstPlainString t (astMeta value) | t <- texts] (astMeta value))]
+        _other -> [pair]
+
+{- | Refuse a final @CommandsBefore@ that differs from what ran: only a
+computed key, tag or merge can produce one, and it never ran.
+-}
+refuseComputedCommands :: (Monad m) => Text -> Maybe [Text] -> [Text] -> ExceptT Text m ()
+refuseComputedCommands argsfile final ran
+    | fromMaybe [] final == ran = pure ()
+    | otherwise = throwE (computedCommandsError argsfile)
+
+computedCommandsError :: Text -> Text
+computedCommandsError argsfile =
+    "In "
+        <> argsfile
+        <> ", CommandsBefore is produced by a computed key, tag or merge; iidy-hs runs only a CommandsBefore list written in the stack-args file, so it refuses this one without running it"
 
 ------------------------------------------------------------------------
 -- Environment map resolution

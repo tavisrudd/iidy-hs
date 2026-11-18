@@ -8,16 +8,20 @@ module Iidy.Cfn.Runner (
     emitsCommandMetadata,
 ) where
 
-import Control.Exception (finally)
+import Control.Exception (IOException, finally, try)
 import Control.Monad (when)
 import Data.Text (Text)
 import Data.Text qualified as T
 import System.Exit (ExitCode (..), exitSuccess, exitWith)
+import System.IO (hIsTerminalDevice, stdin)
+
+import Amazonka qualified
 
 import Iidy.Aws.ClientReqToken (generateTokenFromMaybe)
-import Iidy.Aws.Config (createAwsEnv, createAwsEnvFromSettings)
+import Iidy.Aws.Config (createAwsEnv, createAwsEnvFromSettings, resolveRegion)
 import Iidy.Aws.Timing (timeProviderForOperation)
 import Iidy.Cfn.CommandMetadata (constructCommandMetadata, createFinalCommandSummary)
+import Iidy.Cfn.CommandsBefore (CommandsBeforeSettings (..), commandOutputFor)
 import Iidy.Cfn.Context (CfnContext, createContext, createContextFromEnv, ctxElapsedSeconds)
 import Iidy.Cfn.GlobalConfig (applyGlobalConfiguration)
 import Iidy.Cfn.StackArgsBootstrap (loadStackArgsBootstrapped)
@@ -27,6 +31,7 @@ import Iidy.Cli (AwsOpts (..), Cli (..), GlobalOpts (..), cliToAwsSettings, impo
 import Iidy.Errors (dieTxt)
 import Iidy.Output.Manager (cleanupOutputDispatch, mkOutputDispatch, renderOutput)
 import Iidy.Output.Types (OutputData (..))
+import Iidy.Types (OutputMode (..))
 import Iidy.Yaml.Imports.Types (ImportPolicy)
 
 {- | Run a CFN operation that requires loading stack args from an argsfile.
@@ -54,8 +59,17 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
 
     -- Imports in the argsfile run under an env built by this factory;
     -- the final env below is built from the preprocessed settings.
+    stdinIsTerminal <- hIsTerminalDevice stdin
+    let commandsBefore =
+            CommandsBeforeSettings
+                { cbsOutput = commandOutputFor (goOutputMode (cliGlobalOpts cli) == Just Json)
+                , cbsStackName = stackNameOverride
+                , cbsResolveRegion = resolvedRegionText
+                , cbsStdinIsTerminal = stdinIsTerminal
+                }
     result <-
         loadStackArgsBootstrapped
+            commandsBefore
             (fmap fst . createAwsEnvFromSettings)
             argsfilePath
             env
@@ -94,6 +108,16 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
                     emit (createFinalCommandSummary (rc == 0) elapsed)
 
             exitCode rc
+
+{- | The region the AWS environment is built with ('resolveRegion', as
+'createAwsEnv' applies it), or 'Nothing' when none is configured.
+-}
+resolvedRegionText :: Maybe Text -> IO (Maybe Text)
+resolvedRegionText merged = do
+    r <- try (resolveRegion merged)
+    pure $ case r of
+        Right region -> Just (Amazonka.fromRegion region)
+        Left (_ :: IOException) -> Nothing
 
 -- | Create a simple CfnContext for operations that don't load stack args
 createSimpleContext :: Cli -> CfnOperation -> Text -> ImportPolicy -> (OutputData -> IO ()) -> IO CfnContext

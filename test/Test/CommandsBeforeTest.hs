@@ -15,6 +15,7 @@ import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
+import Iidy.Cfn.CommandsBefore (commandEnvironment)
 import Iidy.Cfn.CommandsBefore.Expand (
     CommandContext (..),
     HashMode (..),
@@ -31,6 +32,14 @@ commandsBeforeTests =
     , testGroup "expandCommand" expandTests
     , testGroup "readRawCommands" classifierTests
     , testGroup "shell runner" runnerTests
+    , testCase "the iidy_* variables and helpers are set over the inherited environment" $ do
+        let env = commandEnvironment [("iidy_region", "inherited"), ("PATH", "/bin"), ("iidy_profile", "p0")] Nothing "us-east-1" "dev"
+        lookup "iidy_region" env @?= Just "us-east-1"
+        lookup "iidy_environment" env @?= Just "dev"
+        lookup "iidy_profile" env @?= Just ""
+        lookup "PATH" env @?= Just "/bin"
+        length [() | ("iidy_region", _) <- env] @?= 1
+        assertBool "helpers defined" (all (\k -> isJust (lookup k env)) ["BASH_FUNC_iidy_filehash%%", "BASH_FUNC_iidy_filehash_base64%%", "BASH_FUNC_iidy_s3_upload%%"])
     ]
 
 -- | The shared runner reports exit codes and signals.

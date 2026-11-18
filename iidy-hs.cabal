@@ -107,6 +107,7 @@ library
     Iidy.Cfn.GlobalConfig
     Iidy.Cfn.StackArgsBootstrap
     Iidy.Cfn.StackArgs.Credentials
+    Iidy.Cfn.CommandsBefore
     Iidy.Cfn.CommandsBefore.Expand
     Iidy.Cfn.StackArgs.Fields
     Iidy.Cfn.StackArgs.Validate
@@ -202,6 +203,7 @@ test-suite iidy-hs-test
     Test.JMESPathTest
     Test.HandlebarsTest
     Test.CommandsBeforeTest
+    Test.CommandsBeforeLoadTest
     Test.EmitterTest
     Test.FixtureTest
     Test.ErrorFixtureTest
