@@ -1,0 +1,72 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C52
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   C40 review: BASH_FUNC_iidy_filehash calls shasum -p, which shasum 6.04 rejects
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
+:ID: org:01a1ec22-af9a-71f8-9766-8c430ffdc6cd
+:ADDED: [2026-11-17 Tue 17:50]
+:END:
+#+title: C52 — iidy_filehash bash helpers fail on current shasum (-p removed)
+#+date: 2026-11-17
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1ec22-af9a-71f8-9766-8c421c52930f
+:ADDED: [2026-11-17 Tue 17:50]
+:END:
+
+Found by the C40 review (2026-11-17), pre-existing in both originals. The
+=CommandsBefore= bash helper functions =iidy_filehash= and
+=iidy_filehash_base64= run =shasum -p -a 256 "$1"=
+(Rust =~/src/iidy/src/cfn/stack_args.rs:621= and =:625=; iidy-js
+=~/src/iidy-js/src/cfn/runCommandSet.ts:33-34=; iidy-hs copies them byte
+for byte since C40). Perl =shasum= 6.x removed =-p= (portable mode): on
+this host =shasum --version= is 6.04 and =shasum -p -a 256 FILE= prints
+"Unknown option: p", so a command that calls either helper fails.
+=iidy_s3_upload= does not use them. Without =-p= the digest is the same
+for a regular file (portable mode only changed line-ending handling in
+text mode).
+
+Parity question for Tavis: both originals share the bug, so the default
+parity rule says keep it; the recommendation is to drop =-p= (or use
+=sha256sum= with a =shasum= fallback) and record the divergence, because a
+helper that cannot run on a current system has no behaviour worth keeping.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1ec22-af9a-71f8-9766-8c4196f97700
+:ADDED: [2026-11-17 Tue 17:50]
+:END:
+
+Allowed paths: the module that defines the =BASH_FUNC_iidy_*= values
+(=src/Iidy/Cfn/CommandsBefore.hs= or wherever C40 put them), its test
+module, =DIVERGENCES.md=, =notes/C52/=.
+
+Out of scope: =iidy_s3_upload=; the Handlebars =filehash= helpers (they
+hash in Haskell).
+
+Done when:
+- [ ] Tavis has chosen: keep Rust's text, drop =-p=, or a =sha256sum=
+  fallback (recorded here).
+- [ ] If changed: a test runs =iidy_filehash= and =iidy_filehash_base64= on
+  a fixture file through the shared runner and checks the hex and base64
+  digests against the Haskell =filehash= helper's output; the difference
+  from Rust and iidy-js is in =DIVERGENCES.md=.
+- [ ] Build warning-free, full suite green, commits name C52.
+
+Stop and record if: =shasum= is missing on the test host (the test then
+needs a skip rule; ask).
+
+* TODO iidy_filehash bash helpers fail on current shasum (-p removed)
+:PROPERTIES:
+:ID: org:01a1ec22-af9a-71f8-9766-8c40e212b6aa
+:ADDED: [2026-11-17 Tue 17:50]
+:END:
+
+Ask Tavis the parity question (via the supervisor), then apply the choice with the test above.
