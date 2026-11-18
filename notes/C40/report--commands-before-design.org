@@ -141,7 +141,7 @@ second one. The existing process runner is =execShell= / =execDirect= in
 second =createProcess= call written.
 
 * Options
-** A. Literal commands only, context through environment variables (recommended)
+** A. Literal commands only, context through environment variables (worker's recommendation)
 - Each entry must be a plain string in the raw argsfile AST
   (=AstPlainString=, read with the extended =readRawField= under a plain,
   non-duplicated =CommandsBefore= key whose value is a plain sequence).
@@ -199,7 +199,70 @@ which point any writer of an imported value runs code.
 Document the field as unsupported. No code. Users run their build steps
 before calling iidy-hs. Cost: none; loses the feature.
 
-* Common behaviour for A, B and C
+** E. iidy-js templates, every substituted value checked (supervisor, 2026-11-17)
+Added after Tavis named the kind of file that must keep working (generic
+form):
+
+#+begin_src yaml
+CommandsBefore:
+  - ./build.sh
+  - iidy_s3_upload dist/app.zip {{ params.bucket }} 'app-{{ filehash "dist/app.zip" }}.zip'
+#+end_src
+
+It needs three things A and B refuse: a def or import by name
+(=params.bucket=), the =filehash= helper, and that helper reading
+a file the previous command built. In iidy-js this works because each
+command is expanded just before it runs (=runCommandSet.ts:19-20=, inside
+the =forEach=). Rust cannot run it: it has no =filehash= Handlebars helper
+(only the bash function, =stack_args.rs:620=), and it expands the text in
+its first preprocess, before the build script would run.
+
+Design:
+- Entries: plain strings written in the local argsfile, as in iidy-js
+  (classifier in =Credentials.hs=); a tag, merge or imported entry is
+  refused.
+- Context: the iidy-js one: =iidy.{command,environment,region,profile,=
+  =stackName,stackArgs}=, bare =region= and =environment=, and every
+  =$defs= and =$imports= name of the argsfile, from a preprocess of the
+  stack-args without the field.
+- Helpers: =filehash= and =filehashBase64= (resolved against the argsfile
+  directory), plus iidy's existing pure helpers.
+- Expansion per command, immediately before it runs, so =filehash= sees
+  what earlier commands built.
+- The safety rule: every value a mustache substitutes (={{ ... }}= output,
+  helper results included) must be a non-empty string of
+  =[A-Za-z0-9._/:@+=,%-]= that does not start with =-=. A value is
+  refused, never quoted or rewritten; the error names the expression and
+  its source name and suggests the shell read the value instead. To refuse
+  before anything runs, every command is first expanded once with
+  =filehash= stubbed (its output is always hex or base64, so it passes by
+  construction) and every other value checked; only then do the commands
+  run, each expanded again for real just before it starts. Literal template text is the operator's and
+  is not checked. Hex and base64 hashes, bucket names, ARNs, regions,
+  environments, stack names and paths pass; whitespace, quotes, =$=,
+  backquotes, =;=, =|=, =&=, =<=, =>=, =*=, =?=, brackets, braces,
+  backslashes and newlines cannot, so a value cannot start a new command,
+  open a substitution, glob or split into extra arguments, and the leading
+  =-= rule blocks option injection. It also works inside the operator's
+  own quotes, as in the example's ='app-{{ filehash ... }}.zip'=.
+- Where it hooks in: the Handlebars engine renders an =Output= part in
+  =renderPart= (=src/Iidy/Yaml/Handlebars/Engine.hs:271-277=); add an
+  output check parameter there (the place Handlebars itself puts HTML
+  escaping) instead of a second renderer. The helpers are pure, so
+  =filehash= runs as an IO pre-pass over the parsed command that hashes
+  each literal path argument and hands the helper a lookup table; a
+  non-literal path argument is refused.
+- What it does not stop: a value that passes the filter still decides
+  data, for example which bucket the package is uploaded to. Whoever can
+  write =params.bucket='s source can redirect the upload, which
+  is the same power they have over the template that reads that value.
+  =docs/SECURITY.org= says so. No provenance tracking is needed for code
+  execution, because no value can become code.
+- Bash helpers, environment, working directory, banners and failure as in
+  "Common behaviour" below; =iidy_s3_upload= stays, since the example uses
+  it.
+
+* Common behaviour for A, B, C and E
 - Operations: =create-stack=, =update-stack=, =create-changeset=,
   =create-or-update=; other commands ignore the field (C22 behaviour).
 - Shell and directory: =bash -c= found on =PATH= (=/usr/bin/env bash=, as
@@ -226,8 +289,22 @@ before calling iidy-hs. Cost: none; loses the feature.
   Run", =docs/getting-started.org=, the init template comment, and the
   C22 =DIVERGENCES.md= section rewritten for the chosen option.
 
+* Decision
+Decision (Tavis, 2026-11-17): Option E.
+
+Supervisor's calls for the details E leaves open: the common behaviour
+below applies, except stdin, which follows iidy-js when stdin is a
+terminal (a command may prompt) and is =/dev/null= otherwise (no hang in
+CI).
+
 * Recommendation
-Option A. It is the only option that keeps every non-literal value out of
+Supervisor, 2026-11-17, after Tavis's example: Option E. It runs that kind
+of file and other iidy-js files unchanged, unless a substituted value holds a
+shell metacharacter, and it closes the injection path by checking values
+instead of tracking where they came from. A is kept below as the worker's
+original recommendation; it cannot run the example.
+
+Worker's original recommendation: Option A. It is the only option that keeps every non-literal value out of
 shell text by construction, which matches how C15 draws its lines (decided
 by where text comes from, fail closed, nothing widened from a file), and it
 needs no taint tracking, which iidy-hs does not have. What it gives up is
@@ -237,7 +314,7 @@ Running before preprocessing also removes the double import pass of both
 originals. If Tavis wants iidy-js files with ={{iidy.region}}= and friends to
 keep working, B adds that safely on top of A; it can be a later step.
 
-* Implementation outline (after approval; not started)
+* Implementation outline (written for A; E's contract is on the card)
 Allowed paths to set on the card: =src/Iidy/Cfn/StackArgsLoader.hs=,
 =src/Iidy/Cfn/StackArgs/Credentials.hs= (classifier),
 =src/Iidy/Cfn/StackArgsBootstrap.hs= (if the raw AST is read there),

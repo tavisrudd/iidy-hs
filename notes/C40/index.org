@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C40
 :LANE:     main
-:TODO_STATE: WAITING
+:TODO_STATE: STARTED
 :CARD_PRIORITY: C
 :MODE:     CONTRACT
 :ORIGIN:   C22 decision, Tavis 2026-11-16
@@ -26,6 +26,13 @@ CLOCK: [2026-11-17 Tue 14:45]--[2026-11-17 Tue 14:49] => 0:04
   Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a787ebb0db67e50d3
 - Card state STARTED → WAITING [2026-11-17 Tue 14:56]
   Note: Design note ready (notes/C40/report--commands-before-design.org); waiting on Tavis to choose option A-D and the three defaults
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
+- Card state WAITING → TODO [2026-11-17 Tue 16:19]
+  Note: Tavis chose Option E (2026-11-17)
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
+- Card state TODO → STARTED [2026-11-17 Tue 16:19]
   Agent: opus-5.5-medium
   Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
 :END:
@@ -71,33 +78,107 @@ C15.
 :ADDED: [2026-11-16 Mon 22:05]
 :END:
 
-Allowed paths: to be set by the design task. Expect
-=src/Iidy/Cfn/StackArgsLoader.hs= (or the modules C12 splits out of it), a
-new module for running commands, =docs/SECURITY.org=, =DIVERGENCES.md=,
-tests and fixtures, =notes/C40/=.
+Decision (Tavis, 2026-11-17): Option E of
+[[file:report--commands-before-design.org][report--commands-before-design.org]]
+(iidy-js templates in commands, every substituted value checked against a
+safe character set). Supervisor's call for the detail E left open: stdin is
+inherited when it is a terminal and =/dev/null= otherwise; the rest of
+"Common behaviour" in the note applies.
 
-Out of scope until the design is approved by Tavis: any code that runs a
-command.
+What E means, in order, for the four operations (=create-stack=,
+=update-stack=, =create-changeset=, =create-or-update=; every other
+operation ignores the field, as now):
+1. Read the =CommandsBefore= entries from the raw argsfile AST. Each must
+   be a plain or templated string written in the local argsfile; a tag,
+   merge or imported entry is refused before anything runs (extend the
+   classifier in =src/Iidy/Cfn/StackArgs/Credentials.hs=).
+2. Preprocess the stack-args without the field (pass 1) to build the
+   context: =iidy.{command,environment,region,profile,stackName,stackArgs}=,
+   bare =region= and =environment=, and every =$defs= and =$imports= name.
+3. Dry run: expand every command with =filehash= and =filehashBase64=
+   stubbed; every substituted value (helper results included) must be a
+   non-empty string of =[A-Za-z0-9._/:@+=,%-]= not starting with =-=.
+   Any failure refuses the run before the first command starts, naming the
+   entry, the expression and the value's source name.
+4. Run the commands in order, each expanded again just before it starts,
+   so =filehash= hashes what earlier commands built. =bash -c=, argsfile
+   directory, =iidy_*= variables and the three =BASH_FUNC_iidy_*= helpers
+   over the inherited environment, banners showing raw and expanded text,
+   output streamed (stdout to stderr in =--output-mode json=), failure on a
+   non-zero exit or a signal with the exit code and the raw command.
+5. Preprocess the stack-args again with the expanded commands (pass 2), so
+   imports of files the commands built are read after them (both originals
+   resolve imports twice).
+
+Allowed paths: =src/Iidy/Cfn/StackArgsLoader.hs= (and the modules C12
+split out of it), =src/Iidy/Cfn/StackArgs/Credentials.hs= (classifier), a
+new =src/Iidy/Cfn/CommandsBefore.hs= (or a small set of modules under
+=src/Iidy/Cfn/CommandsBefore/=), =src/Iidy/Yaml/Handlebars/Engine.hs= and
+=Helpers.hs= (an output-check hook in =renderPart= and the =filehash=
+helpers; no other engine change), =src/Iidy/Demo.hs= (only to extract or
+export its shell runner for sharing), a new shared runner module if
+extracted, =iidy-hs.cabal= (=other-modules=), =docs/SECURITY.org=,
+=docs/getting-started.org=, =docs/command-reference.org=,
+=src/Iidy/InitStackArgs.hs= (template comment), =DIVERGENCES.md=, the test
+modules of those sources (=StackArgsLoaderTest=, =HandlebarsTest= or the
+engine's test module, =DemoTest=, a new =CommandsBeforeTest=),
+=test-fixtures/=, =notes/C40/=.
+
+Out of scope: any other Handlebars behaviour; quoting or rewriting values
+(refuse only); provenance or taint tracking; new CLI flags; =render= or
+=delete-stack= running commands; Rust's =iidy= namespace quirks beyond
+what E lists.
 
 Done when:
-- [ ] A design note in =notes/C40/= states which values may reach a command
+- [X] A design note in =notes/C40/= states which values may reach a command
   (literal in the argsfile only, or imported and computed too), how a
   non-literal source is refused or confirmed, what environment and working
   directory the command gets, and what the output and failure behaviour is,
-  with the Rust and TypeScript references above. Tavis approves it.
-- [ ] After approval: the implementation, tests with a harmless command and
-  a refused untrusted source, the removal of C22's refusal for the allowed
-  sources, =docs/SECURITY.org= and =DIVERGENCES.md= entries; full suite
-  green, commits name C40.
+  with the Rust and TypeScript references above. Tavis approves it
+  (Option E, 2026-11-17).
+- [ ] A command using a =$defs= value, an import by name, =iidy.region=
+  and =filehash= of a file an earlier command creates runs with the
+  expected expanded text, in the argsfile directory, with the =iidy_*=
+  variables set (tests with harmless commands writing marker files under a
+  temporary directory; no network, no AWS).
+- [ ] Refused before anything runs, each with a test that checks no marker
+  file appears: a value containing each class of metacharacter (space,
+  quote, =$=, backquote, =;=, =|=, =&=, =<=, newline, =*=), a value starting
+  with =-=, an empty value, a tagged entry, an imported or merged entry, and
+  =filehash= with a non-literal path.
+- [ ] A failing command stops the load before any AWS call with its exit
+  code; later commands do not run. A killed command fails too.
+- [ ] =--output-mode json= keeps stdout valid JSON while commands print.
+- [ ] Stdin: a test pins =/dev/null= when stdin is not a terminal.
+- [ ] Imports resolve after the commands: a =filehash:= import of a file
+  the first command writes sees the new content.
+- [ ] C22's refusal is removed for the four operations; =render= and
+  =delete-stack= still ignore the field.
+- [ ] =docs/SECURITY.org= replaces "=CommandsBefore= Is Never Run" with the
+  rule, what it blocks and what it does not (a value still controls data,
+  for example which bucket an upload goes to); =docs/getting-started.org=,
+  the init template comment and =DIVERGENCES.md= (against Rust: no
+  =filehash= helper and expansion before the commands; against iidy-js:
+  values checked, stdin rule, env precedence) are updated.
+- [ ] No duplicated runner or renderer (the reviewer checks); modules under
+  about 500 lines; build warning-free, full suite green, commits name C40.
 
-Stop and record if: the design cannot separate literal from computed values
-without a change outside the allowed paths; or Tavis has not approved the
-design (do not write command-running code).
+Stop and record if: the engine hook needs more than an output check in
+=renderPart= (for example block helpers bypass it); pass 1 cannot omit the
+field without a change outside the allowed paths; a value class that real
+iidy-js files need (for example a space in a substituted value) is refused
+and a workaround is not obvious; or the work needs a decision this
+contract does not settle.
 
-* TODO Implement CommandsBefore with a trust design for computed stack-args
+* DONE Write the trust design and put it to Tavis
 :PROPERTIES:
 :ID: org:01a1e7e5-1a68-70c2-b5b8-7ae34d5be1b9
 :ADDED: [2026-11-16 Mon 22:05]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 15:18] \\
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
 :END:
 
 Write the design note described under Done when, with Rust and
@@ -150,3 +231,37 @@ For Tavis: which option should C40 implement?
 Also to confirm with the choice: child stdout goes to stderr in
 =--output-mode json=; stdin is =/dev/null=; output is streamed rather than
 buffered.
+
+Answer (Tavis, 2026-11-17): Option E, added by the supervisor to the
+design note after Tavis named the kind of file that must keep working. The
+three defaults: json-mode stdout to stderr and streaming as proposed; stdin
+inherited when it is a terminal, =/dev/null= otherwise (supervisor's call).
+
+* TODO Value check hook and filehash helpers in the Handlebars engine
+:PROPERTIES:
+:ID: org:01a1eb97-724c-7732-9cf6-52900183769a
+:ADDED: [2026-11-17 Tue 15:18]
+:END:
+Add an output-check parameter to the engine's =Output= rendering
+(=renderPart=) and the =filehash= / =filehashBase64= helpers fed by an IO
+pre-pass that hashes literal path arguments (a non-literal path is
+refused). Existing callers keep today's behaviour. Unit tests for the safe
+character set and the refusal message.
+
+* TODO Classify, dry-run and run CommandsBefore in the stack-args loader
+:PROPERTIES:
+:ID: org:01a1eb97-724c-7732-9cf6-528f760b2495
+:ADDED: [2026-11-17 Tue 15:18]
+:END:
+Steps 1 to 5 of Scope and gate: classifier for the entries, pass 1
+context, dry run, per-command expansion and run through the shared shell
+runner, pass 2. Remove C22's refusal for the four operations. Tests for
+every Done when item that concerns behaviour.
+
+* TODO Docs and divergences
+:PROPERTIES:
+:ID: org:01a1eb97-724c-7732-9cf6-528e5a5fbc00
+:ADDED: [2026-11-17 Tue 15:18]
+:END:
+=docs/SECURITY.org=, =docs/getting-started.org=, the init template comment
+and =DIVERGENCES.md=, as listed under Done when. Full suite, then report.
