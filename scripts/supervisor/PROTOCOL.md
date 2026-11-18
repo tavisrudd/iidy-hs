@@ -87,10 +87,14 @@ supervisor.
        scripts/guarded-build cabal test all --test-show-details=direct \
          --test-options='--timeout=60s -p "<pattern>"'
 
-   Never commit after a failing run. Run long commands detached
-   (`nohup setsid ... > LOG 2>&1 &`) and poll the log if your shell tool has
-   a short timeout; a command killed while it waits on the build lock is not
-   a failure.
+   Never commit after a failing run. Codex workers: run long commands
+   detached (`nohup setsid ... > LOG 2>&1 &`) and poll the log if your shell
+   tool has a short timeout. Claude sub-agents: never detach; run builds,
+   tests and commits in the foreground with a long Bash tool timeout (up to
+   600000 ms), and wrap test runs in `timeout -s KILL 600`. A detached job
+   is invisible to a sub-agent's harness, so the sub-agent is never woken
+   when it ends. A command killed while it waits on the build lock is not a
+   failure.
 6. Known flaky hang (card C6): a test can hang forever and ignore SIGTERM.
    Always pass a per-test timeout. If a run or a commit hangs, `kill -9` the
    `iidy-hs-test` process from your worktree (by PID, after checking its

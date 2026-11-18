@@ -25,6 +25,10 @@ final reply, not the mailbox.
   per-test timeout (`--test-options=--timeout=60s`); on a hang, `kill -9`
   by PID the `iidy-hs-test` process from your own worktree (never
   `pkill -f`) and report the test name (card C6).
+- Run builds, test runs and commits in the FOREGROUND with a long Bash tool
+  timeout (up to 600000 ms), test runs wrapped in `timeout -s KILL 600`.
+  Never detach with nohup/setsid or a background job: your harness cannot
+  see it, so you are never woken when it ends.
 - Clock in and out from `~/src/iidy-hs`, not the worktree (`c` refuses a
   cross-root clock-in); before the final reply, check the card has no open
   `CLOCK:` line.

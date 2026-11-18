@@ -451,6 +451,13 @@ is deterministic" (a different group from TemplateLoader), ignoring the
 timeout; killed by PID, the rerun passed. Host memory was tight (4-5 GiB
 available, ZFS cache large). No thread dump captured.
 
+Sighting 2026-11-17 (supervisor, from the C39 review): a focused run
+(=-p "/repeated key/ || /same key/ || /different keys/ || /parse time/"=,
+=--timeout=60s=) hung two hours in "Demo / runDemo / a bash step runs",
+ignoring the timeout and holding the build lock until the supervisor
+killed it by PID; the rerun passed in 0.01 s. Memory was not tight
+(15 GiB available). No thread dump captured. A third group (Demo).
+
 * TODO Build a standalone reproducer and prepare the upstream report
 :PROPERTIES:
 :ID: org:01a1e7e3-f922-7019-868f-d4f97b179cca

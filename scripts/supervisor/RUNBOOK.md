@@ -265,9 +265,20 @@ Mechanics learned in peregrine:
   waiting means it has no live background job and will not wake: check its
   processes and send it on with SendMessage. Before closing a session,
   check each started card's branch and notes and resume a quiet sub.
-- Exit 143 from a worker's build is its own shell tool timeout killing a
-  command that waited on the build lock; tell it to run long jobs detached
-  and poll the log.
+  On 2026-11-17 this happened three times, each from a sub-agent that had
+  detached its run with nohup/setsid: Claude sub-agents run builds and tests
+  in the foreground (PROTOCOL.md, CARD-BRIEF.md). A notification saying
+  "waiting on its own background work" with no ghc, cabal or test process
+  and the build lock free means the same.
+- Exit 143 from a Codex worker's build is its own shell tool timeout killing
+  a command that waited on the build lock; tell it to run long jobs detached
+  and poll the log. (Claude sub-agents: use a longer tool timeout instead.)
+- A commit that fails with "build lock wait timed out" means something holds
+  the lock: look for a long-running `iidy-hs-test` (`ps -eo pid,etime,args`),
+  check its path, and if it is a C6 hang kill it by PID and tell its owner.
+  On 2026-11-17 a reviewer's focused run held the lock for two hours.
+- One reviewer for several cards fills its context; start a fresh reviewer
+  for a large or security card (C40 on 2026-11-17).
 - Orphaned clocks: when a Codex session was restarted with a clock open,
   close it as that session: read its `Session-ID` from the card's clock-in
   entry and run `C_HARNESS=codex C_SESSION_ID=<id> c clock-out <ID> --note
