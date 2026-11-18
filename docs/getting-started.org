@@ -413,17 +413,20 @@ CommandsBefore:
 The context holds =iidy.command=, =iidy.environment=, =iidy.region=,
 =iidy.profile=, =iidy.stackName=, =iidy.stackArgs=, bare =region= and
 =environment=, and every =$defs= and =$imports= name; =filehash= and
-=filehashBase64= hash a file named by a literal path. Each command is
+=filehashBase64= hash a file named by a literal path, used as the whole of
+a ={{ ... }}=. Each command is
 expanded just before it runs, so =filehash= sees what earlier commands
 built, and imports are read again after the commands. Every substituted
 value must be a non-empty string of letters, digits and
 =. _ / : @ + = , % -= not starting with =-=; any other value refuses the
 run before the first command starts. Have a command read such a value
 itself instead (for example from an environment variable or with the =aws=
-CLI). The variables =iidy_profile=, =iidy_region= and =iidy_environment=
+CLI). A checked value is safe as an argument but still chooses the program
+in command position, so keep substitutions after the program name. The
+variables =iidy_profile=, =iidy_region= and =iidy_environment=
 and the bash functions =iidy_filehash=, =iidy_filehash_base64= and
 =iidy_s3_upload= are set for every command. A failing command stops the
-load. See =docs/SECURITY.org=, "=CommandsBefore=: No Value Becomes Code".
+load. See =docs/SECURITY.org=, "=CommandsBefore=: Values Are Arguments, Not Code".
 
 --------------
 
