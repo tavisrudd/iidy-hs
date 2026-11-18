@@ -480,6 +480,17 @@ classifyMessage' allLines loc msg
                 , ysiFixHint = Nothing
                 , ysiExample = Nothing
                 }
+    -- A repeated mapping key (parseYamlStrict): structural, not a tag error
+    | "duplicate entry" `T.isPrefixOf` msg =
+        YamlSyntaxError
+            YamlSyntaxInfo
+                { ysiErrorId = MalformedYamlStructure
+                , ysiShortMessage = msg
+                , ysiGuidance = "a mapping key appears more than once"
+                , ysiLocation = loc
+                , ysiFixHint = Just "remove or rename one of the entries"
+                , ysiExample = Nothing
+                }
     -- YAML syntax: "invalid YAML structure" / "unexpected end of file"
     | "invalid YAML" `T.isPrefixOf` msg =
         YamlSyntaxError

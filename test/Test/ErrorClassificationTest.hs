@@ -235,6 +235,14 @@ errorClassificationTests =
                 assertEqual "guidance" "tags cannot be chained - use list syntax" (ysiGuidance info)
                 assertEqual "fix hint present" (Just "put the inner tag in a list to separate it from the outer tag") (ysiFixHint info)
             _other -> pure ()
+    , -- repeated mapping key (ERR_1004), not a tag error
+      testCase "duplicate entry with key" $ do
+        let result = classify "duplicate entry with key \"c\""
+        assertYamlSyntax MalformedYamlStructure result
+        case result of
+            YamlSyntaxError info ->
+                assertEqual "guidance" "a mapping key appears more than once" (ysiGuidance info)
+            _other -> pure ()
     , -- unexpected end of file (ERR_1001)
       testCase "unexpected end of file" $ do
         let result = classify "unexpected end of file"
