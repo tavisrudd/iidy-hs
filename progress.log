@@ -149,3 +149,4 @@
 2026-11-17 14:32 — 2026-11-17--3 (b1ef70ff-a081-4826-ad18-fe7133fe40f2): AWS service errors name the service, HTTP status and request ID
 2026-11-17 14:51 — 2026-11-17--3 (b1ef70ff-a081-4826-ad18-fe7133fe40f2): C30 landed and closed (explain and demo aligned with Rust; fractional sleep)
 2026-11-17 14:55 — 2026-11-17--3 (b1ef70ff-a081-4826-ad18-fe7133fe40f2): C22 landed and closed (security docs corrected, CommandsBefore refused until C40)
+2026-11-17 17:23 — 2026-11-17--3 (b1ef70ff-a081-4826-ad18-fe7133fe40f2): C39 landed and closed (repeated YAML keys rejected in templates, stack-args and demo scripts)

@@ -43,6 +43,7 @@
 - [2026-11-17 Tue 13:39] [[file:../C19/index.org][C19]] — Landed 41e4f23..5ec8f28 (replayed; worker's b37def5+aa65d10 squashed, b37def5 alone failed -Werror): one AWS/HTTP error formatter, three duplicates removed, every site routed incl. S3Objects, LazyEnv, StackArgsBootstrap; S3 errors keep HTTP status; Opus review + fix round 1
 - [2026-11-17 Tue 14:51] [[file:../C30/index.org][C30]] — Landed 9c725db..efddbfb (explain message and ERR_6002 follow Rust, fractional demo sleep with 0..86400 bound, rounding and masking pinned, divergences recorded); reviewed by the Opus review worker, re-review clean
 - [2026-11-17 Tue 14:55] [[file:../C22/index.org][C22]] — Landed 9804b0b..5858131 (security doc links fixed, CommandsBefore refused for the four deploy operations when non-empty, --debug documented as no effect, hardening notes folded into SECURITY.org; C21's lines still owed, listed in the card); reviewed by the Opus review worker, re-review clean
+- [2026-11-17 Tue 17:23] [[file:../C39/index.org][C39]] — Landed 2b3abbd, 001f8f5 (repeated mapping keys rejected in templates, stack-args and demo scripts with the imports' position format; classified as ERR_1004); reviewed by the Opus review worker; fix round 1 (classification) landed on the supervisor's diff check
 * COMMENT meta
 :PROPERTIES:
 :LANE: main

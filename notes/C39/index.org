@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C39
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   Tavis 2026-11-16, C34 follow-up: top-level templates and stack-args reject repeated keys as TypeScript (js-yaml) does; Rust accepts them (last wins) and iidy-hs currently renders both entries
 :CREATED_BY: opus-5.5-medium
@@ -10,8 +10,35 @@
 :ID: org:01a1e7e2-78a8-71e8-b16b-70c542426ff1
 :ADDED: [2026-11-16 Mon 22:02]
 :END:
+:CLOCK:
+CLOCK: [2026-11-17 Tue 14:36]--[2026-11-17 Tue 15:12] => 0:36
+CLOCK: [2026-11-17 Tue 15:13]--[2026-11-17 Tue 15:15] => 0:02
+CLOCK: [2026-11-17 Tue 17:21]--[2026-11-17 Tue 17:23] => 0:02
+:END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-17 Tue 14:35]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
+- Clock-in [2026-11-17 Tue 14:36]
+  Agent: sonnet-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:aa5ab4644329c1eaf
+- Clock-out [2026-11-17 Tue 15:12]
+  Agent: sonnet-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:aa5ab4644329c1eaf
+- Clock-in [2026-11-17 Tue 15:13]
+  Agent: sonnet-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:aa5ab4644329c1eaf
+- Clock-out [2026-11-17 Tue 15:15]
+  Agent: sonnet-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:aa5ab4644329c1eaf
+- Clock-in [2026-11-17 Tue 17:21]
+  Agent: sonnet-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:aa5ab4644329c1eaf
+- Clock-out [2026-11-17 Tue 17:23]
+  Agent: sonnet-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:aa5ab4644329c1eaf
+- Card state STARTED → DONE [2026-11-17 Tue 17:23]
+  Note: Landed 2b3abbd, 001f8f5 (repeated mapping keys rejected in templates, stack-args and demo scripts with the imports' position format; classified as ERR_1004); reviewed by the Opus review worker; fix round 1 (classification) landed on the supervisor's diff check
   Agent: opus-5.5-medium
   Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
 :END:
@@ -101,30 +128,30 @@ time, or rebase. C22 and C39 both edit =DIVERGENCES.md=; keep each entry
 separate.
 
 Done when:
-- [ ] A repeated mapping key at any depth in a top-level template (the
+- [X] A repeated mapping key at any depth in a top-level template (the
   =render= command and a =render:= template) and in a stack-args file is
   rejected with the same message format as for imports (=duplicate entry
   with key "k" at line L column C=; see =DIVERGENCES.md= "Duplicate Mapping
   Keys: Error Text"), through the existing parse-error display, before
   preprocessing runs.
-- [ ] Tests, recorded failing first (each currently renders both entries):
+- [X] Tests, recorded failing first (each currently renders both entries):
   a repeated key at the top level and nested in a template, in a stack-args
   file, and in a =render:= template; key spellings that count as the same
   key (=a= and ="a"=); keys that do not (=1= and ="1"=) still load.
-- [ ] Every existing fixture and example template (=test-fixtures/=,
+- [X] Every existing fixture and example template (=test-fixtures/=,
   =example-templates/=) is checked for repeated keys: run the suite and
   also =grep=-check the fixtures; none may be changed to hide a failure
   except a fixture that deliberately repeats a key, which is recorded in
   the card with the reason. No expected output changes otherwise.
-- [ ] The call-site list in Context is re-verified and recorded in the
+- [X] The call-site list in Context is re-verified and recorded in the
   task note with the final switch or stay decision per site.
-- [ ] =DIVERGENCES.md= entry updated: the sentence "Top-level templates and
+- [X] =DIVERGENCES.md= entry updated: the sentence "Top-level templates and
   stack-args accept repeated keys in both ports" is replaced by what is now
   true (iidy-hs and TypeScript reject, Rust accepts and keeps the last
   value), with a cause line that it follows TypeScript.
-- [ ] A docs page that describes YAML parsing or errors mentions that a
+- [X] A docs page that describes YAML parsing or errors mentions that a
   repeated mapping key is an error in templates, stack-args and imports.
-- [ ] Build warning-free, full suite green, commits name C39.
+- [X] Build warning-free, full suite green, commits name C39.
 
 Stop and record if: a call site whose strictness is unclear (the demo and
 convert-stack sites, or any site found that Context does not list) needs a
@@ -134,10 +161,15 @@ duplicate; a stricter parse changes the error order for a document that
 also has another error (record it); or the work needs a change outside the
 allowed paths.
 
-* TODO Reject duplicate mapping keys in templates and stack-args too (Tavis: follow TypeScript)
+* DONE Reject duplicate mapping keys in templates and stack-args too (Tavis: follow TypeScript)
 :PROPERTIES:
 :ID: org:01a1e7e2-78a8-71e8-b16b-70c2d37d6a0d
 :ADDED: [2026-11-16 Mon 22:02]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 15:15] \\
+  Agent: sonnet-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:aa5ab4644329c1eaf
 :END:
 
 Re-run the call-site grep, switch the three top-level sites listed in
@@ -145,3 +177,195 @@ Context to =parseYamlStrict= after writing the failing tests, check the
 fixtures, update =DIVERGENCES.md= and the docs, run the full suite through
 =scripts/guarded-build=, and record the final per-site table here.
 
+** Scope extension (supervisor, 2026-11-17)
+:PROPERTIES:
+:ID: org:01a1eb79-3062-7487-818f-a451b646504d
+:ADDED: [2026-11-17 Tue 14:45]
+:END:
+The supervisor added =src/Iidy/Demo.hs= (only the parse call; it has no
+parse doc comment) and =test/Test/DemoTest.hs= to the allowed paths, for
+Tavis's 2026-11-17 decision that the demo switches to =parseYamlStrict=.
+=ConvertStack.hs= stays lenient.
+** Existing code reused
+:PROPERTIES:
+:ID: org:01a1eb79-3062-7487-818f-a45027a61b6f
+:ADDED: [2026-11-17 Tue 14:45]
+:END:
+- =parseYamlStrict= and =parseYamlWith= in =src/Iidy/Yaml/Parser.hs=, and
+  the key-identity rules and message in =Yaml/DuplicateKeys.hs= (C34): no
+  new parsing or duplicate-detection code; the change is the call sites.
+- Test setup reused: =withSystemTempDirectory= temp files in each module's
+  existing style; =captureStderr= and =renderWithEnv= in =RenderTest.hs=;
+  =runScript= and =writeMarker= in =DemoTest.hs=; =loadStackArgs= and
+  =loadCfnTemplate= as the existing tests call them.
+** Failing run before the switch
+:PROPERTIES:
+:ID: org:01a1eb79-3062-7487-818f-a44fac2bee4b
+:ADDED: [2026-11-17 Tue 14:45]
+:END:
+Tests added, production unchanged
+(=cabal test --test-options='-p "/repeated key/||/duplicate/||..."'=):
+10 of 78 failed: StackArgsLoader (top level, nested, =a= vs ="a"=),
+RenderTest "repeated key rejected" (top level, nested, =a= vs ="a"=: exit 0,
+expected 1), TemplateLoader =render:= (same three), DemoTest "a repeated key
+exits 1 and runs nothing". The =1= vs ="1"= tests pass before and after.
+** Per-site decisions (grep -rn parseYaml src app, re-run 2026-11-17)
+:PROPERTIES:
+:ID: org:01a1eb79-3062-7487-818f-a44edc51492f
+:ADDED: [2026-11-17 Tue 14:45]
+:END:
+| Site                                   | Decision                       |
+|----------------------------------------+--------------------------------|
+| Cfn/StackArgsLoader.hs (stack-args)    | parseYamlStrict                |
+| Cfn/TemplateLoader.hs (render:)        | parseYamlStrict                |
+| Render.hs (render command)             | parseYamlStrict                |
+| Demo.hs (demo script)                  | parseYamlStrict (Tavis)        |
+| Yaml/Engine.hs 279 (import re-parse)   | stays lenient                  |
+| Yaml/Resolution/Resolver.hs 323, 887   | stay lenient                   |
+| Cfn/Operations/ConvertStack.hs 192     | stays lenient (Tavis, AWS text)|
+| Yaml/Imports/ContentParsing.hs, Resolver.hs 843 | already strict (C34)  |
+=tiRawBody= is built in one place (=Engine.hs= 227) from =idRawData= of a
+loaded import, which =ContentParsing.hs= already parsed strictly; the other
+=TemplateInfo= is a test fixture (=ResolverTest.hs= 1285). No stop.
+** Fixtures
+:PROPERTIES:
+:ID: org:01a1eb79-3062-7487-818f-a44dad52f6de
+:ADDED: [2026-11-17 Tue 14:45]
+:END:
+The full suite (pre-commit hook and final run) passes with no fixture
+changed; no fixture deliberately repeats a key.
+** Question for supervisor
+:PROPERTIES:
+:ID: org:01a1eb92-0c86-740f-afea-b1ab8d52ae44
+:ADDED: [2026-11-17 Tue 15:12]
+:END:
+Stop rule hit (change outside the allowed paths). With the three loaders
+and the demo on =parseYamlStrict=, the full suite has exactly two failures,
+both in =test/Test/StackArgsBootstrapTest.hs= (not an allowed path):
+"a duplicate top-level Profile key with an ssm: import is refused" (fixture
+=probe-duplicate-key.yaml=) and "a duplicate environment-map entry with an
+ssm: import is refused" (=probe-envmap-duplicate-entry.yaml=). Both fixtures
+deliberately repeat a key to exercise the bootstrap scan's own duplicate
+rule. =loadStackArgs= now rejects them at parse time with
+=Parse error in <file>: duplicate entry with key "Profile"= (resp. ="dev"=)
+before the bootstrap scan runs, so the AWS-import refusal is no longer
+reachable through the loader. The scan's rule stays covered by the unit test
+"raw reading: duplicate and non-plain keys are not literal", which passes.
+Proposed: edit those two tests to expect the parse error (key named, no
+AWS request asked or served), leaving fixtures unchanged. Needs
+=StackArgsBootstrapTest.hs= added to the allowed paths.
+Second point: the card says "same message format as for imports (=at line L
+column C=)". Only imports add that suffix (=ContentParsing.hs= 72). The
+=render= command shows the position through its parse-error display
+(=file:4:4=, 0-based column); =StackArgsLoader= and =TemplateLoader= build
+=Parse error in FILE: duplicate entry with key "k"= from the message and
+drop the position, as they do for every other parse error. My tests assert
+the key (and the line for =render=). Say if the loaders should append the
+position.
+Work state: all changes staged in the worktree, uncommitted (the hook
+cannot pass until the two tests above change); not rebased.
+*** Supervisor's call (2026-11-17)
+:PROPERTIES:
+:ID: org:01a1eb93-f03c-7352-a51a-2476812a2cb0
+:ADDED: [2026-11-17 Tue 15:15]
+:END:
+1. =test/Test/StackArgsBootstrapTest.hs= is added to the allowed paths:
+   change the two tests to expect the parse-time refusal, keep the
+   fixtures, and keep the assertion that no AWS/SSM call is made.
+2. The loaders show the position: reuse the import path's suffix function
+   (no second formatter) in =StackArgsLoader= and =TemplateLoader= parse
+   errors; every parse error from those loaders gaining its position is in
+   scope; tests assert line and column for stack-args and =render:=.
+*** Result
+:PROPERTIES:
+:ID: org:01a1eb93-f03c-7352-a51a-2475773e30cb
+:ADDED: [2026-11-17 Tue 15:15]
+:END:
+Commit 13fb4ac (rebased on main e864db8). Loaders reuse
+=parseErrorMessage= (exported from =ContentParsing.hs=, factored out of
+=describeParseError=) for the position suffix. The two bootstrap tests now
+expect the parse-time refusal and still assert no factory call and no AWS
+request. Full suite green on the rebased tip.
+
+** Review 2026-11-17
+:PROPERTIES:
+:ID: org:01a1ec07-c310-7202-b89f-a9f93cbccb91
+:ADDED: [2026-11-17 Tue 17:21]
+:END:
+Reviewer: review worker (Claude). Branch =claude/C39= at 13fb4ac, base
+e864db8. Verdict: 13fb4ac land; two low defects, both small and the first
+outside the card's paths.
+
+Checks done:
+- Regression: with the four call sites (=StackArgsLoader=, =TemplateLoader=,
+  =Render=, =Demo=) back on =parseYaml=, every new repeated-key test fails
+  (StackArgsLoader 3, the two StackArgsBootstrap tests, Render 3,
+  TemplateLoader =render:= 3, Demo "a repeated key exits 1 and runs
+  nothing"); the =1= vs ="1"= tests pass. Restored. None of the new tests
+  hangs on the reverted code: the Demo one fails at once (lenient parse keeps
+  the last =demo: []=, exit 0).
+- The two-hour hang in my first run (killed by the supervisor) was the
+  existing test "Demo / runDemo / a bash step runs: exit 0 and the marker
+  file exists", whose script has no repeated key, so the revert cannot have
+  changed it; it passed in 0.01 s on the rerun. This is the C6 hang (the
+  60 s timeout did not fire), not a C39 defect.
+- Formatter: =describeParseError= gives the same text as before for both
+  branches (=parseErrorMessage= for "duplicate entry", =show= otherwise), so
+  no import error changes. The loaders now append the position only to the
+  duplicate-key message; other parse errors keep their old text.
+- Lenient re-parses: =tiRawBody= is set only at =Engine.hs:227= from
+  =idRawData=. File, HTTP and S3 parse =.yaml=/=.json= strictly
+  (=parseByExtensionStrict=; JSON rejects repeats in =jsonToOValue=), SSM
+  =:yaml=/=:json= strictly; every other loader (=env:=, =random:=, =git:=,
+  file hash, =cfn:= values, =ssm-path:=) yields a string or an object
+  built from a KeyMap (raw text =show=/=Aeson.encode= of it, keys unique),
+  which cannot carry =$imports=, =$defs= or =$params= in a way that reaches
+  the re-parse with a repeated key. Claim holds for =Engine.hs:279= and
+  =Resolver.hs:323=, =887=.
+- Bootstrap tests: =expectDuplicateKey= still asserts =bsAsked = []= and
+  =bsServed = []= (no factory call, no AWS request). The scan's own
+  duplicate rule is now unreachable through the loader (strict parse runs
+  first); it stays covered by its unit test, as the card intends.
+- Error order (render of probe files): a syntax error anywhere still wins
+  (=a: 1 / a: 2 / b: [unclosed= and a nested repeat before an unclosed
+  bracket both report the syntax error); an unknown tag before the repeat
+  still wins; a repeat in a mapping that closes before a later unknown tag,
+  or before an unresolved =!$ var=, now wins where the other error was
+  reported before.
+
+Defects:
+1. Low (display). =render= and =demo= show a repeated key as =Tag error:
+   duplicate entry with key "c" @ file:4:2 (errno: ERR_4005)=: the message
+   is not recognised by =Yaml/Errors/Conversion.hs= and falls to the
+   =RETagSyntax= branch (=:185-195=), so it is labelled a tag syntax error
+   with ERR_4005 "Tag syntax error". Fix: classify a message starting
+   "duplicate entry" as a YAML structure error (ERR_1004 "Malformed YAML
+   structure") with the key's position; =Conversion.hs= is outside the
+   allowed paths, so widen the paths or file a card.
+2. Low (card record). The stop rule says to record a changed error order;
+   the task note does not. Fix: add the order above (a repeat that closes
+   before a later tag or resolve error now reports first; syntax errors and
+   earlier tag errors still win) to the task note.
+
+Pre-existing (not this card): the render parse-error display prints a
+0-based column (=file:4:2= for the key at column 3; =4:0= for end of file),
+while the loaders' duplicate message says =column 3= (1-based). Reproduce:
+=iidy-hs render= on =a: 1\nb:\n  c: 2\n  c: 3\n=.
+*** Fix round 1 (supervisor's call, 2026-11-17)
+:PROPERTIES:
+:ID: org:01a1ec08-b6b3-7471-87fc-23e6d54c8c34
+:ADDED: [2026-11-17 Tue 17:22]
+:END:
+Allowed paths extended for this fix only: =src/Iidy/Yaml/Errors/Conversion.hs=
+and =test/Test/ErrorClassificationTest.hs=.
+- A message starting "duplicate entry" is now a YAML structure error
+  (=MalformedYamlStructure=, ERR_1004, Rust =ids.rs= 21), not the
+  tag-syntax fallback (ERR_4005). Imports report a repeated key as an
+  import error with no code of their own, so there was nothing to agree
+  with. Failing first: the new "duplicate entry with key" classification
+  test got =TagParsingError TagSyntaxError= before the change.
+- Error order (reviewer's finding, recorded per the stop rule): a syntax
+  error anywhere in the document still wins, and so does an unknown tag
+  before the repeat. A repeat in a mapping that closes before a later bad
+  tag or an unresolved =!$= variable is now reported first, where the
+  other error was reported before.
