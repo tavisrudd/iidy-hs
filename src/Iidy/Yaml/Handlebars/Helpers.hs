@@ -1,6 +1,8 @@
 module Iidy.Yaml.Handlebars.Helpers (
     HelperFn,
     defaultHelpers,
+    fileHashHelpers,
+    fileHashHelperNames,
 ) where
 
 import Crypto.Hash (SHA256 (..), hashWith)
@@ -42,6 +44,25 @@ before building their result, so they fail without allocating it.
 -}
 defaultHelpers :: Map Text HelperFn
 defaultHelpers = Map.mapWithKey limitOutput helperTable
+
+{- | The @filehash@ and @filehashBase64@ helpers of iidy-js's
+@CommandsBefore@ (@src/cfn/runCommandSet.ts:16-17@). Helpers are pure, so
+the hashes are computed before rendering: the lookup takes the helper name
+and the literal path argument and gives the hash, and a path it does not
+know fails the render.
+-}
+fileHashHelpers :: (Text -> Text -> Maybe Text) -> Map Text HelperFn
+fileHashHelpers lookupHash = Map.fromList [(name, hashHelper name) | name <- fileHashHelperNames]
+  where
+    hashHelper name = \case
+        [String path] -> case lookupHash name path of
+            Just hash -> Right (String hash)
+            Nothing -> Left ("no hash was computed for " <> path)
+        _other -> Left "expects one string path argument"
+
+-- | The names of the file hash helpers, @filehash@ first.
+fileHashHelperNames :: [Text]
+fileHashHelperNames = ["filehash", "filehashBase64"]
 
 limitOutput :: Text -> HelperFn -> HelperFn
 limitOutput name fn args =

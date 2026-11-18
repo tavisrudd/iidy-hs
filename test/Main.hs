@@ -12,6 +12,7 @@ import Test.CfnYamlEmitterTest (cfnYamlEmitterTests)
 import Test.ChangesetHelpersTest (changesetHelpersTests)
 import Test.ChangesetTest (changesetTests)
 import Test.CliParserTest (cliParserTests)
+import Test.CommandsBeforeTest (commandsBeforeTests)
 import Test.ConvertStackTest (convertStackTests)
 import Test.CustomTemplateTrustTest (customTemplateTrustTests)
 import Test.DeleteStackTest (deleteStackTests)
@@ -83,6 +84,7 @@ main = do
             , testGroup "Parser" parserTests
             , testGroup "JMESPath" jmespathTests
             , testGroup "Handlebars" handlebarsTests
+            , testGroup "CommandsBefore" commandsBeforeTests
             , testGroup "Emitter" emitterTests
             , testGroup "Fixtures" fixtureTests
             , testGroup "ErrorFixtures" errorTests

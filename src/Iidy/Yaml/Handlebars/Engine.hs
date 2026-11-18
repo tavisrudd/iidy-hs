@@ -8,6 +8,10 @@ Does not implement partials, decorators, or inline partials.
 -}
 module Iidy.Yaml.Handlebars.Engine (
     interpolate,
+    interpolateChecked,
+    OutputSite (..),
+    OutputCheck,
+    helperCallArgs,
     isTruthy,
     InterpolateError (..),
     HelperFn,
@@ -18,6 +22,7 @@ import Data.Aeson (Value (..))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
 import Data.Char (isAlphaNum, isDigit)
+import Data.List qualified as List
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Scientific (Scientific)
@@ -58,11 +63,60 @@ data Expr
 ------------------------------------------------------------------------
 
 interpolate :: Map Text HelperFn -> Value -> Text -> Either InterpolateError Text
-interpolate helpers ctx template
+interpolate = interpolateChecked noOutputCheck
+
+{- | Where a rendered @{{ ... }}@ value came from: the expression as text
+(normalised spacing, string literals in double quotes) and the context
+names its paths start from, in order, without repeats.
+-}
+data OutputSite = OutputSite
+    { osExpression :: !Text
+    , osRoots :: ![Text]
+    }
+    deriving stock (Show, Eq)
+
+{- | A check on each rendered output value (the text a @{{ ... }}@ puts in
+the result, helper results included), where Handlebars itself would apply
+HTML escaping. 'Left' refuses the render with that message. Literal
+template text is never checked.
+-}
+type OutputCheck = OutputSite -> Text -> Either Text ()
+
+noOutputCheck :: OutputCheck
+noOutputCheck _site _value = Right ()
+
+-- | 'interpolate' with every output value passed through the check.
+interpolateChecked :: OutputCheck -> Map Text HelperFn -> Value -> Text -> Either InterpolateError Text
+interpolateChecked check helpers ctx template
     | not (T.isInfixOf "{{" template) = Right template
     | otherwise = do
         parts <- parseTemplate template
-        renderParts helpers ctx parts
+        renderParts (Renderer check helpers) ctx parts
+
+{- | Every call of the named helper in a template, in order, with its
+arguments: a string literal is 'Just' its text, any other argument
+'Nothing'. Calls inside sub-expressions and block helpers count.
+-}
+helperCallArgs :: Text -> Text -> Either InterpolateError [[Maybe Text]]
+helperCallArgs name template
+    | not (T.isInfixOf "{{" template) = Right []
+    | otherwise = concatMap partCalls <$> parseTemplate template
+  where
+    partCalls = \case
+        Literal _ -> []
+        Comment -> []
+        Output expr -> exprCalls expr
+        Block _ expr body elseBody ->
+            exprCalls expr <> concatMap partCalls body <> maybe [] (concatMap partCalls) elseBody
+    exprCalls = \case
+        HelperExpr n args -> call n args
+        SubExpr n args -> call n args
+        _leaf -> []
+    call n args =
+        [map literalArg args | n == name] <> concatMap exprCalls args
+    literalArg = \case
+        LitStr s -> Just s
+        _other -> Nothing
 
 ------------------------------------------------------------------------
 -- Template parser
@@ -263,35 +317,50 @@ when False _action = Right ()
 -- Renderer
 ------------------------------------------------------------------------
 
-renderParts :: Map Text HelperFn -> Value -> [TemplatePart] -> Either InterpolateError Text
-renderParts helpers ctx parts = do
-    texts <- traverse (renderPart helpers ctx) parts
+-- | The helpers and the output check a render uses.
+data Renderer = Renderer
+    { rCheck :: OutputCheck
+    , rHelpers :: Map Text HelperFn
+    }
+
+renderParts :: Renderer -> Value -> [TemplatePart] -> Either InterpolateError Text
+renderParts r ctx parts = do
+    texts <- traverse (renderPart r ctx) parts
     Right (T.concat texts)
 
-renderPart :: Map Text HelperFn -> Value -> TemplatePart -> Either InterpolateError Text
-renderPart helpers ctx = \case
+{- | Render one part. Every output value passes the check here, and block
+bodies render through 'renderParts', so no output reaches the result
+without it.
+-}
+renderPart :: Renderer -> Value -> TemplatePart -> Either InterpolateError Text
+renderPart r ctx = \case
     Literal t -> Right t
     Comment -> Right ""
     Output expr -> do
         val <- evalExpr helpers ctx expr
-        Right (valueToString val)
+        let text = valueToString val
+        case rCheck r (outputSite expr) text of
+            Left err -> Left (InterpolateError err)
+            Right () -> Right text
     Block name condExpr body elseBody -> do
-        renderBlock helpers ctx name condExpr body elseBody
+        renderBlock r ctx name condExpr body elseBody
+  where
+    helpers = rHelpers r
 
-renderBlock :: Map Text HelperFn -> Value -> Text -> Expr -> [TemplatePart] -> Maybe [TemplatePart] -> Either InterpolateError Text
-renderBlock helpers ctx name condExpr body elseBody = case name of
+renderBlock :: Renderer -> Value -> Text -> Expr -> [TemplatePart] -> Maybe [TemplatePart] -> Either InterpolateError Text
+renderBlock r ctx name condExpr body elseBody = case name of
     "if" -> do
-        val <- evalExpr helpers ctx condExpr
+        val <- evalExpr (rHelpers r) ctx condExpr
         if isTruthy val
-            then renderParts helpers ctx body
-            else maybe (Right "") (renderParts helpers ctx) elseBody
+            then renderParts r ctx body
+            else maybe (Right "") (renderParts r ctx) elseBody
     "unless" -> do
-        val <- evalExpr helpers ctx condExpr
+        val <- evalExpr (rHelpers r) ctx condExpr
         if not (isTruthy val)
-            then renderParts helpers ctx body
-            else maybe (Right "") (renderParts helpers ctx) elseBody
+            then renderParts r ctx body
+            else maybe (Right "") (renderParts r ctx) elseBody
     "each" -> do
-        val <- evalExpr helpers ctx condExpr
+        val <- evalExpr (rHelpers r) ctx condExpr
         case val of
             Array arr -> do
                 texts <- V.iforM arr $ \i item -> do
@@ -304,7 +373,7 @@ renderBlock helpers ctx name condExpr body elseBody = case name of
                                         , ("@first", Bool (i == 0))
                                         , ("@last", Bool (i == V.length arr - 1))
                                         ]
-                    renderParts helpers itemCtx body
+                    renderParts r itemCtx body
                 Right (T.concat (V.toList texts))
             Object obj -> do
                 let entries = KM.toList obj
@@ -318,16 +387,16 @@ renderBlock helpers ctx name condExpr body elseBody = case name of
                                                 [ ("this", v)
                                                 , ("@key", String (Key.toText k))
                                                 ]
-                            renderParts helpers itemCtx body
+                            renderParts r itemCtx body
                         )
                         entries
                 Right (T.concat texts)
-            _notIterable -> maybe (Right "") (renderParts helpers ctx) elseBody
+            _notIterable -> maybe (Right "") (renderParts r ctx) elseBody
     "with" -> do
-        val <- evalExpr helpers ctx condExpr
+        val <- evalExpr (rHelpers r) ctx condExpr
         if isTruthy val
-            then renderParts helpers (mergeContext ctx val) body
-            else maybe (Right "") (renderParts helpers ctx) elseBody
+            then renderParts r (mergeContext ctx val) body
+            else maybe (Right "") (renderParts r ctx) elseBody
     _unknownHelper -> Left (InterpolateError $ "Unknown block helper: " <> name)
 
 evalExpr :: Map Text HelperFn -> Value -> Expr -> Either InterpolateError Value
@@ -352,6 +421,28 @@ callHelper helpers name args =
         Nothing ->
             -- Unknown helper: treat first arg as the result if it's just a path with helper syntax
             Left (InterpolateError $ "Unknown helper: " <> name)
+
+-- | The site of an output expression, for the check.
+outputSite :: Expr -> OutputSite
+outputSite expr = OutputSite (exprText expr) (List.nub (exprRoots expr))
+
+-- | An expression as text, with normalised spacing.
+exprText :: Expr -> Text
+exprText = \case
+    PathExpr segments -> T.intercalate "." segments
+    LitStr s -> "\"" <> s <> "\""
+    LitNum n -> valueToString (Number n)
+    LitBool b -> if b then "true" else "false"
+    HelperExpr name args -> T.unwords (name : map exprText args)
+    SubExpr name args -> "(" <> T.unwords (name : map exprText args) <> ")"
+
+-- | The context names an expression's paths start from.
+exprRoots :: Expr -> [Text]
+exprRoots = \case
+    PathExpr segments -> take 1 (dropWhile (== "this") segments)
+    HelperExpr _ args -> concatMap exprRoots args
+    SubExpr _ args -> concatMap exprRoots args
+    _literal -> []
 
 lookupPath :: [Text] -> Value -> Value
 lookupPath [] val = val
