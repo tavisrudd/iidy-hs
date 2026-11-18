@@ -78,9 +78,9 @@ stackArgsTemplate =
         , "# see http://docs.aws.amazon.com/cli/latest/reference/cloudformation/create-stack.html#options"
         , "# ResourceTypes: <list of aws resource types allowed in the template>"
         , ""
-        , "# shell commands to run prior the cfn stack operation"
-        , "# (not run by iidy-hs: create-stack, update-stack, create-changeset and"
-        , "# create-or-update refuse a file that sets it)"
+        , "# shell commands to run prior the cfn stack operation, in this file's"
+        , "# directory; handlebars values ({{ iidy.region }}, $defs and $imports names)"
+        , "# must be plain words: letters, digits and . _ / : @ + = , % - only"
         , "# CommandsBefore:"
         , "#   - make build # for example"
         ]

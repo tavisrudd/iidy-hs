@@ -391,16 +391,39 @@ All fields are optional except =StackName= and =Template=.
 | =UsePreviousTemplate=         | boolean           | Reuse the existing template during update                                          |
 | =UsePreviousParameterValues=  | list              | Parameter keys to carry forward from previous values                               |
 | =ApprovedTemplateLocation=    | string            | S3 location for the template approval workflow                                     |
-| =CommandsBefore=              | list              | Not run by iidy-hs (see below)                                                     |
+| =CommandsBefore=              | list              | Shell commands run before the stack operation (see below)                          |
 
 Fields marked "env map" accept either a string or a mapping of environment names to strings. The =--environment= flag selects which value to use.
 
-=CommandsBefore= is accepted but iidy-hs never runs its commands. Rust iidy
-and iidy-js run them through bash before =create-stack=, =update-stack=,
-=create-changeset= and =create-or-update=, so those four commands refuse a
-stack-args file that sets it rather than skip the commands silently: remove
-the field, or run the commands yourself before running iidy-hs. Every other
-command accepts the file and ignores the field.
+=CommandsBefore= lists shell commands that =create-stack=, =update-stack=,
+=create-changeset= and =create-or-update= run through bash, in the
+argsfile's directory, while loading the stack-args (before any
+CloudFormation call or confirmation prompt). Every other command ignores
+the field. Each entry is a string written in the file and may use
+Handlebars, for example:
+
+#+begin_src yaml
+$imports:
+  params: ssm-path:/myapp/params
+CommandsBefore:
+  - ./build.sh
+  - iidy_s3_upload dist/app.zip {{ params.bucket }} 'app-{{ filehash "dist/app.zip" }}.zip'
+#+end_src
+
+The context holds =iidy.command=, =iidy.environment=, =iidy.region=,
+=iidy.profile=, =iidy.stackName=, =iidy.stackArgs=, bare =region= and
+=environment=, and every =$defs= and =$imports= name; =filehash= and
+=filehashBase64= hash a file named by a literal path. Each command is
+expanded just before it runs, so =filehash= sees what earlier commands
+built, and imports are read again after the commands. Every substituted
+value must be a non-empty string of letters, digits and
+=. _ / : @ + = , % -= not starting with =-=; any other value refuses the
+run before the first command starts. Have a command read such a value
+itself instead (for example from an environment variable or with the =aws=
+CLI). The variables =iidy_profile=, =iidy_region= and =iidy_environment=
+and the bash functions =iidy_filehash=, =iidy_filehash_base64= and
+=iidy_s3_upload= are set for every command. A failing command stops the
+load. See =docs/SECURITY.org=, "=CommandsBefore=: No Value Becomes Code".
 
 --------------
 

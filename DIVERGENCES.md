@@ -551,27 +551,63 @@ pass can never change what its first `\b\d{12}\b` pass left, so iidy-hs
 uses the single pass. The TypeScript original has no masking and no
 `--mask-secrets` option.
 
-## CommandsBefore: Refused, Never Run
+## CommandsBefore: Values Checked, Expanded Per Command
 
-**Cause**: Intentional (Tavis, card C22); running it needs a trust design
-first (card C40).
+**Cause**: Intentional (Tavis, card C40, Option E of
+`notes/C40/report--commands-before-design.org`): no stack-args value may
+become shell code.
 
 Rust and iidy-js run each `CommandsBefore` entry through bash in the
-argsfile's directory, after expanding Handlebars with the `iidy` namespace,
-for `create-stack`, `update-stack`, `create-changeset` and
-`create-or-update`, and fail the load on a non-zero exit (Rust
-`src/cfn/stack_args.rs:277-313`, `should_process_commands_before` at
-`:483-490`, `process_commands_before` from `:493`; iidy-js
-`src/cfn/loadStackArgs.ts:137-166`, `src/cfn/runCommandSet.ts:11-67`). For
-every other command both drop the field.
+argsfile's directory for `create-stack`, `update-stack`, `create-changeset`
+and `create-or-update`, and drop the field for every other command (Rust
+`src/cfn/stack_args.rs:277-313`, `process_commands_before` from `:493`;
+iidy-js `src/cfn/loadStackArgs.ts:137-166`, `src/cfn/runCommandSet.ts:11-67`).
+iidy-hs runs them for the same commands, in the same directory, with the
+same `iidy_*` variables, bash helper functions, banners and failure text,
+and resolves imports again after them, as both do. It differs as follows.
 
-iidy-hs never runs the commands. For those four commands a stack-args file
-that sets `CommandsBefore` is refused before any stack operation, with an
-error naming the file, the field and the command, so a pre-deploy step (a
-build, a check, an upload) is never skipped silently. Every other command,
-and `render`, accepts the file; the field is parsed and ignored. An empty
-list (`CommandsBefore: []`) runs nothing in the originals and loads for every
-command.
+Against both:
+
+- Every value a `{{ ... }}` substitutes into a command must be a non-empty
+  string of `[A-Za-z0-9._/:@+=,%-]` that does not start with `-`; any other
+  value is refused (never quoted), naming the entry, the expression and the
+  value's source. Every command is expanded once with the file hashes
+  stubbed before the first one runs, so a refused value runs nothing.
+- An entry must be a string written in the stack-args file. A tagged entry,
+  an imported or computed list, and a `CommandsBefore` produced by a
+  computed key are refused before anything runs.
+- A `$defs` or `$imports` name that clashes with a built-in context name
+  (`iidy`, `region`, `environment`) is refused.
+- Stdin is inherited when it is a terminal and is `/dev/null` otherwise
+  (Rust closes it; iidy-js always inherits it).
+- Output is streamed (Rust buffers it until the command exits); in
+  `--output-mode json` the banners and the commands' stdout go to stderr.
+- `PKG_SKIP_EXECPATH_PATCH` (a Node packaging workaround) is not set.
+- A bare argsfile name runs the commands in `.`.
+
+Against Rust only:
+
+- Rust preprocesses the document (tags, `$defs`, `$imports`) into the
+  command text before expanding it with the `iidy` namespace, so its
+  commands can be built from computed values, and a `{{ iidy.region }}` in
+  an entry fails its first preprocess ("Variable error: 'iidy.region' not
+  found"). iidy-hs takes the entry as written and expands it once with the
+  iidy-js context (`iidy.*`, bare `region` and `environment`, every
+  `$defs` and `$imports` name).
+- Rust has no `filehash` or `filehashBase64` Handlebars helper (only the bash
+  functions) and expands every command before running any. iidy-hs has both
+  helpers (a literal path only, relative to the argsfile) and expands each
+  command just before it runs, so `filehash` sees what earlier commands
+  built.
+- A command killed by a signal reports "killed by signal N" (Rust: "exit
+  code -1").
+
+Against iidy-js only:
+
+- The `iidy_*` variables are set over the inherited environment (Rust
+  order); in iidy-js an inherited `iidy_region` wins.
+- A command killed by a signal fails the load; iidy-js treats it as success.
+- `filehash` takes a literal path only.
 
 ## `--debug`: Accepted, No Effect
 
