@@ -79,6 +79,7 @@ library
     Iidy.Cli.Help
     Iidy.Cli.Parser
     Iidy.Demo
+    Iidy.ShellRunner
     Iidy.Errors.JMESPath
     Iidy.Explain
     Iidy.Render

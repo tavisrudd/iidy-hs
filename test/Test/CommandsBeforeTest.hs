@@ -5,9 +5,11 @@ module Test.CommandsBeforeTest (commandsBeforeTests) where
 
 import Data.Aeson (Value (..))
 import Data.Aeson.KeyMap qualified as KM
+import Data.ByteString.Lazy qualified as BL
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.Text qualified as T
+import System.Exit (ExitCode (..))
 import System.FilePath (takeDirectory, (</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, testGroup)
@@ -19,12 +21,66 @@ import Iidy.Cfn.CommandsBefore.Expand (
     expandCommand,
     valueProblem,
  )
+import Iidy.Cfn.StackArgs.Credentials (readRawCommands)
+import Iidy.ShellRunner (bashProcess, exitDescription, runToExit)
+import Iidy.Yaml.Parser (parseYaml)
 
 commandsBeforeTests :: [TestTree]
 commandsBeforeTests =
     [ testGroup "value check" valueCheckTests
     , testGroup "expandCommand" expandTests
+    , testGroup "readRawCommands" classifierTests
+    , testGroup "shell runner" runnerTests
     ]
+
+-- | The shared runner reports exit codes and signals.
+runnerTests :: [TestTree]
+runnerTests =
+    [ testCase "an exit code comes back" $ do
+        code <- runToExit (bashProcess "exit 3" "." [])
+        code @?= ExitFailure 3
+        exitDescription code @?= "exit code 3"
+    , testCase "a killed command reports its signal" $ do
+        code <- runToExit (bashProcess "kill -9 $$" "." [])
+        code @?= ExitFailure (-9)
+        exitDescription code @?= "killed by signal 9"
+    , testCase "the command runs in the directory with only the given environment" $
+        withSystemTempDirectory "iidy-shell-runner" $ \dir -> do
+            code <- runToExit (bashProcess "printf '%s' \"$PWD:$ONLY:${HOME:-unset}\" > out" dir [("ONLY", "yes")])
+            code @?= ExitSuccess
+            out <- readFile (dir </> "out")
+            out @?= dir <> ":yes:unset"
+    ]
+
+-- | The entries as written: plain or templated strings only.
+classifierTests :: [TestTree]
+classifierTests =
+    [ testCase "plain and templated entries are read as written" $
+        classify "CommandsBefore:\n  - make\n  - echo {{ params.bucket }}\n"
+            @?= Right (Right ["make", "echo {{ params.bucket }}"])
+    , testCase "an absent, null or empty list is no commands" $ do
+        classify "StackName: s\n" @?= Right (Right [])
+        classify "CommandsBefore:\n" @?= Right (Right [])
+        classify "CommandsBefore: []\n" @?= Right (Right [])
+    , testCase "a tagged entry is refused, naming the entry" $
+        classify "$defs:\n  c: make\nCommandsBefore:\n  - make\n  - !$ c\n"
+            @?= Right (Left "CommandsBefore[1] is a preprocessing tag")
+    , testCase "an imported or tagged list is refused" $ do
+        classify "$imports:\n  cmds: file:cmds.yaml\nCommandsBefore: !$ cmds\n"
+            @?= Right (Left "CommandsBefore is a preprocessing tag")
+        classify "CommandsBefore: !$concat [[a], [b]]\n"
+            @?= Right (Left "CommandsBefore is a preprocessing tag")
+    , testCase "a non-string entry or a string list is refused" $ do
+        classify "CommandsBefore:\n  - {a: b}\n" @?= Right (Left "CommandsBefore[0] is a value that is not a string")
+        classify "CommandsBefore: make\n" @?= Right (Left "CommandsBefore is a string, not a list")
+    , testCase "a duplicated key is refused" $
+        classify "CommandsBefore: [a]\nCommandsBefore: [b]\n" @?= Right (Left "CommandsBefore appears more than once")
+    ]
+  where
+    classify :: BL.ByteString -> Either String (Either Text [Text])
+    classify yaml = case parseYaml yaml "stack-args.yaml" of
+        Left err -> Left (show err)
+        Right ast -> Right (readRawCommands ast)
 
 valueCheckTests :: [TestTree]
 valueCheckTests =

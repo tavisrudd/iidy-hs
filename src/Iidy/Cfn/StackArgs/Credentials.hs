@@ -16,6 +16,10 @@ module Iidy.Cfn.StackArgs.Credentials (
     readRawField,
     extractRawAwsFromAst,
 
+    -- * CommandsBefore as written
+    readRawCommands,
+    commandsBeforeKey,
+
     -- * Merging with the command line
     mergeAwsSettings,
     mergeSentinel,
@@ -25,6 +29,7 @@ module Iidy.Cfn.StackArgs.Credentials (
 
 import Control.Applicative ((<|>))
 import Data.Text (Text)
+import Data.Text qualified as T
 
 import Iidy.Aws.CredentialSource (AwsSettings (..))
 import Iidy.Yaml.Ast (YamlAst (..))
@@ -119,13 +124,54 @@ plainOrComputed :: Text -> YamlAst -> RawField
 plainOrComputed subject = \case
     AstPlainString t _ -> RawLiteral t
     AstTemplatedString t _ -> computed ("the handlebars template " <> t)
-    AstPreprocessingTag{} -> computed "a preprocessing tag"
-    AstCloudFormationTag _ _ -> computed "a CloudFormation tag"
-    AstUnknownTag _ _ -> computed "a tagged value"
-    AstImportedDocument _ _ -> computed "an imported document"
-    _other -> computed "a value that is not a string"
+    other -> computed (nonStringKind other)
   where
     computed what = RawComputed (subject <> " is " <> what)
+
+-- | What a raw node that is not a plain or templated string is.
+nonStringKind :: YamlAst -> Text
+nonStringKind = \case
+    AstPreprocessingTag{} -> "a preprocessing tag"
+    AstCloudFormationTag _ _ -> "a CloudFormation tag"
+    AstUnknownTag _ _ -> "a tagged value"
+    AstImportedDocument _ _ -> "an imported document"
+    _other -> "a value that is not a string"
+
+------------------------------------------------------------------------
+-- CommandsBefore as written
+------------------------------------------------------------------------
+
+-- | The @CommandsBefore@ key.
+commandsBeforeKey :: Text
+commandsBeforeKey = "CommandsBefore"
+
+{- | The @CommandsBefore@ entries as written in the raw top-level mapping,
+before preprocessing: each must be a plain or handlebars-templated string
+in a plain sequence under a plain, non-duplicated key. Anything else is
+'Left' a clause saying why (a tag, an imported document or another value
+as the list or as an entry). An absent or null key is no commands. A
+@CommandsBefore@ that only a computed key or merge produces is not seen
+here; the loader refuses it when preprocessing without the written key
+still yields one.
+-}
+readRawCommands :: YamlAst -> Either Text [Text]
+readRawCommands = \case
+    AstMapping pairs _ -> case [v | (AstPlainString k _, v) <- pairs, k == commandsBeforeKey] of
+        [] -> Right []
+        [AstNull _] -> Right []
+        [AstSequence entries _] -> traverse entry (zip [0 :: Int ..] entries)
+        [other] -> Left (commandsBeforeKey <> " is " <> listKind other)
+        _duplicates -> Left (commandsBeforeKey <> " appears more than once")
+    _notMapping -> Right []
+  where
+    entry (i, node) = case node of
+        AstPlainString t _ -> Right t
+        AstTemplatedString t _ -> Right t
+        other -> Left (commandsBeforeKey <> "[" <> T.pack (show i) <> "] is " <> nonStringKind other)
+    listKind = \case
+        AstPlainString _ _ -> "a string, not a list"
+        AstTemplatedString _ _ -> "a handlebars template, not a list"
+        other -> nonStringKind other
 
 {- | The literal credential fields of a raw 'YamlAst' (see 'readRawField');
 a field that is absent or not known before preprocessing is 'Nothing'.

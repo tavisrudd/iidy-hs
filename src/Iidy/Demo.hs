@@ -45,11 +45,11 @@ import System.Process (
     CreateProcess (..),
     StdStream (..),
     createProcess,
-    proc,
     waitForProcess,
  )
 import Text.Regex.TDFA ((=~))
 
+import Iidy.ShellRunner (bashProcess, runToExit)
 import Iidy.Types (ColorChoice (..))
 import Iidy.Yaml.Engine (PreprocessResult (..))
 import Iidy.Yaml.Errors.Conversion (formatParseErrorEnhanced, formatPreprocessErrorEnhanced)
@@ -224,13 +224,7 @@ execShell cmd workDir envMap maskSecrets = do
 
 execDirect :: Text -> FilePath -> [(String, String)] -> IO ()
 execDirect cmd workDir envList = do
-    (_, _, _, ph) <-
-        createProcess
-            (proc "/usr/bin/env" ["bash", "-c", T.unpack cmd])
-                { cwd = Just workDir
-                , env = Just envList
-                }
-    exitCode <- waitForProcess ph
+    exitCode <- runToExit (bashProcess cmd workDir envList)
     unless (exitCode == ExitSuccess) $
         ioError (userError $ "command failed: " ++ T.unpack cmd)
 
@@ -238,10 +232,8 @@ execWithMasking :: Text -> FilePath -> [(String, String)] -> IO ()
 execWithMasking cmd workDir envList = do
     (_, Just hOut, Just hErr, ph) <-
         createProcess
-            (proc "/usr/bin/env" ["bash", "-c", T.unpack cmd])
-                { cwd = Just workDir
-                , env = Just envList
-                , std_out = CreatePipe
+            (bashProcess cmd workDir envList)
+                { std_out = CreatePipe
                 , std_err = CreatePipe
                 }
     -- Read output, mask, and write
