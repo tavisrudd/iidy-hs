@@ -1,0 +1,46 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C54
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   Found during tavis-nix C103: nix build of iidy-hs fails before and after that flake change
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 8fc8195b-f851-4d53-8444-c1aefa34beb6
+:ID: org:01a1f01f-ec67-7432-ad8a-ed5bb75d9df4
+:ADDED: [2026-11-18 Wed 12:26]
+:END:
+#+title: C54 — Nix package build fails tests in the sandbox: tests spawn /usr/bin/env
+#+date: 2026-11-18
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1f01f-ec67-7432-ad8a-ed5a7e2fa7c2
+:ADDED: [2026-11-18 Wed 12:26]
+:END:
+
+=nix build= of the package fails its check phase: 21 of 2435 tests fail,
+all with =/usr/bin/env: createProcess: posix_spawnp: does not exist=.
+=Iidy.ShellRunner= runs commands through =proc "/usr/bin/env" ["bash",
+"-c", ...]=, and the Nix build sandbox has no =/usr/bin/env=. Same result
+before and after the C53 flake change. The cabal test run in the dev shell
+passes, since the host has =/usr/bin/env=.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1f01f-ec67-7432-ad8a-ed59a2a4b259
+:ADDED: [2026-11-18 Wed 12:26]
+:END:
+
+Decide between resolving =bash= on =PATH= in =ShellRunner= (then add
+=bash= to the check inputs) and skipping those tests in the Nix build.
+Gate: =nix build= of the package passes its check phase.
+
+* TODO Nix package build fails tests in the sandbox: tests spawn /usr/bin/env
+:PROPERTIES:
+:ID: org:01a1f01f-ec67-7432-ad8a-ed588ceb6e51
+:ADDED: [2026-11-18 Wed 12:26]
+:END:
+
+Not started.
