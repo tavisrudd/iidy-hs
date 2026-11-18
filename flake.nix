@@ -10,6 +10,13 @@
       supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
       pkgsFor = system: nixpkgs.legacyPackages.${system};
+      # Root build dirs stay out of the store copy even when this flake is
+      # referenced as path:, which copies ignored files too.
+      source = nixpkgs.lib.cleanSourceWith {
+        src = nixpkgs.lib.cleanSource ./.;
+        filter = path: _type: !(builtins.elem path
+          (map toString [ ./dist ./dist-newstyle ./.direnv ./.hie ./iidy-hs ./iidy-rs ]));
+      };
       # GHC 9.12 package set. Only leaf packages (nothing else in the set
       # depends on them) are moved past the nixpkgs default version; see
       # notes/C3/index.org for the packages held back and why.
@@ -69,7 +76,7 @@
       packages = forAllSystems (system:
         let pkgs = pkgsFor system;
         in {
-          default = ((hpkgsFor pkgs).callCabal2nix "iidy-hs" self {}).overrideAttrs (old: {
+          default = ((hpkgsFor pkgs).callCabal2nix "iidy-hs" source {}).overrideAttrs (old: {
             nativeCheckInputs = (old.nativeCheckInputs or []) ++ [ pkgs.git ];
             # The Git import test needs a local commit; flake sources omit .git.
             preCheck = (old.preCheck or "") + ''

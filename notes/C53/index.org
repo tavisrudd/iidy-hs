@@ -1,0 +1,57 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C53
+:LANE:     main
+:TODO_STATE: DONE
+:MODE:     CONTRACT
+:ORIGIN:   Tavis via tavis-nix C103 store-bloat review
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: 8fc8195b-f851-4d53-8444-c1aefa34beb6
+:ID: org:01a1f01f-ec48-7103-898c-ad5f8db51e30
+:ADDED: [2026-11-18 Wed 12:26]
+:END:
+:LOGBOOK:
+- Card state TODO → DONE [2026-11-18 Wed 12:26]
+  Note: path: source holds no build dir; pre-commit suite passes
+  Agent: opus-5.5-medium
+  Session-ID: 8fc8195b-f851-4d53-8444-c1aefa34beb6
+:END:
+#+title: C53 — Keep dist, dist-newstyle, .hie and root build symlinks out of the Nix package source
+#+date: 2026-11-18
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1f01f-ec48-7103-898c-ad5ef90eb4a6
+:ADDED: [2026-11-18 Wed 12:26]
+:END:
+
+The package passed =self= to =callCabal2nix=. Referenced as =path:=, a
+flake copies ignored files too, so =dist/=, =dist-newstyle/=, =.hie/= and
+the =iidy-hs=/=iidy-rs= symlinks at the root could land in the store.
+Tavis asked for build dirs to stay out of the store (tavis-nix C103).
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1f01f-ec48-7103-898c-ad5dd0a8213e
+:ADDED: [2026-11-18 Wed 12:26]
+:END:
+
+=flake.nix= only. Gate: evaluated as =path:=, the package source holds
+none of those entries; the pre-commit test suite passes.
+
+* DONE Keep dist, dist-newstyle, .hie and root build symlinks out of the Nix package source
+:PROPERTIES:
+:ID: org:01a1f01f-ec48-7103-898c-ad5ce90038d4
+:ADDED: [2026-11-18 Wed 12:26]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-18 Wed 12:26] \\
+  Agent: opus-5.5-medium
+  Session-ID: 8fc8195b-f851-4d53-8444-c1aefa34beb6
+:END:
+
+=source= is =cleanSource= plus a filter on those root paths (anchored at
+the root, not matched by name). Evaluated as =path:=, the package source
+holds no build dir. The Nix build's own test failures are unchanged by this
+(see C54).
