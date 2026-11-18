@@ -156,12 +156,12 @@ still yields one.
 -}
 readRawCommands :: YamlAst -> Either Text [Text]
 readRawCommands = \case
-    AstMapping pairs _ -> case [v | (AstPlainString k _, v) <- pairs, k == commandsBeforeKey] of
-        [] -> Right []
-        [AstNull _] -> Right []
-        [AstSequence entries _] -> traverse entry (zip [0 :: Int ..] entries)
-        [other] -> Left (commandsBeforeKey <> " is " <> listKind other)
-        _duplicates -> Left (commandsBeforeKey <> " appears more than once")
+    AstMapping pairs _ -> case plainKeyMatches commandsBeforeKey pairs of
+        KeyFound (AstNull _) -> Right []
+        KeyFound (AstSequence entries _) -> traverse entry (zip [0 :: Int ..] entries)
+        KeyFound other -> Left (commandsBeforeKey <> " is " <> listKind other)
+        KeyDuplicated -> Left (commandsBeforeKey <> " appears more than once")
+        _missing -> Right []
     _notMapping -> Right []
   where
     entry (i, node) = case node of
@@ -195,14 +195,20 @@ data KeyLookup
 plainKeyLookup :: Text -> [(YamlAst, YamlAst)] -> KeyLookup
 plainKeyLookup name pairs
     | not (all (isPlainKey . fst) pairs) = KeyNotPlain
-    | otherwise = case [v | (AstPlainString k _, v) <- pairs, k == name] of
-        [] -> KeyMissing
-        [v] -> KeyFound v
-        _duplicates -> KeyDuplicated
+    | otherwise = plainKeyMatches name pairs
   where
     isPlainKey = \case
         AstPlainString _ _ -> True
         _other -> False
+
+{- | Look a key up among the plain-string keys only, failing closed on
+duplicates; a non-plain key is the caller's concern.
+-}
+plainKeyMatches :: Text -> [(YamlAst, YamlAst)] -> KeyLookup
+plainKeyMatches name pairs = case [v | (AstPlainString k _, v) <- pairs, k == name] of
+    [] -> KeyMissing
+    [v] -> KeyFound v
+    _duplicates -> KeyDuplicated
 
 ------------------------------------------------------------------------
 -- Merging with the command line

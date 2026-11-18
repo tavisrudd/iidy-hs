@@ -204,6 +204,7 @@ test-suite iidy-hs-test
     Test.HandlebarsTest
     Test.CommandsBeforeTest
     Test.CommandsBeforeLoadTest
+    Test.ShellRunnerTest
     Test.EmitterTest
     Test.FixtureTest
     Test.ErrorFixtureTest

@@ -58,6 +58,7 @@ import Test.ResourceLimitsTest (resourceLimitsTests)
 import Test.S3ObjectsTest (s3ObjectsTests)
 import Test.SanitizeTest (sanitizeTests)
 import Test.SecurityControlsTest (securityControlsTests)
+import Test.ShellRunnerTest (shellRunnerTests)
 import Test.SpecConformanceTest (specConformanceTests)
 import Test.StackArgsBootstrapTest (stackArgsBootstrapTests)
 import Test.StackArgsFieldsTest (stackArgsFieldsTests)
@@ -87,6 +88,7 @@ main = do
             , testGroup "Handlebars" handlebarsTests
             , testGroup "CommandsBefore" commandsBeforeTests
             , testGroup "CommandsBefore load" commandsBeforeLoadTests
+            , testGroup "ShellRunner" shellRunnerTests
             , testGroup "Emitter" emitterTests
             , testGroup "Fixtures" fixtureTests
             , testGroup "ErrorFixtures" errorTests

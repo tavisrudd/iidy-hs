@@ -10,11 +10,12 @@ import Data.IORef (readIORef)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
-import Test.Tasty (TestTree)
+import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
 import Iidy.Aws.CredentialSource (AwsSettings (..))
 import Iidy.Cfn.CommandsBefore (defaultCommandsBeforeSettings)
+import Iidy.Cfn.StackArgs.Credentials (readRawCommands)
 import Iidy.Cfn.StackArgsBootstrap (
     checkImportSettings,
     importSettingsMismatch,
@@ -30,7 +31,10 @@ import Test.MockAws (MockAws (..), mockAccessKey, mockSecretKey, mockSessionToke
 import Test.Shared (noAwsSettings)
 
 stackArgsBootstrapTests :: [TestTree]
-stackArgsBootstrapTests =
+stackArgsBootstrapTests = testGroup "readRawCommands" rawCommandsTests : credentialTests
+
+credentialTests :: [TestTree]
+credentialTests =
     [ testCase "literal Profile and Region with an ssm: import load under those literals" $ do
         run <- loadWithMock noAwsSettings "literal-ssm.yaml"
         loaded <- expectRight (bsResult run)
@@ -221,3 +225,35 @@ expectJust = maybe (assertFailure "expected a refusal") pure
 -- | The settings of @literal-ssm.yaml@.
 literalSettings :: AwsSettings
 literalSettings = AwsSettings (Just "literal-profile") (Just "eu-west-1") Nothing
+
+-- | The entries as written: plain or templated strings only.
+rawCommandsTests :: [TestTree]
+rawCommandsTests =
+    [ testCase "plain and templated entries are read as written" $
+        classify "CommandsBefore:\n  - make\n  - echo {{ params.bucket }}\n"
+            @?= Right (Right ["make", "echo {{ params.bucket }}"])
+    , testCase "an absent, null or empty list is no commands" $ do
+        classify "StackName: s\n" @?= Right (Right [])
+        classify "CommandsBefore:\n" @?= Right (Right [])
+        classify "CommandsBefore: []\n" @?= Right (Right [])
+    , testCase "a tagged entry is refused, naming the entry" $
+        classify "$defs:\n  c: make\nCommandsBefore:\n  - make\n  - !$ c\n"
+            @?= Right (Left "CommandsBefore[1] is a preprocessing tag")
+    , testCase "an imported or tagged list is refused" $ do
+        classify "$imports:\n  cmds: file:cmds.yaml\nCommandsBefore: !$ cmds\n"
+            @?= Right (Left "CommandsBefore is a preprocessing tag")
+        classify "CommandsBefore: !$concat [[a], [b]]\n"
+            @?= Right (Left "CommandsBefore is a preprocessing tag")
+    , testCase "a non-string entry or a string list is refused" $ do
+        classify "CommandsBefore:\n  - {a: b}\n" @?= Right (Left "CommandsBefore[0] is a value that is not a string")
+        classify "CommandsBefore: make\n" @?= Right (Left "CommandsBefore is a string, not a list")
+    , testCase "a templated key elsewhere does not hide the written list" $
+        classify "\"{{k}}\": x\nCommandsBefore: [make]\n" @?= Right (Right ["make"])
+    , testCase "a duplicated key is refused" $
+        classify "CommandsBefore: [a]\nCommandsBefore: [b]\n" @?= Right (Left "CommandsBefore appears more than once")
+    ]
+  where
+    classify :: String -> Either String (Either Text [Text])
+    classify yaml = case parseYaml (BLC.pack yaml) "stack-args.yaml" of
+        Left err -> Left (show err)
+        Right ast -> Right (readRawCommands ast)
