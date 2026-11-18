@@ -190,6 +190,17 @@ expandTests =
                     assertRefused "literal" r
                 )
                 [StubHashes, HashFiles]
+    , testCase "filehash only as a whole output: an argument or block condition is refused" $
+        withContext $ \cc ->
+            mapM_
+                ( \command -> do
+                    r <- expandCommand cc StubHashes 0 command
+                    assertRefused "whole output" r
+                )
+                [ "echo {{#unless (eq (filehash 'f') '0000')}}{{params.spaced}}{{/unless}}"
+                , "echo {{concat 'a-' (filehash 'f')}}"
+                , "echo {{#if (filehashBase64 'f')}}x{{/if}}"
+                ]
     , testCase "a template error names the entry" $
         withContext $ \cc -> do
             r <- expandCommand cc StubHashes 3 "echo {{unknownHelper x y}}"

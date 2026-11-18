@@ -12,6 +12,7 @@ module Iidy.Yaml.Handlebars.Engine (
     OutputSite (..),
     OutputCheck,
     helperCallArgs,
+    HelperCall (..),
     isTruthy,
     InterpolateError (..),
     HelperFn,
@@ -93,11 +94,19 @@ interpolateChecked check helpers ctx template
         parts <- parseTemplate template
         renderParts (Renderer check helpers) ctx parts
 
-{- | Every call of the named helper in a template, in order, with its
-arguments: a string literal is 'Just' its text, any other argument
-'Nothing'. Calls inside sub-expressions and block helpers count.
+-- | One call of a helper in a template.
+data HelperCall = HelperCall
+    { hcArgs :: ![Maybe Text]
+    -- ^ each argument: a string literal is 'Just' its text, any other 'Nothing'
+    , hcWholeOutput :: !Bool
+    -- ^ the whole of a @{{ ... }}@ output, not an argument or block condition
+    }
+    deriving stock (Show, Eq)
+
+{- | Every call of the named helper in a template, in order. Calls inside
+sub-expressions and block helpers count.
 -}
-helperCallArgs :: Text -> Text -> Either InterpolateError [[Maybe Text]]
+helperCallArgs :: Text -> Text -> Either InterpolateError [HelperCall]
 helperCallArgs name template
     | not (T.isInfixOf "{{" template) = Right []
     | otherwise = concatMap partCalls <$> parseTemplate template
@@ -105,15 +114,15 @@ helperCallArgs name template
     partCalls = \case
         Literal _ -> []
         Comment -> []
-        Output expr -> exprCalls expr
+        Output expr -> exprCalls True expr
         Block _ expr body elseBody ->
-            exprCalls expr <> concatMap partCalls body <> maybe [] (concatMap partCalls) elseBody
-    exprCalls = \case
-        HelperExpr n args -> call n args
-        SubExpr n args -> call n args
+            exprCalls False expr <> concatMap partCalls body <> maybe [] (concatMap partCalls) elseBody
+    exprCalls whole = \case
+        HelperExpr n args -> call whole n args
+        SubExpr n args -> call False n args
         _leaf -> []
-    call n args =
-        [map literalArg args | n == name] <> concatMap exprCalls args
+    call whole n args =
+        [HelperCall (map literalArg args) whole | n == name] <> concatMap (exprCalls False) args
     literalArg = \case
         LitStr s -> Just s
         _other -> Nothing

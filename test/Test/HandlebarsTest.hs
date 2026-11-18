@@ -10,6 +10,7 @@ import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
 import Iidy.Yaml.Handlebars.Engine (
+    HelperCall (..),
     InterpolateError (..),
     OutputSite (..),
     defaultHelpers,
@@ -91,7 +92,10 @@ outputCheckTests =
         interpolate defaultHelpers ctx "{{bad}}" @?= Right "BAD"
     , testCase "helperCallArgs finds calls in outputs, sub-expressions and blocks" $
         helperCallArgs "filehash" "{{filehash 'a.zip'}} {{concat (filehash \"b\") x}} {{#if x}}{{filehash p.q}}{{/if}} {{filehash}}"
-            @?= Right [[Just "a.zip"], [Just "b"], [Nothing]]
+            @?= Right [HelperCall [Just "a.zip"] True, HelperCall [Just "b"] False, HelperCall [Nothing] True]
+    , testCase "helperCallArgs marks a call in a block condition as not a whole output" $
+        helperCallArgs "filehash" "{{#unless (eq (filehash 'f') '0')}}x{{/unless}}"
+            @?= Right [HelperCall [Just "f"] False]
     , testCase "helperCallArgs passes on a parse error" $
         case helperCallArgs "filehash" "{{filehash 'a" of
             Left _ -> pure ()

@@ -195,6 +195,21 @@ refusalTests =
                     o <- load dir . T.unlines $ header <> ["$defs:", "  f: app.zip", "CommandsBefore:", "  - touch marker", "  - echo {{filehash f}}"]
                     refused ["CommandsBefore[1]", "literal path"] o
                     assertNoMarker dir
+           , testCase "a filehash that could steer a block is refused before anything runs" $
+                withSystemTempDirectory "iidy-cb" $ \dir -> do
+                    TIO.writeFile (dir </> "f") "content"
+                    o <-
+                        load dir . T.unlines $
+                            header
+                                <> [ "$defs:"
+                                   , "  bad: \"x; touch PWNED\""
+                                   , "CommandsBefore:"
+                                   , "  - touch marker"
+                                   , "  - echo {{#unless (eq (filehash \"f\") \"" <> T.replicate 64 "0" <> "\")}}{{bad}}{{/unless}}"
+                                   ]
+                    assertNoMarker dir
+                    hasFile dir "PWNED" >>= assertBool "the injected command ran" . not
+                    refused ["CommandsBefore[1]", "whole output"] o
            , testCase "a $defs or $imports name that clashes with a built-in name is refused" $
                 mapM_
                     ( \name -> withSystemTempDirectory "iidy-cb" $ \dir -> do

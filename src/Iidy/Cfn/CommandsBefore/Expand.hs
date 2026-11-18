@@ -26,7 +26,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 
-import Iidy.Yaml.Handlebars.Engine (InterpolateError (..), OutputSite (..), defaultHelpers, helperCallArgs, interpolateChecked)
+import Iidy.Yaml.Handlebars.Engine (HelperCall (..), InterpolateError (..), OutputSite (..), defaultHelpers, helperCallArgs, interpolateChecked)
 import Iidy.Yaml.Handlebars.Helpers (fileHashHelperNames, fileHashHelpers)
 import Iidy.Yaml.Imports.Loaders.File (loadFilehashImport)
 import Iidy.Yaml.Imports.Types (ImportData (..), ImportError (..))
@@ -74,8 +74,11 @@ expandCommand cc mode index command = runExceptT $ do
 entryName :: Int -> Text
 entryName index = "CommandsBefore[" <> T.pack (show index) <> "]"
 
-{- | The literal path of every file hash helper call, keyed by helper name;
-a call whose path is not one string literal is refused.
+{- | The literal path of every file hash helper call, keyed by helper name.
+A call must be the whole of a @{{ ... }}@ output with one literal path: as
+a helper argument, sub-expression or block condition its result could make
+the real expansion render something the dry run did not check, so it is
+refused, as is a computed path.
 -}
 literalHashPaths :: Text -> Either Text [(Text, Text)]
 literalHashPaths command = concat <$> traverse pathsOf fileHashHelperNames
@@ -83,15 +86,24 @@ literalHashPaths command = concat <$> traverse pathsOf fileHashHelperNames
     pathsOf name = case helperCallArgs name command of
         Left (InterpolateError err) -> Left err
         Right calls -> traverse (literalPath name) calls
-    literalPath name = \case
-        [Just path] -> Right (name, path)
-        _computed ->
+    literalPath name call
+        | not (hcWholeOutput call) =
             Left $
                 "{{"
                     <> name
-                    <> "}} takes one literal path in quotes, for example {{"
-                    <> name
-                    <> " \"dist/app.zip\"}}; a computed path is refused"
+                    <> "}} is allowed only as a whole output, as in "
+                    <> example name
+                    <> "; it is refused as a helper argument, sub-expression or block condition, where the dry run with stand-in hashes could render something else"
+        | otherwise = case hcArgs call of
+            [Just path] -> Right (name, path)
+            _computed ->
+                Left $
+                    "{{"
+                        <> name
+                        <> "}} takes one literal path in quotes, for example "
+                        <> example name
+                        <> "; a computed path is refused"
+    example name = "{{" <> name <> " \"dist/app.zip\"}}"
 
 -- | A stand-in hash of the right form, for the dry run.
 stubHash :: Text -> Text
