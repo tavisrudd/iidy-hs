@@ -641,9 +641,26 @@ loadStackArgs(argsfilePath, environment, operation, cliAws, remoteImports, mAwsE
        cdcStackArgsAssumeRoleArn = argsfileAws.assumeRoleArn
      }
   11. stackArgs = valueToStackArgs(withEnvValues)  -- validates unknown keys, parses fields
-  12. if stackArgs.commandsBefore is a non-empty list and operation in
-        {create-stack, update-stack, create-changeset, create-or-update}:
-        error("CommandsBefore in <argsfile> is not supported: ...")  -- never run; see DIVERGENCES.md
+  12. if operation in {create-stack, update-stack, create-changeset, create-or-update}:
+        -- CommandsBefore (Iidy.Cfn.CommandsBefore; see docs/SECURITY.org and DIVERGENCES.md).
+        -- These steps run between steps 2 and 3; step 3 then preprocesses ast'.
+        commands = readRawCommands(ast)   -- strings written in the file, else REFUSE
+        if commands non-empty:
+          (pass1, vars) = preprocess(ast without CommandsBefore)
+          REFUSE if pass1 still has CommandsBefore (a computed key)
+          REFUSE if vars names a built-in (iidy, region, environment)
+          context = iidy.{command, environment, region (resolved), profile,
+                    stackName (CLI first), stackArgs = pass1}, region,
+                    environment, vars
+          for each command: dry-run expand with stub file hashes; every
+            substituted value must match [A-Za-z0-9._/:@+=,%-]+, not start
+            with -, else REFUSE (nothing has run)
+          for each command: expand with real file hashes, bash -c in the
+            argsfile directory, iidy_* and helper functions over the
+            inherited env; non-zero exit or signal: ERROR, later ones skipped
+          ast' = ast with CommandsBefore = the expanded commands
+        REFUSE if the final stackArgs.commandsBefore differs from what ran
+      other operations: the field is parsed and never run
   13. return (stackArgs, mergedAws, detectionCtx)
 #+end_src
 
