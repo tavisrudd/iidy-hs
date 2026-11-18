@@ -596,18 +596,27 @@ Against Rust only:
   `$defs` and `$imports` name).
 - Rust has no `filehash` or `filehashBase64` Handlebars helper (only the bash
   functions) and expands every command before running any. iidy-hs has both
-  helpers (a literal path only, relative to the argsfile) and expands each
+  helpers (a literal path only, relative to the argsfile, as a whole
+  `{{ ... }}` output) and expands each
   command just before it runs, so `filehash` sees what earlier commands
   built.
 - A command killed by a signal reports "killed by signal N" (Rust: "exit
   code -1").
+- `iidy.stackName` prefers the stack name given on the command line, as
+  iidy-js does (`loadStackArgs.ts:157`); Rust uses the file's `StackName`.
+- With no region resolved (no `--region`, `Region`, `AWS_REGION` or
+  `AWS_DEFAULT_REGION`), the commands still run with `iidy_region` empty
+  (and a `{{ iidy.region }}` is refused as empty); Rust fails the load
+  before the commands (`stack_args.rs:258`). iidy-hs then fails when it
+  builds the AWS environment, after the commands ran.
 
 Against iidy-js only:
 
 - The `iidy_*` variables are set over the inherited environment (Rust
   order); in iidy-js an inherited `iidy_region` wins.
 - A command killed by a signal fails the load; iidy-js treats it as success.
-- `filehash` takes a literal path only.
+- `filehash` takes a literal path only, and only as a whole `{{ ... }}`
+  output (not as a helper argument or block condition).
 
 ## `--debug`: Accepted, No Effect
 
