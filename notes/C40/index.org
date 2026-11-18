@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C40
 :LANE:     main
-:TODO_STATE: STARTED
+:TODO_STATE: DONE
 :CARD_PRIORITY: C
 :MODE:     CONTRACT
 :ORIGIN:   C22 decision, Tavis 2026-11-16
@@ -13,6 +13,9 @@
 :END:
 :CLOCK:
 CLOCK: [2026-11-17 Tue 14:45]--[2026-11-17 Tue 14:49] => 0:04
+CLOCK: [2026-11-17 Tue 17:21]--[2026-11-17 Tue 17:32] => 0:11
+CLOCK: [2026-11-17 Tue 17:32]--[2026-11-17 Tue 17:43] => 0:11
+CLOCK: [2026-11-17 Tue 17:50]--[2026-11-17 Tue 17:56] => 0:06
 :END:
 :LOGBOOK:
 - Card state TODO → STARTED [2026-11-17 Tue 14:35]
@@ -33,6 +36,28 @@ CLOCK: [2026-11-17 Tue 14:45]--[2026-11-17 Tue 14:49] => 0:04
   Agent: opus-5.5-medium
   Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
 - Card state TODO → STARTED [2026-11-17 Tue 16:19]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
+- Clock-in [2026-11-17 Tue 17:21]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a81b151dc896f9845
+- Clock-out [2026-11-17 Tue 17:32]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a81b151dc896f9845
+- Clock-in [2026-11-17 Tue 17:32]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a81b151dc896f9845
+- Clock-out [2026-11-17 Tue 17:43]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a81b151dc896f9845
+- Clock-in [2026-11-17 Tue 17:50]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a81b151dc896f9845
+- Clock-out [2026-11-17 Tue 17:56]
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a81b151dc896f9845
+- Card state STARTED → DONE [2026-11-17 Tue 17:58]
+  Note: Landed 92da60c..aa1000b (Option E: CommandsBefore runs for the four deploy operations; every substituted value checked against a safe set, dry run before any command, filehash only as a whole output, shared shell runner; docs and divergences); security review by an Opus reviewer, fix round re-reviewed clean
   Agent: opus-5.5-medium
   Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
 :END:
@@ -136,31 +161,31 @@ Done when:
   directory the command gets, and what the output and failure behaviour is,
   with the Rust and TypeScript references above. Tavis approves it
   (Option E, 2026-11-17).
-- [ ] A command using a =$defs= value, an import by name, =iidy.region=
+- [X] A command using a =$defs= value, an import by name, =iidy.region=
   and =filehash= of a file an earlier command creates runs with the
   expected expanded text, in the argsfile directory, with the =iidy_*=
   variables set (tests with harmless commands writing marker files under a
   temporary directory; no network, no AWS).
-- [ ] Refused before anything runs, each with a test that checks no marker
+- [X] Refused before anything runs, each with a test that checks no marker
   file appears: a value containing each class of metacharacter (space,
   quote, =$=, backquote, =;=, =|=, =&=, =<=, newline, =*=), a value starting
   with =-=, an empty value, a tagged entry, an imported or merged entry, and
   =filehash= with a non-literal path.
-- [ ] A failing command stops the load before any AWS call with its exit
+- [X] A failing command stops the load before any AWS call with its exit
   code; later commands do not run. A killed command fails too.
-- [ ] =--output-mode json= keeps stdout valid JSON while commands print.
-- [ ] Stdin: a test pins =/dev/null= when stdin is not a terminal.
-- [ ] Imports resolve after the commands: a =filehash:= import of a file
+- [X] =--output-mode json= keeps stdout valid JSON while commands print.
+- [X] Stdin: a test pins =/dev/null= when stdin is not a terminal.
+- [X] Imports resolve after the commands: a =filehash:= import of a file
   the first command writes sees the new content.
-- [ ] C22's refusal is removed for the four operations; =render= and
+- [X] C22's refusal is removed for the four operations; =render= and
   =delete-stack= still ignore the field.
-- [ ] =docs/SECURITY.org= replaces "=CommandsBefore= Is Never Run" with the
+- [X] =docs/SECURITY.org= replaces "=CommandsBefore= Is Never Run" with the
   rule, what it blocks and what it does not (a value still controls data,
   for example which bucket an upload goes to); =docs/getting-started.org=,
   the init template comment and =DIVERGENCES.md= (against Rust: no
   =filehash= helper and expansion before the commands; against iidy-js:
   values checked, stdin rule, env precedence) are updated.
-- [ ] No duplicated runner or renderer (the reviewer checks); modules under
+- [X] No duplicated runner or renderer (the reviewer checks); modules under
   about 500 lines; build warning-free, full suite green, commits name C40.
 
 Stop and record if: the engine hook needs more than an output check in
@@ -237,10 +262,15 @@ design note after Tavis named the kind of file that must keep working. The
 three defaults: json-mode stdout to stderr and streaming as proposed; stdin
 inherited when it is a terminal, =/dev/null= otherwise (supervisor's call).
 
-* TODO Value check hook and filehash helpers in the Handlebars engine
+* DONE Value check hook and filehash helpers in the Handlebars engine
 :PROPERTIES:
 :ID: org:01a1eb97-724c-7732-9cf6-52900183769a
 :ADDED: [2026-11-17 Tue 15:18]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 17:31] \\
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a81b151dc896f9845
 :END:
 Add an output-check parameter to the engine's =Output= rendering
 (=renderPart=) and the =filehash= / =filehashBase64= helpers fed by an IO
@@ -248,20 +278,409 @@ pre-pass that hashes literal path arguments (a non-literal path is
 refused). Existing callers keep today's behaviour. Unit tests for the safe
 character set and the refusal message.
 
-* TODO Classify, dry-run and run CommandsBefore in the stack-args loader
+** Existing owners found (worker claude-C40, 2026-11-17)
+:PROPERTIES:
+:ID: org:01a1ec0a-850a-719e-8393-58e96b5d52b2
+:ADDED: [2026-11-17 Tue 17:24]
+:END:
+- Literal-or-computed classifier: =readRawField=, =plainOrComputed= and
+  =plainKeyLookup= in =src/Iidy/Cfn/StackArgs/Credentials.hs=.
+- Shell runner: =execShell=, =execDirect= and =execWithMasking= in
+  =src/Iidy/Demo.hs= (=/usr/bin/env bash -c=, =cwd=, explicit =env=).
+- Handlebars renderer: =renderPart= / =renderParts= / =renderBlock= in
+  =src/Iidy/Yaml/Handlebars/Engine.hs=; block bodies render through
+  =renderParts= and so through =renderPart=, so an output check there sees
+  every =Output= part, inside =if=, =unless=, =each= and =with= too.
+- File hashing: =loadFilehashImport= in
+  =src/Iidy/Yaml/Imports/Loaders/File.hs= (the =filehash:= and
+  =filehash-base64:= imports: SHA-256 of a file, or of a directory's sorted
+  file hashes, path relative to the importing document's directory). The
+  helpers call it with ="filehash:" <> path= and the argsfile as base, so
+  the hashing, the directory walk and the base64 form are not repeated.
+- Json output mode: =goOutputMode= in =src/Iidy/Cli.hs=, read by
+  =mkOutputDispatch= in =src/Iidy/Output/Manager.hs=; the stack-args load
+  is called from =src/Iidy/Cfn/Runner.hs= through
+  =src/Iidy/Cfn/StackArgsBootstrap.hs=, neither in the allowed paths (see
+  the question under the next task).
+
+** Tests first and result (worker claude-C40, 2026-11-17)
+:PROPERTIES:
+:ID: org:01a1ec11-44f9-75c1-8607-aa62439c2020
+:ADDED: [2026-11-17 Tue 17:31]
+:END:
+Failing run first: with the new tests in =test/Test/HandlebarsTest.hs=
+(output check, block helpers, =helperCallArgs=, =fileHashHelpers=) and the
+new =test/Test/CommandsBeforeTest.hs= (value check, =expandCommand=) and no
+production change, =cabal build iidy-hs-test= fails: "Module
+'Iidy.Yaml.Handlebars.Helpers' does not export 'fileHashHelpers'" (and the
+missing =interpolateChecked=, =OutputSite=, =helperCallArgs= and
+=Iidy.Cfn.CommandsBefore.Expand=).
+
+Implemented:
+- =Engine.hs=: =interpolateChecked= takes an =OutputCheck=
+  (=OutputSite -> Text -> Either Text ()=); =renderPart= applies it to each
+  =Output= value. Block bodies render through =renderParts=, so outputs
+  inside =if=, =unless=, =each=, =with= and =else= are checked (tested); no
+  bypass found. =interpolate= is =interpolateChecked= with a check that
+  accepts everything, so existing callers are unchanged.
+  =helperCallArgs= lists a helper's calls with literal-or-not arguments.
+- =Helpers.hs=: =fileHashHelpers= over a precomputed lookup.
+- New =src/Iidy/Cfn/CommandsBefore/Expand.hs=: =valueProblem= (the safe set,
+  leading =-=, empty), =expandCommand= with =StubHashes= (dry run) or
+  =HashFiles= (=loadFilehashImport= per literal path); a non-literal
+  =filehash= path is refused in both modes.
+Focused run: =-p "/Handlebars/ || /CommandsBefore/"=, 59 tests pass.
+
+* DONE Classify, dry-run and run CommandsBefore in the stack-args loader
 :PROPERTIES:
 :ID: org:01a1eb97-724c-7732-9cf6-528f760b2495
 :ADDED: [2026-11-17 Tue 15:18]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 17:43] \\
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a81b151dc896f9845
 :END:
 Steps 1 to 5 of Scope and gate: classifier for the entries, pass 1
 context, dry run, per-command expansion and run through the shared shell
 runner, pass 2. Remove C22's refusal for the four operations. Tests for
 every Done when item that concerns behaviour.
 
-* TODO Docs and divergences
+** Progress (worker claude-C40, 2026-11-17)
+:PROPERTIES:
+:ID: org:01a1ec11-44f9-75c1-8607-aa6152ba5ac7
+:ADDED: [2026-11-17 Tue 17:31]
+:END:
+Done and committed on =claude/C40= (settled by the contract, in the
+allowed paths):
+- Step 1 classifier: =readRawCommands= in
+  =src/Iidy/Cfn/StackArgs/Credentials.hs= (=plainOrComputed='s wording moved
+  into a shared =nonStringKind=). Plain and templated string entries are
+  read as written; a tagged, imported or non-string entry or list, and a
+  duplicated key, are refused with the entry index. A =CommandsBefore= that
+  only a computed key or merge produces is left to the loader: pass 1 runs
+  without the written key, so a non-empty =CommandsBefore= in its result
+  is refused before anything runs.
+- Shared runner: new =src/Iidy/ShellRunner.hs= (=bashProcess=,
+  =runToExit=, =exitDescription=), extracted from =Demo.hs=, whose
+  =execDirect= and =execWithMasking= now use it. Tests: exit code, a
+  killed command (=kill -9 $$= gives "killed by signal 9"), working
+  directory and exact environment.
+Not started: the loader steps 2 to 5, pending the question below.
+
+** Question for supervisor
+:PROPERTIES:
+:ID: org:01a1ec11-6398-7251-b0e1-916a1d320833
+:ADDED: [2026-11-17 Tue 17:32]
+:END:
+Steps 2 to 5 need two changes outside the allowed paths.
+
+1. Json mode and the CLI stack name. The loader
+   (=loadStackArgsWith=) gets neither the output mode nor the stack name
+   given on the command line: both live in =src/Iidy/Cfn/Runner.hs=
+   (=runCfnWithArgs= has =cli= and =stackNameOverride=), which calls
+   =loadStackArgsBootstrapped= in =src/Iidy/Cfn/StackArgsBootstrap.hs=,
+   which calls =loadStackArgsWith=. Neither file is allowed. Proposal:
+   allow both for plumbing only, a small record (child stdout and banners
+   to stderr in =--output-mode json=; the CLI stack name for
+   =iidy.stackName=, which iidy-js takes first,
+   =loadStackArgs.ts:157=) passed from =runCfnWithArgs= down to the loader.
+   Without it, the in-bounds fallback is to send banners and child stdout
+   to stderr in every mode (against "Common behaviour") and to take
+   =iidy.stackName= from the file's =StackName= only.
+2. The =$defs= and =$imports= names for the context. The preprocessor
+   builds that environment (=process= in =src/Iidy/Yaml/Engine.hs=) but
+   =PreprocessResult= returns only the document and the import manifest.
+   Proposal: allow =src/Iidy/Yaml/Engine.hs= for one change, a
+   =prVariables :: Map Text OValue= field holding that environment. The
+   in-bounds fallback is a workaround in the loader: add a synthetic
+   top-level key to the pass-1 AST mapping each raw =$defs= / =$imports=
+   name to =!$ name=, read it out of the result and drop it; it works but
+   depends on =!$= lookup rules (a dotted name) and fakes a document key.
+
+Details I will take as follows unless told otherwise:
+- =iidy.region=, bare =region= and =iidy_region= are the merged region
+  (command line over the file's literal or computed =Region=); the load has
+  no AWS environment, so there is no AWS-config fallback. Absent, the value
+  is empty, so a ={{iidy.region}}= is refused as empty and =iidy_region= is
+  set to the empty string (Rust sets it from its configured region).
+- =iidy.*=, bare =region= and =environment= win over a =$defs= or
+  =$imports= name of the same name (in iidy-js a def named =region=
+  replaces the bare one).
+- =iidy.stackArgs= is the pass-1 preprocessed document with the file's
+  keys, as iidy-js (Rust serialises its =StackArgs= struct).
+- =PKG_SKIP_EXECPATH_PATCH= is dropped (a Node packaging workaround).
+
+Answer (supervisor's call, 2026-11-17):
+1. Allowed: =src/Iidy/Cfn/Runner.hs= and
+   =src/Iidy/Cfn/StackArgsBootstrap.hs=, only to pass one small settings
+   record (output mode, CLI stack name, resolved region) down to the loader.
+   Child stdout to stderr only in json mode. No fallback.
+2. Allowed: =src/Iidy/Yaml/Engine.hs=, only for a =prVariables= field (or
+   equivalent) returning the =$defs= / =$imports= environment. No fake-key
+   workaround.
+- Region: use the region the AWS environment is built with when the
+  bootstrap has it (iidy-js =getCurrentAWSRegion()=,
+  =loadStackArgs.ts:124=), passed in the same record; refuse as empty only
+  when no region is resolved. =iidy_region= gets the same value.
+- Name clashes: refuse a =$defs= or =$imports= name that clashes with a
+  built-in context name (=iidy=, =region=, =environment=) before anything
+  runs, with a test (iidy-js rejects a def clashing with an =$envValues=
+  key, =preprocess/index.ts= around 481).
+- =iidy.stackArgs= as the pass-1 document: agreed.
+- Dropping =PKG_SKIP_EXECPATH_PATCH=: agreed; note it in =DIVERGENCES.md=.
+
+** Result (worker claude-C40, 2026-11-17)
+:PROPERTIES:
+:ID: org:01a1ec1b-931c-7663-b128-c89d10c8d6ac
+:ADDED: [2026-11-17 Tue 17:43]
+:END:
+Failing run first: with =test/Test/CommandsBeforeLoadTest.hs= (new),
+=commandEnvironment= in =CommandsBeforeTest= and the C22 refusal tests in
+=StackArgsLoaderTest= turned into "CommandsBefore runs for <op>" tests,
+=cabal build iidy-hs-test= failed: "Could not find module
+'Iidy.Cfn.CommandsBefore'" and "Module 'Iidy.Cfn.StackArgsLoader' does not
+export 'loadStackArgsWithSettings'". After the code, the first run had 12
+failures; they were fixed in the code (an =fmap= that mapped the expanded
+text instead of the error) and in one test (it looked for =child-stderr= in
+stdout, where the banner prints the raw command).
+
+Implemented (commit "C40: run CommandsBefore in the stack-args loader"):
+- New =src/Iidy/Cfn/CommandsBefore.hs=: =CommandsBeforeSettings= (output
+  handles, CLI stack name, region resolver, stdin-is-terminal),
+  =runCommandsBefore= (name-clash refusal, context, dry run of every
+  command, then per command: expand, banners as Rust, run through
+  =Iidy.ShellRunner=, stop on a non-zero exit or signal),
+  =commandEnvironment= (inherited, =iidy_*= and Rust's three
+  =BASH_FUNC_iidy_*= set over it).
+- =StackArgsLoader.hs=: =loadStackArgsWithSettings=; for the four
+  operations, =readRawCommands=, pass 1 without the written key (refused if
+  a computed key still yields =CommandsBefore=), run, pass 2 with the
+  expanded text; a final =CommandsBefore= that differs from what ran is
+  refused (only a computed key can make one, and it never ran). C22's
+  refusal removed; other operations keep the field unrun.
+- =Yaml/Engine.hs=: =preprocessYamlWithVariables= returns the =$defs= /
+  =$imports= environment beside the result. A =prVariables= field would have
+  broken the positional =PreprocessResult= patterns in =Render.hs=,
+  =TemplateLoader.hs=, =Demo.hs= and =EngineTest.hs= (outside the allowed
+  paths), so this is the "equivalent" form; the loader calls it with
+  =ipTrustedSources policy=, as =preprocessWithPolicy= does.
+- =StackArgsBootstrap.hs= and =Runner.hs=: plumbing only. =Runner= builds
+  the settings: =commandOutputFor (goOutputMode == Just Json)=, the CLI
+  stack name, =resolveRegion= (the function =createAwsEnv= uses: merged
+  region, then =AWS_REGION=, then =AWS_DEFAULT_REGION=; none gives
+  =Nothing=) and =hIsTerminalDevice stdin=.
+
+Evidence per Done-when item (tests in =CommandsBeforeLoadTest= unless named):
+- Run with a def, an import by name, =iidy.region= and =filehash= of a
+  file the first command writes: "a def, an import, iidy.region and filehash
+  of a built file expand and run" (checks =ran.txt= in the argsfile
+  directory, the expanded text, =iidy_region= and =iidy_environment=); CLI
+  stack name and resolved region: "the region the AWS environment is built
+  with, and the CLI stack name".
+- Refused with no marker: one test per class (space, both quotes, =$=,
+  backquote, =;=, =|=, =&=, =<=, newline, =*=, leading =-=, empty), tagged
+  entry, imported list, computed key alone and beside a written list,
+  non-literal =filehash= path, built-in name clash, unresolved region.
+- Failure: "a failing command stops the load with its exit code" (=exit 7=)
+  and "a killed command fails the load" (=kill -9 $$=); a later =touch
+  marker= does not run. The load returns =Left= and =Runner= dies before
+  =createAwsEnv=.
+- Json: "json output mode keeps stdout clear of banners and child output"
+  (stdout file empty, banner and child stdout on stderr); plain mode
+  counterpart. The =Runner= wiring of =--output-mode json= itself is not
+  covered by a test (it has no test seam today).
+- Stdin: "stdin is /dev/null when it is not a terminal"
+  (=readlink /proc/$$/fd/0=).
+- Imports after commands: the first test's =Parameters.Hash= from a
+  =filehash:dist/app.zip= import equals the hash of the content the first
+  command wrote, not the old content.
+- C22 refusal removed: =StackArgsLoaderTest= "CommandsBefore runs for <op>"
+  for the four operations; delete-stack and render tests unchanged and
+  passing.
+Full suite on the rebased tip: 2431 tests pass.
+
+* DONE Docs and divergences
 :PROPERTIES:
 :ID: org:01a1eb97-724c-7732-9cf6-528e5a5fbc00
 :ADDED: [2026-11-17 Tue 15:18]
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-17 Tue 17:43] \\
+  Agent: opus-5.5-medium
+  Session-ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2/agent:a81b151dc896f9845
+:END:
 =docs/SECURITY.org=, =docs/getting-started.org=, the init template comment
 and =DIVERGENCES.md=, as listed under Done when. Full suite, then report.
+
+** Result (worker claude-C40, 2026-11-17)
+:PROPERTIES:
+:ID: org:01a1ec1b-931c-7663-b128-c89c3368fef0
+:ADDED: [2026-11-17 Tue 17:43]
+:END:
+Commit "C40: document CommandsBefore rules, divergences and init template
+comment": =docs/SECURITY.org= section "=CommandsBefore=: No Value Becomes
+Code" (rule, what it blocks, what it does not: a value still decides data
+such as the upload bucket; commands run before the confirmation prompt),
+=docs/getting-started.org= field row and paragraph with an example, the
+=InitStackArgs.hs= template comment, and =DIVERGENCES.md= "CommandsBefore:
+Values Checked, Expanded Per Command" (against both, against Rust: no
+=filehash= helper and expansion before the commands, against iidy-js:
+values checked, stdin rule, env precedence, signals; =PKG_SKIP_EXECPATH_PATCH=
+dropped). Not updated (outside the allowed paths):
+=docs/requirements/01-cli-interface.org= still shows C22's refusal in its
+pseudo-code.
+
+** Review 2026-11-17
+:PROPERTIES:
+:ID: org:01a1ec22-1223-72e9-8be7-2ad70208c5a4
+:ADDED: [2026-11-17 Tue 17:50]
+:END:
+Reviewer (worker=review), branch =claude/C40= 8883ba0..88f826a on main
+9758df6.
+
+Verdict per commit: 8883ba0 land; f0d38ef land; 6ca8d25 fix first
+(defect 1); 88f826a fix first (defects 2, 3). All are small.
+
+Checked and holding:
+- Injection through the engine: every =Output= goes through the check in
+  =renderPart=, inside =if=, =unless=, =each= (=this=, =@key=, =@index=),
+  =with= and =else=. Triple-stash, ={{&=, ={{~=, ={{>= are parse errors;
+  =\{{= is a literal backslash and the value is still checked; comments
+  render nothing. Non-strings are checked as rendered text: null and
+  missing are empty (refused), arrays and objects render with spaces
+  (refused), negative numbers start with =-= (refused), =true= passes.
+  Helper results and sub-expressions (=concat "a" bad=) are checked.
+- Classifier (ghci probes against the loader): tag and imported entries,
+  environment map, top-level templated key, computed key next to a written
+  list all refused; alias entries and quoted keys are local text and run;
+  JSON stack-args runs; =<<:= is not a merge in stack-args (unknown key).
+- Environment: an inherited =iidy_region=evil= gives =us-east-1= to the
+  command; =BASH_FUNC_iidy_*= match =stack_args.rs:617-634= byte for byte
+  (including the =s3_upload= trailing =;\n\n }=); banners match Rust.
+- filehash real output: hex, or standard base64 (=+/== are in the safe
+  set). =filehash "?missing"= gives =FILE_MISSING= (inherited from the
+  =filehash:?= import form; passes the check). A literal absolute or
+  =../..= path reads and hashes any readable file, an operator choice.
+- Mutations: =src/= reverted to base fails to build the tests; the output
+  check made a no-op fails 19 tests; the dry run removed fails 15 load
+  tests (markers appear). Full suite on the tip: 2431 pass, no warnings.
+- Duplication: one runner (=Iidy.ShellRunner=, Demo uses it, behaviour
+  unchanged apart from =withCreateProcess= cleanup on exceptions); one
+  render path; filehash reuses =loadFilehashImport=; =interpolate= is
+  =interpolateChecked= with an accept-all check, so callers are unchanged.
+- Supervisor's calls: name clash refused; region from =resolveRegion=;
+  =preprocessYamlWithVariables= (equivalent to =prVariables=, reason
+  recorded).
+
+Defects:
+1. Low (contract, not an injection). =src/Iidy/Cfn/CommandsBefore/Expand.hs:80-100=
+   with =CommandsBefore.hs:164=: the dry run's stub hash can take a
+   different block branch than the real hash, so a value in that branch is
+   checked only at the real expansion, after earlier commands ran. Probe:
+   ={{#unless (eq (filehash "f") "000…0")}}{{bad}}{{/unless}}= with
+   =bad: "x; touch PWNED"= gives =Right "echo "= in the dry run and the
+   refusal only under =HashFiles=. The value is still refused before it
+   runs, but the card's "refuses the run before the first command starts"
+   and the docs' "a refused value runs nothing" do not hold. Smallest fix:
+   in =literalHashPaths=, accept a =filehash= / =filehashBase64= call only
+   as a whole output (={{filehash "p"}}=), refusing it as a helper argument,
+   sub-expression or block condition; then a hash cannot steer what is
+   rendered. Add the probe as a test.
+2. Low (docs). =docs/SECURITY.org:222= says "no value can become code".
+   A value at the start of a command still chooses what runs:
+   ={{ params.tool }} build= runs whatever path the value names, and
+   because === is in the safe set, =LD_PRELOAD=/tmp/x.so= or
+   =BASH_ENV=/tmp/x= there is an assignment word for the next command.
+   Fix: say that values are safe as arguments only, and that a value in a
+   command's first word (or before it) decides which program runs.
+3. Low (docs, outside allowed paths). =docs/requirements/01-cli-interface.org:644-646=
+   still has C22's refusal ("CommandsBefore in <argsfile> is not
+   supported"). Confirmed; the supervisor should allow the path or file a
+   card.
+4. Low (docs). =DIVERGENCES.md:588= "Against Rust only" omits two
+   differences: =iidy.stackName= prefers the command-line stack name (Rust
+   uses the file's), and with no region resolved the commands still run with
+   =iidy_region= empty (Rust fails the load without a region,
+   =stack_args.rs:258=).
+5. Nit (duplication). =src/Iidy/Cfn/StackArgs/Credentials.hs:157=
+   =readRawCommands= repeats the plain-key and duplicate lookup of
+   =plainKeyLookup= (same file); a =KeyNotPlain= result can fall through to
+   the loader's pass-1 check. Also: =ShellRunner= and =readRawCommands=
+   unit tests live in =CommandsBeforeTest= rather than their modules' test
+   modules, and f0d38ef bundles two changes.
+
+Pre-existing (not from this card): Rust's =BASH_FUNC_iidy_filehash= calls
+=shasum -p=, which recent Perl =shasum= rejects ("Unknown option: p"), so
+=iidy_filehash= in a command may fail; kept byte for byte as the contract
+asks.
+
+** Fix round 1 (worker claude-C40, 2026-11-17)
+:PROPERTIES:
+:ID: org:01a1ec27-d3de-75d5-84b5-072e05106709
+:ADDED: [2026-11-17 Tue 17:56]
+:END:
+Path extension (supervisor's call, 2026-11-17):
+=docs/requirements/01-cli-interface.org= added to the allowed paths for
+replacing its C22-refusal text.
+
+1. Dry-run gap: =HelperCall= (=helperCallArgs= now says whether a call is
+   the whole of an output); =literalHashPaths= refuses =filehash= /
+   =filehashBase64= as a helper argument, sub-expression or block
+   condition. Failing first: the reviewer's probe as "a filehash that could
+   steer a block is refused before anything runs" failed with "a command
+   ran" (the =touch marker= before it); unit tests in =CommandsBeforeTest=
+   and =HandlebarsTest= failed likewise. Now refused at the dry run.
+2. =docs/SECURITY.org= (section renamed "=CommandsBefore=: Values Are
+   Arguments, Not Code") and =docs/getting-started.org=: a value is safe as
+   an argument; in command position it picks the program, and with === a
+   =NAME=x= value is an assignment for the next word; keep substitutions
+   after the program name.
+3. =docs/requirements/01-cli-interface.org= step 12 describes the run.
+4. =DIVERGENCES.md= "Against Rust only": =iidy.stackName= prefers the CLI
+   name; with no region the commands run with an empty =iidy_region= where
+   Rust fails the load (=stack_args.rs:258=).
+5. =readRawCommands= uses =plainKeyMatches=, split out of =plainKeyLookup=
+   (non-plain keys ignored, as before; new test "a templated key elsewhere
+   does not hide the written list"). Runner tests moved to a new
+   =test/Test/ShellRunnerTest.hs=, classifier tests to
+   =StackArgsBootstrapTest= (which already tests =readRawField=).
+BASH_FUNC helpers unchanged. Rebased onto main 1aeb2c1; full suite 2435
+pass.
+
+*** Re-review 2026-11-17
+:PROPERTIES:
+:ID: org:01a1ec29-3940-71c4-9f62-422688a87870
+:ADDED: [2026-11-17 Tue 17:58]
+:END:
+Branch =claude/C40= rebased on main 1aeb2c1; fix commits ee10a33, d585a7f,
+7d5ff6d, 505e2a7, aa1000b reviewed. Verdict: land, 0 defects.
+
+1. Fixed (ee10a33). =helperCallArgs= marks a call whole only when it is the
+   entire =Output=; a sub-expression, helper argument or block condition is
+   not. Probes all refused before rendering: ={{(filehash "f")}}=,
+   ={{concat (filehash "f") "x"}}=, ={{eq ...}}=, ={{lookup l (filehash
+   "f")}}=, =#with= / =#each= over =(filehash "f")=, a condition inside an
+   =else= branch, and the review's =#unless (eq (filehash ...))= probe.
+   ={{#filehash "f"}}= is an unknown block helper (refused). Whole outputs
+   with spacing variants (={{ filehash 'f' }}=, ={{filehashBase64   "f"}}=)
+   and inside =#if=, =else= or =#each= bodies are allowed, which is sound:
+   there the hash only becomes output text. With the check disabled
+   (=&& False=), both new tests fail (unit and the load test with markers).
+2. Fixed (7d5ff6d). =docs/SECURITY.org= now says values are safe as
+   arguments only, naming command position and assignment words
+   (=BASH_ENV=, =LD_PRELOAD=); getting-started says the same.
+3. Fixed (505e2a7). =docs/requirements/01-cli-interface.org= step 12 now
+   describes the run; checked against the loader (classifier, pass 1
+   computed-key refusal, name clash, dry run, run, pass 2, final mismatch
+   refusal at the operation level). Accurate.
+4. Fixed (aa1000b). =DIVERGENCES.md= lists the CLI-first =iidy.stackName=
+   and the missing-region behaviour (commands run with =iidy_region= empty;
+   the load then fails in =createAwsEnv= through =resolveRegion=). Accurate.
+5. Fixed (d585a7f). =plainKeyMatches= is =plainKeyLookup='s former body,
+   so =plainKeyLookup= is unchanged; =readRawCommands= gives the same
+   results (=KeyNotPlain= cannot come from =plainKeyMatches=). Runner tests
+   moved to =Test.ShellRunnerTest= (listed in =test/Main.hs=), classifier
+   tests to =StackArgsBootstrapTest= (=readRawCommands= group); both ran.
+
+Full suite on aa1000b: 2435 pass, no warnings.
