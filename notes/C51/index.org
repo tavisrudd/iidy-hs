@@ -1,0 +1,67 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C51
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   C39 review: render shows file:4:2 for a key at column 3 while the loaders' message says column 3
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
+:ID: org:01a1ec08-138d-75ff-ab8b-871043c70546
+:ADDED: [2026-11-17 Tue 17:21]
+:END:
+#+title: C51 — Render's parse-error display prints 0-based columns
+#+date: 2026-11-17
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1ec08-138d-75ff-ab8b-870f70b564f4
+:ADDED: [2026-11-17 Tue 17:21]
+:END:
+
+Found by the C39 review (2026-11-17), pre-existing. =iidy-hs render= on
+
+#+begin_src yaml
+a: 1
+b:
+  c: 2
+  c: 3
+#+end_src
+
+reports the repeated key at =file:4:2=, a 0-based column, while the
+loaders' message for the same key says =at line 4 column 3=. Find where the
+render parse-error display builds its =file:line:col= text (the error
+display under =src/Iidy/Yaml/Errors/=) and compare with Rust's display for
+the same parse error (=~/src/iidy/src/yaml/errors/=); Rust's convention
+decides, since the display format is ported from it.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1ec08-138d-75ff-ab8b-870eb9c47372
+:ADDED: [2026-11-17 Tue 17:21]
+:END:
+
+Allowed paths: the error-display modules under =src/Iidy/Yaml/Errors/=,
+their test modules, =notes/C51/=.
+
+Out of scope: the loaders' own message text (C39); any other error format.
+
+Done when:
+- [ ] Rust's column convention for this display is recorded with file:line.
+- [ ] A failing-first test pins the column for the example above, and the
+  display matches Rust (or the difference is recorded in =DIVERGENCES.md=
+  with its cause).
+- [ ] Build warning-free, full suite green, commits name C51.
+
+Stop and record if: more than one display path builds positions and they
+disagree in ways the card does not cover.
+
+* TODO Render's parse-error display prints 0-based columns
+:PROPERTIES:
+:ID: org:01a1ec08-138d-75ff-ab8b-870d56b69e1a
+:ADDED: [2026-11-17 Tue 17:21]
+:END:
+
+Reproduce with the example, record Rust's convention, fix the column, test.
