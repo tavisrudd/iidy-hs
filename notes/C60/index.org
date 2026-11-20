@@ -1,0 +1,68 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C60
+:LANE:     main
+:TODO_STATE: DONE
+:MODE:     CONTRACT
+:ORIGIN:   C58 related-status audit (notes/C58/report--related-status-audit.org), user asked to fix
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:ID: org:01a1fab1-a5aa-76b0-afb9-811952952c97
+:ADDED: [2026-11-20 Fri 13:41]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-20 Fri 13:43]
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+- Card state STARTED → DONE [2026-11-20 Fri 13:43]
+  Note: Rollback-complete statuses green; missing stack shows no status
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:END:
+#+title: C60 — Status display: rollback-complete statuses uncoloured; missing stack shows CREATE_FAILED
+#+date: 2026-11-20
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1fab1-a5aa-76b0-afb9-8118109e815f
+:ADDED: [2026-11-20 Fri 13:41]
+:END:
+
+Found by the C58 audit ([[file:../C58/report--related-status-audit.org]]).
+=categorizeStatus= (=src/Iidy/Output/Status.hs=) put =ROLLBACK_COMPLETE=,
+=UPDATE_ROLLBACK_COMPLETE= and =IMPORT_ROLLBACK_COMPLETE= in the unknown
+category (info colour); Rust and iidy-js show every =*_COMPLETE= green.
+=fetchStackContents= (=src/Iidy/Cfn/StackOperations.hs=) showed
+=CREATE_FAILED= as the current status when the stack vanished before the
+final describe; Rust shows an empty status. Display only; exit codes are
+unaffected.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1fab1-a5aa-76b0-afb9-811721d1a046
+:ADDED: [2026-11-20 Fri 13:41]
+:END:
+
+Paths: =src/Iidy/Output/Status.hs=, =src/Iidy/Cfn/StackOperations.hs=,
+=test/Test/ThemeVariantTest.hs=. Gate: rollback-complete statuses render in
+the success colour; missing stack shows no status. Tests pass.
+
+* DONE Status display: rollback-complete statuses uncoloured; missing stack shows CREATE_FAILED
+:PROPERTIES:
+:ID: org:01a1fab1-a5aa-76b0-afb9-811627f86e03
+:ADDED: [2026-11-20 Fri 13:41]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-20 Fri 13:43] \\
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:END:
+
+Rollback-complete statuses map to =StatusComplete=; the missing-stack
+status is =UnknownStatus ""=. The theme test that only checked for an ANSI
+escape now checks the success colour for all three.
+
+Not taken from the audit (match Rust, inherited, or cosmetic): drift
+=DETECTION_FAILED= shown without a warning, the duration restart at cleanup
+events, and the failure colour for =UPDATE_FAILED= / =IMPORT_FAILED=.

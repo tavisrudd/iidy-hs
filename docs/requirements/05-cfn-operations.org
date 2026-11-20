@@ -774,11 +774,7 @@ pollForCompletion(fetchEvents, stackId, terminalStatuses, config):
 
     -- Check terminal status
     stackEvents = filter(isStackEvent(_, stackId), events)
-    relevantStackEvents =
-      if config.waitForStatusChange:
-        filter(\e -> e.timestamp > startTime, stackEvents)
-      else:
-        stackEvents
+    relevantStackEvents = filter(\e -> e.timestamp > startTime, stackEvents)
     currentStatus = head(relevantStackEvents).resourceStatus    -- most recent
 
     if currentStatus in terminalStatuses:
@@ -807,7 +803,7 @@ convertEventWithDuration(startTime, event):
 
 - New events are delivered to the callback in chronological order (reversed from AWS response which is most-recent-first).
 - =lastEventSet= is updated incrementally with new event IDs (union, not replace).
-- When =waitForStatusChange= is True, only events with =timestamp > startTime= are considered for terminal exit. Pre-existing terminal events are displayed but do not trigger exit.
+- For every operation, only stack events with =timestamp > startTime= are considered for terminal exit, as in Rust (=process_new_events=). Pre-existing terminal events are displayed but do not trigger exit. Without this, an update or changeset execution polled before CloudFormation writes its first event would stop at the previous operation's terminal event and report its result.
 
 *Error Scenarios:*
 

@@ -255,17 +255,23 @@ watchStackTests =
         result @?= PollSuccess UpdateComplete
         polls <- readIORef pollCount
         assertBool "should poll at least twice (pre-existing terminal ignored)" (polls >= 2)
-    , testCase "pollForCompletionWith - exits on terminal regardless of timestamp when not waiting" $ do
-        -- Write operations (pcWaitForStatusChange = False) should still detect
-        -- terminal status on any event, regardless of timestamp.
+    , testCase "pollForCompletionWith - write operation ignores the previous operation's terminal event (C59)" $ do
+        -- update-stack / exec-changeset: before CloudFormation writes the new
+        -- UPDATE_IN_PROGRESS, the newest stack event is the previous update's
+        -- UPDATE_COMPLETE. It must not end the poll.
         let startTime = addUTCTime 100 epoch
-            events = [mkStackEvtAt epoch "evt-1" CF.ResourceStatus_CREATE_COMPLETE]
-        eventsRef <- newIORef [events]
+            previous = mkStackEvtAt epoch "evt-1" CF.ResourceStatus_UPDATE_COMPLETE
+            started = mkStackEvtAt (addUTCTime 101 epoch) "evt-2" CF.ResourceStatus_UPDATE_IN_PROGRESS
+            failed = mkStackEvtAt (addUTCTime 130 epoch) "evt-3" CF.ResourceStatus_UPDATE_ROLLBACK_COMPLETE
+            batches0 = [[previous], [started, previous], [failed, started, previous]]
+        eventsRef <- newIORef batches0
+        pollCount <- newIORef (0 :: Int)
         let fetchEvents = do
+                modifyIORef' pollCount (+ 1)
                 batches <- readIORef eventsRef
                 case batches of
                     (b : rest) -> writeIORef eventsRef rest >> pure b
-                    [] -> pure events
+                    [] -> pure [failed, started, previous]
         result <-
             pollForCompletionWith
                 fetchEvents
@@ -277,7 +283,9 @@ watchStackTests =
                     , pcWaitForStatusChange = False
                     }
                 )
-        result @?= PollSuccess CreateComplete
+        result @?= PollSuccess UpdateRollbackComplete
+        polls <- readIORef pollCount
+        assertBool "should poll until the new operation's terminal event" (polls >= 3)
     , testCase "pollForCompletionWith - displays pre-existing events but doesn't exit on them" $ do
         -- Pre-existing terminal events should be emitted via pcOnNewEvents
         -- but should NOT trigger exit when pcWaitForStatusChange is True.
@@ -347,7 +355,9 @@ watchStackTests =
     epoch = UTCTime (fromGregorian 2024 1 1) 0
 
     testPollConfig :: PollConfig
-    testPollConfig = defaultPollConfig{pcIntervalSeconds = 0}
+    -- Start before the fixture events: only stack events after the start
+    -- time can end a poll.
+    testPollConfig = defaultPollConfig{pcIntervalSeconds = 0, pcStartTime = Just (addUTCTime (-60) epoch)}
 
     mkStackEvt :: Text -> CF.ResourceStatus -> SE.StackEvent
     mkStackEvt evtId status =

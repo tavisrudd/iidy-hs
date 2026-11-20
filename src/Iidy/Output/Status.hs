@@ -18,10 +18,16 @@ data StatusCategory
     | StatusUnknown
     deriving stock (Show, Eq, Ord)
 
--- | Categorize a StackStatus into a display category
+{- | Categorize a StackStatus into a display category. Every @*_COMPLETE@
+status displays as complete, rollbacks included, as in Rust and iidy-js
+(their COMPLETE lists include the rollback-complete statuses).
+-}
 categorizeStatus :: StackStatus -> StatusCategory
 categorizeStatus = \case
     DeleteSkipped -> StatusSkipped
+    RollbackComplete -> StatusComplete
+    UpdateRollbackComplete -> StatusComplete
+    ImportRollbackComplete -> StatusComplete
     s
         | isInProgress s -> StatusInProgress
         | isSuccess s -> StatusComplete

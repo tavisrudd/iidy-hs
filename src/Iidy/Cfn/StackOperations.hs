@@ -225,7 +225,9 @@ collectStackContentsWithStack ctx sName mStack = do
             Nothing -> []
             Just s -> mapMaybe convertOutput (fromMaybe [] s.outputs)
         statusInfo = case mStack of
-            Nothing -> StackStatusInfo CreateFailed Nothing Nothing
+            -- The stack vanished before the final describe: no status to
+            -- show (Rust shows an empty status here too).
+            Nothing -> StackStatusInfo (UnknownStatus "") Nothing Nothing
             Just s ->
                 StackStatusInfo
                     { ssiStatus = fromCfnStackStatus s.stackStatus
@@ -274,7 +276,9 @@ data PollConfig = PollConfig
     , pcInactivityTimeoutSecs :: !(Maybe Int)
     -- ^ inactivity timeout
     , pcStartTime :: !(Maybe UTCTime)
-    -- ^ operation start time (for duration calc)
+    {- ^ operation start time (default: when polling starts). Only stack
+    events after it can end the poll; also used for elapsed time.
+    -}
     , pcWaitForStatusChange :: !Bool
     -- ^ wait for new events before checking terminal (watch-stack)
     , pcOnNewEvents :: [CF.StackEvent] -> IO ()
@@ -371,16 +375,18 @@ pollForCompletionWith fetchEvents sId terminalStatuses config = do
                     case pcTimeoutSeconds config of
                         Just t | t > 0 && totalElapsed > t -> pure PollTimeout
                         _noOverallTimeout -> do
-                            -- Check if we hit a terminal status.
-                            -- When pcWaitForStatusChange is True (watch-stack), only
-                            -- consider events AFTER startTime for terminal exit.
-                            -- Pre-existing terminal events are displayed but don't
-                            -- trigger exit — matching iidy-js (ev.Timestamp > startTime).
+                            -- Check if we hit a terminal status. Only stack events
+                            -- AFTER startTime count, for every operation: before
+                            -- CloudFormation writes the new operation's first event,
+                            -- the newest stack event is the previous operation's
+                            -- terminal one. Pre-existing events are displayed but
+                            -- don't trigger exit — matching Rust
+                            -- (process_new_events) and iidy-js (ev.Timestamp > startTime).
+                            -- startTime is the NTP-backed context start time, taken
+                            -- before the operation's API call.
                             let stackEvents = filter isStackEvent events
-                                relevantStackEvents
-                                    | pcWaitForStatusChange config =
-                                        filter (\e -> e.timestamp.fromTime > startTime) stackEvents
-                                    | otherwise = stackEvents
+                                relevantStackEvents =
+                                    filter (\e -> e.timestamp.fromTime > startTime) stackEvents
                                 mCurrentStatus = case relevantStackEvents of
                                     (e : _) -> fmap fromCfnResourceStatus e.resourceStatus
                                     _noEvents -> Nothing

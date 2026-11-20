@@ -1,0 +1,182 @@
+#+TITLE: C58 related-bug audit: status classification and polling
+#+DATE: 2026-11-20
+
+Scope: read-only audit of status mappings, terminal/success sets and
+polling in iidy-hs after commit 5047a25. Nothing was built or run.
+Amazonka enum values were taken from the Haddock HTML for
+amazonka-cloudformation (2025-04-16).
+
+Summary: no remaining bug of the C58 kind (unknown status flipping a
+poll or exit code) was found. The remaining findings are display
+divergences and low-reachability defaults.
+
+* Findings
+
+** F1. Rollback-complete statuses render in the "unknown" colour (wrong display)
+- Where: src/Iidy/Output/Status.hs:22-29 (=categorizeStatus=), consumed by
+  src/Iidy/Output/Color.hs:249-265. Predicates in src/Iidy/Cfn/Status.hs:
+  =isSuccess= (about line 232) and =isFailed= (about line 243).
+- Scenario: AWS sends =ROLLBACK_COMPLETE=, =UPDATE_ROLLBACK_COMPLETE= or
+  =IMPORT_ROLLBACK_COMPLETE= (very common after a failed update).
+  =categorizeStatus= tests =isInProgress=, then =isSuccess= (only
+  CreateComplete, UpdateComplete, DeleteComplete, ImportComplete), then
+  =isFailed=; the rollback-complete statuses match none and land in
+  =StatusUnknown=, drawn with =thInfo= (white). Same for =UnknownStatus=.
+- Effect: in events, describe-stack and list-stacks, the final status of
+  a rolled-back update is uncoloured, not green or red. Exit codes are
+  unaffected (they use the explicit success lists).
+- Rust: =src/output/status.rs= COMPLETE list includes ROLLBACK_COMPLETE,
+  UPDATE_ROLLBACK_COMPLETE, IMPORT_ROLLBACK_COMPLETE, so they categorise
+  as Complete (green). Rust =color.rs:150= (=format_resource_status=)
+  instead colours anything containing ROLLBACK red; which of the two
+  the Rust renderers actually call is unconfirmed (only the =status.rs=
+  categoriser is used by =status.rs:122=).
+- iidy-js: =statusTypes.ts= COMPLETE includes the same three, so
+  =formatting.ts colorizeResourceStatus= paints them green.
+- Note: test/Test/ThemeVariantTest.hs "ROLLBACK uses error color" only
+  asserts that some ANSI is present, so it passes whatever the colour is
+  and its name is misleading.
+- Fix: add the three rollback-complete statuses to the "complete" display
+  category (iidy-js/Rust =status.rs= parity) without changing =isSuccess=
+  (which drives nothing at exit-code level, but keep it narrow), e.g.
+  a separate =isCompleteDisplay= or extend =categorizeStatus=. Tighten the
+  theme test to compare against the success/error colour.
+- Severity: wrong display.
+
+** F2. Duration calculation overwrites the start time on cleanup events (cosmetic)
+- Where: src/Iidy/Cfn/Operations/DescribeStack.hs:196-211
+  (=calculateEventDurations=).
+- Scenario: describe-stack history for a successful update contains, for
+  the stack's own key, UPDATE_IN_PROGRESS, then
+  UPDATE_COMPLETE_CLEANUP_IN_PROGRESS, then UPDATE_COMPLETE. The text
+  test =_IN_PROGRESS= suffix matches the cleanup status, so
+  =Map.insert= replaces the start time; the UPDATE_COMPLETE duration is
+  then measured from the cleanup event (short) instead of the real start.
+  Same for UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS.
+- Rust: =aws_conversion.rs:385-412= has the identical suffix logic and
+  overwrite, so this matches Rust.
+- iidy-js: =calcEventTimings.ts= ignores a second IN_PROGRESS while the
+  first entry has no completion yet, so it measures from the first start.
+- Also: classification is by text suffix, not the ADT; an
+  =UnknownStatus= ending in _COMPLETE/_FAILED/_IN_PROGRESS is classified
+  by suffix, which is a reasonable fallback.
+- Fix: keep the first start (use =Map.insertWith (\_ old -> old)=, and
+  clear the entry on completion) to match iidy-js; or use
+  =isInProgress=/=isTerminal= from the ADT.
+- Severity: cosmetic.
+
+** F3. Missing stack defaults to CREATE_FAILED in collected contents (low reachability)
+- Where: src/Iidy/Cfn/StackOperations.hs:228
+  (=Nothing -> StackStatusInfo CreateFailed Nothing Nothing=).
+- Scenario: =collectStackContents= calls =getStack= and finds no stack.
+  Reachable only if the stack vanishes between the poll ending and the
+  DescribeStacks call (for example a delete finishing, or a poll that
+  ended on a non-DELETE_COMPLETE event for a stack since deleted). The
+  create, update and exec-changeset paths short-circuit on
+  =PollSuccess DeleteComplete= first, and delete-stack calls it only with
+  an existing stack, so the window is narrow.
+- Effect: the stack-contents section (and JSON =current_status.status=)
+  would say CREATE_FAILED for a stack that does not exist.
+- Rust: =stack_operations.rs:76-80= uses the empty string when the status
+  is absent.
+- Fix: use =UnknownStatus ""= (or a dedicated "stack absent" display) so
+  nothing claims a failure.
+- Severity: wrong display, rarely reachable.
+
+** F4. Drift detection DETECTION_FAILED treated as completed (wrong display)
+- Where: src/Iidy/Cfn/Operations/DescribeStackDrift.hs:154-168
+  (=pollDriftDetection=, the =_done -> pure True= branch).
+- Scenario: DescribeStackDriftDetectionStatus returns
+  =DETECTION_FAILED= (e.g. insufficient permissions; the response carries
+  =detectionStatusReason=). Any status other than DETECTION_IN_PROGRESS,
+  including unknown text, returns True, so the code goes on to list
+  resource drifts (stale or NOT_CHECKED) without any warning.
+- Effect: the user sees old or empty drift output as if detection
+  succeeded; no failure message and exit code is 0.
+- Rust: =describe_stack_drift.rs:94-100= has the same =_ => break=;
+  iidy-js =drift.ts:45= same. So this is parity with both, but still
+  misleading.
+- Fix: return a result distinguishing complete / failed (with reason) /
+  timed out, and emit a warning (or error) for DETECTION_FAILED.
+- Severity: wrong display (parity bug, optional).
+
+** F5. Divergent classification of IMPORT_FAILED and UPDATE_FAILED (cosmetic)
+- Where: src/Iidy/Cfn/Status.hs =isTerminal= (ImportFailed -> True) and
+  =isFailed= (UpdateFailed, ImportFailed -> True).
+- Scenario: resource event IMPORT_FAILED is marked terminal and failed;
+  UPDATE_FAILED is failed (red) but non-terminal.
+- Rust and iidy-js: neither IMPORT_FAILED nor UPDATE_FAILED is in any
+  list; both are uncoloured. IMPORT_FAILED is a resource-level status
+  only (not in amazonka's StackStatus list), and the poll looks at the
+  stack's own event only, so terminal =ImportFailed= cannot end a poll
+  early in practice. UPDATE_FAILED non-terminal agrees with all three
+  implementations (rollback follows).
+- Effect: red UPDATE_FAILED / IMPORT_FAILED resource lines where
+  Rust/iidy-js show plain text. Arguably an improvement.
+- Fix: none required; document as a deliberate divergence.
+- Severity: cosmetic.
+
+** F6. Non-watch polling does not ignore events from before the operation (unconfirmed)
+- Where: src/Iidy/Cfn/StackOperations.hs:366-390 in
+  =pollForCompletionWith=: the start-time filter applies only when
+  =pcWaitForStatusChange= (watch-stack).
+- Scenario (unconfirmed, race): update-stack or exec-changeset on a stack
+  whose newest stack event is an old UPDATE_COMPLETE. The first poll is
+  after a 2s delay and uses the newest stack event. If DescribeStackEvents
+  does not yet show the new UPDATE_IN_PROGRESS event, the poll ends
+  immediately at the old terminal event and reports success while the
+  update is still running.
+- Not confirmed against real AWS timing; the comments say this "matches
+  Rust", and the first-batch behaviour is documented in the code. I did
+  not trace whether Rust filters by start time in
+  =process_new_events=.
+- Severity if real: bug that changes poll/exit behaviour. Treat as a
+  question for a separate card; it is not related to unknown statuses.
+
+* Checked and found fine
+- Status.hs: every StackStatus and ResourceStatus pattern in amazonka
+  (read from Haddock) has an ADT constructor; the open-newtype fallback
+  goes through =parseStatus= to =UnknownStatus=, which is neither
+  terminal, failed, success nor in progress. Poll terminal checks use
+  =elem= against known statuses, so an unknown status can never end a
+  poll or count as success.
+- Terminal set: UpdateFailed not terminal, ReviewInProgress terminal (and
+  excluded from resource-terminal), DeleteSkipped terminal; all match
+  Rust =is_terminal_status.rs= and iidy-js =statusTypes.ts= TERMINAL.
+- Success lists (Context.hs:139-146): create/update/delete require
+  exactly CREATE_COMPLETE / UPDATE_COMPLETE / DELETE_COMPLETE. Rust uses
+  the same lists. iidy-js also accepts UPDATE_COMPLETE_CLEANUP_IN_PROGRESS
+  because it reads the stack status via DescribeStacks after waiting;
+  iidy-hs reads the stack's own newest event, so the cleanup event is
+  non-terminal and polling continues to UPDATE_COMPLETE. No change needed.
+- Create, update, exec-changeset, delete: all treat timeout and
+  inactivity as exit 1; DELETE_COMPLETE on create/update/exec returns 1
+  (rollback-deleted stack); delete returns 0 only for DELETE_COMPLETE;
+  watch-stack always returns 0 by design (documented).
+- Changeset polling (Changeset.hs:186): the terminal text set
+  (CREATE_COMPLETE, FAILED, DELETE_COMPLETE, DELETE_FAILED) covers every
+  terminal ChangeSetStatus amazonka defines; the in-progress/pending ones
+  keep polling. An unknown changeset status polls until the iteration cap
+  and then reports FAILED, which fails safe (no false success).
+- Changeset execution status: only "AVAILABLE" is matched
+  (Changeset.hs:463), covering the pending-changeset search; other
+  values (UNAVAILABLE, OBSOLETE, EXECUTE_*) correctly are not pending.
+  If none is found the name falls back to "unknown" (cosmetic edge).
+- Change action, replacement, scope, evaluation, change source, drift
+  status and difference type are passed through as raw Text
+  (=CF.fromChangeAction= etc.), not mapped into closed types, so there
+  is no closed-set failure mode. =isInSync= compares against the single
+  IN_SYNC pattern, so unknown or NOT_CHECKED resource drifts are shown,
+  which fails safe.
+- =needsDriftCheck= (NOT_CHECKED or stale) and the stack-level drift
+  status are only compared with one pattern; unknown means "recheck".
+- =checkStackState= / =stackExists=: only DELETE_COMPLETE means absent
+  and only REVIEW_IN_PROGRESS triggers the pending-changeset branch; all
+  other (including unknown) statuses are "normal".
+- Missing event status in describe-stack becomes =UnknownStatus
+  "UNKNOWN"= (DescribeStack.hs:170), neither failed nor terminal.
+- The JSON renderer uses =toText=, so unknown statuses round-trip their
+  AWS text; interactive padding also uses =toText=.
+- =shouldShowStatusReason= (Interactive/Types.hs:467) shows reasons for
+  failed plus ROLLBACK_COMPLETE and UPDATE_ROLLBACK_COMPLETE; this is a
+  deliberate choice and not driven by unknown statuses.

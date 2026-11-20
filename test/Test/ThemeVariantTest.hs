@@ -4,7 +4,7 @@ import Data.Text qualified as T
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
-import Iidy.Cfn.Status (StackStatus (..))
+import Iidy.Cfn.Status (StackStatus (..), toText)
 import Iidy.Output.Color (
     IidyTheme (..),
     colorize,
@@ -52,9 +52,13 @@ themeVariantTests =
         assertBool "dark has ANSI" ("\ESC[" `T.isInfixOf` darkResult)
         assertBool "light has ANSI" ("\ESC[" `T.isInfixOf` lightResult)
         assertBool "hc has ANSI" ("\ESC[" `T.isInfixOf` hcResult)
-    , testCase "colorizeResourceStatus - ROLLBACK uses error color" $ do
-        let result = colorizeResourceStatus darkTheme RollbackComplete
-        assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)
+    , testCase "colorizeResourceStatus - rollback-complete statuses use the success color (C60)" $
+        mapM_
+            ( \s ->
+                colorizeResourceStatus darkTheme s
+                    @?= colorize darkTheme (thSuccess darkTheme) (toText s)
+            )
+            [RollbackComplete, UpdateRollbackComplete, ImportRollbackComplete]
     , testCase "colorizeResourceStatus - DELETE_SKIPPED uses muted" $ do
         let result = colorizeResourceStatus darkTheme DeleteSkipped
         assertBool "has ANSI" ("\ESC[" `T.isInfixOf` result)

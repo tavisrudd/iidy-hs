@@ -1,0 +1,77 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C59
+:LANE:     main
+:TODO_STATE: DONE
+:CARD_PRIORITY: A
+:MODE:     CONTRACT
+:ORIGIN:   C58 related-status audit (notes/C58/report--related-status-audit.org), user asked to fix
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:ID: org:01a1fab1-a580-7282-bf16-7e52b3ff5284
+:ADDED: [2026-11-20 Fri 13:41]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-20 Fri 13:43]
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+- Card state STARTED → DONE [2026-11-20 Fri 13:43]
+  Note: Start-time filter applies to every operation's terminal check, as in Rust
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:END:
+#+title: C59 — Poll can stop at a previous operation's terminal stack event (start-time filter only applied for watch-stack)
+#+date: 2026-11-20
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1fab1-a580-7282-bf16-7e515308dfa6
+:ADDED: [2026-11-20 Fri 13:41]
+:END:
+
+Found by the C58 audit ([[file:../C58/report--related-status-audit.org]]).
+=pollForCompletionWith= (=src/Iidy/Cfn/StackOperations.hs=) ignored stack
+events older than the operation's start time only for =watch-stack=
+(=pcWaitForStatusChange=). For create, update, exec-changeset and delete,
+a poll that ran before CloudFormation wrote the new operation's first
+event saw the previous operation's terminal stack event (for example the
+last update's =UPDATE_COMPLETE=) as newest and returned it at once, so the
+command could report the old result without waiting. =exec-changeset= is
+most exposed, since change set execution starts asynchronously. Rust
+filters by start time for every operation (=process_new_events= in
+=src/cfn/stack_operations.rs=); iidy-js does too (=ev.Timestamp > startTime=).
+The filter was limited to watch-stack in 2409809 (2026-03-03) as a
+watch-stack fix, with no reason recorded for leaving write operations out.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1fab1-a580-7282-bf16-7e501376b141
+:ADDED: [2026-11-20 Fri 13:41]
+:END:
+
+Paths: =src/Iidy/Cfn/StackOperations.hs=, =test/Test/WatchStackTest.hs=,
+=docs/requirements/05-cfn-operations.org=.
+
+Gate: every operation's terminal check considers only stack events after
+the start time (the NTP-backed =cfnStartTime=, taken before the API call);
+a regression test shows a write operation polling past the previous
+operation's terminal event. Tests pass, zero warnings. Not verifiable
+against live AWS timing here.
+
+* DONE Poll can stop at a previous operation's terminal stack event (start-time filter only applied for watch-stack)
+:PROPERTIES:
+:ID: org:01a1fab1-a580-7282-bf16-7e4ff7aa72f6
+:ADDED: [2026-11-20 Fri 13:41]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-20 Fri 13:43] \\
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:END:
+
+Dropped the =pcWaitForStatusChange= condition on the start-time filter;
+=pcWaitForStatusChange= still gates the inactivity timeout for
+watch-stack. The test that asserted the old behaviour ("exits on terminal
+regardless of timestamp when not waiting") is replaced by the regression
+test; the shared test poll config now starts before the fixture events.
