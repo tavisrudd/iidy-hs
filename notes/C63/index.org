@@ -1,0 +1,84 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C63
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   User request: Rust follow-up to bring Rust in line with iidy-hs after C55, C61, C62
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:ID: org:01a1fad6-8254-766a-8563-8e8a02bb603f
+:ADDED: [2026-11-20 Fri 14:22]
+:END:
+#+title: C63 — Rust iidy (~/src/iidy): follow iidy-hs changes from 2026-11-20 (global SSM config opt-in, YAML 1.1 booleans, stack-args error path)
+#+date: 2026-11-20
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1fad6-8254-766a-8563-8e89b6a74718
+:ADDED: [2026-11-20 Fri 14:22]
+:END:
+
+Rust iidy (=~/src/iidy=) has no =c= setup and is read-only from this repo,
+so its follow-ups are tracked here (as C57 is for local-time timestamps).
+On 2026-11-20 iidy-hs changed three behaviours that Rust shares:
+
+1. Global SSM config (C55). Rust calls =apply_global_configuration= on every
+   stack-args load (=src/cfn/stack_args.rs:325-327=, with a
+   "TODO disable behind feature flag"). iidy-hs reads =/iidy/= only with
+   =--global-config=, because CloudFormation operator roles without SSM read
+   printed an AccessDenied warning on every run.
+2. YAML 1.1 booleans (C62). Rust converts yes/no/on/off strings after
+   preprocessing (=convert_yaml_12_to_11_compatibility_with_context=,
+   =src/yaml/engine.rs:461-551=), so a quoted ="yes"= and strings built
+   during preprocessing become booleans, softened by path and length
+   heuristics (=should_preserve_as_string=). iidy-hs now reads YAML 1.1
+   booleans at parse time from plain, untagged scalars only; quoted values
+   stay strings and keys keep their text. Details and the full list of
+   differences: =docs/dev/rust-compatibility.org= ("YAML 1.1 Booleans Read
+   at Parse Time") and C62.
+3. Stack-args type errors (C61). Rust deserialises with
+   =serde_yaml::from_value= (=src/cfn/stack_args.rs:323=), giving
+   =invalid type: boolean `false`, expected a string= with no field or key
+   (as reported). iidy-hs reports
+   =invalid type for Parameters.PublicFavicon: expected a string, got boolean `false`=.
+
+Open decision that may change item 2 for both ports: iidy-js has no YAML
+1.1 mode (js-yaml 3.14.1 core-schema booleans only; see C62 "Comparison
+with iidy-js"), so plain yes/no/on/off in stack-args were strings there and
+both ports now reject e.g. =Parameters: {Flag: yes}=. If stack-args move to
+YAML 1.2 in iidy-hs, Rust should follow.
+
+Status and polling (C58-C60) need nothing in Rust: those were iidy-hs
+divergences from Rust, which already handles the cleanup statuses, filters
+poll events by start time and colours rollback-complete green.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1fad6-8254-766a-8563-8e88478bfa1d
+:ADDED: [2026-11-20 Fri 14:22]
+:END:
+
+Work happens in =~/src/iidy=, by whoever owns that repo; nothing in
+iidy-hs changes. Gate: each item matches iidy-hs (or a recorded reason not
+to), Rust tests cover it, and the matching entries in
+=docs/dev/rust-compatibility.org= are removed once the ports agree.
+
+* TODO Rust iidy (~/src/iidy): follow iidy-hs changes from 2026-11-20 (global SSM config opt-in, YAML 1.1 booleans, stack-args error path)
+:PROPERTIES:
+:ID: org:01a1fad6-8254-766a-8563-8e87b5d419a1
+:ADDED: [2026-11-20 Fri 14:22]
+:END:
+
+- [ ] Global config: add an opt-in flag (iidy-hs: =--global-config=, off
+  by default) and skip =apply_global_configuration= without it.
+- [ ] YAML 1.1: resolve yes/no/on/off at parse time for plain, untagged
+  scalars only, keep keys as text, drop the post-pass and its heuristics;
+  apply the same schema to imports parsed from text, =!$parseYaml= and
+  custom template bodies. Settle the stack-args YAML 1.2 decision first.
+- [ ] Error path: report the field and key for a non-string =Parameters= /
+  =Tags= value (check whether serde_yaml's path can be kept, e.g. with
+  =serde_path_to_error=, before hand-rolling).
+- Local-time timestamps are C57.
