@@ -1,5 +1,6 @@
 dist-newstyle/
 dist/
+dist-release/
 .direnv/
 result
 *.hi

@@ -1,6 +1,7 @@
 {- | The one way iidy-hs runs operator shell text: @bash -c@ found on
-@PATH@ (@/usr/bin/env bash@), in a given directory, with exactly the given
-environment. Used by @demo@ ("Iidy.Demo") and by @CommandsBefore@
+iidy's own @PATH@, in a given directory, with exactly the given
+environment. @bash@ is looked up directly rather than through
+@\/usr\/bin\/env@, which does not exist in the Nix build sandbox. Used by @demo@ ("Iidy.Demo") and by @CommandsBefore@
 ("Iidy.Cfn.CommandsBefore").
 -}
 module Iidy.ShellRunner (
@@ -20,7 +21,7 @@ inherited unless the caller sets them.
 -}
 bashProcess :: Text -> FilePath -> [(String, String)] -> CreateProcess
 bashProcess command workDir envList =
-    (proc "/usr/bin/env" ["bash", "-c", T.unpack command])
+    (proc "bash" ["-c", T.unpack command])
         { cwd = Just workDir
         , env = Just envList
         }

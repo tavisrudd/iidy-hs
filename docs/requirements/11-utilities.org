@@ -188,7 +188,7 @@ The error database is a static list compiled into the binary. Lookups are O(n) l
 - The =IIDY_EXE= environment variable is set to the current executable path when the binary on =PATH= named =iidy= is absent or points to a different file.
 - The =PKG_SKIP_EXECPATH_PATCH= environment variable is set to ="yes"= to suppress nix wrapper path patching.
 - Command types (parsed from the =demo= sequence):
-  - *String value*: shell command (=DemoShell=). Printed character-by-character with a 50 ms/char delay (scaled by =timescaling=), prefixed with ="\ESC[31mShell Prompt >\ESC[0m "=. Then executed via =/usr/bin/env bash -c=.
+  - *String value*: shell command (=DemoShell=). Printed character-by-character with a 50 ms/char delay (scaled by =timescaling=), prefixed with ="\ESC[31mShell Prompt >\ESC[0m "=. Then executed via =bash -c= (=bash= found on iidy's =PATH=).
   - ={silent: "<cmd>"}=: executes without printing the command (=DemoSilent=).
   - ={sleep: <N>}=: sleeps =N * timescaling= seconds (=DemoSleep=). =N= may be fractional (=0.5=); a negative =N= or one above 86400 is rejected when the script is parsed.
   - ={banner: "<text>"}=: displays text in a bold-yellow-on-dark-grey 80-column banner (=DemoBanner=). Multi-line text is split on =\n=.

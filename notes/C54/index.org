@@ -43,4 +43,8 @@ Gate: =nix build= of the package passes its check phase.
 :ADDED: [2026-11-18 Wed 12:26]
 :END:
 
-Not started.
+=Iidy.ShellRunner.bashProcess= now runs =proc "bash" ["-c", ...]=, found on
+iidy's =PATH=, instead of going through =/usr/bin/env=. Cabal tests pass.
+Still to verify: the =nix build= check phase (the stdenv build =PATH=
+includes =bash=). Not re-run yet because the 2026-11-20 release was built
+with cabal.

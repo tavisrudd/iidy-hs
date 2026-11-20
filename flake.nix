@@ -15,7 +15,7 @@
       source = nixpkgs.lib.cleanSourceWith {
         src = nixpkgs.lib.cleanSource ./.;
         filter = path: _type: !(builtins.elem path
-          (map toString [ ./dist ./dist-newstyle ./.direnv ./.hie ./iidy-hs ./iidy-rs ]));
+          (map toString [ ./dist ./dist-newstyle ./dist-release ./.direnv ./.hie ./iidy-hs ./iidy-rs ]));
       };
       # GHC 9.12 package set. Only leaf packages (nothing else in the set
       # depends on them) are moved past the nixpkgs default version; see
