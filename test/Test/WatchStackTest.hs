@@ -129,6 +129,27 @@ watchStackTests =
                 allTerminalStatuses
                 (testPollConfig{pcOnNewEvents = const (pure ())})
         result @?= PollSuccess CreateComplete
+    , testCase "pollForCompletionWith - UPDATE_COMPLETE_CLEANUP_IN_PROGRESS keeps polling until UPDATE_COMPLETE" $ do
+        let cleanup = mkStackEvt "evt-2" (CF.ResourceStatus' "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS")
+            started = mkStackEvt "evt-1" CF.ResourceStatus_UPDATE_IN_PROGRESS
+            complete = mkStackEvt "evt-3" CF.ResourceStatus_UPDATE_COMPLETE
+        eventsRef <- newIORef [[cleanup, started], [complete, cleanup, started]]
+        pollCount <- newIORef (0 :: Int)
+        let fetchEvents = do
+                modifyIORef' pollCount (+ 1)
+                batches <- readIORef eventsRef
+                case batches of
+                    (b : rest) -> writeIORef eventsRef rest >> pure b
+                    [] -> pure [complete, cleanup, started]
+        result <-
+            pollForCompletionWith
+                fetchEvents
+                "arn:aws:cloudformation:us-east-1:123:stack/demo/guid"
+                allTerminalStatuses
+                (testPollConfig{pcOnNewEvents = const (pure ())})
+        result @?= PollSuccess UpdateComplete
+        polls <- readIORef pollCount
+        assertBool "should poll past the cleanup event" (polls >= 2)
     , testCase "pollForCompletionWith - detects DELETE_COMPLETE" $ do
         let events = [mkStackEvt "evt-1" CF.ResourceStatus_DELETE_COMPLETE]
         eventsRef <- newIORef [events]

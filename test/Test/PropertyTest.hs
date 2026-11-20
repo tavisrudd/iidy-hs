@@ -18,7 +18,7 @@ import Test.QuickCheck hiding (Failure, Success)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.QuickCheck (testProperty)
 
-import Iidy.Cfn.Status (StackStatus (..), fromText, isFailureStatus, isInProgressStatus, isSuccessStatus, toText)
+import Iidy.Cfn.Status (StackStatus (..), fromText, isFailureStatus, isInProgressStatus, isSuccessStatus, knownStatuses, toText)
 import Iidy.Cfn.TemplateHash (calculateTemplateHash)
 import Iidy.Output.Renderers.Interactive (padRight)
 import Iidy.Yaml.CustomResources.JsonSchema (validateSchema)
@@ -493,7 +493,7 @@ prop_cfn_status_exclusive = forAll (elements allStatuses) $ \s ->
             $ trueCount <= 1
   where
     allStatuses :: [StackStatus]
-    allStatuses = [minBound .. maxBound]
+    allStatuses = knownStatuses
 
 -- | fromText . toText is Just for all StackStatus constructors.
 prop_cfn_status_roundtrip :: Property
@@ -501,7 +501,7 @@ prop_cfn_status_roundtrip = forAll (elements allStatuses) $ \s ->
     fromText (toText s) === Just s
   where
     allStatuses :: [StackStatus]
-    allStatuses = [minBound .. maxBound]
+    allStatuses = knownStatuses
 
 ------------------------------------------------------------------------
 -- Template Hash properties

@@ -2,6 +2,9 @@
 
 Replaces stringly-typed status predicates with a proper sum type
 that covers all AWS CloudFormation stack and resource statuses.
+A status this module does not know parses to 'UnknownStatus', which keeps
+the AWS text for display and is neither terminal nor a failure, so a
+status AWS adds later cannot end a poll early or be shown as a failure.
 -}
 module Iidy.Cfn.Status (
     StackStatus (..),
@@ -9,6 +12,8 @@ module Iidy.Cfn.Status (
     -- * Conversion
     toText,
     fromText,
+    parseStatus,
+    knownStatuses,
     fromCfnStackStatus,
     fromCfnResourceStatus,
 
@@ -65,7 +70,42 @@ data StackStatus
     | ImportRollbackFailed
     | ReviewInProgress
     | DeleteSkipped
-    deriving (Eq, Ord, Show, Bounded, Enum)
+    | UpdateCompleteCleanupInProgress
+    | UpdateRollbackCompleteCleanupInProgress
+    | ImportFailed
+    | -- | A status not listed above, kept as the AWS text.
+      UnknownStatus !Text
+    deriving (Eq, Ord, Show)
+
+-- | Every status except 'UnknownStatus'.
+knownStatuses :: [StackStatus]
+knownStatuses =
+    [ CreateInProgress
+    , CreateComplete
+    , CreateFailed
+    , DeleteInProgress
+    , DeleteComplete
+    , DeleteFailed
+    , UpdateInProgress
+    , UpdateComplete
+    , UpdateFailed
+    , UpdateRollbackInProgress
+    , UpdateRollbackComplete
+    , UpdateRollbackFailed
+    , RollbackInProgress
+    , RollbackComplete
+    , RollbackFailed
+    , ImportInProgress
+    , ImportComplete
+    , ImportRollbackInProgress
+    , ImportRollbackComplete
+    , ImportRollbackFailed
+    , ReviewInProgress
+    , DeleteSkipped
+    , UpdateCompleteCleanupInProgress
+    , UpdateRollbackCompleteCleanupInProgress
+    , ImportFailed
+    ]
 
 ------------------------------------------------------------------------
 -- Conversion: ADT <-> Text
@@ -96,14 +136,22 @@ toText = \case
     ImportRollbackFailed -> "IMPORT_ROLLBACK_FAILED"
     ReviewInProgress -> "REVIEW_IN_PROGRESS"
     DeleteSkipped -> "DELETE_SKIPPED"
+    UpdateCompleteCleanupInProgress -> "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS"
+    UpdateRollbackCompleteCleanupInProgress -> "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS"
+    ImportFailed -> "IMPORT_FAILED"
+    UnknownStatus t -> t
 
--- | Parse a StackStatus from its AWS-style text representation.
+-- | Parse a known StackStatus from its AWS-style text representation.
 fromText :: Text -> Maybe StackStatus
 fromText t = Map.lookup t textToStatusMap
 
--- | Lookup map for fromText (built once from all constructors).
+-- | Parse any AWS status text; text not known here becomes 'UnknownStatus'.
+parseStatus :: Text -> StackStatus
+parseStatus t = fromMaybe (UnknownStatus t) (fromText t)
+
+-- | Lookup map for fromText (built once from all known statuses).
 textToStatusMap :: Map.Map Text StackStatus
-textToStatusMap = Map.fromList [(toText s, s) | s <- [minBound .. maxBound]]
+textToStatusMap = Map.fromList [(toText s, s) | s <- knownStatuses]
 
 ------------------------------------------------------------------------
 -- Conversion: amazonka types -> StackStatus
@@ -133,14 +181,16 @@ fromCfnStackStatus = \case
     CF.StackStatus_IMPORT_ROLLBACK_COMPLETE -> ImportRollbackComplete
     CF.StackStatus_IMPORT_ROLLBACK_FAILED -> ImportRollbackFailed
     CF.StackStatus_REVIEW_IN_PROGRESS -> ReviewInProgress
-    -- Catch-all for any future amazonka constructors; fall back to the text representation
-    other ->
-        fromMaybe
-            CreateFailed
-            (fromText (CF.fromStackStatus other)) -- defensive fallback, should never happen
+    CF.StackStatus_UPDATE_COMPLETE_CLEANUP_IN_PROGRESS -> UpdateCompleteCleanupInProgress
+    CF.StackStatus_UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS -> UpdateRollbackCompleteCleanupInProgress
+    -- amazonka statuses are open newtypes over Text: anything else is parsed
+    -- from its text, and text not known here is kept as 'UnknownStatus'.
+    other -> parseStatus (CF.fromStackStatus other)
 
 {- | Convert from amazonka's CF.ResourceStatus to our StackStatus.
-Resource statuses are a subset of stack statuses.
+Stack events report the stack's own status in their resource status, so
+stack-only statuses such as UPDATE_COMPLETE_CLEANUP_IN_PROGRESS arrive
+here too; they are parsed from their text.
 -}
 fromCfnResourceStatus :: CF.ResourceStatus -> StackStatus
 fromCfnResourceStatus = \case
@@ -165,11 +215,8 @@ fromCfnResourceStatus = \case
     CF.ResourceStatus_UPDATE_ROLLBACK_IN_PROGRESS -> UpdateRollbackInProgress
     CF.ResourceStatus_UPDATE_ROLLBACK_COMPLETE -> UpdateRollbackComplete
     CF.ResourceStatus_UPDATE_ROLLBACK_FAILED -> UpdateRollbackFailed
-    -- Catch-all for any future amazonka constructors
-    other ->
-        fromMaybe
-            CreateFailed
-            (fromText (CF.fromResourceStatus other)) -- defensive fallback
+    CF.ResourceStatus_IMPORT_FAILED -> ImportFailed
+    other -> parseStatus (CF.fromResourceStatus other)
 
 ------------------------------------------------------------------------
 -- Predicates
@@ -193,6 +240,7 @@ isTerminal = \case
     ImportComplete -> True
     ImportRollbackComplete -> True
     ImportRollbackFailed -> True
+    ImportFailed -> True
     DeleteSkipped -> True
     ReviewInProgress -> True
     _inProgress -> False
@@ -215,6 +263,7 @@ isFailed = \case
     UpdateRollbackFailed -> True
     RollbackFailed -> True
     ImportRollbackFailed -> True
+    ImportFailed -> True
     _nonFailure -> False
 
 -- | Is this an in-progress status?
@@ -228,6 +277,8 @@ isInProgress = \case
     ImportInProgress -> True
     ImportRollbackInProgress -> True
     ReviewInProgress -> True
+    UpdateCompleteCleanupInProgress -> True
+    UpdateRollbackCompleteCleanupInProgress -> True
     _terminal -> False
 
 -- | Is this a rollback-related status?
@@ -239,6 +290,7 @@ isRollback = \case
     UpdateRollbackInProgress -> True
     UpdateRollbackComplete -> True
     UpdateRollbackFailed -> True
+    UpdateRollbackCompleteCleanupInProgress -> True
     ImportRollbackInProgress -> True
     ImportRollbackComplete -> True
     ImportRollbackFailed -> True
@@ -250,7 +302,7 @@ isRollback = \case
 
 -- | All terminal stack statuses.
 allTerminalStatuses :: [StackStatus]
-allTerminalStatuses = filter isTerminal [minBound .. maxBound]
+allTerminalStatuses = filter isTerminal knownStatuses
 
 {- | Terminal resource statuses (full terminal set minus ReviewInProgress,
 which is a stack-level-only state).

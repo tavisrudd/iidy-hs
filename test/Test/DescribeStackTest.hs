@@ -17,7 +17,7 @@ import Amazonka.Data.Time (Time (..))
 import Iidy.Cfn.Operations.DescribeStack (buildConsoleUrl, buildEventsDisplay, calculateEventDurations, convertEvent, convertStack)
 import Iidy.Cfn.Status (StackStatus (..))
 import Iidy.Output.Types
-import Test.Shared (mkEvent)
+import Test.Shared (mkEvent, renderCaptured)
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -125,7 +125,35 @@ describeStackTests =
         ]
     , testGroup
         "convertEvent"
-        [ testCase "converts all required fields from CF.StackEvent" $ do
+        [ testCase "changeset update with cleanup renders the real statuses (C58)" $ do
+            -- The event sequence from a changeset update of an IAM role, newest
+            -- first as DescribeStackEvents returns it.
+            let ev eid secs logId rtype status =
+                    (SE.newStackEvent "sid" eid "c109-operator-role" (UTCTime (fromGregorian 2026 11 20) secs))
+                        { SE.logicalResourceId = Just logId
+                        , SE.resourceType = Just rtype
+                        , SE.resourceStatus = Just status
+                        }
+                stackT = "AWS::CloudFormation::Stack"
+                roleT = "AWS::IAM::Role"
+                cfEvents =
+                    [ ev "e5" 72759 "c109-operator-role" stackT CF.ResourceStatus_UPDATE_COMPLETE
+                    , ev "e4" 72759 "c109-operator-role" stackT (CF.ResourceStatus' "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS")
+                    , ev "e3" 72755 "CfnServiceRole" roleT CF.ResourceStatus_UPDATE_COMPLETE
+                    , ev "e2" 72738 "CfnServiceRole" roleT CF.ResourceStatus_UPDATE_IN_PROGRESS
+                    , ev "e1" 72735 "c109-operator-role" stackT CF.ResourceStatus_UPDATE_IN_PROGRESS
+                    ]
+            out <- renderCaptured False [OdStackEvents (buildEventsDisplay 50 cfEvents)]
+            assertBool ("cleanup status shown in: " <> show out) ("UPDATE_COMPLETE_CLEANUP_IN_PROGRESS" `T.isInfixOf` out)
+            assertBool ("no CREATE_FAILED in: " <> show out) (not ("CREATE_FAILED" `T.isInfixOf` out))
+        , testCase "stack event UPDATE_COMPLETE_CLEANUP_IN_PROGRESS keeps its status" $ do
+            let cfEvent =
+                    (SE.newStackEvent "sid" "eid" "c109-operator-role" epoch)
+                        { SE.resourceStatus = Just (CF.ResourceStatus' "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS")
+                        , SE.resourceType = Just "AWS::CloudFormation::Stack"
+                        }
+            seResourceStatus (convertEvent cfEvent) @?= UpdateCompleteCleanupInProgress
+        , testCase "converts all required fields from CF.StackEvent" $ do
             let cfEvent =
                     (SE.newStackEvent "stack-id-123" "evt-001" "my-stack" epoch)
                         { SE.logicalResourceId = Just "MyBucket"
@@ -153,7 +181,7 @@ describeStackTests =
             seLogicalResourceId result @?= ""
             sePhysicalResourceId result @?= Nothing
             seResourceType result @?= ""
-            seResourceStatus result @?= CreateFailed -- fallback when resourceStatus is Nothing
+            seResourceStatus result @?= UnknownStatus "UNKNOWN" -- as Rust: missing status shows UNKNOWN
             seResourceStatusReason result @?= Nothing
             seResourceProperties result @?= Nothing
             seClientRequestToken result @?= Nothing

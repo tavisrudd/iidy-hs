@@ -8,6 +8,7 @@ import Test.ApprovedTemplateTest (approvedTemplateTests)
 import Test.AwsErrorTest (awsErrorTests)
 import Test.AwsImportGateTest (awsImportGateTests)
 import Test.AwsLoaderTest (awsLoaderTests)
+import Test.CfnStatusTest (cfnStatusTests)
 import Test.CfnYamlEmitterTest (cfnYamlEmitterTests)
 import Test.ChangesetHelpersTest (changesetHelpersTests)
 import Test.ChangesetTest (changesetTests)
@@ -145,6 +146,7 @@ main = do
             , testGroup "ParamsClient" paramsClientTests
             , testGroup "TemplateLoader" templateLoaderTests
             , testGroup "GlobalConfig" globalConfigTests
+            , testGroup "CfnStatus" cfnStatusTests
             , testGroup "PreprocessingProperties" preprocessingPropertyTests
             , testGroup "ErrorContent" errorContentTests
             , testGroup "TemplateDiff" templateDiffTests

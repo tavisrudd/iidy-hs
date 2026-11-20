@@ -48,6 +48,7 @@
 - [2026-11-18 Wed 12:26] [[file:../C53/index.org][C53]] — path: source holds no build dir; pre-commit suite passes
 - [2026-11-20 Fri 13:02] [[file:../C55/index.org][C55]] — Added opt-in --global-config flag; SSM /iidy/ lookup off by default
 - [2026-11-20 Fri 13:16] [[file:../C56/index.org][C56]] — Timestamps render in local time via per-instant getTimeZone; tests pin UTC
+- [2026-11-20 Fri 13:29] [[file:../C58/index.org][C58]] — Cleanup statuses known and in progress; unknown statuses kept as text instead of CREATE_FAILED
 * COMMENT meta
 :PROPERTIES:
 :LANE: main

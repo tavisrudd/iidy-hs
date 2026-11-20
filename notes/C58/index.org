@@ -1,0 +1,84 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C58
+:LANE:     main
+:TODO_STATE: DONE
+:CARD_PRIORITY: A
+:MODE:     CONTRACT
+:ORIGIN:   User report: describe-stack shows CREATE_FAILED where the console shows UPDATE_COMPLETE_CLEANUP_IN_PROGRESS (changeset update of c109-operator-role)
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:ID: org:01a1faa3-22db-730a-9e70-f2d4a099b0af
+:ADDED: [2026-11-20 Fri 13:25]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-20 Fri 13:29]
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+- Card state STARTED → DONE [2026-11-20 Fri 13:29]
+  Note: Cleanup statuses known and in progress; unknown statuses kept as text instead of CREATE_FAILED
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:END:
+#+title: C58 — Unknown CFN statuses (UPDATE_COMPLETE_CLEANUP_IN_PROGRESS) parse as CREATE_FAILED
+#+date: 2026-11-20
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1faa3-22db-730a-9e70-f2d30433e81b
+:ADDED: [2026-11-20 Fri 13:25]
+:END:
+
+=describe-stack= on c109-operator-role (updated with a changeset) showed
+=CREATE_FAILED= for the stack where the console shows
+=UPDATE_COMPLETE_CLEANUP_IN_PROGRESS=. =Iidy.Cfn.Status= had no constructor
+for the two =*_CLEANUP_IN_PROGRESS= stack statuses (or resource
+=IMPORT_FAILED=), and =fromCfnStackStatus= / =fromCfnResourceStatus= fell
+back to =CreateFailed= for any text they did not know. Stack events carry
+the stack's own status in their resource status, so every update that
+needs cleanup hit the fallback.
+
+Beyond display: =CreateFailed= is terminal and failed, so the poll in
+=update-stack=, =exec-changeset= and =watch-stack= could stop at the
+cleanup event and report the update as failed. Rust and iidy-js both list
+both cleanup statuses as in progress (=src/output/status.rs=,
+=src/cfn/statusTypes.ts=).
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1faa3-22db-730a-9e70-f2d23d812511
+:ADDED: [2026-11-20 Fri 13:25]
+:END:
+
+Paths: =src/Iidy/Cfn/Status.hs=, =src/Iidy/Cfn/Operations/DescribeStack.hs=,
+status, describe-stack, watch and property tests.
+
+Gate: every amazonka stack and resource status parses to a known status;
+the cleanup statuses are in progress (not terminal, not failed); unknown
+text is kept as-is and is neither terminal nor failed; a poll that sees
+the cleanup event keeps going to =UPDATE_COMPLETE=.
+
+* DONE Unknown CFN statuses (UPDATE_COMPLETE_CLEANUP_IN_PROGRESS) parse as CREATE_FAILED
+:PROPERTIES:
+:ID: org:01a1faa3-22db-730a-9e70-f2d1ca21d061
+:ADDED: [2026-11-20 Fri 13:25]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-20 Fri 13:29] \\
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:END:
+
+Added =UpdateCompleteCleanupInProgress=,
+=UpdateRollbackCompleteCleanupInProgress= and =ImportFailed=, and an
+=UnknownStatus Text= constructor that replaces the =CreateFailed= fallback
+(=parseStatus=). =StackStatus= drops =Enum=/=Bounded=; =knownStatuses= lists
+the known ones. An event with no status shows =UNKNOWN=, as Rust does.
+
+Durations follow Rust: the cleanup event restarts the stack's timer, so
+the final =UPDATE_COMPLETE= row shows about 1s, not the whole update.
+
+Tests: =Test.CfnStatusTest= (all amazonka patterns, cleanup, unknown), a
+poll regression in =Test.WatchStackTest=, and a describe-stack render of
+the reported event sequence in =Test.DescribeStackTest=.

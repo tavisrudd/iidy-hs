@@ -155,3 +155,4 @@
 2026-11-20 13:02 — 2026-11-20--1 (d42a67fe-2d28-47b9-9e97-1abc23d36530): C55 SSM /iidy/ global config now opt-in via --global-config (off by default)
 2026-11-20 13:16 — 2026-11-20--1 (d42a67fe-2d28-47b9-9e97-1abc23d36530): C56 interactive timestamps now local time (matches iidy-js); C57 filed for the Rust side
 2026-11-20 13:20 — 2026-11-20--1 (d42a67fe-2d28-47b9-9e97-1abc23d36530): C54 ShellRunner finds bash on PATH (no /usr/bin/env); cabal -O2 release build in dist-release/
+2026-11-20 13:29 — 2026-11-20--1 (d42a67fe-2d28-47b9-9e97-1abc23d36530): C58 *_CLEANUP_IN_PROGRESS statuses no longer parse as CREATE_FAILED (display + poll termination)

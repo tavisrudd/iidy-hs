@@ -267,6 +267,7 @@ test-suite iidy-hs-test
     Test.ParamsClientTest
     Test.TemplateLoaderTest
     Test.GlobalConfigTest
+    Test.CfnStatusTest
     Test.PreprocessingPropertyTest
     Test.ErrorContentTest
     Test.S3ObjectsTest
