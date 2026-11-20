@@ -5,3 +5,5 @@ Parameters:
   PublicFavicon: "false"          # quoted: a string, not a boolean
   SessionTimeout: "300"
   Enabled: "yes"
+  PlainYes: yes                   # stack-args are YAML 1.2: still a string
+  PlainOff: Off

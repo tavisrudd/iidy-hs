@@ -81,7 +81,8 @@ runDemo scriptPath timescaling maskSecrets policy = do
     content <- BL.readFile fp
     let baseLocation = scriptPath
 
-    case parseYamlStrictAs Yaml11Bools content baseLocation of
+    -- YAML 1.2: a demo script is not a CloudFormation template
+    case parseYamlStrictAs Yaml12Bools content baseLocation of
         Left (ParseError pos msg) -> do
             let source = TE.decodeUtf8 (BL.toStrict content)
             formatted <- formatParseErrorEnhanced ColorAuto baseLocation source pos msg
@@ -89,7 +90,7 @@ runDemo scriptPath timescaling maskSecrets policy = do
             pure 1
         Right ast -> do
             let importCfg = mkImportConfig Nothing policy
-            result <- preprocessWithConfig importCfg True ast baseLocation
+            result <- preprocessWithConfig importCfg False ast baseLocation
             case result of
                 Left err -> do
                     let source = TE.decodeUtf8 (BL.toStrict content)

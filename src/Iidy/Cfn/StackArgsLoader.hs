@@ -196,18 +196,18 @@ loadStackArgsWithSettings settings policy mkLoader argsfile environment operatio
         content <- lift $ BL.readFile argsfile
         let baseLocation = T.pack argsfile
 
-        -- Parse YAML
-        -- Read as YAML 1.1, matching the preprocess below (plain yes/no/on/off
-        -- are booleans; quoted strings stay strings)
-        ast <- case parseYamlStrictAs Yaml11Bools content baseLocation of
+        -- Parse YAML 1.2, as iidy-js read stack-args (js-yaml core schema):
+        -- yes/no/on/off are strings, so a parameter value `Flag: yes` stays
+        -- the string "yes". Only CloudFormation templates are read as YAML 1.1.
+        ast <- case parseYamlStrictAs Yaml12Bools content baseLocation of
             Left perr ->
                 throwE $ "Parse error in " <> baseLocation <> ": " <> parseErrorMessage perr
             Right a -> pure a
 
-        -- Preprocess (YAML 1.1 for CFN compatibility)
+        -- Preprocess (YAML 1.2, matching the parse above)
         loader <- lift (mkLoader ast)
         let preprocess doc = ExceptT $ do
-                r <- preprocessYamlWithVariables (ipTrustedSources policy) True loader doc baseLocation
+                r <- preprocessYamlWithVariables (ipTrustedSources policy) False loader doc baseLocation
                 pure $ case r of
                     Left err ->
                         Left $

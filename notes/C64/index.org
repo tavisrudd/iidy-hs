@@ -1,0 +1,65 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C64
+:LANE:     main
+:TODO_STATE: DONE
+:CARD_PRIORITY: A
+:MODE:     CONTRACT
+:ORIGIN:   User decision after C62 iidy-js comparison: stack-args as 1.2, only cfn templates as 1.1
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:ID: org:01a1fad7-51e1-72ef-ac0c-a63633f01beb
+:ADDED: [2026-11-20 Fri 14:22]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-20 Fri 14:23]
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+- Card state STARTED → DONE [2026-11-20 Fri 14:24]
+  Note: Stack-args and demo scripts read as YAML 1.2; only CloudFormation templates as YAML 1.1
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:END:
+#+title: C64 — Read stack-args (and demo scripts) as YAML 1.2; keep YAML 1.1 for CloudFormation templates only
+#+date: 2026-11-20
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1fad7-51e1-72ef-ac0c-a6355a39c13b
+:ADDED: [2026-11-20 Fri 14:22]
+:END:
+
+After the C62 comparison showed iidy-js had no YAML 1.1 mode (every
+document read with js-yaml 3's core schema), the user decided: stack-args
+are YAML 1.2; only CloudFormation templates are YAML 1.1. Before this,
+stack-args (and demo scripts) were read as YAML 1.1 following Rust, so a
+plain =Parameters: {Flag: yes}= became a boolean and failed to load.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1fad7-51e1-72ef-ac0c-a634a14eec79
+:ADDED: [2026-11-20 Fri 14:22]
+:END:
+
+Paths: =src/Iidy/Cfn/StackArgsLoader.hs=, =src/Iidy/Demo.hs=, stack-args
+loader test and fixture, requirements doc 02, =docs/dev/rust-compatibility.org=.
+Gate: plain yes/Off stack-args parameters load as strings; =render:=
+templates still YAML 1.1. Tests pass.
+
+* DONE Read stack-args (and demo scripts) as YAML 1.2; keep YAML 1.1 for CloudFormation templates only
+:PROPERTIES:
+:ID: org:01a1fad7-51e1-72ef-ac0c-a633e7a900d1
+:ADDED: [2026-11-20 Fri 14:22]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-20 Fri 14:24] \\
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:END:
+
+Done. The stack-args loader and demo scripts parse with =Yaml12Bools= and
+preprocess with the YAML 1.1 flag off; =render:= templates
+(=TemplateLoader=) and =render= (auto-detected) are unchanged. Test: plain
+=PlainYes: yes= and =PlainOff: Off= parameters load as ="yes"= / ="Off"=.
+Rust follow-up added to C63.

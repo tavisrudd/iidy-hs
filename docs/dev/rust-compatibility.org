@@ -88,10 +88,16 @@ takes a =DateTime<Utc>=) with no zone label. iidy-js and the Haskell port
 show local time. Card C57 tracks the same change on the Rust side.
 
 ** YAML 1.1 Booleans Read at Parse Time
-*Cause*: Intentional Haskell change (C62), following the YAML 1.1 spec.
+*Cause*: Intentional Haskell change (C62, C64), following the YAML 1.1 spec
+and iidy-js.
 
-Under YAML 1.1 compatibility (stack-args, =render:= templates, templates
-detected as YAML 1.1), the Haskell port treats YAML 1.1's yes/no/on/off as
+Stack-args files and demo scripts are YAML 1.2 (C64), as in iidy-js, which
+had no YAML 1.1 mode; Rust reads stack-args as YAML 1.1 (=YamlSpec::V11= in
+=src/cfn/stack_args.rs=), so a plain =Flag: yes= parameter is a boolean
+there and a string in iidy-hs.
+
+Under YAML 1.1 compatibility (=render:= templates, templates detected as
+YAML 1.1), the Haskell port treats YAML 1.1's yes/no/on/off as
 booleans while parsing, and only for a plain, untagged scalar. Rust converts
 string values after preprocessing, when quoting is no longer known. The
 differences:

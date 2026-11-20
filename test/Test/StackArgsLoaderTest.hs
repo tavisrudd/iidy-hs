@@ -74,6 +74,14 @@ loaderTests =
                 param "PublicFavicon" @?= Just "false"
                 param "SessionTimeout" @?= Just "300"
                 param "Enabled" @?= Just "yes"
+    , testCase "stack-args are YAML 1.2: plain yes/Off parameters stay strings (C64)" $ do
+        result <- loadStackArgs "test-fixtures/test-stack-args-quoted-bools.yaml" "dev" OpCreateStack noAwsSettings (importPolicy AllowRemoteImports) Nothing
+        case result of
+            Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
+            Right (LoadedStackArgs sa _aws _ctx) -> do
+                let param k = saParameters sa >>= Data.Map.Strict.lookup k
+                param "PlainYes" @?= Just "yes"
+                param "PlainOff" @?= Just "Off"
     , testCase "environment map resolution" $ do
         result <- loadStackArgs "test-fixtures/test-stack-args-envmap.yaml" "prod" OpUpdateStack noAwsSettings (importPolicy AllowRemoteImports) Nothing
         case result of

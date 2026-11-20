@@ -946,6 +946,7 @@ The Handlebars engine must be implemented as a custom recursive-descent parser; 
 - Default mode is YAML 1.2: only plain =true=/=false= (three casings) are booleans; =yes=/=no=/=on=/=off= are strings.
 - YAML 1.1 compat mode also reads a plain, untagged =yes=, =no=, =on=, =off= (lower, =Title= or =UPPER= case) as a boolean. Quoted values (="false"=, ='yes'=) and explicitly tagged ones (=!!str yes=) stay strings, as the YAML 1.1 spec says. Single-letter =y=/=n= are not booleans (as in Rust and most YAML 1.1 loaders).
 - Mapping keys keep their text: =on:= is the key =on=, not =true=.
+- Which documents use YAML 1.1: CloudFormation templates only, that is =render:= templates in stack-args and =render= input detected (or forced) as YAML 1.1. Stack-args files and demo scripts are always YAML 1.2, as iidy-js read every document (js-yaml 3 core schema), so =Parameters: {Flag: yes}= passes the string ="yes"=.
 - The =--yaml-spec= CLI flag accepts =auto=, =1.1=, or =1.2=.
   - =auto=: auto-detect by document content.
   - =1.1=: force YAML 1.1 compat.
@@ -988,7 +989,7 @@ resolveScalar(schema, tag, style, text):
 
 *Complexity Notes:*
 
-YAML 1.1 boolean conversion is a recursive structural fold over the output value. The conversion happens after full resolution, so it interacts with all other features uniformly -- including strings produced by =!$join= or Handlebars interpolation.
+YAML 1.1 booleans are decided while parsing, from each scalar's style, so values built during preprocessing (=!$join=, Handlebars) are never converted.
 
 --------------
 
