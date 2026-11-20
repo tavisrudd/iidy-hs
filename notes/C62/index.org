@@ -127,3 +127,30 @@ Tests: =Test.Yaml11BoolsTest= (parser, preprocess, imports, =!$parseYaml=),
 a stack-args loader test with the reported Parameters, and the fixture
 =yaml-11-quoted-strings=. The fixture harness now parses with the schema
 its preprocess uses (it parsed YAML 1.2 before and relied on the post-pass).
+
+** Comparison with iidy-js (TypeScript)
+:PROPERTIES:
+:ID: org:01a1faca-5c60-73f0-9ce1-6fff20da4e90
+:ADDED: [2026-11-20 Fri 14:08]
+:END:
+iidy-js has no YAML 1.1 mode and no =--yaml-spec= option. Every document
+(stack-args =src/cfn/loadStackArgs.ts:83=, templates =src/render.ts:45=,
+imports =src/preprocess/index.ts:222=, =!$parseYaml= =visitor.ts:366=) goes
+through one js-yaml 3.14.1 schema (=jsyaml.Schema.create(schemaTypes)=,
+=src/yaml.ts:226-232=). js-yaml 3's boolean type is the YAML 1.2 core one:
+only plain =true=/=false= (three casings). So in iidy-js:
+
+- plain =yes=/=no=/=on=/=off= are strings, everywhere;
+- quoted values are strings; keys keep their text;
+- its dumper quotes yes/no/on/off strings on output (='yes'=) for YAML 1.1
+  readers, as iidy-hs's emitter does.
+
+YAML 1.1 compatibility was added in Rust (2025-06-06, commits 25957bf,
+e77ebbc) and is always on for stack-args and =render:= templates. Effect:
+a stack-args =Parameters: {Flag: yes}= worked in iidy-js (the parameter
+value ="yes"=) but fails in Rust and iidy-hs (a boolean is not a string).
+
+Not verified by running js-yaml (no Node or js-yaml on this host; npm is
+outside the allowed network sources). From js-yaml 3.14.1's source as
+known; unverified side note: its default schema also reads a plain
+=2010-09-09= as a timestamp.
