@@ -30,8 +30,15 @@ stackArgsFieldsTests =
     , testCase "string maps" $ do
         errorOf (named [("Tags", String "x")]) @?= Just "invalid type for Tags: expected a mapping, got a string"
         errorOf (named [("Parameters", list [])]) @?= Just "invalid type for Parameters: expected a mapping, got a sequence"
-        errorOf (named [("Parameters", args [("A", Number 3)])]) @?= Just "invalid type: integer `3`, expected a string"
-        errorOf (named [("Tags", args [("A", Number 2.5)])]) @?= Just "invalid type: float `2.5`, expected a string"
+        errorOf (named [("Parameters", args [("A", Number 3)])]) @?= Just "invalid type for Parameters.A: expected a string, got integer `3`"
+        errorOf (named [("Tags", args [("A", Number 2.5)])]) @?= Just "invalid type for Tags.A: expected a string, got float `2.5`"
+    , testCase "string map errors name the field and key (C61)" $ do
+        errorOf (named [("Parameters", args [("PublicFavicon", Bool False)])])
+            @?= Just "invalid type for Parameters.PublicFavicon: expected a string, got boolean `false`"
+        errorOf (named [("Tags", args [("Owner", args [("team", String "x")])])])
+            @?= Just "invalid type for Tags.Owner: expected a string, got a mapping"
+        errorOf (named [("Parameters", args [("Subnets", list [String "a"])])])
+            @?= Just "invalid type for Parameters.Subnets: expected a string, got a sequence"
     , testCase "capabilities" $ do
         errorOf (named [("Capabilities", String "CAPABILITY_IAM")])
             @?= Just "invalid type for Capabilities: expected a sequence, got a string"

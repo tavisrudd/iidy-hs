@@ -2,13 +2,22 @@
 :PROPERTIES:
 :CARD_ID:  C61
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: DONE
 :MODE:     CONTRACT
 :ORIGIN:   User report: 'Failed to parse stack args from stack-args.yaml: invalid type: boolean `false`, expected a string'
 :CREATED_BY: opus-5.5-medium
 :SESSION_ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
 :ID: org:01a1fab4-4448-73b9-aeea-7881b14411b1
 :ADDED: [2026-11-20 Fri 13:44]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-20 Fri 13:56]
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+- Card state STARTED → DONE [2026-11-20 Fri 13:58]
+  Note: strMap errors name field and key: invalid type for Parameters.X: expected a string, got ...
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
 :END:
 #+title: C61 — Stack-args error for a non-string map value omits the field and key (Parameters.PublicFavicon)
 #+date: 2026-11-20
@@ -51,10 +60,15 @@ this point the YAML is a plain value without source positions; a key path
 is the most the message can give unless positions are carried through
 (out of scope; note it if cheap).
 
-* TODO Stack-args error for a non-string map value omits the field and key (Parameters.PublicFavicon)
+* DONE Stack-args error for a non-string map value omits the field and key (Parameters.PublicFavicon)
 :PROPERTIES:
 :ID: org:01a1fab4-4448-73b9-aeea-787e3ec25920
 :ADDED: [2026-11-20 Fri 13:44]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-20 Fri 13:58] \\
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
 :END:
 
 Pass the field key into =validatePair= and build the message with the
@@ -62,3 +76,12 @@ key path. Check Rust's serde message for the same input
 (=~/src/iidy=, stack args deserialisation) and decide whether matching it
 or the clearer key-path form is preferred; record the choice in the card.
 Check other parsers in =Fields.hs= for messages that drop the key.
+
+Done. =strMap= now reports
+=invalid type for Parameters.PublicFavicon: expected a string, got boolean `false`=
+(the =typeError= / =strList= wording plus the key path). Rust's message is
+serde's =invalid type: boolean `false`, expected a string=, with no
+location; the key-path form was chosen over matching it. The other parsers
+already name the field; =Capabilities= entries name the field but not the
+index (left as is). Tests in =Test.StackArgsFieldsTest= cover a boolean, a
+nested mapping and a sequence under =Parameters= and =Tags=.

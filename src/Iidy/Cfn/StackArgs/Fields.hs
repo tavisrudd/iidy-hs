@@ -154,14 +154,25 @@ strList key = \case
                 <> "]: expected a string, got "
                 <> describeValue v
 
--- | A mapping of strings to strings (matching Rust/serde behavior).
+{- | A mapping of strings to strings (matching Rust/serde behavior). A
+non-string value is reported with its key path, e.g.
+@invalid type for Parameters.PublicFavicon: expected a string, got boolean `false`@
+(Rust's serde message names neither the field nor the key).
+-}
 strMap :: ValueParser (Map Text Text)
 strMap key = \case
     Object m -> Map.fromList <$> mapM validatePair (KM.toList m)
     v -> typeError key "a mapping" v
   where
     validatePair (k, String t) = Right (Key.toText k, t)
-    validatePair (_, v) = Left ("invalid type: " <> describeValue v <> ", expected a string")
+    validatePair (k, v) =
+        Left $
+            "invalid type for "
+                <> key
+                <> "."
+                <> Key.toText k
+                <> ": expected a string, got "
+                <> describeValue v
 
 -- | An integer, rejecting other numbers (detected with 'isInteger').
 int :: ValueParser Int

@@ -158,3 +158,4 @@
 2026-11-20 13:29 — 2026-11-20--1 (d42a67fe-2d28-47b9-9e97-1abc23d36530): C58 *_CLEANUP_IN_PROGRESS statuses no longer parse as CREATE_FAILED (display + poll termination)
 2026-11-20 13:43 — 2026-11-20--1 (d42a67fe-2d28-47b9-9e97-1abc23d36530): C59 poll ignores pre-start terminal events for all operations; C60 rollback-complete colours + missing-stack status; C58 audit report
 2026-11-20 13:55 — 2026-11-20--1 (d42a67fe-2d28-47b9-9e97-1abc23d36530): C62 YAML 1.1 booleans resolved at parse time (plain scalars only); quoted "false" stays a string
+2026-11-20 13:58 — 2026-11-20--1 (d42a67fe-2d28-47b9-9e97-1abc23d36530): C61 stack-args map type errors name the field and key

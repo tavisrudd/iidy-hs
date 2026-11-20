@@ -52,6 +52,7 @@
 - [2026-11-20 Fri 13:43] [[file:../C59/index.org][C59]] — Start-time filter applies to every operation's terminal check, as in Rust
 - [2026-11-20 Fri 13:43] [[file:../C60/index.org][C60]] — Rollback-complete statuses green; missing stack shows no status
 - [2026-11-20 Fri 13:55] [[file:../C62/index.org][C62]] — YAML 1.1 booleans read at parse time for plain scalars only; quoted strings stay strings
+- [2026-11-20 Fri 13:58] [[file:../C61/index.org][C61]] — strMap errors name field and key: invalid type for Parameters.X: expected a string, got ...
 * COMMENT meta
 :PROPERTIES:
 :LANE: main
