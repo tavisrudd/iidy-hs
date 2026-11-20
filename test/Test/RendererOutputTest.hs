@@ -11,6 +11,7 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..))
+import Data.Time.LocalTime (hoursToTimeZone)
 import Data.Vector qualified as V
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -19,6 +20,7 @@ import Iidy.Aws.ClientReqToken (DerivedTokenInfo (..), TokenInfo (..), TokenSour
 import Iidy.Cfn.Status (StackStatus (..))
 import Iidy.Output.Color (colorizeResourceStatus, darkTheme)
 import Iidy.Output.Renderers.Interactive (
+    InteractiveRenderer (..),
     formatLogicalId,
     formatSectionEntry,
     formatSectionHeading,
@@ -77,10 +79,21 @@ rendererOutputTests =
         assertBool "failed colored" ("\ESC[" `T.isInfixOf` failedResult)
         let rollbackResult = colorizeResourceStatus darkTheme RollbackInProgress
         assertBool "rollback colored" ("\ESC[" `T.isInfixOf` rollbackResult)
-    , testCase "renderTimestamp produces expected format" $ do
-        let ts = UTCTime (fromGregorian 2026 1 15) (10 * 3600 + 5 * 60 + 30)
-            formatted = renderTimestamp ts
-        assertEqual "timestamp" "Thu Jan 15 2026 10:05:30" formatted
+    , testCase "renderTimestamp uses the renderer's local zone" $ do
+        base <- mkPlainRenderer
+        let r = base{irTimeZoneAt = const (pure (hoursToTimeZone (-8)))}
+            ts = UTCTime (fromGregorian 2026 1 15) (10 * 3600 + 5 * 60 + 30)
+        formatted <- renderTimestamp r ts
+        assertEqual "timestamp" "Thu Jan 15 2026 02:05:30" formatted
+    , testCase "renderTimestamp asks for the zone at each instant (DST)" $ do
+        base <- mkPlainRenderer
+        let dstStart = UTCTime (fromGregorian 2026 3 8) (10 * 3600)
+            zoneAt t = if t < dstStart then hoursToTimeZone (-8) else hoursToTimeZone (-7)
+            r = base{irTimeZoneAt = pure . zoneAt}
+        winter <- renderTimestamp r (UTCTime (fromGregorian 2026 1 15) (20 * 3600))
+        summer <- renderTimestamp r (UTCTime (fromGregorian 2026 7 15) (20 * 3600))
+        assertEqual "winter offset" "Thu Jan 15 2026 12:00:00" winter
+        assertEqual "summer offset" "Wed Jul 15 2026 13:00:00" summer
     , testCase "prettyFormatTags with environment and env" $ do
         let tags = Map.fromList [("Environment", "staging"), ("Name", "my-stack")]
             result = prettyFormatTags tags (Just 100)

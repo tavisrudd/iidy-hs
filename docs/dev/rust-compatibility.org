@@ -80,6 +80,13 @@ The =explain= command accepts multiple input formats:
 
 Rust only accepts the =ERR_NNNN= format.
 
+** Timestamps Shown in Local Time
+*Cause*: Intentional Haskell change, matching iidy-js.
+
+Rust formats event, stack and changeset times in UTC (=render_timestamp=
+takes a =DateTime<Utc>=) with no zone label. iidy-js and the Haskell port
+show local time. Card C57 tracks the same change on the Rust side.
+
 ** Global SSM Configuration Is Opt-In
 *Cause*: Intentional Haskell change.
 

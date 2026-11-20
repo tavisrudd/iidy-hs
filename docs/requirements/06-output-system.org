@@ -125,7 +125,7 @@ Four themes are defined. Each theme is a record of 14 color fields:
 - Each entry is formatted as  ~<label_padded_to_25_chars> <value>~, where label text is in =thMuted= color and value text receives semantic coloring (status, environment, resource ID, timestamp, etc.).
 - Column alignment: =column2Start = 25=; labels exceeding 25 characters are truncated or the value is placed after a single space.
 - Dynamic padding for tabular sections (stack events, stack resources, etc.) is computed by scanning the full list and taking the maximum text width of each column, clamped between =minStatusPadding = 17= and =maxPadding = 60=. Resource type columns use a separate =resourceTypePadding = 40= constant. Default screen width is 80 columns.
-- Timestamps use the format =%a %b %d %Y %H:%M:%S= (e.g., =Tue Feb 22 2026 14:30:00=).
+- Timestamps use the format =%a %b %d %Y %H:%M:%S= (e.g., =Tue Feb 22 2026 14:30:00=), shown in the local time zone as iidy-js does. The zone is looked up for each timestamp, so events on either side of a daylight-saving change get the right offset. JSON output is unaffected.
 - CloudFormation resource status values are colored semantically:
   - Substring =IN_PROGRESS= -> =thWarning= (yellow in dark theme)
   - Substring =COMPLETE= -> =thSuccess= (green)
@@ -579,7 +579,7 @@ Event Arrival (OdNewStackEvents):
 - Resource status coloring tests: verify each status keyword substring maps to the expected color code under the dark theme.
 - Environment coloring tests: verify =production=, =integration=, =development= map to correct theme colors; verify unknown env name returns plain text.
 - Interactive renderer alignment tests: entry labels are left-padded to exactly 25 characters; values begin at column 26.
-- Timestamp format test: timestamps are rendered with =%a %b %d %Y %H:%M:%S= (locale-independent, English day/month names).
+- Timestamp format test: timestamps are rendered with =%a %b %d %Y %H:%M:%S= (locale-independent, English day/month names) in the renderer's local zone; test renderers use UTC.
 - JSON stability test: same =OutputData= value serialized twice produces identical JSON strings.
 - Final command summary: =SummarySuccess= output contains "Success" in green; =SummaryFailure= output contains "Failure" in red (verified by ANSI code inspection).
 

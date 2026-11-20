@@ -4,6 +4,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text qualified as T
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..), addUTCTime, secondsToNominalDiffTime)
+import Data.Time.LocalTime (hoursToTimeZone, utc)
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 
@@ -26,7 +27,7 @@ import Iidy.Output.Renderers.Interactive (
     padRight,
     prettyFormatParameters,
     prettyFormatTags,
-    renderTimestamp,
+    renderTimestampIn,
     styleMuted,
  )
 import Iidy.Output.Types (StackEventWithTiming (..))
@@ -84,10 +85,14 @@ rendererTests =
         r <- mkPlainRenderer
         let muted = styleMuted r "dimmed text"
         assertEqual "no styling" "dimmed text" muted
-    , testCase "renderTimestamp - correct format" $ do
+    , testCase "renderTimestampIn - correct format in UTC" $ do
         let ts = UTCTime (fromGregorian 2026 2 22) (15 * 3600 + 30 * 60 + 45)
-            formatted = renderTimestamp ts
+            formatted = renderTimestampIn utc ts
         assertEqual "timestamp format" "Sun Feb 22 2026 15:30:45" formatted
+    , testCase "renderTimestampIn - shifts to the given zone" $ do
+        let ts = UTCTime (fromGregorian 2026 2 22) (3 * 3600)
+            formatted = renderTimestampIn (hoursToTimeZone (-8)) ts
+        assertEqual "previous local day" "Sat Feb 21 2026 19:00:00" formatted
     , testCase "calcPadding - respects min and max" $ do
         assertEqual "empty list uses min" minStatusPadding (calcPadding ([] :: [T.Text]) id)
         let items = [T.replicate 100 "x"]

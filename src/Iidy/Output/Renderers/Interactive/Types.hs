@@ -31,6 +31,7 @@ module Iidy.Output.Renderers.Interactive.Types (
     formatLogicalId,
     formatTimestampText,
     renderTimestamp,
+    renderTimestampIn,
     styleMuted,
     calcPadding,
     padRight,
@@ -75,7 +76,7 @@ import Data.Ord (comparing)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import Data.Time (UTCTime, defaultTimeLocale, diffUTCTime, formatTime, getCurrentTime)
+import Data.Time (TimeZone, UTCTime, defaultTimeLocale, diffUTCTime, formatTime, getCurrentTime, getTimeZone, utcToZonedTime)
 import System.IO (Handle, hFlush, hIsTerminalDevice, stderr, stdout)
 
 import Iidy.Aws.ClientReqToken (DerivedTokenInfo (..), TokenSource (..))
@@ -163,6 +164,11 @@ data InteractiveRenderer = InteractiveRenderer
     -- ^ (start_time, last_event_time) for elapsed time display
     , irTimingThread :: !(TVar (Maybe ThreadId))
     -- ^ Background thread updating spinner message with elapsed time
+    , irTimeZoneAt :: !(UTCTime -> IO TimeZone)
+    {- ^ Local time zone in effect at a given instant, used to show
+    timestamps in local time. Per-instant so that events from either
+    side of a daylight-saving change get the right offset.
+    -}
     }
 
 newInteractiveRenderer :: InteractiveOptions -> IO InteractiveRenderer
@@ -193,6 +199,7 @@ newInteractiveRendererWithHandles hOut hErr opts = do
             , irSpinnerThread = spinnerThreadRef
             , irTimingState = timingStateRef
             , irTimingThread = timingThreadRef
+            , irTimeZoneAt = getTimeZone
             }
 
 ------------------------------------------------------------------------
@@ -386,9 +393,17 @@ formatLogicalId r = colorize (th r) (thResourceId (th r))
 formatTimestampText :: InteractiveRenderer -> Text -> Text
 formatTimestampText r = colorize (th r) (thTimestamp (th r))
 
--- | Render a UTCTime to canonical format
-renderTimestamp :: UTCTime -> Text
-renderTimestamp = T.pack . formatTime defaultTimeLocale "%a %b %d %Y %H:%M:%S"
+{- | Render a UTCTime in the renderer's local time zone, in canonical
+format. Matches iidy-js, whose @dateformat@ call shows local time.
+-}
+renderTimestamp :: InteractiveRenderer -> UTCTime -> IO Text
+renderTimestamp r t = do
+    tz <- irTimeZoneAt r t
+    pure (renderTimestampIn tz t)
+
+-- | Render a UTCTime in the given time zone, in canonical format.
+renderTimestampIn :: TimeZone -> UTCTime -> Text
+renderTimestampIn tz = T.pack . formatTime defaultTimeLocale "%a %b %d %Y %H:%M:%S" . utcToZonedTime tz
 
 -- | Style text as muted
 styleMuted :: InteractiveRenderer -> Text -> Text

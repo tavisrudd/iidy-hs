@@ -42,7 +42,7 @@ module Iidy.Output.Renderers.Interactive.Sections (
 
 import Control.Concurrent.STM (atomically, readTVarIO, writeTVar)
 import Control.Monad (unless, when)
-import Data.Foldable (for_)
+import Data.Foldable (asum, for_)
 import Data.List (sortBy)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
@@ -141,12 +141,12 @@ renderStackDefinition r def showTimes = do
     printSectionEntry r "TerminationProtection:" protText
     -- Times
     when showTimes $ do
-        case sdCreationTime def of
-            Just t -> printSectionEntry r "Creation Time:" (styleMuted r (renderTimestamp t))
-            Nothing -> pure ()
-        case sdLastUpdatedTime def of
-            Just t -> printSectionEntry r "Last Update Time:" (styleMuted r (renderTimestamp t))
-            Nothing -> pure ()
+        for_ (sdCreationTime def) $ \t -> do
+            tsText <- renderTimestamp r t
+            printSectionEntry r "Creation Time:" (styleMuted r tsText)
+        for_ (sdLastUpdatedTime def) $ \t -> do
+            tsText <- renderTimestamp r t
+            printSectionEntry r "Last Update Time:" (styleMuted r tsText)
     -- Timeout
     case sdTimeoutInMinutes def of
         Just t -> printSectionEntry r "Timeout In Minutes:" (styleMuted r (T.pack (show t)))
@@ -195,9 +195,8 @@ renderStackEvents r evts = do
 renderSingleStackEvent :: InteractiveRenderer -> Int -> Int -> StackEventWithTiming -> IO ()
 renderSingleStackEvent r statusPad rtypePad ewt = do
     let event = sewEvent ewt
-        ts = case seTimestamp event of
-            Just t -> formatTimestampText r (renderTimestamp t)
-            Nothing -> formatTimestampText r (T.replicate 25 " ")
+    tsRaw <- maybe (pure (T.replicate 25 " ")) (renderTimestamp r) (seTimestamp event)
+    let ts = formatTimestampText r tsRaw
         -- Pad the text representation before coloring to avoid ANSI length issues
         statusPadded = padRight statusPad (toText (seResourceStatus event))
         status = colorizeResourceStatusText (th r) (seResourceStatus event) statusPadded
@@ -291,9 +290,9 @@ renderStackContents r contents = do
         printSectionHeadingLn r "Pending Changesets"
         mapM_
             ( \cs -> do
-                let ctText = case csiCreationTime cs of
-                        Just t -> formatTimestampText r (renderTimestamp t)
-                        Nothing -> "Unknown"
+                ctText <- case csiCreationTime cs of
+                    Just t -> formatTimestampText r <$> renderTimestamp r t
+                    Nothing -> pure "Unknown"
                 printSectionEntry
                     r
                     ctText
@@ -315,11 +314,11 @@ renderStackContents r contents = do
 
 renderStatusUpdate :: InteractiveRenderer -> StatusUpdate -> IO ()
 renderStatusUpdate r upd = do
-    let tsText =
-            if ioShowTimestamps (irOptions r)
-                then formatTimestampText r (renderTimestamp (suTimestamp upd)) <> " "
-                else ""
-        msg = case suLevel upd of
+    tsText <-
+        if ioShowTimestamps (irOptions r)
+            then (\t -> formatTimestampText r t <> " ") <$> renderTimestamp r (suTimestamp upd)
+            else pure ""
+    let msg = case suLevel upd of
             LevelError -> colorize (th r) (thError (th r)) (suMessage upd)
             LevelWarning -> colorize (th r) (thWarning (th r)) (suMessage upd)
             LevelSuccess -> colorize (th r) (thSuccess (th r)) (suMessage upd)
@@ -374,6 +373,8 @@ renderStackList r lst = do
             rPutStrLn r (styleMuted r header)
             mapM_
                 ( \stack -> do
+                    tsRaw <-
+                        maybe (pure "Unknown") (renderTimestamp r) (asum [sleLastUpdatedTime stack, sleCreationTime stack])
                     let lifecycleIcon
                             | sleTerminationProtection stack
                                 || Map.lookup "lifetime" (sleTags stack) == Just "protected" =
@@ -390,11 +391,7 @@ renderStackList r lst = do
                                 else sleStackName stack
                         envName = detectEnvironment (sleStackName stack) (sleTags stack)
                         stackName = colorByEnvironment (th r) envName baseStackName
-                        tsText = case sleLastUpdatedTime stack of
-                            Just t -> padRight timePad (renderTimestamp t)
-                            Nothing -> case sleCreationTime stack of
-                                Just t -> padRight timePad (renderTimestamp t)
-                                Nothing -> padRight timePad "Unknown"
+                        tsText = padRight timePad tsRaw
                         tagsDisplay =
                             if sldShowTags lst
                                 then " " <> styleMuted r (prettyFormatTags (sleTags stack) (Just 3))
@@ -429,9 +426,9 @@ renderChangesetResult r cs = do
     printSectionHeadingLn r "Pending Changesets"
     mapM_
         ( \changeset -> do
-            let ctText = case csiCreationTime changeset of
-                    Just t -> formatTimestampText r (renderTimestamp t)
-                    Nothing -> "Unknown time"
+            ctText <- case csiCreationTime changeset of
+                Just t -> formatTimestampText r <$> renderTimestamp r t
+                Nothing -> pure "Unknown time"
             printSectionEntry
                 r
                 ctText

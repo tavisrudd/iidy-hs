@@ -34,6 +34,7 @@ module Iidy.Output.Renderers.Interactive (
     formatLogicalId,
     formatTimestampText,
     renderTimestamp,
+    renderTimestampIn,
     styleMuted,
     calcPadding,
     padRight,

@@ -1,0 +1,68 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C56
+:LANE:     main
+:TODO_STATE: DONE
+:MODE:     CONTRACT
+:ORIGIN:   User request: iidy-hs shows event times in UTC; iidy-js (dateformat) shows local time
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:ID: org:01a1fa99-4870-713e-ba62-64b5a41b0a6b
+:ADDED: [2026-11-20 Fri 13:15]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-20 Fri 13:16]
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+- Card state STARTED → DONE [2026-11-20 Fri 13:16]
+  Note: Timestamps render in local time via per-instant getTimeZone; tests pin UTC
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:END:
+#+title: C56 — Render CloudFormation event and stack timestamps in local time, not UTC
+#+date: 2026-11-20
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1fa99-4870-713e-ba62-64b455ee5dcb
+:ADDED: [2026-11-20 Fri 13:15]
+:END:
+
+iidy-hs printed event, stack and changeset times in UTC with no zone label,
+so they read as local time but were not. iidy-js shows local time: its
+=renderTimestamp= (=src/cfn/formatting.ts:14=) calls =dateformat(ts)= with no
+mask, which formats in the local zone. Rust iidy uses UTC
+(=render_timestamp= in =src/output/renderers/interactive.rs=); C57 tracks
+that side.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1fa99-4870-713e-ba62-64b38f54b862
+:ADDED: [2026-11-20 Fri 13:15]
+:END:
+
+Paths: =src/Iidy/Output/Renderers/Interactive/{Types,Sections}.hs=,
+=src/Iidy/Output/Renderers/Interactive.hs=, renderer tests and =Test.Shared=,
+=docs/requirements/06-output-system.org=, =docs/dev/rust-compatibility.org=.
+
+Gate: interactive and plain output show local time with the offset in effect
+at each timestamp (daylight saving handled). JSON output unchanged. Test
+renderers pin UTC so snapshots stay stable. Tests pass, zero warnings.
+
+* DONE Render CloudFormation event and stack timestamps in local time, not UTC
+:PROPERTIES:
+:ID: org:01a1fa99-4870-713e-ba62-64b246936b86
+:ADDED: [2026-11-20 Fri 13:15]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-20 Fri 13:16] \\
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:END:
+
+The renderer carries =irTimeZoneAt :: UTCTime -> IO TimeZone= (production:
+=getTimeZone=, tests: UTC). =renderTimestamp r t= looks up the zone for each
+instant; the pure =renderTimestampIn= formats in a given zone. All call
+sites in =Sections.hs= now bind the rendered text in IO. Tests cover the
+format, the zone shift and a per-instant daylight-saving offset change.

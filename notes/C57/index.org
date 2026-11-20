@@ -1,0 +1,53 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C57
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   User request: same UTC-vs-local divergence from iidy-js exists in Rust render_timestamp
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:ID: org:01a1fa99-4891-7093-bfcc-7bfeac3a92e9
+:ADDED: [2026-11-20 Fri 13:15]
+:END:
+#+title: C57 — Rust iidy (~/src/iidy): render timestamps in local time, not UTC
+#+date: 2026-11-20
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1fa99-4891-7093-bfcc-7bfd78f9eeb9
+:ADDED: [2026-11-20 Fri 13:15]
+:END:
+
+Rust iidy (=~/src/iidy=, read-only from this repo) formats all
+interactive timestamps in UTC: =render_timestamp(&self, dt: &DateTime<Utc>)=
+in =src/output/renderers/interactive.rs= uses
+=dt.format("%a %b %d %Y %H:%M:%S")= with no zone conversion or label.
+iidy-js shows local time (=dateformat(ts)= in =src/cfn/formatting.ts:14=),
+and iidy-hs now does too (C56). This card records the matching change for
+the Rust side; it has no =c= setup, so it is tracked here.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1fa99-4891-7093-bfcc-7bfc226be1f6
+:ADDED: [2026-11-20 Fri 13:15]
+:END:
+
+Work happens in =~/src/iidy=, by whoever owns that repo; nothing in
+iidy-hs changes. Gate: =render_timestamp= converts with
+=dt.with_timezone(&chrono::Local)= before formatting, Rust snapshot tests pin
+a zone (for example =TZ=UTC=) so they stay stable, and the divergence entry
+in =docs/dev/rust-compatibility.org= is removed once both ports agree.
+
+* TODO Rust iidy (~/src/iidy): render timestamps in local time, not UTC
+:PROPERTIES:
+:ID: org:01a1fa99-4891-7093-bfcc-7bfbe9697c02
+:ADDED: [2026-11-20 Fri 13:15]
+:END:
+
+Change =render_timestamp= (and =render_event_timestamp=, which delegates to
+it) in =src/output/renderers/interactive.rs= to render in local time. Check
+other =with_timezone(&Utc)= display paths in =src/cfn/stack_operations.rs=
+are only for data, not display. Pin the zone in snapshot tests.

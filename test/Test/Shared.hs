@@ -76,6 +76,7 @@ import Data.Text (Text)
 import Data.Text.Encoding qualified as TE
 import Data.Time.Calendar (fromGregorian)
 import Data.Time.Clock (UTCTime (..))
+import Data.Time.LocalTime (utc)
 import Network.HTTP.Types.Status (status400)
 import System.IO (Handle, hClose, hSetEncoding, stderr, stdout, utf8)
 import System.IO.Temp (withSystemTempFile)
@@ -144,6 +145,7 @@ mkRendererOn out err theme opts = do
             , irSpinnerThread = spinnerThreadRef
             , irTimingState = timingStateRef
             , irTimingThread = timingThreadRef
+            , irTimeZoneAt = const (pure utc)
             }
 
 {- | Render the given output data with the interactive renderer and return
