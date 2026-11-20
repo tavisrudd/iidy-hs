@@ -1,0 +1,85 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C62
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: A
+:MODE:     CONTRACT
+:ORIGIN:   User report: Parameters PublicFavicon: "false" loaded as boolean; Rust keeps it a string
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:ID: org:01a1fab4-4468-71b8-a7f0-205aee1a3c5c
+:ADDED: [2026-11-20 Fri 13:44]
+:END:
+#+title: C62 — YAML 1.1 compat turns quoted "false"/"true" strings into booleans (stack-args Parameters)
+#+date: 2026-11-20
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1fab4-4468-71b8-a7f0-2059f99deb27
+:ADDED: [2026-11-20 Fri 13:44]
+:END:
+
+A stack-args.yaml with
+
+: Parameters:
+:   PublicFavicon: "false"
+:   SessionTimeout: "300"
+
+loaded =PublicFavicon= as the boolean =false= (C61 is the poor error that
+followed). Rust iidy keeps it the string ='false'=.
+
+Cause: stack-args are preprocessed in YAML 1.1 compatibility mode
+(=preprocessYamlWithVariables ... True= in
+=src/Iidy/Cfn/StackArgsLoader.hs=). After resolution, =convertYaml11CompatO=
+(=src/Iidy/Yaml/Engine.hs:335=) turns every string that =isBooleanLike=
+(true/false/yes/no/on/off in three casings) into a boolean. It runs on the
+resolved value, where plain and quoted scalars are indistinguishable, so
+quoted strings are converted too. Reproduce with
+=iidy-hs render --yaml-spec 1.1 FILE=: =PublicFavicon: "false"= renders as
+=false=; with =--yaml-spec 1.2= it stays ='false'=.
+
+Rust (=convert_yaml_12_to_11_compatibility_with_context=,
+=src/yaml/engine.rs:461-551=) differs in two ways: it converts only
+yes/no/on/off (=true=/=false= variants are left to the parser, which only
+makes plain ones booleans), and =should_preserve_as_string= skips paths
+containing Description, Name, Value, Message, Text, Content or Data and
+strings longer than five characters. Rust shares the quoting flaw for
+quoted ="yes"= / ="no"= etc.
+
+Affects every YAML 1.1 preprocess: stack-args, and templates rendered or
+deployed with YAML 1.1 detected (=Iidy.Render=, =shouldUseYaml11Compatibility=).
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1fab4-4468-71b8-a7f0-20586747b8ca
+:ADDED: [2026-11-20 Fri 13:44]
+:END:
+
+Paths: =src/Iidy/Yaml/Engine.hs= (and the parser if quoting style must be
+carried), engine/render/stack-args tests, =docs/dev/rust-compatibility.org=
+if behaviour deliberately differs from Rust.
+
+Gate: in YAML 1.1 mode a quoted ="false"= / ="true"= / ="yes"= stays a
+string; plain =yes= / =no= / =on= / =off= still become booleans; a
+stack-args test with the reported Parameters loads =PublicFavicon= as the
+string ="false"=. Tests pass, zero warnings.
+
+* TODO YAML 1.1 compat turns quoted "false"/"true" strings into booleans (stack-args Parameters)
+:PROPERTIES:
+:ID: org:01a1fab4-4468-71b8-a7f0-2057c8aa241e
+:ADDED: [2026-11-20 Fri 13:44]
+:END:
+
+Options, in order of preference:
+1. Spec-correct: apply YAML 1.1 boolean resolution only to plain
+   (unquoted) scalars. Needs the scalar style from the parser (HsYAML
+   events carry it) to survive into the AST, or do the conversion at parse
+   time instead of on the resolved value. Diverges from Rust only for
+   quoted yes/no/on/off, where Rust is wrong.
+2. Rust parity: drop true/false from =isBooleanLike= and port
+   =should_preserve_as_string=. Fixes this report but keeps the quoting
+   flaw for quoted yes/no.
+Decide with a look at how strings produced by =!$= variables or
+handlebars should behave (they have no source quoting).

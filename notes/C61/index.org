@@ -1,0 +1,64 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C61
+:LANE:     main
+:TODO_STATE: TODO
+:MODE:     CONTRACT
+:ORIGIN:   User report: 'Failed to parse stack args from stack-args.yaml: invalid type: boolean `false`, expected a string'
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:ID: org:01a1fab4-4448-73b9-aeea-7881b14411b1
+:ADDED: [2026-11-20 Fri 13:44]
+:END:
+#+title: C61 — Stack-args error for a non-string map value omits the field and key (Parameters.PublicFavicon)
+#+date: 2026-11-20
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1fab4-4448-73b9-aeea-7880724141aa
+:ADDED: [2026-11-20 Fri 13:44]
+:END:
+
+Loading a stack-args.yaml whose =Parameters= held a boolean value failed with
+
+: iidy-hs: Failed to parse stack args from stack-args.yaml: invalid type: boolean `false`, expected a string
+
+The message names neither the field (=Parameters=) nor the key
+(=PublicFavicon=). It is built by =strMap= in
+=src/Iidy/Cfn/StackArgs/Fields.hs= (=validatePair (_, v) = Left ("invalid
+type: " ...)=), which parses =Parameters= and =Tags=. The other parsers in
+that file include the key: =strList= reports =invalid type in <key>[<i>]=.
+
+The value here was a quoted ="false"=; the boolean came from C62's YAML 1.1
+conversion. This card is only about the message: any non-string map value
+(a real =false=, a number, a nested map) should name where it is.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1fab4-4448-73b9-aeea-787f068e6f56
+:ADDED: [2026-11-20 Fri 13:44]
+:END:
+
+Paths: =src/Iidy/Cfn/StackArgs/Fields.hs= and its tests
+(=test/Test/StackArgsFieldsTest.hs=).
+
+Gate: the error reads like
+=invalid type for Parameters.PublicFavicon: expected a string, got boolean `false`=,
+consistent with =strList= / =typeError= wording; a test covers a boolean, a
+number and a nested value under =Parameters= and =Tags=. No line number: by
+this point the YAML is a plain value without source positions; a key path
+is the most the message can give unless positions are carried through
+(out of scope; note it if cheap).
+
+* TODO Stack-args error for a non-string map value omits the field and key (Parameters.PublicFavicon)
+:PROPERTIES:
+:ID: org:01a1fab4-4448-73b9-aeea-787e3ec25920
+:ADDED: [2026-11-20 Fri 13:44]
+:END:
+
+Pass the field key into =validatePair= and build the message with the
+key path. Check Rust's serde message for the same input
+(=~/src/iidy=, stack args deserialisation) and decide whether matching it
+or the clearer key-path form is preferred; record the choice in the card.
+Check other parsers in =Fields.hs= for messages that drop the key.
