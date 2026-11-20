@@ -90,9 +90,6 @@ adjustLocationForTag source loc msg =
                             Nothing -> case findTagInLine allLines (lineNum - 1) unknownTag of
                                 Just (ln, col) -> loc{srcLocLine = ln, srcLocColumn = col}
                                 Nothing -> loc
-                -- Unexpected field: position needs +1 for 1-based column
-                | "unexpected field '" `T.isPrefixOf` msg ->
-                    loc{srcLocColumn = srcLocColumn loc + 1}
                 -- Query/jmespath mutual exclusivity: search for !$ tag
                 | "'query' and 'jmespath'" `T.isPrefixOf` msg ->
                     case findAnyTagInLine allLines lineNum of

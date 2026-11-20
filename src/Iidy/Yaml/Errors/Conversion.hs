@@ -54,8 +54,12 @@ formatParseErrorEnhanced :: ColorChoice -> Text -> Text -> Position -> Text -> I
 formatParseErrorEnhanced colorChoice filePath source pos msg = do
     colors <- detectErrorColors colorChoice
     let
+        -- A parse error's column is HsYAML's 0-based column; the display is
+        -- 1-based, as Rust's (serde_yaml's Location and the parser's
+        -- format_file_location both add 1).
+        displayPos = pos{posColumn = posColumn pos + 1}
         -- Translate HsYAML-specific parse errors to Rust-compatible format
-        (adjustedMsg, adjustedPos) = translateParseError source pos msg
+        (adjustedMsg, adjustedPos) = translateParseError source displayPos msg
         adjustedLoc = adjustLocationForTag source (posToSourceLocation filePath adjustedPos) adjustedMsg
         enhanced = classifyMessage source adjustedLoc adjustedMsg
     pure $ formatError colors source enhanced

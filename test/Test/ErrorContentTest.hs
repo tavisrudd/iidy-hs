@@ -16,7 +16,7 @@ import Iidy.Yaml.Errors.Conversion (
     formatParseErrorEnhanced,
     formatPreprocessErrorEnhanced,
  )
-import Iidy.Yaml.Parser (ParseError (..), parseYaml)
+import Iidy.Yaml.Parser (ParseError (..), parseYaml, parseYamlStrict)
 import Test.ImportFixtures (fileLoader)
 
 ------------------------------------------------------------------------
@@ -78,6 +78,7 @@ errorContentTests =
     , testGroup "CloudFormation errors (ERR_7001)" cfnTests
     , testGroup "Syntax errors (ERR_1001)" syntaxTests
     , testGroup "Import/expand errors" importTests
+    , testGroup "Parse error positions" parsePositionTests
     ]
 
 variableTests :: [TestTree]
@@ -361,4 +362,23 @@ importTests =
         "expand-parse-error.yaml"
         "ERR_6001"
         ["Unclosed expression"]
+    ]
+
+{- | The parse-error display prints @file:line:col@ with a 1-based column, as
+Rust's 'SourceLocation' display does (serde_yaml's 'Location' and the parser's
+@format_file_location@ both add 1 to the 0-based column), and puts the caret
+under that column.
+-}
+parsePositionTests :: [TestTree]
+parsePositionTests =
+    [ testCase "a repeated nested key is shown at its 1-based column" $ do
+        let source = "a: 1\nb:\n  c: 2\n  c: 3\n"
+        case parseYamlStrict (BL.fromStrict (TE.encodeUtf8 source)) "t.yaml" of
+            Right _ -> assertFailure "expected a duplicate-key parse error"
+            Left pe -> do
+                output <- formatParseErrorEnhanced ColorNever "t.yaml" source (pePosition pe) (peMessage pe)
+                assertContainsAll "location" output ["@ t.yaml:4:3 ", "   4 |   c: 3\n     |   ^\n"]
+    , testCase "an unexpected tag field is shown at its 1-based column" $ do
+        output <- getErrorOutput "tag-if-unknown-field.yaml"
+        assertContainsAll "location" output ["tag-if-unknown-field.yaml:9:3 "]
     ]

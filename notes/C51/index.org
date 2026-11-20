@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C51
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: DONE
 :CARD_PRIORITY: C
 :MODE:     CONTRACT
 :ORIGIN:   C39 review: render shows file:4:2 for a key at column 3 while the loaders' message says column 3
@@ -10,6 +10,15 @@
 :SESSION_ID: b1ef70ff-a081-4826-ad18-fe7133fe40f2
 :ID: org:01a1ec08-138d-75ff-ab8b-871043c70546
 :ADDED: [2026-11-17 Tue 17:21]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-20 Fri 14:31]
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530/agent:a31ee67703fb58763
+- Card state STARTED → DONE [2026-11-20 Fri 14:38]
+  Note: Parse-error display now prints 1-based columns as Rust does (dup key shows file:4:3); unexpected-field double +1 removed; pinned by two tests
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530/agent:a31ee67703fb58763
 :END:
 #+title: C51 — Render's parse-error display prints 0-based columns
 #+date: 2026-11-17
@@ -58,10 +67,48 @@ Done when:
 Stop and record if: more than one display path builds positions and they
 disagree in ways the card does not cover.
 
-* TODO Render's parse-error display prints 0-based columns
+* DONE Render's parse-error display prints 0-based columns
 :PROPERTIES:
 :ID: org:01a1ec08-138d-75ff-ab8b-870d56b69e1a
 :ADDED: [2026-11-17 Tue 17:21]
 :END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-20 Fri 14:38] \\
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530/agent:a31ee67703fb58763
+:END:
 
 Reproduce with the example, record Rust's convention, fix the column, test.
+
+Reproduced: =iidy-hs render= on the example printed =dup.yaml:4:2= with the
+caret under the space before =c=.
+
+Cause: a parse error's =Position= carries HsYAML's 0-based column
+(=convertPos=, =src/Iidy/Yaml/Parser.hs:276=, despite the 1-based comment on
+=posColumn= in =src/Iidy/Yaml/Location.hs=), and =formatParseErrorEnhanced=
+(=src/Iidy/Yaml/Errors/Conversion.hs=) passed it straight to the display. The
+only parse error that came out right was "unexpected field", through a
+per-message =+1= in =adjustLocationForTag=
+(=src/Iidy/Yaml/Errors/Conversion/Location.hs=).
+
+Rust's convention is 1-based: =SourceLocation= displays =file:line:column=
+as stored (=~/src/iidy/src/yaml/errors/enhanced.rs:37=); a syntax error
+takes serde_yaml's =Location= (=~/src/iidy/src/yaml/errors/wrapper.rs:97=),
+whose =from_mark= adds 1 to libyaml's 0-based column; a tag error's
+location comes from =format_file_location=, =character + 1=
+(=~/src/iidy/src/yaml/parsing/parser.rs:1947=); the caret column is
+documented 1-based (=~/src/iidy/src/yaml/errors/display.rs:87=). Rust itself
+accepts a repeated template key (see =DIVERGENCES.md=, "Duplicate Mapping
+Keys"), so the example has no Rust output; its convention for parse errors
+decides.
+
+Fix: =formatParseErrorEnhanced= turns the column 1-based on entry, and the
+"unexpected field" =+1= is dropped (it now double-counted). Tests in
+=test/Test/ErrorContentTest.hs=, group "Parse error positions": "a repeated
+nested key is shown at its 1-based column" (failed first with =t.yaml:4:2=)
+and "an unexpected tag field is shown at its 1-based column" (pins
+=tag-if-unknown-field.yaml:9:3=, which the entry change alone made =9:4=).
+The =@ file:line:col= of every error fixture under
+=test-fixtures/example-templates/errors/= matches the Rust binary except
+=expand-missing-template= and =expand-parse-error=, where Rust prints no
+location; that was so before this card.
