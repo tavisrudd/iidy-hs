@@ -11,7 +11,9 @@ data Position = Position
     { posLine :: !Int
     -- ^ 1-based line number
     , posColumn :: !Int
-    -- ^ 1-based column number
+    {- ^ 0-based column number, as the YAML parser (HsYAML) reports it;
+    error displays add 1 to show it 1-based, as Rust does
+    -}
     , posOffset :: !Int
     -- ^ Byte offset in source text
     }
