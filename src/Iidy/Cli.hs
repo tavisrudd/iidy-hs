@@ -84,6 +84,10 @@ data AwsOpts = AwsOpts
     , aoProfile :: !(Maybe Text)
     , aoAssumeRoleArn :: !(Maybe Text)
     , aoClientRequestToken :: !(Maybe Text)
+    , aoGlobalConfig :: !Bool
+    {- ^ @--global-config@: read global settings from SSM under @\/iidy\/@.
+    Off by default because operator roles often lack SSM read access.
+    -}
     }
     deriving stock (Show, Eq)
 

@@ -1,0 +1,65 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C55
+:LANE:     main
+:TODO_STATE: DONE
+:MODE:     CONTRACT
+:ORIGIN:   User request: cfn operator roles without SSM read on /iidy/ get 'Warning: failed to load global config from SSM: AccessDenied'
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:ID: org:01a1fa8c-7b91-7028-92e7-75dd31334288
+:ADDED: [2026-11-20 Fri 13:01]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-20 Fri 13:02]
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+- Card state STARTED → DONE [2026-11-20 Fri 13:02]
+  Note: Added opt-in --global-config flag; SSM /iidy/ lookup off by default
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:END:
+#+title: C55 — Make SSM global config (/iidy/) opt-in; off by default
+#+date: 2026-11-20
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1fa8c-7b91-7028-92e7-75dc161b3c97
+:ADDED: [2026-11-20 Fri 13:01]
+:END:
+
+CloudFormation operator roles used with iidy-hs often lack SSM read access
+to =/iidy/=, so every stack operation printed
+"Warning: failed to load global config from SSM: AWS SSM error AccessDenied".
+Rust iidy always reads =/iidy/= (=src/cfn/stack_args.rs=); this card makes
+the Haskell port read it only on request.
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1fa8c-7b91-7028-92e7-75dbf224ab06
+:ADDED: [2026-11-20 Fri 13:01]
+:END:
+
+Paths: =src/Iidy/Cli.hs=, =src/Iidy/Cli/Parser.hs=, =src/Iidy/Cli/Help.hs=,
+=src/Iidy/Cfn/Runner.hs=, =src/Iidy/Cfn/GlobalConfig.hs= (doc), parser test,
+requirements docs and =docs/dev/rust-compatibility.org=.
+
+Gate: without =--global-config= no SSM call is made; with it, the old
+behaviour is unchanged. Tests pass, zero warnings.
+
+* DONE Make SSM global config (/iidy/) opt-in; off by default
+:PROPERTIES:
+:ID: org:01a1fa8c-7b91-7028-92e7-75dae7010eec
+:ADDED: [2026-11-20 Fri 13:01]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-20 Fri 13:02] \\
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:END:
+
+Added =--global-config= (AWS option, =aoGlobalConfig=, default off). The
+runner calls =applyGlobalConfiguration= only when it is set. Parser test
+covers the default and the opt-in; the divergence is listed in
+=docs/dev/rust-compatibility.org=.

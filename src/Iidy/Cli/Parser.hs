@@ -189,6 +189,10 @@ awsOptsParser =
                     <> help "A unique, case-sensitive string of up to 64 ASCII characters used to ensure idempotent retries."
                 )
             )
+        <*> switch
+            ( long "global-config"
+                <> help "Read global iidy settings from SSM Parameter Store under /iidy/ (off by default)."
+            )
 
 ------------------------------------------------------------------------
 -- Commands

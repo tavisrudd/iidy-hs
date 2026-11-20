@@ -278,6 +278,7 @@ awsOptionHelpRows =
     , ("--profile <PROFILE>", "AWS profile. Can also be set via --environment & stack-args.yaml:Profile. Use --profile=no-profile to override stack-args.yaml and use AWS_* env vars.")
     , ("--assume-role-arn <ARN>", "AWS role ARN to assume. Can also be set via --environment & stack-args.yaml:AssumeRoleArn. Use --assume-role-arn=no-role to override stack-args.yaml and use AWS_* env vars.")
     , ("--client-request-token <TOKEN>", "A unique, case-sensitive string of up to 64 ASCII characters used to ensure idempotent retries.")
+    , ("--global-config", "Read global iidy settings from SSM Parameter Store under /iidy/\n(default-notification-arn, disable-template-approval). Off by default.")
     ]
 
 statusCodeRows :: [(String, String)]

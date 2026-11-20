@@ -16,6 +16,11 @@ Parameters currently recognised:
   * @\/iidy\/disable-template-approval@ -- if the value is @\"true\"@
     (case-insensitive) and 'saApprovedTemplateLocation' is set, clears it.
 
+Opt-in: the runner calls this only when @--global-config@ is passed.
+It is off by default (a divergence from Rust iidy, which always reads it)
+because CloudFormation operator roles often lack SSM read access to
+@\/iidy\/@ and would print an AccessDenied warning on every run.
+
 SSM errors are handled as follows:
 
   * If no parameters exist under @\/iidy\/@ (the common case), the call

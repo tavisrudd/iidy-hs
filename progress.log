@@ -152,3 +152,4 @@
 2026-11-17 17:23 — 2026-11-17--3 (b1ef70ff-a081-4826-ad18-fe7133fe40f2): C39 landed and closed (repeated YAML keys rejected in templates, stack-args and demo scripts)
 2026-11-17 17:58 — 2026-11-17--3 (b1ef70ff-a081-4826-ad18-fe7133fe40f2): C40 landed and closed (CommandsBefore runs under Option E with checked values)
 2026-11-17 17:59 — 2026-11-17--3 (b1ef70ff-a081-4826-ad18-fe7133fe40f2): supervisor handoff after C22, C30, C39, C40; runbook and protocol: Claude sub-agents run builds in the foreground
+2026-11-20 13:02 — 2026-11-20--1 (d42a67fe-2d28-47b9-9e97-1abc23d36530): C55 SSM /iidy/ global config now opt-in via --global-config (off by default)

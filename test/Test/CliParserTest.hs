@@ -81,6 +81,11 @@ cliParserTests =
             Right cli -> do
                 aoRegion (cliAwsOpts cli) @?= Just "eu-west-1"
                 aoProfile (cliAwsOpts cli) @?= Just "myprofile"
+                aoGlobalConfig (cliAwsOpts cli) @?= False
+    , testCase "parse --global-config opt-in" $ do
+        case parseCli ["--global-config", "list-stacks"] of
+            Left e -> assertFailure e
+            Right cli -> aoGlobalConfig (cliAwsOpts cli) @?= True
     , testCase "parse explain with codes" $ do
         case parseCli ["explain", "ERR_2001", "ERR_3001"] of
             Left e -> assertFailure e

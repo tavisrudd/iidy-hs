@@ -552,6 +552,7 @@ afterLoad(loaded):
 - Recognized parameters modify the loaded StackArgs:
   - =/iidy/default-notification-arn=: the ARN value is appended to =saNotificationArns=.
   - =/iidy/disable-template-approval=: if value is ="true"= (case-insensitive) and =saApprovedTemplateLocation= is set, it is cleared. A message is printed to stderr.
+- Opt-in: only runs when =--global-config= is passed. Off by default (divergence from Rust iidy, which always reads it) because CloudFormation operator roles often lack SSM read access to =/iidy/=.
 - If no parameters exist under =/iidy/=, StackArgs passes through unchanged (no warning).
 - AWS errors (auth, network, throttling) emit a warning to stderr but do not fail the operation. The original StackArgs is returned.
 - Async exceptions are not caught.

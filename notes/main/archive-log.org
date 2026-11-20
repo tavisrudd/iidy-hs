@@ -46,6 +46,7 @@
 - [2026-11-17 Tue 17:23] [[file:../C39/index.org][C39]] — Landed 2b3abbd, 001f8f5 (repeated mapping keys rejected in templates, stack-args and demo scripts with the imports' position format; classified as ERR_1004); reviewed by the Opus review worker; fix round 1 (classification) landed on the supervisor's diff check
 - [2026-11-17 Tue 17:58] [[file:../C40/index.org][C40]] — Landed 92da60c..aa1000b (Option E: CommandsBefore runs for the four deploy operations; every substituted value checked against a safe set, dry run before any command, filehash only as a whole output, shared shell runner; docs and divergences); security review by an Opus reviewer, fix round re-reviewed clean
 - [2026-11-18 Wed 12:26] [[file:../C53/index.org][C53]] — path: source holds no build dir; pre-commit suite passes
+- [2026-11-20 Fri 13:02] [[file:../C55/index.org][C55]] — Added opt-in --global-config flag; SSM /iidy/ lookup off by default
 * COMMENT meta
 :PROPERTIES:
 :LANE: main

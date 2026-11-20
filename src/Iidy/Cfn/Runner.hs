@@ -81,8 +81,12 @@ runCfnWithArgs cli operation argsfile stackNameOverride action = do
         Right (LoadedStackArgs sa mergedAws detectionCtx) -> do
             -- Create AWS env with merged settings
             (awsEnv, credStack) <- createAwsEnv detectionCtx mergedAws
-            -- Apply global SSM configuration (silently ignored on error)
-            sa'' <- applyGlobalConfiguration awsEnv sa
+            -- Apply global SSM configuration only when opted in with
+            -- --global-config (operator roles often lack SSM read on /iidy/)
+            sa'' <-
+                if aoGlobalConfig (cliAwsOpts cli)
+                    then applyGlobalConfiguration awsEnv sa
+                    else pure sa
             let sa' = case stackNameOverride of
                     Just sn -> sa''{saStackName = sn}
                     Nothing -> sa''

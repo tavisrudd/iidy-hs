@@ -80,6 +80,14 @@ The =explain= command accepts multiple input formats:
 
 Rust only accepts the =ERR_NNNN= format.
 
+** Global SSM Configuration Is Opt-In
+*Cause*: Intentional Haskell change.
+
+Rust reads global settings from SSM Parameter Store under =/iidy/= before
+every stack operation. The Haskell port does so only when =--global-config=
+is passed, because CloudFormation operator roles often lack SSM read access
+to =/iidy/= and printed an AccessDenied warning on every run.
+
 ** AWS API Pagination and Live Operations
 Event pagination for =describe-stack= and =list-stacks= uses SDK pagination helpers. Exact pagination behavior, along with stack CRUD operations, S3 upload/download, SSM parameter read/write, spinner timing, live polling, and NTP sync, cannot be verified without live AWS. Verified by code review only.
 

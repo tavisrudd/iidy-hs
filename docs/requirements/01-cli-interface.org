@@ -708,7 +708,7 @@ deriveTokenForStep(primary, step):
 
 *Global SSM Configuration (pseudocode):*
 
-After stack-args are loaded but before the main operation runs, global configuration is applied from SSM Parameter Store:
+When =--global-config= is passed, after stack-args are loaded but before the main operation runs, global configuration is applied from SSM Parameter Store. It is off by default (divergence from Rust iidy, which always reads it) because CloudFormation operator roles often lack SSM read access to =/iidy/= and would print an AccessDenied warning on every run:
 
 #+begin_src pseudocode
 applyGlobalConfiguration(awsEnv, stackArgs):
