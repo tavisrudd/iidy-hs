@@ -17,6 +17,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Iidy.Yaml.CustomResources.Params (ParamDef (..), TemplateInfo (..))
 import Iidy.Yaml.OValue (OValue)
+import Iidy.Yaml.Parser (BoolSchema (..))
 
 -- | Context threaded through tag resolution
 data TagContext = TagContext
@@ -24,6 +25,10 @@ data TagContext = TagContext
     , tcInputUri :: !(Maybe Text)
     , tcCustomTemplateDefs :: !(Map Text TemplateInfo)
     , tcActiveExpansions :: !(Set Text)
+    , tcBools :: !BoolSchema
+    {- ^ boolean schema for YAML parsed during resolution (@!$parseYaml@,
+    custom template bodies): YAML 1.1 under CloudFormation compatibility
+    -}
     }
     deriving stock (Show, Eq)
 
@@ -34,6 +39,7 @@ emptyContext =
         , tcInputUri = Nothing
         , tcCustomTemplateDefs = Map.empty
         , tcActiveExpansions = Set.empty
+        , tcBools = Yaml12Bools
         }
 
 withBindings :: Map Text OValue -> TagContext -> TagContext

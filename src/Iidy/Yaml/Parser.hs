@@ -1,6 +1,10 @@
 module Iidy.Yaml.Parser (
     parseYaml,
     parseYamlStrict,
+    parseYamlAs,
+    parseYamlStrictAs,
+    BoolSchema (..),
+    boolSchemaFor,
     parseYamlFile,
     ParseError (..),
 ) where
@@ -32,7 +36,7 @@ imported document). A repeated mapping key is accepted and the last value
 wins, as in Rust's template parser; also used for a template fetched from AWS.
 -}
 parseYaml :: BL.ByteString -> Text -> Parse YamlAst
-parseYaml = parseYamlWith False
+parseYaml = parseYamlAs Yaml12Bools
 
 {- | Parse a user document: a template, stack-args file, demo script, imported
 document or @!$parseYaml@ string. A repeated mapping key at any depth is an
@@ -40,10 +44,34 @@ error, as TypeScript (js-yaml) and Rust's serde_yaml imports report it (@a@ and
 @"a"@ are the same key; @1@ and @"1"@ are not).
 -}
 parseYamlStrict :: BL.ByteString -> Text -> Parse YamlAst
-parseYamlStrict = parseYamlWith True
+parseYamlStrict = parseYamlStrictAs Yaml12Bools
 
-parseYamlWith :: Bool -> BL.ByteString -> Text -> Parse YamlAst
-parseYamlWith rejectDuplicates input uri =
+{- | Which plain scalars are booleans. 'Yaml12Bools' is the YAML 1.2 core
+schema (true\/false in three casings). 'Yaml11Bools' adds YAML 1.1's
+yes\/no\/on\/off (same casings), used where a document is read as YAML 1.1
+for CloudFormation compatibility. Only a plain, untagged scalar is ever a
+boolean: a quoted @\"false\"@ or @\"yes\"@ stays a string, and so does a
+mapping key (keys keep their text, so @on:@ is the key @on@). YAML 1.1's
+single-letter y\/n are not booleans, as in Rust iidy and most YAML 1.1
+loaders.
+-}
+data BoolSchema = Yaml12Bools | Yaml11Bools
+    deriving stock (Eq, Show)
+
+-- | The schema for a preprocess run's YAML 1.1 compatibility flag.
+boolSchemaFor :: Bool -> BoolSchema
+boolSchemaFor yaml11 = if yaml11 then Yaml11Bools else Yaml12Bools
+
+-- | 'parseYaml' with the given boolean schema.
+parseYamlAs :: BoolSchema -> BL.ByteString -> Text -> Parse YamlAst
+parseYamlAs = parseYamlWith False
+
+-- | 'parseYamlStrict' with the given boolean schema.
+parseYamlStrictAs :: BoolSchema -> BL.ByteString -> Text -> Parse YamlAst
+parseYamlStrictAs = parseYamlWith True
+
+parseYamlWith :: Bool -> BoolSchema -> BL.ByteString -> Text -> Parse YamlAst
+parseYamlWith rejectDuplicates schema input uri =
     let
         -- Ensure trailing newline for HsYAML compatibility
         input' =
@@ -51,7 +79,7 @@ parseYamlWith rejectDuplicates input uri =
                 then input <> "\n"
                 else input
      in
-        case runIdentity (Y.decodeLoader (yamlLoader rejectDuplicates uri) input') of
+        case runIdentity (Y.decodeLoader (yamlLoader rejectDuplicates schema uri) input') of
             Left (pos, msg) -> Left (ParseError (convertPos pos) (T.pack msg))
             Right [] -> Right (AstNull (emptyMeta uri))
             Right (node : _) -> Right (nodeAst node)
@@ -77,16 +105,27 @@ data Node = Node
     -}
     , nodeBytes :: !Int
     -- ^ UTF-8 bytes of scalar text in this subtree with every alias expanded
+    , nodeYaml11Word :: !(Maybe Text)
+    {- ^ the source text of a plain scalar read as a YAML 1.1 boolean
+    (yes, off, ...), so a mapping key can keep it as text
+    -}
     }
 
-yamlLoader :: Bool -> Text -> Y.Loader Identity Node
-yamlLoader rejectDuplicates uri =
+yamlLoader :: Bool -> BoolSchema -> Text -> Y.Loader Identity Node
+yamlLoader rejectDuplicates schema uri =
     Y.Loader
         { Y.yScalar = \tag style text pos ->
             let bytes = lengthWord8 text
+                resolved = isResolved tag style
+                yaml11Word = case schema of
+                    Yaml11Bools | resolved -> yaml11OnlyBool text
+                    _notYaml11 -> Nothing
              in pure $
                     checkExpansion uri pos 1 bytes
-                        *> ( (\ast -> Node ast (Just (scalarKeyId (isResolved tag style) text)) 1 bytes)
+                        *> ( ( \ast -> case yaml11Word of
+                                Just b -> Node (AstBool b (astMeta ast)) (Just (scalarKeyId resolved text)) 1 bytes (Just text)
+                                Nothing -> Node ast (Just (scalarKeyId resolved text)) 1 bytes Nothing
+                             )
                                 <$> resolveScalar uri pos tag style text
                            )
         , Y.ySequence = \tag nodes pos ->
@@ -97,10 +136,10 @@ yamlLoader rejectDuplicates uri =
                     meta = SrcMeta uri startP endP
                     (count, bytes) = totals nodes
                  in checkExpansion uri pos count bytes
-                        *> ((\n -> Node n (sequenceKeyId (map nodeKey nodes)) count bytes) <$> applyTag meta tag (AstSequence items meta))
+                        *> ((\n -> Node n (sequenceKeyId (map nodeKey nodes)) count bytes Nothing) <$> applyTag meta tag (AstSequence items meta))
         , Y.yMapping = \tag nodes pos ->
             pure $
-                let kvs = [(nodeAst k, nodeAst v) | (k, v) <- nodes]
+                let kvs = [(keyAst k, nodeAst v) | (k, v) <- nodes]
                     startP = convertPos pos
                     endP = childrenEndPos startP (map (astMeta . snd) kvs)
                     meta = SrcMeta uri startP endP
@@ -109,13 +148,26 @@ yamlLoader rejectDuplicates uri =
                         *> case firstDuplicate [(nodeAst k, nodeKey k) | (k, _) <- nodes] of
                             Just (dup, msg)
                                 | rejectDuplicates -> Left (unconvertPos (smStart (astMeta dup)), msg)
-                            _noDuplicate -> (\n -> Node n (mappingKeyId [(nodeKey k, nodeKey v) | (k, v) <- nodes]) count bytes) <$> applyTag meta tag (AstMapping kvs meta)
+                            _noDuplicate -> (\n -> Node n (mappingKeyId [(nodeKey k, nodeKey v) | (k, v) <- nodes]) count bytes Nothing) <$> applyTag meta tag (AstMapping kvs meta)
         , Y.yAlias = \_ _ node _ -> pure $ Right node
         , Y.yAnchor = \_ node _ -> pure $ Right node
         }
   where
     -- An untagged plain scalar resolves to a number, boolean or null.
     isResolved tag style = style == Plain && isNothing (tagToText tag)
+    -- A key keeps the text of a YAML 1.1 boolean word.
+    keyAst k = case nodeYaml11Word k of
+        Just t -> AstPlainString t (astMeta (nodeAst k))
+        Nothing -> nodeAst k
+
+{- | The boolean of a word YAML 1.1 adds to the core schema's true\/false:
+yes\/no\/on\/off in lower, capitalised or upper case.
+-}
+yaml11OnlyBool :: Text -> Maybe Bool
+yaml11OnlyBool t
+    | t `elem` ["yes", "Yes", "YES", "on", "On", "ON"] = Just True
+    | t `elem` ["no", "No", "NO", "off", "Off", "OFF"] = Just False
+    | otherwise = Nothing
 
 -- | The node count (this node included) and scalar bytes of children.
 totals :: [Node] -> (Int, Int)

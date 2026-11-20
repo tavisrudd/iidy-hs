@@ -102,7 +102,7 @@ import Iidy.Yaml.Imports.ContentParsing (parseErrorMessage)
 import Iidy.Yaml.Imports.Loaders.Dispatch (mkFullDispatcher, mkImportConfig)
 import Iidy.Yaml.Imports.Types (ImportPolicy (..))
 import Iidy.Yaml.OValue (OValue, toValue)
-import Iidy.Yaml.Parser (parseYamlStrict)
+import Iidy.Yaml.Parser (BoolSchema (..), parseYamlStrictAs)
 
 ------------------------------------------------------------------------
 -- Types
@@ -197,7 +197,9 @@ loadStackArgsWithSettings settings policy mkLoader argsfile environment operatio
         let baseLocation = T.pack argsfile
 
         -- Parse YAML
-        ast <- case parseYamlStrict content baseLocation of
+        -- Read as YAML 1.1, matching the preprocess below (plain yes/no/on/off
+        -- are booleans; quoted strings stay strings)
+        ast <- case parseYamlStrictAs Yaml11Bools content baseLocation of
             Left perr ->
                 throwE $ "Parse error in " <> baseLocation <> ": " <> parseErrorMessage perr
             Right a -> pure a

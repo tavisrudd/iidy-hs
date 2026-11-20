@@ -1,0 +1,26 @@
+%YAML 1.1
+---
+# YAML 1.1 booleans are plain scalars only: quoted values stay strings,
+# and a key keeps its text.
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  PublicFavicon:
+    Type: String
+    Default: "false"
+  QuotedYes:
+    Type: String
+    Default: 'yes'
+Mappings:
+  Toggle:
+    on:
+      Enabled: on
+    Off:
+      Enabled: "off"
+Resources:
+  TestInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      Monitoring: yes
+      EbsOptimized: "no"
+      SourceDestCheck: true
+      DisableApiTermination: 'TRUE'

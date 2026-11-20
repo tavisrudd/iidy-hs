@@ -65,6 +65,15 @@ loaderTests =
                     Just params -> do
                         Data.Map.Strict.lookup "Env" params @?= Just "dev"
                         Data.Map.Strict.lookup "Version" params @?= Just "1.0"
+    , testCase "quoted boolean-looking parameters stay strings (C62)" $ do
+        result <- loadStackArgs "test-fixtures/test-stack-args-quoted-bools.yaml" "dev" OpCreateStack noAwsSettings (importPolicy AllowRemoteImports) Nothing
+        case result of
+            Left err -> assertFailure $ "loadStackArgs failed: " <> T.unpack err
+            Right (LoadedStackArgs sa _aws _ctx) -> do
+                let param k = saParameters sa >>= Data.Map.Strict.lookup k
+                param "PublicFavicon" @?= Just "false"
+                param "SessionTimeout" @?= Just "300"
+                param "Enabled" @?= Just "yes"
     , testCase "environment map resolution" $ do
         result <- loadStackArgs "test-fixtures/test-stack-args-envmap.yaml" "prod" OpUpdateStack noAwsSettings (importPolicy AllowRemoteImports) Nothing
         case result of

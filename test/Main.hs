@@ -74,6 +74,7 @@ import Test.ThemeVariantTest (themeVariantTests)
 import Test.TimingTest (timingTests)
 import Test.TrustedSourceTest (trustedSourceTests)
 import Test.WatchStackTest (watchStackTests)
+import Test.Yaml11BoolsTest (yaml11BoolsTests)
 
 main :: IO ()
 main = do
@@ -147,6 +148,7 @@ main = do
             , testGroup "TemplateLoader" templateLoaderTests
             , testGroup "GlobalConfig" globalConfigTests
             , testGroup "CfnStatus" cfnStatusTests
+            , testGroup "Yaml11Bools" yaml11BoolsTests
             , testGroup "PreprocessingProperties" preprocessingPropertyTests
             , testGroup "ErrorContent" errorContentTests
             , testGroup "TemplateDiff" templateDiffTests

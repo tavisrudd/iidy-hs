@@ -1,0 +1,7 @@
+StackName: test-stack
+Template: template.yaml
+Region: us-east-1
+Parameters:
+  PublicFavicon: "false"          # quoted: a string, not a boolean
+  SessionTimeout: "300"
+  Enabled: "yes"

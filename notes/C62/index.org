@@ -2,7 +2,7 @@
 :PROPERTIES:
 :CARD_ID:  C62
 :LANE:     main
-:TODO_STATE: TODO
+:TODO_STATE: DONE
 :CARD_PRIORITY: A
 :MODE:     CONTRACT
 :ORIGIN:   User report: Parameters PublicFavicon: "false" loaded as boolean; Rust keeps it a string
@@ -10,6 +10,15 @@
 :SESSION_ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
 :ID: org:01a1fab4-4468-71b8-a7f0-205aee1a3c5c
 :ADDED: [2026-11-20 Fri 13:44]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-20 Fri 13:50]
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+- Card state STARTED → DONE [2026-11-20 Fri 13:55]
+  Note: YAML 1.1 booleans read at parse time for plain scalars only; quoted strings stay strings
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
 :END:
 #+title: C62 — YAML 1.1 compat turns quoted "false"/"true" strings into booleans (stack-args Parameters)
 #+date: 2026-11-20
@@ -66,10 +75,15 @@ string; plain =yes= / =no= / =on= / =off= still become booleans; a
 stack-args test with the reported Parameters loads =PublicFavicon= as the
 string ="false"=. Tests pass, zero warnings.
 
-* TODO YAML 1.1 compat turns quoted "false"/"true" strings into booleans (stack-args Parameters)
+* DONE YAML 1.1 compat turns quoted "false"/"true" strings into booleans (stack-args Parameters)
 :PROPERTIES:
 :ID: org:01a1fab4-4468-71b8-a7f0-2057c8aa241e
 :ADDED: [2026-11-20 Fri 13:44]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-20 Fri 13:55] \\
+  Agent: opus-5.5-medium
+  Session-ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
 :END:
 
 Options, in order of preference:
@@ -83,3 +97,33 @@ Options, in order of preference:
    flaw for quoted yes/no.
 Decide with a look at how strings produced by =!$= variables or
 handlebars should behave (they have no source quoting).
+
+** Result
+:PROPERTIES:
+:ID: org:01a1fabe-2d3b-763e-81a7-babfe9f2b1fa
+:ADDED: [2026-11-20 Fri 13:55]
+:END:
+Done the spec-correct way (option 1). YAML 1.1 booleans are a parse-time
+schema: =Iidy.Yaml.Parser= gains =BoolSchema= (=Yaml12Bools= /
+=Yaml11Bools=) with =parseYamlAs= / =parseYamlStrictAs=; under
+=Yaml11Bools= a plain, untagged yes/no/on/off (three casings) is an
+=AstBool=, quoted and =!!str= values stay strings, and a mapping key keeps
+its text (the loader node carries the source word). =convertYaml11CompatO=
+is gone.
+
+Callers that preprocess as YAML 1.1 parse with the matching schema: the
+stack-args loader, =render:= templates, demo scripts, and =render= (which
+now decides the spec before parsing). The engine carries the schema in
+=Importer= and =TagContext= (=tcBools=) for imported documents (re-read
+from their text when the loader parsed text and the document holds a
+candidate word), =!$parseYaml= strings and custom template bodies.
+
+Differences from Rust are listed in =docs/dev/rust-compatibility.org=
+(quoted yes/no stay strings; computed strings and non-text imports are not
+converted; no Rust path/length heuristics). Requirements doc
+(02-yaml-preprocessing, US-02-008) updated.
+
+Tests: =Test.Yaml11BoolsTest= (parser, preprocess, imports, =!$parseYaml=),
+a stack-args loader test with the reported Parameters, and the fixture
+=yaml-11-quoted-strings=. The fixture harness now parses with the schema
+its preprocess uses (it parsed YAML 1.2 before and relied on the post-pass).

@@ -87,6 +87,28 @@ Rust formats event, stack and changeset times in UTC (=render_timestamp=
 takes a =DateTime<Utc>=) with no zone label. iidy-js and the Haskell port
 show local time. Card C57 tracks the same change on the Rust side.
 
+** YAML 1.1 Booleans Read at Parse Time
+*Cause*: Intentional Haskell change (C62), following the YAML 1.1 spec.
+
+Under YAML 1.1 compatibility (stack-args, =render:= templates, templates
+detected as YAML 1.1), the Haskell port treats YAML 1.1's yes/no/on/off as
+booleans while parsing, and only for a plain, untagged scalar. Rust converts
+string values after preprocessing, when quoting is no longer known. The
+differences:
+
+- A quoted ="yes"= / ="off"= stays a string; Rust makes it a boolean.
+- A string built during preprocessing (handlebars, =!$= of a computed
+  value) stays a string even when it reads =yes=; Rust converts it.
+- An import whose loader did not parse YAML text (for example =ssm-path:=)
+  keeps its strings; Rust converts them.
+- Rust leaves values under Description, Name, Value, Message, Text,
+  Content or Data paths, and strings longer than five characters, as
+  strings; the Haskell port follows the scalar's style only, so a plain
+  =Description: yes= is a boolean in both YAML 1.1 readers' terms.
+
+Before C62 the Haskell port also turned a quoted ="true"= / ="false"= into
+a boolean, which Rust never did; that was the reported bug.
+
 ** Global SSM Configuration Is Opt-In
 *Cause*: Intentional Haskell change.
 

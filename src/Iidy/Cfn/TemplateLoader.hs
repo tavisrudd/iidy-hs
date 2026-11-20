@@ -33,7 +33,7 @@ import Iidy.Yaml.Engine (
 import Iidy.Yaml.Imports.ContentParsing (parseErrorMessage)
 import Iidy.Yaml.Imports.Loaders.Dispatch (ImportConfig (..), preprocessWithConfig)
 import Iidy.Yaml.Location (zeroPosition)
-import Iidy.Yaml.Parser (parseYamlStrict)
+import Iidy.Yaml.Parser (BoolSchema (..), parseYamlStrictAs)
 
 ------------------------------------------------------------------------
 -- Constants
@@ -110,7 +110,7 @@ loadCfnTemplateWithLimit limit (Just tmplSpec) argsfilePath env importCfg
         let resolvedPath = resolveTemplatePath (T.unpack renderPath) argsfilePath
             baseLocation = T.pack resolvedPath
         rawContent <- BL.readFile resolvedPath
-        case parseYamlStrict rawContent baseLocation of
+        case parseYamlStrictAs Yaml11Bools rawContent baseLocation of
             Left perr ->
                 pure (Left ("Parse error in rendered template " <> baseLocation <> ": " <> parseErrorMessage perr))
             Right ast -> do

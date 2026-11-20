@@ -14,7 +14,7 @@ import Test.Tasty.HUnit
 import Iidy.Yaml.Detection (detectYamlSpec, shouldUseYaml11Compatibility)
 import Iidy.Yaml.Emitter (emitYaml)
 import Iidy.Yaml.Engine (PreprocessError (..), PreprocessResult (..), preprocessYaml, preprocessYaml11)
-import Iidy.Yaml.Parser (parseYaml)
+import Iidy.Yaml.Parser (boolSchemaFor, parseYamlAs)
 import Test.ImportFixtures (fileLoader)
 
 fixtureDir :: FilePath
@@ -71,16 +71,18 @@ runFixtureTest inPath outPath = do
     expectedRaw <- TIO.readFile outPath
     let expected = T.stripEnd expectedRaw
 
-    let parseResult = parseYaml rawInput (T.pack inPath)
+    -- Parse with the schema the preprocess uses: YAML 1.1 compatibility is
+    -- applied at parse time (plain yes/no/on/off), as in 'Iidy.Render'.
+    let source = TE.decodeUtf8 (BL.toStrict rawInput)
+        useYaml11 = shouldUseYaml11Compatibility (detectYamlSpec source)
+        parseResult = parseYamlAs (boolSchemaFor useYaml11) rawInput (T.pack inPath)
     ast <- case parseResult of
         Left pe ->
             assertFailure $
                 "Parse error in " <> inPath <> ": " <> show pe
         Right a -> return a
 
-    let source = TE.decodeUtf8 (BL.toStrict rawInput)
-        useYaml11 = shouldUseYaml11Compatibility (detectYamlSpec source)
-        preprocess = if useYaml11 then preprocessYaml11 else preprocessYaml
+    let preprocess = if useYaml11 then preprocessYaml11 else preprocessYaml
     preprocessResult <- preprocess fileLoader ast (T.pack inPath)
     pr <- case preprocessResult of
         Left err ->

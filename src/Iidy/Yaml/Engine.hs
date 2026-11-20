@@ -38,10 +38,10 @@ import Iidy.Yaml.Imports.Types (
     rootBase,
  )
 import Iidy.Yaml.OValue (OValue (..), fromValue, toValue)
-import Iidy.Yaml.Parser (parseYaml)
+import Iidy.Yaml.Parser (BoolSchema (..), boolSchemaFor, parseYamlAs)
 import Iidy.Yaml.Resolution.Context
 
-import Iidy.Yaml.Resolution.Resolver (ResolveError (..), resolveAst)
+import Iidy.Yaml.Resolution.Resolver (ResolveError (..), astToOValueKeepingTags, resolveAst)
 
 ------------------------------------------------------------------------
 -- Types
@@ -71,6 +71,8 @@ document trust (for custom templates) with the same policy as the loader.
 data Importer = Importer
     { imLoad :: LoadImportFn
     , imTrusted :: TrustedSources
+    , imBools :: BoolSchema
+    -- ^ boolean schema imported YAML documents are read with
     }
 
 ------------------------------------------------------------------------
@@ -81,12 +83,19 @@ data Importer = Importer
 preprocessYaml :: LoadImportFn -> YamlAst -> Text -> IO (Either PreprocessError PreprocessResult)
 preprocessYaml = preprocessYamlWith noTrustedSources False
 
+-- | YAML 1.1 compatibility; parse the document with 'parseYamlStrictAs' 'Yaml11Bools'.
 preprocessYaml11 :: LoadImportFn -> YamlAst -> Text -> IO (Either PreprocessError PreprocessResult)
 preprocessYaml11 = preprocessYamlWith noTrustedSources True
 
 {- | Preprocess with the trusted sources the loader applies (see
 "Iidy.Yaml.Imports.Loaders.Dispatch", whose helper passes both from one
 policy) and the YAML 1.1 compatibility flag.
+
+YAML 1.1 compatibility is a parse-time boolean schema ('boolSchemaFor'):
+plain yes\/no\/on\/off read as booleans, quoted strings stay strings. The
+caller parses the document with @boolSchemaFor yaml11Compat@; the engine
+reads imported documents, @!$parseYaml@ strings and custom template bodies
+with the same schema.
 -}
 preprocessYamlWith ::
     TrustedSources -> Bool -> LoadImportFn -> YamlAst -> Text -> IO (Either PreprocessError PreprocessResult)
@@ -103,15 +112,15 @@ preprocessYamlWithVariables ::
     YamlAst ->
     Text ->
     IO (Either PreprocessError (PreprocessResult, Map Text OValue))
-preprocessYamlWithVariables trusted yaml11Compat loader ast baseLocation =
-    process (Importer{imLoad = loader, imTrusted = trusted}) ast baseLocation yaml11Compat
+preprocessYamlWithVariables trusted yaml11Compat loader =
+    process (Importer{imLoad = loader, imTrusted = trusted, imBools = boolSchemaFor yaml11Compat})
 
 ------------------------------------------------------------------------
 -- Main processing pipeline
 ------------------------------------------------------------------------
 
-process :: Importer -> YamlAst -> Text -> Bool -> IO (Either PreprocessError (PreprocessResult, Map Text OValue))
-process importer ast baseLocation yaml11Compat = do
+process :: Importer -> YamlAst -> Text -> IO (Either PreprocessError (PreprocessResult, Map Text OValue))
+process importer ast baseLocation = do
     case pushImport baseLocation emptyStack of
         Left err -> pure $ Left $ pushErrorToPreprocess err
         Right stack' -> do
@@ -126,18 +135,15 @@ process importer ast baseLocation yaml11Compat = do
                                 { tcVariables = env
                                 , tcInputUri = Just baseLocation
                                 , tcCustomTemplateDefs = templateDefs
+                                , tcBools = imBools importer
                                 }
                     case resolveAst ctx ast of
                         Left reErr -> pure $ Left $ PeResolveError reErr
                         Right resolved -> do
-                            let final =
-                                    if yaml11Compat
-                                        then convertYaml11CompatO resolved
-                                        else resolved
                             pure $
                                 Right
                                     ( PreprocessResult
-                                        { prValue = final
+                                        { prValue = resolved
                                         , prImportRecords = manifest
                                         }
                                     , env
@@ -258,7 +264,7 @@ processImports importer env tmplDefs manifest stack ((keyAst, locAst) : rest) ba
                                         }
                                 manifest' = addRecord record manifest
                             -- Recursively preprocess if imported doc has $imports or $defs
-                            importResult <- processImportedDoc importer (idDoc importData) (idRawData importData) (childBase base (idLocation importData)) manifest' stack'
+                            importResult <- processImportedDoc importer importData (childBase base (idLocation importData)) manifest' stack'
                             case importResult of
                                 Left err -> pure $ Left err
                                 Right (importedValue, manifest'', stack'') -> do
@@ -281,18 +287,17 @@ dispatcher can tell whether the requester chain is trusted.
 -}
 processImportedDoc ::
     Importer ->
-    Value ->
-    Text ->
+    ImportData ->
     ImportBase ->
     ImportManifest ->
     ImportStack ->
     IO (Either PreprocessError (OValue, ImportManifest, ImportStack))
-processImportedDoc importer doc rawData docBase manifest stack =
+processImportedDoc importer importData docBase manifest stack =
     case doc of
         Object obj
             | hasImportsOrDefs obj -> do
                 -- Re-parse to AST and recursively preprocess
-                case parseYaml (BL.fromStrict (TE.encodeUtf8 rawData)) (ibLocation docBase) of
+                case parseYamlAs (imBools importer) (BL.fromStrict (TE.encodeUtf8 rawData)) (ibLocation docBase) of
                     Left _parseErr ->
                         -- If re-parse fails, fall back to raw value
                         pure $ Right (fromValue doc, manifest, stack)
@@ -306,11 +311,26 @@ processImportedDoc importer doc rawData docBase manifest stack =
                                         emptyContext
                                             { tcVariables = docEnv
                                             , tcInputUri = Just (ibLocation docBase)
+                                            , tcBools = imBools importer
                                             }
                                 case resolveAst ctx ast of
                                     Left reErr -> pure $ Left $ PeResolveError reErr
                                     Right resolved -> pure $ Right (resolved, manifest', stack')
-        _nonObject -> pure $ Right (fromValue doc, manifest, stack)
+        _noPreprocessing -> pure $ Right (plainImport, manifest, stack)
+  where
+    doc = idDoc importData
+    rawData = idRawData importData
+    -- A document the loader parsed from text was read with the YAML 1.2
+    -- schema. Under YAML 1.1 it is re-read when it has a string that YAML
+    -- 1.1 could read as a boolean, so its plain yes/no/on/off become
+    -- booleans while quoted ones stay strings. Keys and values otherwise
+    -- come out as the loader's parse gives them.
+    plainImport = case (imBools importer, idOrdered importData) of
+        (Yaml11Bools, Just _parsedFromText)
+            | hasYaml11Word doc
+            , Right ast <- parseYamlAs Yaml11Bools (BL.fromStrict (TE.encodeUtf8 rawData)) (ibLocation docBase) ->
+                fromValue (toValue (astToOValueKeepingTags ast))
+        _otherwise -> fromValue doc
 
 -- | Check if a JSON object has $imports or $defs keys that need preprocessing.
 hasImportsOrDefs :: KM.KeyMap Value -> Bool
@@ -332,40 +352,15 @@ interpolateLocation env loc
 -- YAML 1.1 compatibility
 ------------------------------------------------------------------------
 
-convertYaml11CompatO :: OValue -> OValue
-convertYaml11CompatO = \case
-    OObject kvs -> OObject [(k, convertYaml11CompatO v) | (k, v) <- kvs]
-    OArray items -> OArray (map convertYaml11CompatO items)
-    OString s
-        | isBooleanLike s -> OBool (isTrueIsh s)
-        | otherwise -> OString s
-    other -> other
-
-isBooleanLike :: Text -> Bool
-isBooleanLike s =
-    s
-        `elem` [ "true"
-               , "false"
-               , "yes"
-               , "no"
-               , "on"
-               , "off"
-               , "True"
-               , "False"
-               , "Yes"
-               , "No"
-               , "On"
-               , "Off"
-               , "TRUE"
-               , "FALSE"
-               , "YES"
-               , "NO"
-               , "ON"
-               , "OFF"
-               ]
-
-isTrueIsh :: Text -> Bool
-isTrueIsh s = T.toLower s `elem` ["true", "yes", "on"]
+{- | Whether a document has a string value YAML 1.1 could read as a
+boolean (when its source scalar is plain).
+-}
+hasYaml11Word :: Value -> Bool
+hasYaml11Word = \case
+    Object o -> any hasYaml11Word (KM.elems o)
+    Array a -> any hasYaml11Word a
+    String t -> T.toLower t `elem` ["yes", "no", "on", "off"]
+    _scalar -> False
 
 ------------------------------------------------------------------------
 -- Helpers

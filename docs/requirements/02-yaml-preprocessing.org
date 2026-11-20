@@ -17,12 +17,10 @@ preprocess(ast, baseLocation, yaml11Compat):
   (env, templateDefs, manifest) = loadImportsAndDefs(ast, baseLocation, {}, {}, emptyManifest, importStack)
 
   -- Phase 2: Pure resolution
-  ctx = TagContext { variables = env, inputUri = baseLocation, customTemplateDefs = templateDefs }
+  -- ast was parsed with boolSchemaFor(yaml11Compat) by the caller
+  ctx = TagContext { variables = env, inputUri = baseLocation, customTemplateDefs = templateDefs,
+                     bools = boolSchemaFor(yaml11Compat) }
   resolved = resolveAst(ctx, ast)
-
-  -- Post-pass
-  if yaml11Compat:
-    resolved = convertYaml11Compat(resolved)
 
   return PreprocessResult { value = resolved, importRecords = manifest }
 
@@ -65,7 +63,7 @@ Phase 2 (pure): Build a variable scope from the environment and recursively reso
 2. Templated string nodes are processed through the Handlebars engine.
 3. Preprocessing tag nodes (=!$=) dispatch to per-tag resolvers.
 4. CloudFormation tag nodes have their inner content resolved, then pass through as tagged YAML.
-5. If YAML 1.1 compat mode is requested, a post-pass converts boolean-like strings (=yes=, =no=, =on=, =off=, =true=, =false=, all case variants) to actual booleans.
+5. YAML 1.1 compat mode is a parse-time boolean schema (see US-02-008): there is no post-pass over the resolved value.
 
 ** Internal Value Type
 The internal value type preserves key insertion order using an association list rather than an unordered map:
@@ -314,7 +312,6 @@ type ImportRecord =
 2. Fold over =$defs= pairs in order, resolving each value against the accumulated environment.
 3. For each =$imports= entry: interpolate the location string, load the import, add result to environment. If the imported document contains =$params=, register it as a custom resource template.
 4. Build the variable scope from the final environment; resolve the full document AST (filtering out =$defs/$imports= special keys from output).
-5. Apply YAML 1.1 compat post-pass if requested.
 
 *Edge Cases:*
 
@@ -946,9 +943,9 @@ The Handlebars engine must be implemented as a custom recursive-descent parser; 
 
 *Acceptance Criteria:*
 
-- Default mode is YAML 1.2: boolean-like strings remain as strings.
-- YAML 1.1 compat mode converts the 18 boolean-like strings to actual booleans: =true=, =false=, =yes=, =no=, =on=, =off= and their =Title= and =UPPER= case variants.
-- =isTrueIsh= considers =true=, =yes=, =on= (case-insensitive) as =True=; all others (=false=, =no=, =off=) as =False=.
+- Default mode is YAML 1.2: only plain =true=/=false= (three casings) are booleans; =yes=/=no=/=on=/=off= are strings.
+- YAML 1.1 compat mode also reads a plain, untagged =yes=, =no=, =on=, =off= (lower, =Title= or =UPPER= case) as a boolean. Quoted values (="false"=, ='yes'=) and explicitly tagged ones (=!!str yes=) stay strings, as the YAML 1.1 spec says. Single-letter =y=/=n= are not booleans (as in Rust and most YAML 1.1 loaders).
+- Mapping keys keep their text: =on:= is the key =on=, not =true=.
 - The =--yaml-spec= CLI flag accepts =auto=, =1.1=, or =1.2=.
   - =auto=: auto-detect by document content.
   - =1.1=: force YAML 1.1 compat.
@@ -963,33 +960,25 @@ The Handlebars engine must be implemented as a custom recursive-descent parser; 
 *Conversion logic:*
 
 #+begin_src pseudocode
-convertYaml11Compat(value):
-  case value of
-    OObject kvs -> OObject [(k, convertYaml11Compat(v)) | (k, v) <- kvs]
-    OArray items -> OArray [convertYaml11Compat(v) | v <- items]
-    OString s | isBooleanLike(s) -> OBool(isTrueIsh(s))
-    other -> other
-
-isBooleanLike(s):
-  s in {"true","false","yes","no","on","off",
-        "True","False","Yes","No","On","Off",
-        "TRUE","FALSE","YES","NO","ON","OFF"}
-
-isTrueIsh(s):
-  toLower(s) in {"true","yes","on"}
+-- in the parser, for each scalar
+resolveScalar(schema, tag, style, text):
+  ast = coreSchemaResolve(tag, style, text)       -- YAML 1.2 core schema
+  if schema == Yaml11Bools and style == Plain and tag is untagged:
+    if text in {yes,Yes,YES,on,On,ON}:  ast = Bool(True)
+    if text in {no,No,NO,off,Off,OFF}:  ast = Bool(False)
+  return ast                                       -- a mapping key keeps its text
 #+end_src
 
 *Logic Flow:*
 
 1. Detect YAML spec from raw input text before parsing when =--yaml-spec auto= or the default is active.
 2. Determine whether YAML 1.1 compatibility mode should be enabled.
-3. Run the appropriate preprocessing pipeline variant accordingly.
-4. After Phase 2, if YAML 1.1 compat: walk the resolved value recursively; for every string that matches a boolean-like pattern, replace it with an actual boolean.
+3. Parse the document with that boolean schema, and preprocess with the same flag. The engine reads YAML parsed during preprocessing with it too: imported documents a loader parsed from text (re-read when they hold a candidate word), =!$parseYaml= strings and custom template bodies.
 
 *Edge Cases:*
 
-- YAML 1.1 conversion is a post-pass over the fully resolved value, not applied during parsing. This means a string produced by =!$join= that happens to spell ="yes"= is also converted.
-- The 18 recognized strings are case-sensitive membership: =True= converts but =tRue= does not.
+- Conversion follows the scalar's source style, so a string built during preprocessing (=!$join=, handlebars) that spells ="yes"= stays a string.
+- An import whose loader did not parse YAML text (for example =ssm-path:=) keeps its strings.
 - YAML 1.1 conversion does not affect numbers or existing booleans.
 - CloudFormation auto-detection requires at least 2 matching keys (not just 1) to avoid false positives.
 

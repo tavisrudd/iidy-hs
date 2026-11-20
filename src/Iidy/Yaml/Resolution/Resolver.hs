@@ -31,7 +31,7 @@ import Iidy.Yaml.Handlebars.Engine (InterpolateError (..), defaultHelpers, inter
 import Iidy.Yaml.JMESPath (JMESPathError (..), applyJmesPath)
 import Iidy.Yaml.Location (Position, zeroPosition)
 import Iidy.Yaml.OValue
-import Iidy.Yaml.Parser (ParseError (..), parseYaml, parseYamlStrict)
+import Iidy.Yaml.Parser (ParseError (..), parseYamlAs, parseYamlStrictAs)
 import Iidy.Yaml.Resolution.Context
 
 {- | Structured classification of resolve errors.
@@ -320,7 +320,7 @@ Returns OValue to preserve key ordering from the template.
 -}
 buildReparse :: TagContext -> TemplateInfo -> Map.Map Text OValue -> Text -> Either Text OValue
 buildReparse parentCtx tmplInfo params rawBody =
-    case parseYaml (BL.fromStrict (TE.encodeUtf8 rawBody)) (fromMaybe "<template>" (tcInputUri parentCtx)) of
+    case parseYamlAs (tcBools parentCtx) (BL.fromStrict (TE.encodeUtf8 rawBody)) (fromMaybe "<template>" (tcInputUri parentCtx)) of
         Left (ParseError _ msg) -> Left ("Parse error: " <> msg)
         Right templateAst ->
             let subCtx =
@@ -840,7 +840,7 @@ resolveParseYaml ctx meta (ParseYamlTag strAst) = do
     val <- resolveAst ctx strAst
     case val of
         OString s ->
-            case parseYamlStrict (BL.fromStrict (TE.encodeUtf8 s)) "<parseYaml>" of
+            case parseYamlStrictAs (tcBools ctx) (BL.fromStrict (TE.encodeUtf8 s)) "<parseYaml>" of
                 Right ast -> Right (astToOValueRaw ast)
                 Left (ParseError _ msg) -> parseSyntaxError meta "!$parseYaml: " msg
         _nonString -> typeMismatchError meta "string" val
@@ -884,7 +884,7 @@ resolveExpand ctx meta (ExpandTag templateRefAst paramsAst) = do
             -- 5. Merge with defaults from $params (defaults are Value, convert to OValue)
             let merged = mergeParams (tiParams tmplInfo) provided
             -- 6. Re-parse the raw template YAML
-            case parseYaml (BL.fromStrict (TE.encodeUtf8 (tiRawBody tmplInfo))) (tiLocation tmplInfo) of
+            case parseYamlAs (tcBools ctx) (BL.fromStrict (TE.encodeUtf8 (tiRawBody tmplInfo))) (tiLocation tmplInfo) of
                 Left (ParseError _ msg) -> parseSyntaxError meta "!$expand parse error: " msg
                 Right templateAst' -> do
                     -- 7. Build sub-context with merged params as variables

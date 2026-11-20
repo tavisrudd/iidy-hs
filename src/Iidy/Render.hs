@@ -35,7 +35,7 @@ import Iidy.Yaml.Imports.Types (ImportPolicy)
 import Iidy.Yaml.JMESPath (JMESPathError, applyJmesPath)
 import Iidy.Yaml.Location (Position)
 import Iidy.Yaml.OValue (OValue, fromValue, toValue)
-import Iidy.Yaml.Parser (ParseError (..), parseYamlStrict)
+import Iidy.Yaml.Parser (ParseError (..), boolSchemaFor, parseYamlStrictAs)
 
 ------------------------------------------------------------------------
 -- Error type
@@ -67,26 +67,26 @@ runRenderWith mkEnv emit args gopts = do
     (content, baseLocation) <- readTemplate args
     let source = TE.decodeUtf8 (BL.toStrict content)
         policy = importPolicyFromOpts gopts
+        useYaml11 = case raYamlSpec args of
+            YamlV11 -> True
+            YamlV12 -> False
+            YamlAuto -> shouldUseYaml11Compatibility (detectYamlSpec source)
     loader <- lazyAwsDispatcher mkEnv policy
     result <- runExceptT $ do
-        ast <- ExceptT . pure $ parseStep content baseLocation
-        val <- ExceptT $ preprocessStep source policy loader ast
+        ast <- ExceptT . pure $ parseStep useYaml11 content baseLocation
+        val <- ExceptT $ preprocessStep useYaml11 policy loader ast
         outputVal <- ExceptT . pure $ queryStep val
         ExceptT $ writeStep outputVal
     either (reportError baseLocation source) pure result
   where
-    parseStep :: BL.ByteString -> Text -> Either RenderError YamlAst
-    parseStep content baseLocation =
-        case parseYamlStrict content baseLocation of
+    parseStep :: Bool -> BL.ByteString -> Text -> Either RenderError YamlAst
+    parseStep useYaml11 content baseLocation =
+        case parseYamlStrictAs (boolSchemaFor useYaml11) content baseLocation of
             Left (ParseError pos msg) -> Left (ParseFailed pos msg)
             Right ast -> Right ast
 
-    preprocessStep :: Text -> ImportPolicy -> LoadImportFn -> YamlAst -> IO (Either RenderError OValue)
-    preprocessStep source policy loader ast = do
-        let useYaml11 = case raYamlSpec args of
-                YamlV11 -> True
-                YamlV12 -> False
-                YamlAuto -> shouldUseYaml11Compatibility (detectYamlSpec source)
+    preprocessStep :: Bool -> ImportPolicy -> LoadImportFn -> YamlAst -> IO (Either RenderError OValue)
+    preprocessStep useYaml11 policy loader ast = do
         result <- preprocessWithPolicy policy loader useYaml11 ast (raTemplate args)
         pure $ case result of
             Left err -> Left (PreprocessFailed err)

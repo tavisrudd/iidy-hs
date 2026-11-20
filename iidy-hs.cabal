@@ -268,6 +268,7 @@ test-suite iidy-hs-test
     Test.TemplateLoaderTest
     Test.GlobalConfigTest
     Test.CfnStatusTest
+    Test.Yaml11BoolsTest
     Test.PreprocessingPropertyTest
     Test.ErrorContentTest
     Test.S3ObjectsTest
