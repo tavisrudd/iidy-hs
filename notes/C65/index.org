@@ -62,3 +62,20 @@ is removed.
 - Add a stack-args test with plain yes/Off parameters, mirroring iidy-hs
   =Test.StackArgsLoaderTest= "stack-args are YAML 1.2" (fixture
   =test-fixtures/test-stack-args-quoted-bools.yaml=).
+
+** Research from a blocked attempt (2026-11-20)
+:PROPERTIES:
+:ID: org:01a1fae1-ef3b-73bf-bafe-524d02a6334f
+:ADDED: [2026-11-20 Fri 14:34]
+:END:
+An attempt from an iidy-hs session could not edit, build or test: there,
+=~/src/iidy= and =~/.cargo/registry/src= are on a read-only mount. Run this
+card from a session started in =~/src/iidy=. Findings from reading the code:
+
+- =src/cfn/stack_args.rs:195=: =YamlSpec::V11= -> =V12=; all three
+  =preprocess_yaml= passes (=:199=, =:289=, =:320=) use that variable.
+- =src/demo.rs:79=: =preprocess_yaml(&data, script_path, &YamlSpec::V12)=
+  instead of =preprocess_yaml_v11=.
+- Test beside the =load_stack_args= tests in =stack_args.rs= (around line
+  670, they load temp files): plain =PlainYes: yes=, =PlainOff: Off= load as
+  ="yes"= / ="Off"=; quoted ="false"=, ="300"=, ="yes"= stay strings.

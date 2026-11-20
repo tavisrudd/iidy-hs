@@ -84,3 +84,33 @@ to), Rust tests cover it, and the matching entries in
   =Tags= value (check whether serde_yaml's path can be kept, e.g. with
   =serde_path_to_error=, before hand-rolling).
 - Local-time timestamps are C57.
+
+** Research from a blocked attempt (2026-11-20)
+:PROPERTIES:
+:ID: org:01a1fae1-ef19-7476-903c-72769d420ba6
+:ADDED: [2026-11-20 Fri 14:34]
+:END:
+An attempt from an iidy-hs session could not edit, build or test: there,
+=~/src/iidy= and =~/.cargo/registry/src= are on a read-only mount. Run this
+card from a session started in =~/src/iidy=. Findings from reading the code:
+
+- Error path (item 3): =StackArgs.parameters= / =.tags= are
+  =Option<BTreeMap<String, String>>=, deserialised at =stack_args.rs:323=
+  and for the CommandsBefore pass at =:290=. Walk the =Parameters= / =Tags=
+  mappings before =from_value= in one helper shared by both sites.
+- Global config (item 1): add =global_config: bool= to =AwsOpts=
+  (=src/cli.rs:127=, =#[arg(long, global = true, help_heading = "AWS Options")]=),
+  carry it into =NormalizedAwsOpts=, pass it to =load_stack_args= from the
+  =run_command_handler_with_stack_args!= macro (=src/cfn/mod.rs:148=).
+  Struct literals to update: tests in =src/cli.rs= (~796-885),
+  =src/output/aws_conversion.rs:721=, =:782=, =tests/output/dynamic_manager.rs=,
+  =tests/output/stack_events_title.rs=. =src/cfn/create_or_update.rs:339=
+  rebuilds =AwsOpts= for exec-changeset and must carry the flag. No
+  snapshot holds the help text.
+- YAML 1.1 (item 2), not researched in depth: the post-pass is in
+  =src/yaml/engine.rs=, gated by =YamlPreprocessor::new(loader,
+  yaml_11_compatibility)=, and runs only on the top-level result (imports
+  are not converted today). Check whether =src/yaml/parsing/parser.rs= /
+  =ast.rs= expose scalar style. =tests/yaml/boolean_compatibility.rs= and
+  =test_yaml_12_mode_preserves_quoted_strings= pin the current heuristic
+  behaviour and will change.
