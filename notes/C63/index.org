@@ -79,8 +79,7 @@ to), Rust tests cover it, and the matching entries in
   scalars only, keep keys as text, drop the post-pass and its heuristics;
   apply the same schema to imports parsed from text, =!$parseYaml= and
   custom template bodies.
-- [ ] Stack-args as YAML 1.2: use =YamlSpec::V12= in =load_stack_args=
-  (all three =preprocess_yaml= passes); keep V11 for =render:= templates.
+- Stack-args (and demo scripts) as YAML 1.2: card C65.
 - [ ] Error path: report the field and key for a non-string =Parameters= /
   =Tags= value (check whether serde_yaml's path can be kept, e.g. with
   =serde_path_to_error=, before hand-rolling).

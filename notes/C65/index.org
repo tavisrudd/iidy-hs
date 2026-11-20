@@ -1,0 +1,64 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C65
+:LANE:     main
+:TODO_STATE: TODO
+:CARD_PRIORITY: C
+:MODE:     CONTRACT
+:ORIGIN:   User request: Rust follow-up for C64 (stack-args as YAML 1.2, only cfn templates as 1.1)
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: d42a67fe-2d28-47b9-9e97-1abc23d36530
+:ID: org:01a1fadb-1d10-724b-a599-a06c7255fc1a
+:ADDED: [2026-11-20 Fri 14:27]
+:END:
+#+title: C65 — Rust iidy (~/src/iidy): read stack-args as YAML 1.2; keep YAML 1.1 for CloudFormation templates only
+#+date: 2026-11-20
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1fadb-1d10-724b-a599-a06b2b63295d
+:ADDED: [2026-11-20 Fri 14:27]
+:END:
+
+Rust follow-up to C64. Rust iidy (=~/src/iidy=, read-only from this repo,
+no =c= setup) reads stack-args as YAML 1.1: =load_stack_args= sets
+=let yaml_spec = YamlSpec::V11;= (=src/cfn/stack_args.rs:195=) and uses it
+for all three =preprocess_yaml= passes (=:199=, =:289=, =:320=). Its YAML
+1.1 post-pass turns plain and quoted yes/no/on/off into booleans, so
+=Parameters: {Flag: yes}= fails to deserialise into the string map.
+Demo scripts are YAML 1.1 too (=preprocess_yaml_v11=, =src/demo.rs:79=).
+
+iidy-js had no YAML 1.1 mode: every document went through js-yaml 3.14.1's
+core schema, so yes/no/on/off were strings (C62 "Comparison with iidy-js").
+iidy-hs now reads stack-args and demo scripts as YAML 1.2 and keeps YAML
+1.1 for CloudFormation templates only (C64, commit f5e34a8).
+
+Related Rust work: C63 (YAML 1.1 at parse time from plain scalars, global
+SSM config opt-in, error key path), C57 (local-time timestamps). and gate
+:PROPERTIES:
+:ID: org:01a1fadb-1d10-724b-a599-a06adb02e286
+:ADDED: [2026-11-20 Fri 14:27]
+:END:
+
+Work happens in =~/src/iidy=, by whoever owns that repo; nothing in
+iidy-hs changes. Gate: a stack-args file with plain =Flag: yes= and
+=Off: Off= parameters loads them as the strings ="yes"= / ="Off"=; a demo
+script's plain =yes= stays a string; =render:= templates
+(=src/cfn/template_loader.rs:135=, =:416=) and =render= keep YAML 1.1
+handling. Rust tests cover it; the stack-args sentence in
+=docs/dev/rust-compatibility.org= ("YAML 1.1 Booleans Read at Parse Time")
+is removed.
+
+* TODO Rust iidy (~/src/iidy): read stack-args as YAML 1.2; keep YAML 1.1 for CloudFormation templates only
+:PROPERTIES:
+:ID: org:01a1fadb-1d10-724b-a599-a069aa1c7b1b
+:ADDED: [2026-11-20 Fri 14:27]
+:END:
+
+- Use =YamlSpec::V12= in =load_stack_args= (=src/cfn/stack_args.rs:195=);
+  all three passes take it.
+- Use the YAML 1.2 preprocess for demo scripts (=src/demo.rs:79=).
+- Add a stack-args test with plain yes/Off parameters, mirroring iidy-hs
+  =Test.StackArgsLoaderTest= "stack-args are YAML 1.2" (fixture
+  =test-fixtures/test-stack-args-quoted-bools.yaml=).
