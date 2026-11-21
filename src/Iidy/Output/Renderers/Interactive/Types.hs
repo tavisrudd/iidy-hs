@@ -51,6 +51,7 @@ module Iidy.Output.Renderers.Interactive.Types (
 
     -- * Spinner management
     startSpinner,
+    resumePollingSpinner,
     stopSpinner,
     formatTimingText,
     updateLastEventTime,
@@ -227,6 +228,22 @@ and a timing task that updates the spinner message with elapsed time.
 -}
 startSpinner :: InteractiveRenderer -> Text -> IO ()
 startSpinner r msg = do
+    now <- getCurrentTime
+    startSpinnerWithTiming r msg (now, Nothing)
+
+{- | Restart the live-events spinner after an event batch was printed.
+Keeps the polling start time and shows the muted timing line right away,
+so the line does not fall back to the initial placeholder message.
+-}
+resumePollingSpinner :: InteractiveRenderer -> UTCTime -> Maybe UTCTime -> IO ()
+resumePollingSpinner r startTime mLastEventTime = do
+    now <- getCurrentTime
+    let st = (startTime, mLastEventTime)
+    startSpinnerWithTiming r (timingMessage r now st) st
+
+-- | Start a spinner showing @msg@ with its timing task seeded from @st@.
+startSpinnerWithTiming :: InteractiveRenderer -> Text -> (UTCTime, Maybe UTCTime) -> IO ()
+startSpinnerWithTiming r msg st =
     -- Only start if spinners are enabled and ANSI is available
     if not (ioEnableSpinners (irOptions r)) || not (irIsTty r)
         then pure ()
@@ -242,7 +259,7 @@ startSpinner r msg = do
             tid <- forkIO $ spinnerTickLoop sp colorCode interval
             atomically $ writeTVar (irSpinnerThread r) (Just tid)
             -- Start timing task
-            startTimingTask r
+            startTimingTask r sp st
 
 -- | Background spinner tick loop
 spinnerTickLoop :: Spinner -> Text -> Int -> IO ()
@@ -283,17 +300,19 @@ formatTimingText totalElapsed mSinceLastEvent =
         Nothing ->
             T.pack (show totalElapsed) <> " seconds elapsed total."
 
+-- | Muted timing line for a timing state (start time, last event time) at @now@.
+timingMessage :: InteractiveRenderer -> UTCTime -> (UTCTime, Maybe UTCTime) -> Text
+timingMessage r now (startTime, mLastEventTime) =
+    let totalElapsed = floor (diffUTCTime now startTime) :: Int
+        mSinceLastEvent = fmap (\lastTime -> floor (diffUTCTime now lastTime) :: Int) mLastEventTime
+     in styleMuted r (formatTimingText totalElapsed mSinceLastEvent)
+
 -- | Start the background timing task that updates spinner message every second.
-startTimingTask :: InteractiveRenderer -> IO ()
-startTimingTask r = do
-    now <- getCurrentTime
-    atomically $ writeTVar (irTimingState r) (Just (now, Nothing))
-    mSp <- readTVarIO (irSpinner r)
-    case mSp of
-        Nothing -> pure ()
-        Just sp -> do
-            tid <- forkIO $ timingLoop r sp
-            atomically $ writeTVar (irTimingThread r) (Just tid)
+startTimingTask :: InteractiveRenderer -> Spinner -> (UTCTime, Maybe UTCTime) -> IO ()
+startTimingTask r sp st = do
+    atomically $ writeTVar (irTimingState r) (Just st)
+    tid <- forkIO $ timingLoop r sp
+    atomically $ writeTVar (irTimingThread r) (Just tid)
 
 -- | Background loop that updates spinner message with elapsed time every 1 second.
 timingLoop :: InteractiveRenderer -> Spinner -> IO ()
@@ -303,13 +322,8 @@ timingLoop r sp = do
     mState <- readTVarIO (irTimingState r)
     case mState of
         Nothing -> pure () -- stopped
-        Just (startTime, mLastEventTime) -> do
-            let totalElapsed = floor (diffUTCTime now startTime) :: Int
-                mSinceLastEvent = case mLastEventTime of
-                    Just lastTime -> Just (floor (diffUTCTime now lastTime) :: Int)
-                    Nothing -> Nothing
-                text = styleMuted r (formatTimingText totalElapsed mSinceLastEvent)
-            spinnerSetMessage sp text
+        Just st -> do
+            spinnerSetMessage sp (timingMessage r now st)
             timingLoop r sp
 
 -- | Stop the timing task.

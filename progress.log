@@ -161,3 +161,4 @@
 2026-11-20 13:58 — 2026-11-20--1 (d42a67fe-2d28-47b9-9e97-1abc23d36530): C61 stack-args map type errors name the field and key
 2026-11-20 14:24 — 2026-11-20--1 (d42a67fe-2d28-47b9-9e97-1abc23d36530): C64 stack-args and demo scripts read as YAML 1.2; only CFN templates YAML 1.1; C63 Rust follow-up updated
 2026-11-20 14:39 — 2026-11-20--1 (d42a67fe-2d28-47b9-9e97-1abc23d36530): C51 parse-error columns shown 1-based (sub-agent, c663cf3); C63/C65 Rust work blocked: ~/src/iidy read-only from this session
+2026-11-20 17:49 — 2026-11-20--2 (e0321dae-da30-42ae-aac5-21f6bbdeb9d0): C66 live-event spinner keeps muted timing line after each event batch

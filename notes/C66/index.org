@@ -1,0 +1,77 @@
+* COMMENT meta
+:PROPERTIES:
+:CARD_ID:  C66
+:LANE:     main
+:TODO_STATE: DONE
+:MODE:     CONTRACT
+:ORIGIN:   User request: after each new stack event, the spinner briefly shows 'Loading live events...' before settling back to the grey elapsed/since-last-event line; only the latter should show while polling
+:CREATED_BY: opus-5.5-medium
+:SESSION_ID: e0321dae-da30-42ae-aac5-21f6bbdeb9d0
+:ID: org:01a1fb93-f620-77ad-aebd-a5c562e4fd42
+:ADDED: [2026-11-20 Fri 17:49]
+:END:
+:LOGBOOK:
+- Card state TODO → STARTED [2026-11-20 Fri 17:49]
+  Agent: opus-5.5-medium
+  Session-ID: e0321dae-da30-42ae-aac5-21f6bbdeb9d0
+- Card state STARTED → DONE [2026-11-20 Fri 17:49]
+  Note: Spinner resumes with the muted timing line after each event batch; Rust change described in card (iidy repo read-only here)
+  Agent: opus-5.5-medium
+  Session-ID: e0321dae-da30-42ae-aac5-21f6bbdeb9d0
+:END:
+#+title: C66 — Live event polling: keep the muted timing line after each event batch instead of flashing 'Loading live events...'
+#+date: 2026-11-20
+#+TODO: TODO NEXT STARTED WAITING | DONE CANCELLED
+
+* Context
+:PROPERTIES:
+:ID: org:01a1fb93-f620-77ad-aebd-a5c48a49a29e
+:ADDED: [2026-11-20 Fri 17:49]
+:END:
+
+Live event polling: keep the muted timing line after each event batch instead of flashing 'Loading live events...'
+
+* Scope and gate
+:PROPERTIES:
+:ID: org:01a1fb93-f620-77ad-aebd-a5c3b566c677
+:ADDED: [2026-11-20 Fri 17:49]
+:END:
+
+Paths: =src/Iidy/Output/Renderers/Interactive/{Types,Sections}.hs=.
+Gate: after an event batch prints during live polling, the spinner line shows
+the muted "N seconds elapsed total. M since last event." text immediately;
+"Loading live events..." appears only when polling first starts. Build clean,
+all tests pass.
+
+* DONE Live event polling: keep the muted timing line after each event batch instead of flashing 'Loading live events...'
+:PROPERTIES:
+:ID: org:01a1fb93-f61f-7515-b014-b1a25c828284
+:ADDED: [2026-11-20 Fri 17:49]
+:END:
+:LOGBOOK:
+- State "DONE"       from "TODO" [2026-11-20 Fri 17:49] \\
+  Agent: opus-5.5-medium
+  Session-ID: e0321dae-da30-42ae-aac5-21f6bbdeb9d0
+:END:
+
+Cause: =renderNewStackEvents= stopped the spinner, printed the events, then
+called =startSpinner r "Loading live events..."=; the timing thread only
+replaced that text after its first 1s sleep, so the placeholder flashed in
+default colour after every batch. It also briefly reset the timing start time
+before the caller overwrote it.
+
+Fix: =resumePollingSpinner r startTime mLastEventTime= (Types.hs) starts the
+spinner with the muted timing message already computed and seeds the timing
+state directly (no reset window). =startSpinner= and it share
+=startSpinnerWithTiming=; =timingMessage= is shared with =timingLoop=. The last
+event time falls back to the previous one when the batch has no timestamps.
+
+Rust parity: the Rust implementation has the same flash
+(=~/src/iidy/src/output/renderers/interactive.rs= =render_new_stack_events=,
+which calls =create_api_spinner("Loading live events...")= before
+=start_live_events_timing=). Tavis wants Rust to behave the same way, but
+=~/src/iidy= is read-only from iidy-hs sessions; the matching Rust change is to
+create the restarted spinner with the formatted timing text
+(=format!("{total} seconds elapsed total. {since} since last event.")=, muted)
+instead of the placeholder, and to set the last event time before the first
+timing tick.

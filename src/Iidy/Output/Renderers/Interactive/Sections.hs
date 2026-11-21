@@ -40,11 +40,10 @@ module Iidy.Output.Renderers.Interactive.Sections (
 -- Further splitting would create artificial module boundaries without
 -- improving readability.
 
-import Control.Concurrent.STM (atomically, readTVarIO, writeTVar)
+import Control.Concurrent.STM (readTVarIO)
 import Control.Monad (unless, when)
 import Data.Foldable (asum, for_)
 import Data.List (sortBy)
-import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Ord (comparing)
@@ -591,21 +590,13 @@ renderNewStackEvents r events = do
         let statusPad = calcPadding events (toText . seResourceStatus . sewEvent)
             rtypePad = calcPadding events (seResourceType . sewEvent)
         mapM_ (renderSingleStackEvent r statusPad rtypePad) events
-        -- Restart spinner for continued polling
-        startSpinner r "Loading live events..."
-        -- Restore preserved start time and update last event time
+        -- Resume the polling spinner with the preserved start time, showing
+        -- the muted timing line at once rather than the initial placeholder.
         case preservedState of
-            Just (startTime, _) -> do
-                case NE.nonEmpty events of
-                    Just ne -> do
-                        let mLastEventTime = seTimestamp (sewEvent (NE.last ne))
-                        -- Restore preserved timing state. There is a brief (~microsecond) window
-                        -- between startTimingTask setting fresh state and this overwrite, during
-                        -- which the timing thread could read the wrong start time. This is benign:
-                        -- the timing thread sleeps 1s before its first read.
-                        atomically $ writeTVar (irTimingState r) (Just (startTime, mLastEventTime))
-                    Nothing -> pure ()
-            Nothing -> pure ()
+            Just (startTime, mPrevEventTime) ->
+                let mLastEventTime = asum (map (seTimestamp . sewEvent) (reverse events) <> [mPrevEventTime])
+                 in resumePollingSpinner r startTime mLastEventTime
+            Nothing -> startSpinner r "Loading live events..."
 
 renderOperationComplete :: InteractiveRenderer -> OperationCompleteInfo -> IO ()
 renderOperationComplete r info = do

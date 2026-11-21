@@ -55,6 +55,7 @@
 - [2026-11-20 Fri 13:58] [[file:../C61/index.org][C61]] — strMap errors name field and key: invalid type for Parameters.X: expected a string, got ...
 - [2026-11-20 Fri 14:24] [[file:../C64/index.org][C64]] — Stack-args and demo scripts read as YAML 1.2; only CloudFormation templates as YAML 1.1
 - [2026-11-20 Fri 14:38] [[file:../C51/index.org][C51]] — Parse-error display now prints 1-based columns as Rust does (dup key shows file:4:3); unexpected-field double +1 removed; pinned by two tests
+- [2026-11-20 Fri 17:49] [[file:../C66/index.org][C66]] — Spinner resumes with the muted timing line after each event batch; Rust change described in card (iidy repo read-only here)
 * COMMENT meta
 :PROPERTIES:
 :LANE: main
